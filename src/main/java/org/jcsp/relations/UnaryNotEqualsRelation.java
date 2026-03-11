@@ -7,7 +7,7 @@ import org.jspecify.annotations.Nullable;
 import java.util.Objects;
 
 @SuperBuilder
-public class UnaryValueRelation extends UnaryRelation {
+public class UnaryNotEqualsRelation extends UnaryRelation {
     @NonNull
     Object value;
 
@@ -16,11 +16,11 @@ public class UnaryValueRelation extends UnaryRelation {
         if (value == null) {
             return false;
         }
-        return Objects.equals(this.value, value);
+        return !Objects.equals(this.value, value);
     }
 
     @Override
     public String toString() {
-        return "{(" + value + ")}";
+        return variable + " != " + value;
     }
 }

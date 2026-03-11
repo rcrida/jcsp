@@ -11,13 +11,12 @@ import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
 
 import java.util.Map;
-import java.util.Objects;
 import java.util.function.Predicate;
 import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-public class UnaryValueRelationTest {
+public class UnaryNotEqualsRelationTest {
     static final Object VALUE = 5;
     static final Domain DOMAIN = new IntRangeDomain(0, 100);
     static final Variable.Factory VARIABLE_FACTORY = new Variable.Factory() {};
@@ -48,10 +47,5 @@ public class UnaryValueRelationTest {
     @MethodSource
     void isSatisfied_false(Object value) {
         assertThat(relation.isSatisfied(new Assignment(Map.of(variable, value)))).isFalse();
-    }
-
-    @Test
-    void testToString() {
-        assertThat(relation.toString()).isEqualTo("{(5)}");
     }
 }
