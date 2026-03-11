@@ -16,7 +16,7 @@ import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-public class BinaryTuplesRelationTest {
+public class ReversedBinaryRelationTest {
     static final List<BinaryTuple> TUPLES = List.of(
             BinaryTuple.of(0, 0),
             BinaryTuple.of(1, 1),
@@ -29,6 +29,7 @@ public class BinaryTuplesRelationTest {
     Variable left = VARIABLE_FACTORY.create("left", DOMAIN);
     Variable right = VARIABLE_FACTORY.create("right", DOMAIN);
     BinaryTuplesRelation relation;
+    ReversedBinaryRelation reversedRelation;
 
     @BeforeEach
     void setUp() {
@@ -36,6 +37,11 @@ public class BinaryTuplesRelationTest {
                 .left(left)
                 .right(right)
                 .binaryTuples(TUPLES)
+                .build();
+        reversedRelation = ReversedBinaryRelation.builder()
+                .left(right)
+                .right(left)
+                .relation(relation)
                 .build();
     }
 

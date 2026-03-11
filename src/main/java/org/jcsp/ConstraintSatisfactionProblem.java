@@ -20,16 +20,6 @@ public class ConstraintSatisfactionProblem {
     @Singular
     Set<Constraint> constraints;
 
-    @Deprecated
-    public Set<Variable> getVariables() {
-        return variableDomains.keySet();
-    }
-
-    @Deprecated
-    public Set<Domain> getDomains() {
-        return Set.copyOf(variableDomains.values());
-    }
-
     public Optional<Assignment> getSolution() {
         return Optional.empty();
     }

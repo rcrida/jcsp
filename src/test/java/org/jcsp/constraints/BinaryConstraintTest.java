@@ -74,6 +74,14 @@ public class BinaryConstraintTest {
     }
 
     @Test
+    void reversed() {
+        val reversed = constraint.reversed();
+        assertThat(reversed.left()).isEqualTo(RIGHT);
+        assertThat(reversed.right()).isEqualTo(LEFT);
+        assertThat(reversed.relation()).isEqualTo(binaryRelation.reversed());
+    }
+
+    @Test
     void testToString() {
         assertThat(constraint.toString()).isEqualTo("<(X, Y), binaryRelation>");
     }

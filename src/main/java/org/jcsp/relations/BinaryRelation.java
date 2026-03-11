@@ -19,4 +19,12 @@ public abstract class BinaryRelation implements Relation {
     }
 
     public abstract boolean isSatisfied(@Nullable Object left, @Nullable Object right);
+
+    public BinaryRelation reversed() {
+        return ReversedBinaryRelation.builder()
+                .left(right)
+                .right(left)
+                .relation(this)
+                .build();
+    }
 }

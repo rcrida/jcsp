@@ -1,13 +1,17 @@
 package org.jcsp.consistency.arc;
 
+import lombok.extern.slf4j.Slf4j;
 import lombok.val;
 import org.jcsp.ConstraintSatisfactionProblem;
+import org.jcsp.assignments.Assignment;
 import org.jcsp.constraints.BinaryConstraint;
 import org.jcsp.domains.Domain;
 
 import java.util.ArrayDeque;
+import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.stream.Stream;
 
 /**
  * Implementation of the Arc-Consistency algorithm (AC-3) for constraint satisfaction problems.
@@ -18,6 +22,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
  * The algorithm works by maintaining a queue of binary constraints (arcs) and iteratively revising
  * the domains of variables associated with those constraints.
  */
+@Slf4j
 public class AC3 implements ArcConsistency {
     public static AC3 INSTANCE = new AC3();
 
@@ -30,7 +35,9 @@ public class AC3 implements ArcConsistency {
                 .filter(c -> c instanceof BinaryConstraint)
                 .map(c -> (BinaryConstraint) c)
                 .toList();
-        final var queue = new ArrayDeque<>(binaryConstraints);
+        final var queue = new ArrayDeque<>(binaryConstraints.stream()
+                .flatMap(c -> Stream.of(c, c.reversed()))
+                .toList());
         while (!queue.isEmpty()) {
             final var arc = queue.poll();
             val X_i = arc.left();
@@ -39,6 +46,7 @@ public class AC3 implements ArcConsistency {
             if (optionalRevisedDomain1.isPresent()) {
                 final var revisedDomain1 = optionalRevisedDomain1.get();
                 if (revisedDomain1.isEmpty()) {
+                    log.warn("Domain of variable {} is empty after AC3", X_i);
                     return Optional.empty();
                 }
                 builder.variableDomain(arc.left(), revisedDomain1);
