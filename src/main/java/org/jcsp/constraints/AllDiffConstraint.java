@@ -42,4 +42,9 @@ public record AllDiffConstraint(@NonNull Set<Variable> variables) implements Con
         }
         return true;
     }
+
+    @Override
+    public boolean isSatisfied(@NonNull Object... values) {
+        return false;
+    }
 }

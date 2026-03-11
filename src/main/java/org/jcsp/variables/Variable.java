@@ -24,6 +24,11 @@ public interface Variable {
                 public Domain getDomain() {
                     return domain;
                 }
+
+                @Override
+                public String toString() {
+                    return name;
+                }
             };
         }
     }

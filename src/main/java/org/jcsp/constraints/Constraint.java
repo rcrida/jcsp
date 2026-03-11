@@ -11,4 +11,5 @@ import org.jspecify.annotations.NonNull;
  */
 public interface Constraint {
     boolean isSatisfied(@NonNull Assignment assignment);
+    boolean isSatisfied(@NonNull Object... values);
 }

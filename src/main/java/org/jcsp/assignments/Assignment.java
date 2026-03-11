@@ -5,6 +5,7 @@ import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -28,9 +29,8 @@ public record Assignment(@NonNull Map<Variable, Object> values) {
         }
     }
 
-    @Nullable
-    public Object getValue(@NonNull Variable variable) {
-        return values.get(variable);
+    public Optional<Object> getValue(@NonNull Variable variable) {
+        return Optional.ofNullable(values.get(variable));
     }
 
     public Assignment extractPartialAssignment(@NonNull Set<Variable> variables) {

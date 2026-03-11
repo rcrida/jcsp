@@ -43,14 +43,14 @@ public class AssignmentTest {
     void getValueKnown() {
         when(variable.isAllowedValue(value)).thenReturn(true);
         var assignment = new Assignment(Map.of(variable, value));
-        assertThat(assignment.getValue(variable)).isEqualTo(value);
+        assertThat(assignment.getValue(variable)).contains(value);
     }
 
     @Test
     void getValueUnknown() {
         when(variable.isAllowedValue(value)).thenReturn(true);
         var assignment = new Assignment(Map.of(variable, value));
-        assertThat(assignment.getValue(anotherVariable)).isNull();
+        assertThat(assignment.getValue(anotherVariable)).isEmpty();
     }
     @Test
     void extractPartialAssignment() {

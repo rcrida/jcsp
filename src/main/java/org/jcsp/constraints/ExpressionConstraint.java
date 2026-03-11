@@ -28,4 +28,9 @@ public record ExpressionConstraint(@NonNull Set<Variable> variables, @NonNull Fu
     public boolean isSatisfied(@NonNull Assignment assignment) {
         return expression.apply(assignment);
     }
+
+    @Override
+    public boolean isSatisfied(@NonNull Object... values) {
+        return false;
+    }
 }
