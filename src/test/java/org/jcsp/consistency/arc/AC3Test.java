@@ -5,7 +5,7 @@ import org.jcsp.ConstraintSatisfactionProblem;
 import org.jcsp.constraints.BinaryConstraint;
 import org.jcsp.domains.DomainObjectSet;
 import org.jcsp.domains.IntRangeDomain;
-import org.jcsp.examples.AustraliaMapColouringTest;
+import org.jcsp.solver.AustraliaMapColouringTest;
 import org.jcsp.relations.BinaryTuple;
 import org.jcsp.relations.BinaryTuplesRelation;
 import org.junit.jupiter.api.Test;

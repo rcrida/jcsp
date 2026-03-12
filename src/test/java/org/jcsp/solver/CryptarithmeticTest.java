@@ -1,4 +1,4 @@
-package org.jcsp.examples;
+package org.jcsp.solver;
 
 import lombok.val;
 import org.jcsp.ConstraintSatisfactionProblem;
@@ -10,7 +10,6 @@ import org.jcsp.domains.IntRangeDomain;
 import org.jcsp.search.BacktrackingSearch;
 import org.jcsp.search.order.LeastConstrainingValueOrderer;
 import org.jcsp.search.selector.MinimumRemainingValuesSelector;
-import org.jcsp.solver.SolverImpl;
 import org.jcsp.variables.Variable;
 import org.junit.jupiter.api.Test;
 

@@ -1,4 +1,4 @@
-package org.jcsp.examples;
+package org.jcsp.solver;
 
 import lombok.val;
 import org.jcsp.ConstraintSatisfactionProblem;
@@ -10,7 +10,6 @@ import org.jcsp.relations.BinaryNotEqualsRelation;
 import org.jcsp.search.BacktrackingSearch;
 import org.jcsp.search.order.LeastConstrainingValueOrderer;
 import org.jcsp.search.selector.MinimumRemainingValuesSelector;
-import org.jcsp.solver.SolverImpl;
 import org.jcsp.variables.Variable;
 import org.junit.jupiter.api.Test;
 
@@ -60,7 +59,13 @@ public class AustraliaMapColouringTest {
                         new Assignment(Map.of(
                                 WA, Colour.RED, NT, Colour.GREEN, Q, Colour.RED, NSW, Colour.GREEN, V, Colour.RED, SA, Colour.BLUE, T, Colour.RED)),
                         new Assignment(Map.of(
-                                WA, Colour.RED, NT, Colour.BLUE, Q, Colour.RED, NSW, Colour.BLUE, V, Colour.RED, SA, Colour.GREEN, T, Colour.RED))
+                                WA, Colour.RED, NT, Colour.BLUE, Q, Colour.RED, NSW, Colour.BLUE, V, Colour.RED, SA, Colour.GREEN, T, Colour.RED)),
+                        new Assignment(Map.of(
+                                WA, Colour.BLUE, NT, Colour.RED, Q, Colour.BLUE, NSW, Colour.RED, V, Colour.BLUE, SA, Colour.GREEN, T, Colour.RED)),
+                        new Assignment(Map.of(
+                                WA, Colour.GREEN, NT, Colour.RED, Q, Colour.GREEN, NSW, Colour.RED, V, Colour.GREEN, SA, Colour.BLUE, T, Colour.RED)),
+                        new Assignment(Map.of(
+                                WA, Colour.GREEN, NT, Colour.BLUE, Q, Colour.GREEN, NSW, Colour.BLUE, V, Colour.GREEN, SA, Colour.RED, T, Colour.RED))
                 ));
     }
 }
