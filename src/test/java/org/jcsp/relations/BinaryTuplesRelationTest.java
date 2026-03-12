@@ -66,6 +66,13 @@ public class BinaryTuplesRelationTest {
     }
 
     @Test
+    void isSatisfied_unknowns() {
+        assertThat(relation.isSatisfied(new Assignment(Map.of()))).isTrue();
+        assertThat(relation.isSatisfied(new Assignment(Map.of(left, 0)))).isTrue();
+        assertThat(relation.isSatisfied(new Assignment(Map.of(right, 1)))).isTrue();
+    }
+
+    @Test
     void testToString() {
         assertThat(relation.toString()).isEqualTo("{(0, 0), (1, 1), (2, 4), (3, 9)}");
     }

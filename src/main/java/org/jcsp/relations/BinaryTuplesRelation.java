@@ -15,7 +15,7 @@ public class BinaryTuplesRelation extends BinaryRelation {
     @Override
     public boolean isSatisfied(@Nullable Object left, @Nullable Object right) {
         if (left == null || right == null) {
-            return false;
+            return true;
         }
         return binaryTuples.contains(new BinaryTuple(left, right));
     }

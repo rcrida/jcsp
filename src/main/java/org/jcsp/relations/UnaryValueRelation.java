@@ -14,7 +14,7 @@ public class UnaryValueRelation extends UnaryRelation {
     @Override
     public boolean isSatisfied(@Nullable Object value) {
         if (value == null) {
-            return false;
+            return true;
         }
         return Objects.equals(this.value, value);
     }

@@ -1,6 +1,7 @@
 package org.jcsp.constraints;
 
 import org.jcsp.assignments.Assignment;
+import org.jcsp.domains.Domain;
 import org.jcsp.variables.Variable;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -24,6 +25,12 @@ public class ExpressionConstraintTest {
     @Mock
     Variable variable2;
     @Mock
+    Object value1;
+    @Mock
+    Object value2;
+    @Mock
+    Domain domain;
+    @Mock
     Function<Assignment, Boolean> expression;
     ExpressionConstraint expressionConstraint;
 
@@ -34,9 +41,20 @@ public class ExpressionConstraintTest {
 
     @ParameterizedTest
     @ValueSource(booleans = {true, false})
-    void isSatisfied(boolean satisfied) {
-        var assignment = new Assignment(Map.of());
+    void isSatisfiedBy(boolean satisfied) {
+        when(domain.contains(value1)).thenReturn(true);
+        when(domain.contains(value2)).thenReturn(true);
+        when(variable1.getDomain()).thenReturn(domain);
+        when(variable2.getDomain()).thenReturn(domain);
+        when(variable1.isAllowedValue(value1)).thenCallRealMethod();
+        when(variable2.isAllowedValue(value2)).thenCallRealMethod();
+        var assignment = new Assignment(Map.of(variable1, value1, variable2, value2));
         when(expression.apply(assignment)).thenReturn(satisfied);
-        assertThat(expressionConstraint.isSatisfied(assignment)).isEqualTo(satisfied);
+        assertThat(expressionConstraint.isSatisfiedBy(assignment)).isEqualTo(satisfied);
+    }
+
+    @Test
+    void isSatisfiedBy_unknown() {
+        assertThat(expressionConstraint.isSatisfiedBy(new Assignment(Map.of()))).isTrue();
     }
 }

@@ -22,22 +22,22 @@ public class UnaryNotEqualsRelationTest {
     static final Variable.Factory VARIABLE_FACTORY = new Variable.Factory() {};
 
     Variable variable = VARIABLE_FACTORY.create("variable", DOMAIN);
-    UnaryValueRelation relation;
+    UnaryNotEqualsRelation relation;
 
     @BeforeEach
     void setUp() {
-        relation = UnaryValueRelation.builder()
+        relation = UnaryNotEqualsRelation.builder()
                 .variable(variable)
                 .value(VALUE)
                 .build();
     }
 
     @Test
-    void isSatisfied_true() {
-        assertThat(relation.isSatisfied(VALUE)).isTrue();
+    void isSatisfied_false() {
+        assertThat(relation.isSatisfied(VALUE)).isFalse();
     }
 
-    static Stream<Arguments> isSatisfied_false() {
+    static Stream<Arguments> isSatisfied_true() {
         return DOMAIN.stream()
                 .filter(Predicate.not(VALUE::equals))
                 .map(Arguments::of);
@@ -45,7 +45,17 @@ public class UnaryNotEqualsRelationTest {
 
     @ParameterizedTest
     @MethodSource
-    void isSatisfied_false(Object value) {
-        assertThat(relation.isSatisfied(new Assignment(Map.of(variable, value)))).isFalse();
+    void isSatisfied_true(Object value) {
+        assertThat(relation.isSatisfied(new Assignment(Map.of(variable, value)))).isTrue();
+    }
+
+    @Test
+    void isSatisfied_unknown() {
+        assertThat(relation.isSatisfied(new Assignment(Map.of()))).isTrue();
+    }
+
+    @Test
+    void testToString() {
+        assertThat(relation.toString()).isEqualTo("variable != 5");
     }
 }

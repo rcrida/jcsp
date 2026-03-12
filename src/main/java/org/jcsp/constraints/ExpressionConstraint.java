@@ -25,12 +25,10 @@ import java.util.function.Function;
  */
 public record ExpressionConstraint(@NonNull Set<Variable> variables, @NonNull Function<Assignment, Boolean> expression) implements Constraint {
     @Override
-    public boolean isSatisfied(@NonNull Assignment assignment) {
+    public boolean isSatisfiedBy(@NonNull Assignment assignment) {
+        if (!assignment.getValues().keySet().containsAll(variables)) {
+            return true;
+        }
         return expression.apply(assignment);
-    }
-
-    @Override
-    public boolean isSatisfied(@NonNull Object... values) {
-        return false;
     }
 }

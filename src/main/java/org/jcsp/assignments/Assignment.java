@@ -1,5 +1,9 @@
 package org.jcsp.assignments;
 
+import lombok.Builder;
+import lombok.Singular;
+import lombok.Value;
+import org.jcsp.ConstraintSatisfactionProblem;
 import org.jcsp.variables.Variable;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
@@ -22,11 +26,17 @@ import java.util.stream.Collectors;
  *   constraint satisfaction problem.
  * - Validating whether a value assignment satisfies specific constraints.
  */
-public record Assignment(@NonNull Map<Variable, Object> values) {
-    public Assignment {
+@Value
+@Builder(toBuilder = true)
+public class Assignment {
+    @Singular
+    Map<Variable, Object> values;
+
+    public Assignment(Map<Variable, Object> values) {
         for (Map.Entry<Variable, Object> entry : values.entrySet()) {
             assert entry.getKey().isAllowedValue(entry.getValue()) : String.format("Invalid assigned value for variable '%s': %s", entry.getKey(), entry.getValue());
         }
+        this.values = values;
     }
 
     public Optional<Object> getValue(@NonNull Variable variable) {
@@ -37,5 +47,20 @@ public record Assignment(@NonNull Map<Variable, Object> values) {
         return new Assignment(values.entrySet().stream()
                 .filter(a -> variables.contains(a.getKey()))
                 .collect(Collectors.toUnmodifiableMap(Map.Entry::getKey, Map.Entry::getValue)));
+    }
+
+    public Assignment withValue(@NonNull Variable variable, @NonNull Object value) {
+        return toBuilder()
+                .value(variable, value)
+                .build();
+    }
+
+    public boolean isConsistent(ConstraintSatisfactionProblem csp) {
+        return csp.getConstraints().stream()
+                .allMatch(constraint -> constraint.isSatisfiedBy(this));
+    }
+
+    public boolean isComplete(ConstraintSatisfactionProblem csp) {
+        return csp.getVariableDomains().keySet().stream().allMatch(values::containsKey);
     }
 }

@@ -9,6 +9,9 @@ import java.util.Objects;
 public class BinaryNotEqualsRelation extends BinaryRelation {
     @Override
     public boolean isSatisfied(@Nullable Object left, @Nullable Object right) {
+        if (left == null || right == null) {
+            return true;
+        }
         return !Objects.equals(left, right);
     }
 

@@ -10,6 +10,5 @@ import org.jspecify.annotations.NonNull;
  * the specific logic for evaluating whether an assignment satisfies the constraint.
  */
 public interface Constraint {
-    boolean isSatisfied(@NonNull Assignment assignment);
-    boolean isSatisfied(@NonNull Object... values);
+    boolean isSatisfiedBy(@NonNull Assignment assignment);
 }

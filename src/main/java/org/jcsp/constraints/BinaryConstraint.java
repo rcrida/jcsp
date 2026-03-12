@@ -2,7 +2,6 @@ package org.jcsp.constraints;
 
 import org.jcsp.assignments.Assignment;
 import org.jcsp.relations.BinaryRelation;
-import org.jcsp.relations.ReversedBinaryRelation;
 import org.jcsp.variables.Variable;
 import org.jspecify.annotations.NonNull;
 
@@ -12,14 +11,12 @@ public record BinaryConstraint(@NonNull Variable left, @NonNull Variable right, 
     }
 
     @Override
-    public boolean isSatisfied(@NonNull Assignment assignment) {
+    public boolean isSatisfiedBy(@NonNull Assignment assignment) {
         return relation.isSatisfied(assignment);
     }
 
-    @Override
-    public boolean isSatisfied(@NonNull Object... values) {
-        assert values.length == 2 : "Binary constraint requires exactly two values";
-        return relation.isSatisfied(values[0], values[1]);
+    public boolean isSatisfied(@NonNull Object leftValue, @NonNull Object rightValue) {
+        return relation.isSatisfied(leftValue, rightValue);
     }
 
     public BinaryConstraint reversed() {

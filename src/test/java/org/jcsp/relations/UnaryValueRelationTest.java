@@ -51,6 +51,11 @@ public class UnaryValueRelationTest {
     }
 
     @Test
+    void isSatisfied_unknown() {
+        assertThat(relation.isSatisfied(new Assignment(Map.of()))).isTrue();
+    }
+
+    @Test
     void testToString() {
         assertThat(relation.toString()).isEqualTo("{(5)}");
     }

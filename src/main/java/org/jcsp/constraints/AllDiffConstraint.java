@@ -23,8 +23,8 @@ import java.util.Set;
 public record AllDiffConstraint(@NonNull Set<Variable> variables) implements Constraint {
 
     @Override
-    public boolean isSatisfied(@NonNull Assignment assignment) {
-        final var allValues = assignment.extractPartialAssignment(variables).values().values();
+    public boolean isSatisfiedBy(@NonNull Assignment assignment) {
+        final var allValues = assignment.extractPartialAssignment(variables).getValues().values();
         final var allSize = allValues.size();
         if (allSize < 2) {
             return true;
@@ -41,10 +41,5 @@ public record AllDiffConstraint(@NonNull Set<Variable> variables) implements Con
                 return false;
         }
         return true;
-    }
-
-    @Override
-    public boolean isSatisfied(@NonNull Object... values) {
-        return false;
     }
 }

@@ -58,6 +58,6 @@ public class AssignmentTest {
         when(anotherVariable.isAllowedValue(anotherValue)).thenReturn(true);
         var assignment = new Assignment(Map.of(variable, value, anotherVariable, anotherValue));
         var partialAssignment = assignment.extractPartialAssignment(Set.of(variable));
-        assertThat(partialAssignment.values()).isEqualTo(Map.of(variable, value));
+        assertThat(partialAssignment.getValues()).isEqualTo(Map.of(variable, value));
     }
 }
