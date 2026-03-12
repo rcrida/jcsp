@@ -1,0 +1,66 @@
+package org.jcsp.examples;
+
+import lombok.val;
+import org.jcsp.ConstraintSatisfactionProblem;
+import org.jcsp.assignments.Assignment;
+import org.jcsp.constraints.BinaryConstraint;
+import org.jcsp.domains.Domain;
+import org.jcsp.domains.EnumDomain;
+import org.jcsp.relations.BinaryNotEqualsRelation;
+import org.jcsp.search.BacktrackingSearch;
+import org.jcsp.search.order.LeastConstrainingValueOrderer;
+import org.jcsp.search.selector.MinimumRemainingValuesSelector;
+import org.jcsp.solver.SolverImpl;
+import org.jcsp.variables.Variable;
+import org.junit.jupiter.api.Test;
+
+import java.util.Map;
+import java.util.Set;
+
+import static org.assertj.core.api.Assertions.assertThat;
+
+public class AustraliaMapColouringTest {
+    enum Colour {
+        RED, GREEN, BLUE
+    }
+
+    public static Domain DOMAIN = EnumDomain.allOf(Colour.class);
+    static Variable.Factory VARIABLE_FACTORY = new Variable.Factory() {};
+    static Variable WA = VARIABLE_FACTORY.create("WA", DOMAIN);
+    static Variable NT = VARIABLE_FACTORY.create("NT", DOMAIN);
+    static Variable Q = VARIABLE_FACTORY.create("Q", DOMAIN);
+    static Variable NSW = VARIABLE_FACTORY.create("NSW", DOMAIN);
+    static Variable V = VARIABLE_FACTORY.create("V", DOMAIN);
+    static Variable SA = VARIABLE_FACTORY.create("SA", DOMAIN);
+    static Variable T = VARIABLE_FACTORY.create("T", DOMAIN);
+
+    public static ConstraintSatisfactionProblem problem() {
+        return ConstraintSatisfactionProblem.builder()
+                .variables(Set.of(WA, NT, Q, NSW, V, SA, T))
+                .constraint(BinaryConstraint.of(SA, WA, BinaryNotEqualsRelation.builder().left(SA).right(WA).build()))
+                .constraint(BinaryConstraint.of(SA, NT, BinaryNotEqualsRelation.builder().left(SA).right(NT).build()))
+                .constraint(BinaryConstraint.of(SA, Q, BinaryNotEqualsRelation.builder().left(SA).right(Q).build()))
+                .constraint(BinaryConstraint.of(SA, NSW, BinaryNotEqualsRelation.builder().left(SA).right(NSW).build()))
+                .constraint(BinaryConstraint.of(SA, V, BinaryNotEqualsRelation.builder().left(SA).right(V).build()))
+                .constraint(BinaryConstraint.of(WA, NT, BinaryNotEqualsRelation.builder().left(WA).right(NT).build()))
+                .constraint(BinaryConstraint.of(NT, Q, BinaryNotEqualsRelation.builder().left(NT).right(Q).build()))
+                .constraint(BinaryConstraint.of(Q, NSW, BinaryNotEqualsRelation.builder().left(Q).right(NSW).build()))
+                .constraint(BinaryConstraint.of(NSW, V, BinaryNotEqualsRelation.builder().left(NSW).right(V).build()))
+                .build();
+    }
+
+    @Test
+    void solution() {
+        val csp = problem();
+        val solver = new SolverImpl(new BacktrackingSearch(new MinimumRemainingValuesSelector(), new LeastConstrainingValueOrderer()));
+        val optionalSolution = solver.getSolution(csp);
+        System.out.println(optionalSolution);
+        assertThat(optionalSolution).hasValueSatisfying(value ->
+                assertThat(value).isIn(
+                        new Assignment(Map.of(
+                                WA, Colour.RED, NT, Colour.GREEN, Q, Colour.RED, NSW, Colour.GREEN, V, Colour.RED, SA, Colour.BLUE, T, Colour.RED)),
+                        new Assignment(Map.of(
+                                WA, Colour.RED, NT, Colour.BLUE, Q, Colour.RED, NSW, Colour.BLUE, V, Colour.RED, SA, Colour.GREEN, T, Colour.RED))
+                ));
+    }
+}

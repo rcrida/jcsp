@@ -31,4 +31,9 @@ public record ExpressionConstraint(@NonNull Set<Variable> variables, @NonNull Fu
         }
         return expression.apply(assignment);
     }
+
+    @Override
+    public String toString() {
+        return "<(" + String.join(", ", variables.stream().map(Object::toString).sorted().toList()) + "), " + expression + ">";
+    }
 }

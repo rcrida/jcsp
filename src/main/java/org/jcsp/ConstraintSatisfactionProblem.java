@@ -7,6 +7,7 @@ import org.jcsp.constraints.Constraint;
 import org.jcsp.domains.Domain;
 import org.jcsp.variables.Variable;
 
+import java.util.Collection;
 import java.util.Map;
 import java.util.Set;
 
@@ -25,6 +26,18 @@ public class ConstraintSatisfactionProblem {
             final var variable = variableFactory.create(name, domain);
             variableDomain(variable, domain);
             return variable;
-        };
+        }
+
+        public ConstraintSatisfactionProblemBuilder variables(Collection<Variable> variables) {
+            for (Variable variable : variables) {
+                variable(variable);
+            }
+            return this;
+        }
+
+        public ConstraintSatisfactionProblemBuilder variable(Variable variable) {
+            variableDomain(variable, variable.getDomain());
+            return this;
+        }
     }
 }

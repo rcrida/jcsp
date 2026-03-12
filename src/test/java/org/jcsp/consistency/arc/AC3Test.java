@@ -4,9 +4,8 @@ import lombok.val;
 import org.jcsp.ConstraintSatisfactionProblem;
 import org.jcsp.constraints.BinaryConstraint;
 import org.jcsp.domains.DomainObjectSet;
-import org.jcsp.domains.EnumDomain;
 import org.jcsp.domains.IntRangeDomain;
-import org.jcsp.relations.BinaryNotEqualsRelation;
+import org.jcsp.examples.AustraliaMapColouringTest;
 import org.jcsp.relations.BinaryTuple;
 import org.jcsp.relations.BinaryTuplesRelation;
 import org.junit.jupiter.api.Test;
@@ -41,37 +40,14 @@ public class AC3Test {
         assertThat(arcConstrainedProblem.getVariableDomains().get(right)).isEqualTo(DomainObjectSet.builder().values(List.of(0, 1, 4, 9)).build());
     }
 
-    enum Colour {
-        RED, GREEN, BLUE
-    }
-
     @Test
     void applyAustraliaMapColouring() {
-        val domain = EnumDomain.allOf(Colour.class);
-        val builder = ConstraintSatisfactionProblem.builder();
-        val WA = builder.createVariable("WA", domain);
-        val NT = builder.createVariable("NT", domain);
-        val Q = builder.createVariable("Q", domain);
-        val NSW = builder.createVariable("NSW", domain);
-        val V = builder.createVariable("V", domain);
-        val SA = builder.createVariable("SA", domain);
-        val T = builder.createVariable("T", domain);
-        builder
-                .constraint(BinaryConstraint.of(SA, WA, BinaryNotEqualsRelation.builder().left(SA).right(WA).build()))
-                .constraint(BinaryConstraint.of(SA, NT, BinaryNotEqualsRelation.builder().left(SA).right(NT).build()))
-                .constraint(BinaryConstraint.of(SA, Q, BinaryNotEqualsRelation.builder().left(SA).right(Q).build()))
-                .constraint(BinaryConstraint.of(SA, NSW, BinaryNotEqualsRelation.builder().left(SA).right(NSW).build()))
-                .constraint(BinaryConstraint.of(SA, V, BinaryNotEqualsRelation.builder().left(SA).right(V).build()))
-                .constraint(BinaryConstraint.of(WA, NT, BinaryNotEqualsRelation.builder().left(WA).right(NT).build()))
-                .constraint(BinaryConstraint.of(NT, Q, BinaryNotEqualsRelation.builder().left(NT).right(Q).build()))
-                .constraint(BinaryConstraint.of(Q, NSW, BinaryNotEqualsRelation.builder().left(Q).right(NSW).build()))
-                .constraint(BinaryConstraint.of(NSW, V, BinaryNotEqualsRelation.builder().left(NSW).right(V).build()));
-        val problem = builder.build();
+        val problem = AustraliaMapColouringTest.problem();
         System.out.println(problem);
         val arcConstrainedProblem = AC3.INSTANCE.apply(problem).get();
         System.out.println(arcConstrainedProblem);
         arcConstrainedProblem.getVariableDomains().keySet().stream().forEach(state -> {
-            assertThat(arcConstrainedProblem.getVariableDomains().get(state)).isEqualTo(domain);
+            assertThat(arcConstrainedProblem.getVariableDomains().get(state)).isEqualTo(AustraliaMapColouringTest.DOMAIN);
         });
     }
 

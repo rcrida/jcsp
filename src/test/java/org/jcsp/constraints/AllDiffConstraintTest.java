@@ -98,4 +98,9 @@ public class AllDiffConstraintTest {
         when(variable3.isAllowedValue(value2)).thenCallRealMethod();
         assertThat(allDiffConstraint.isSatisfiedBy(new Assignment(Map.of(variable1, value1, variable2, value2, variable3, value2)))).isFalse();
     }
+
+    @Test
+    void testToString() {
+        assertThat(allDiffConstraint.toString()).isEqualTo("<(variable1, variable2, variable3), AllDiff>");
+    }
 }

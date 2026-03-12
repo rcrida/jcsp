@@ -57,4 +57,9 @@ public class ExpressionConstraintTest {
     void isSatisfiedBy_unknown() {
         assertThat(expressionConstraint.isSatisfiedBy(new Assignment(Map.of()))).isTrue();
     }
+
+    @Test
+    void testToString() {
+        assertThat(expressionConstraint.toString()).isEqualTo("<(variable1, variable2), expression>");
+    }
 }

@@ -42,4 +42,9 @@ public record AllDiffConstraint(@NonNull Set<Variable> variables) implements Con
         }
         return true;
     }
+
+    @Override
+    public String toString() {
+        return "<(" + String.join(", ", variables.stream().map(Object::toString).sorted().toList()) + "), AllDiff>";
+    }
 }

@@ -2,34 +2,40 @@ package org.jcsp.examples;
 
 import lombok.val;
 import org.jcsp.ConstraintSatisfactionProblem;
+import org.jcsp.assignments.Assignment;
 import org.jcsp.constraints.AllDiffConstraint;
 import org.jcsp.constraints.ExpressionConstraint;
+import org.jcsp.domains.Domain;
 import org.jcsp.domains.IntRangeDomain;
 import org.jcsp.search.BacktrackingSearch;
 import org.jcsp.search.order.LeastConstrainingValueOrderer;
 import org.jcsp.search.selector.MinimumRemainingValuesSelector;
 import org.jcsp.solver.SolverImpl;
+import org.jcsp.variables.Variable;
 import org.junit.jupiter.api.Test;
 
+import java.util.Map;
 import java.util.Set;
 
-public class CryptarithmeticTest {
-    @Test
-    void twoPlusTwoEqualsFour() {
-        val builder = ConstraintSatisfactionProblem.builder();
-        val digitDomain = new IntRangeDomain(0, 9);
-        val carryDomain = new IntRangeDomain(0, 1);
-        val t = builder.createVariable("T", digitDomain);
-        val w = builder.createVariable("W", digitDomain);
-        val o = builder.createVariable("O", digitDomain);
-        val f = builder.createVariable("F", digitDomain);
-        val u = builder.createVariable("U", digitDomain);
-        val r = builder.createVariable("R", digitDomain);
-        val c1 = builder.createVariable("C1", carryDomain);
-        val c2 = builder.createVariable("C2", carryDomain);
-        val c3 = builder.createVariable("C3", carryDomain);
+import static org.assertj.core.api.Assertions.assertThat;
 
-        builder
+public class CryptarithmeticTest {
+    static Domain DIGIT_DOMAIN = new IntRangeDomain(0, 9);
+    static Domain CARRY_DOMAIN = new IntRangeDomain(0, 1);
+    static Variable.Factory VARIABLE_FACTORY = new Variable.Factory() {};
+    static Variable t = VARIABLE_FACTORY.create("T", DIGIT_DOMAIN);
+    static Variable w = VARIABLE_FACTORY.create("W", DIGIT_DOMAIN);
+    static Variable o = VARIABLE_FACTORY.create("O", DIGIT_DOMAIN);
+    static Variable f = VARIABLE_FACTORY.create("F", DIGIT_DOMAIN);
+    static Variable u = VARIABLE_FACTORY.create("U", DIGIT_DOMAIN);
+    static Variable r = VARIABLE_FACTORY.create("R", DIGIT_DOMAIN);
+    static Variable c1 = VARIABLE_FACTORY.create("C1", CARRY_DOMAIN);
+    static Variable c2 = VARIABLE_FACTORY.create("C2", CARRY_DOMAIN);
+    static Variable c3 = VARIABLE_FACTORY.create("C3", CARRY_DOMAIN);
+
+    public static ConstraintSatisfactionProblem twoPlusTwoEqualsFour() {
+        return ConstraintSatisfactionProblem.builder()
+                .variables(Set.of(t, w, o, f, u, r, c1, c2, c3))
                 .constraint(new AllDiffConstraint(Set.of(t, w, o, f, u, r)))
                 .constraint(new ExpressionConstraint(Set.of(o, r, c1), assignment -> {
                     val O = (int) assignment.getValue(o).get();
@@ -55,9 +61,26 @@ public class CryptarithmeticTest {
                     val C3 = (int) assignment.getValue(c3).get();
                     val F = (int) assignment.getValue(f).get();
                     return C3 == F;
-                }));
-        val csp = builder.build();
+                }))
+                .build();
+    }
+
+    @Test
+    void solution() {
+        val csp = twoPlusTwoEqualsFour();
         val solver = new SolverImpl(new BacktrackingSearch(new MinimumRemainingValuesSelector(), new LeastConstrainingValueOrderer()));
-        System.out.println(solver.getSolution(csp));
+        val optionalSolution = solver.getSolution(csp);
+        System.out.println(optionalSolution);
+        assertThat(optionalSolution).contains(new Assignment(Map.of(
+                t, 1,
+                w, 3,
+                o, 2,
+                f, 0,
+                u, 6,
+                r, 4,
+                c1, 0,
+                c2, 0,
+                c3, 0
+        )));
     }
 }
