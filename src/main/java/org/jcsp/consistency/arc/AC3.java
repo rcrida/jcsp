@@ -34,13 +34,13 @@ public class AC3 implements ArcConsistency {
         final var binaryConstraints = problem.getConstraints().stream()
                 .filter(c -> c instanceof BinaryConstraint)
                 .map(c -> (BinaryConstraint) c)
-                .toList();
-        final var queue = new ArrayDeque<>(binaryConstraints.stream()
                 .flatMap(c -> Stream.of(c, c.reversed()))
-                .toList());
+                .toList();
+        final var queue = new ArrayDeque<>(binaryConstraints);
         while (!queue.isEmpty()) {
             final var arc = queue.poll();
             val X_i = arc.left();
+            val X_j = arc.right();
             final var D_i = problem.getVariableDomains().get(X_i);
             final var optionalRevisedDomain1 = revise(problem, D_i, arc);
             if (optionalRevisedDomain1.isPresent()) {
@@ -49,10 +49,10 @@ public class AC3 implements ArcConsistency {
                     log.warn("Domain of variable {} is empty after AC3", X_i);
                     return Optional.empty();
                 }
-                builder.variableDomain(arc.left(), revisedDomain1);
+                builder.variableDomain(X_i, revisedDomain1);
                 val X_iNeighbours = binaryConstraints.stream()
+                        .filter(c -> !c.left().equals(X_j))
                         .filter(c -> c.right().equals(X_i))
-                        .filter(c -> !c.right().equals(arc.right()))
                         .toList();
                 queue.addAll(X_iNeighbours);
             }

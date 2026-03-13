@@ -5,9 +5,9 @@ import org.jcsp.ConstraintSatisfactionProblem;
 import org.jcsp.constraints.BinaryConstraint;
 import org.jcsp.domains.DomainObjectSet;
 import org.jcsp.domains.IntRangeDomain;
-import org.jcsp.solver.AustraliaMapColouringTest;
 import org.jcsp.relations.BinaryTuple;
 import org.jcsp.relations.BinaryTuplesRelation;
+import org.jcsp.solver.AustraliaMapColouringTest;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
@@ -38,6 +38,27 @@ public class AC3Test {
         System.out.println(arcConstrainedProblem);
         assertThat(arcConstrainedProblem.getVariableDomains().get(left)).isEqualTo(DomainObjectSet.builder().values(List.of(0, 1, 2, 3)).build());
         assertThat(arcConstrainedProblem.getVariableDomains().get(right)).isEqualTo(DomainObjectSet.builder().values(List.of(0, 1, 4, 9)).build());
+    }
+
+    @Test
+    void emptyProblem() {
+        val builder = ConstraintSatisfactionProblem.builder();
+        val problem = builder.build();
+        System.out.println(problem);
+        val arcConstrainedProblem = AC3.INSTANCE.apply(problem).get();
+        assertThat(arcConstrainedProblem.getVariableDomains()).isEmpty();
+    }
+
+    @Test
+    void singleVariableNoConstraints() {
+        val domain = new IntRangeDomain(0, 5);
+        val builder = ConstraintSatisfactionProblem.builder();
+        val variable = builder.createVariable("x", domain);
+        builder.variable(variable);
+        val problem = builder.build();
+        System.out.println(problem);
+        val arcConstrainedProblem = AC3.INSTANCE.apply(problem).get();
+        assertThat(arcConstrainedProblem.getVariableDomains().get(variable)).isEqualTo(domain);
     }
 
     @Test

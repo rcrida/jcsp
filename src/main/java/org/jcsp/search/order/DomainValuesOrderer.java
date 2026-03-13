@@ -7,6 +7,14 @@ import org.jspecify.annotations.NonNull;
 
 import java.util.List;
 
+/**
+ * A functional interface that defines a strategy for ordering the domain values of a variable
+ * in the context of a constraint satisfaction problem (CSP). The order in which domain values
+ * are considered can significantly impact the efficiency of solving the CSP.
+ * <p>
+ * Implementations of this interface typically apply heuristics to prioritize domain values
+ * in a way that reduces the search space or satisfies constraints more effectively.
+ */
 @FunctionalInterface
 public interface DomainValuesOrderer {
     List<?> order(@NonNull ConstraintSatisfactionProblem csp, @NonNull Variable variable, @NonNull Assignment assignment);

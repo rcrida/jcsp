@@ -9,6 +9,21 @@ import org.jspecify.annotations.NonNull;
 import java.util.Comparator;
 import java.util.List;
 
+/**
+ * A strategy for ordering the domain values of a variable in a constraint satisfaction problem (CSP)
+ * based on the "Least Constraining Value" heuristic. This heuristic prioritizes values that eliminate
+ * the fewest possible domain values for neighboring variables, thereby aiming to preserve flexibility
+ * in the search space.
+ * <p>
+ * The ordering is determined by evaluating how many domain values would be eliminated for each
+ * neighbouring variable if a particular value is assigned to the given variable. The value order is
+ * established in ascending order of the number of eliminated values, with values that affect fewer
+ * neighbours or eliminate fewer possibilities being prioritized.
+ * <p>
+ * This implementation specifically accounts for constraints that are instances of {@code BinaryConstraint},
+ * which operate on pairs of variables. The elimination of domain values is computed by iterating
+ * over the binary constraints involving the variable of interest and evaluating their satisfaction.
+ */
 public class LeastConstrainingValueOrderer implements DomainValuesOrderer {
     @Override
     public List<?> order(@NonNull ConstraintSatisfactionProblem csp, @NonNull Variable variable, @NonNull Assignment assignment) {
