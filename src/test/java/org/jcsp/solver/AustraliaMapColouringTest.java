@@ -65,7 +65,16 @@ public class AustraliaMapColouringTest {
                         new Assignment(Map.of(
                                 WA, Colour.GREEN, NT, Colour.RED, Q, Colour.GREEN, NSW, Colour.RED, V, Colour.GREEN, SA, Colour.BLUE, T, Colour.RED)),
                         new Assignment(Map.of(
-                                WA, Colour.GREEN, NT, Colour.BLUE, Q, Colour.GREEN, NSW, Colour.BLUE, V, Colour.GREEN, SA, Colour.RED, T, Colour.RED))
+                                WA, Colour.GREEN, NT, Colour.BLUE, Q, Colour.GREEN, NSW, Colour.BLUE, V, Colour.GREEN, SA, Colour.RED, T, Colour.RED)),
+                        new Assignment(Map.of(
+                                WA, Colour.BLUE, NT, Colour.GREEN, Q, Colour.BLUE, NSW, Colour.GREEN, V, Colour.BLUE, SA, Colour.RED, T, Colour.RED))
                 ));
+    }
+
+    @Test
+    void searchStream() {
+        val csp = problem();
+        val solver = new SolverImpl(new BacktrackingSearch(new MinimumRemainingValuesSelector(), new LeastConstrainingValueOrderer()));
+        assertThat(solver.getSolutions(csp)).hasSize(18);
     }
 }

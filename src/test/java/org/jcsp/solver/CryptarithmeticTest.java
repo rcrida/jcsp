@@ -82,4 +82,11 @@ public class CryptarithmeticTest {
                 c3, 0
         )));
     }
+
+    @Test
+    void searchStream() {
+        val csp = twoPlusTwoEqualsFour();
+        val solver = new SolverImpl(new BacktrackingSearch(new MinimumRemainingValuesSelector(), new LeastConstrainingValueOrderer()));
+        assertThat(solver.getSolutions(csp)).hasSize(19);
+    }
 }

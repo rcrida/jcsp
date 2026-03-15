@@ -11,6 +11,7 @@ import org.jspecify.annotations.NonNull;
 
 import java.util.Map;
 import java.util.Optional;
+import java.util.stream.Stream;
 
 @Slf4j
 @Value
@@ -20,25 +21,23 @@ public class BacktrackingSearch implements Search {
 
     @Override
     public Optional<Assignment> search(ConstraintSatisfactionProblem csp) {
-        return search(csp, new Assignment(Map.of()));
+        return searchStream(csp).findFirst();
     }
 
-    private Optional<Assignment> search(ConstraintSatisfactionProblem csp, Assignment assignment) {
+    @Override
+    public Stream<Assignment> searchStream(ConstraintSatisfactionProblem csp) {
+        return searchStream(csp, new Assignment(Map.of()));
+    }
+
+    private Stream<Assignment> searchStream(ConstraintSatisfactionProblem csp, Assignment assignment) {
         log.info("Searching with assignment: {}", assignment);
         if (assignment.isComplete(csp)) {
-            return Optional.of(assignment);
+            return Stream.of(assignment);
         }
         val variable = unassignedVariableSelector.select(csp, assignment);
-        for (var value : domainValuesOrderer.order(csp, variable, assignment)) {
-            val assignmentWithValue = assignment.withValue(variable, value);
-            // TODO support inferences
-            if (assignmentWithValue.isConsistent(csp)) {
-                val result = search(csp, assignmentWithValue);
-                if (result.isPresent()) {
-                    return result;
-                }
-            }
-        }
-        return Optional.empty();
+        return domainValuesOrderer.order(csp, variable, assignment).stream()
+                .map(value -> assignment.withValue(variable, value))
+                .filter(next -> next.isConsistent(csp))
+                .flatMap(next -> searchStream(csp, next));
     }
 }
