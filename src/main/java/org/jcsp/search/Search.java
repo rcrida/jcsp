@@ -7,6 +7,5 @@ import java.util.Optional;
 import java.util.stream.Stream;
 
 public interface Search {
-    Optional<Assignment> search(ConstraintSatisfactionProblem csp);
     Stream<Assignment> searchStream(ConstraintSatisfactionProblem csp);
 }

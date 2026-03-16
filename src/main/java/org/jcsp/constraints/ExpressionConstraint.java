@@ -1,5 +1,6 @@
 package org.jcsp.constraints;
 
+import lombok.experimental.SuperBuilder;
 import org.jcsp.assignments.Assignment;
 import org.jcsp.variables.Variable;
 import org.jspecify.annotations.NonNull;
@@ -19,21 +20,21 @@ import java.util.function.Function;
  * The constraint is satisfied if the provided assignment meets the boolean condition
  * specified by {@code expression}. This allows for defining complex relationships
  * and dependencies between multiple variables.
- *
- * @param variables The constraint operates on a set of variables, making it n-ary in nature.
- * @param expression The logical condition or rule that determines satisfaction.
  */
-public record ExpressionConstraint(@NonNull Set<Variable> variables, @NonNull Function<Assignment, Boolean> expression) implements Constraint {
+@SuperBuilder
+public class ExpressionConstraint extends NaryConstraint {
+    @NonNull Function<Assignment, Boolean> expression;
+
     @Override
     public boolean isSatisfiedBy(@NonNull Assignment assignment) {
-        if (!assignment.getValues().keySet().containsAll(variables)) {
+        if (!assignment.getValues().keySet().containsAll(getVariables())) {
             return true;
         }
         return expression.apply(assignment);
     }
 
     @Override
-    public String toString() {
-        return "<(" + String.join(", ", variables.stream().map(Object::toString).sorted().toList()) + "), " + expression + ">";
+    public String getRelation() {
+        return expression.toString();
     }
 }

@@ -20,11 +20,6 @@ public class BacktrackingSearch implements Search {
     @NonNull DomainValuesOrderer domainValuesOrderer;
 
     @Override
-    public Optional<Assignment> search(ConstraintSatisfactionProblem csp) {
-        return searchStream(csp).findFirst();
-    }
-
-    @Override
     public Stream<Assignment> searchStream(ConstraintSatisfactionProblem csp) {
         return searchStream(csp, new Assignment(Map.of()));
     }

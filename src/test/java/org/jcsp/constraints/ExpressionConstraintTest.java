@@ -36,7 +36,7 @@ public class ExpressionConstraintTest {
 
     @BeforeEach
     void setUp() {
-        expressionConstraint = new ExpressionConstraint(Set.of(variable1, variable2), expression);
+        expressionConstraint = ExpressionConstraint.builder().variables(Set.of(variable1, variable2)).expression(expression).build();
     }
 
     @ParameterizedTest

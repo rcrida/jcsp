@@ -36,31 +36,31 @@ public class CryptarithmeticTest {
         return ConstraintSatisfactionProblem.builder()
                 .variables(Set.of(t, w, o, f, u, r, c1, c2, c3))
                 .constraint(AllDiffConstraint.builder().variables(Set.of(t, w, o, f, u, r)).build())
-                .constraint(new ExpressionConstraint(Set.of(o, r, c1), assignment -> {
+                .constraint(ExpressionConstraint.builder().variables(Set.of(o, r, c1)).expression(assignment -> {
                     val O = (int) assignment.getValue(o).get();
                     val R = (int) assignment.getValue(r).get();
                     val C1 = (int) assignment.getValue(c1).get();
                     return O + O == R + 10 * C1;
-                }))
-                .constraint(new ExpressionConstraint(Set.of(c1, w, u, c2), assignment -> {
+                }).build())
+                .constraint(ExpressionConstraint.builder().variables(Set.of(c1, w, u, c2)).expression(assignment -> {
                     val C1 = (int) assignment.getValue(c1).get();
                     val W = (int) assignment.getValue(w).get();
                     val U = (int) assignment.getValue(u).get();
                     val C2 = (int) assignment.getValue(c2).get();
                     return C1 + W + W == U + 10 * C2;
-                }))
-                .constraint(new ExpressionConstraint(Set.of(c2, t, o, c3), assignment -> {
+                }).build())
+                .constraint(ExpressionConstraint.builder().variables(Set.of(c2, t, o, c3)).expression(assignment -> {
                     val C2 = (int) assignment.getValue(c2).get();
                     val T = (int) assignment.getValue(t).get();
                     val O = (int) assignment.getValue(o).get();
                     val C3 = (int) assignment.getValue(c3).get();
                     return C2 + T + T == O + 10 * C3;
-                }))
-                .constraint(new ExpressionConstraint(Set.of(c3, f), assignment -> {
+                }).build())
+                .constraint(ExpressionConstraint.builder().variables(Set.of(c3, f)).expression(assignment -> {
                     val C3 = (int) assignment.getValue(c3).get();
                     val F = (int) assignment.getValue(f).get();
                     return C3 == F;
-                }))
+                }).build())
                 .build();
     }
 
