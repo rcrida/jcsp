@@ -2,7 +2,7 @@ package org.jcsp.consistency.node;
 
 import lombok.val;
 import org.jcsp.ConstraintSatisfactionProblem;
-import org.jcsp.constraints.UnaryConstraint;
+import org.jcsp.constraints.unary.UnaryConstraint;
 import org.jcsp.domains.DomainObjectSet;
 import org.jcsp.domains.EnumDomain;
 import org.jcsp.relations.UnaryNotEqualsRelation;

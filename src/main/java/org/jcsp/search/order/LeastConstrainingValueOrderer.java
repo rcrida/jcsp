@@ -2,7 +2,7 @@ package org.jcsp.search.order;
 
 import org.jcsp.ConstraintSatisfactionProblem;
 import org.jcsp.assignments.Assignment;
-import org.jcsp.constraints.BinaryConstraint;
+import org.jcsp.constraints.binary.BinaryConstraint;
 import org.jcsp.variables.Variable;
 import org.jspecify.annotations.NonNull;
 

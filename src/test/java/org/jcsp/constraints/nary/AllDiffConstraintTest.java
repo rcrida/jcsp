@@ -1,4 +1,4 @@
-package org.jcsp.constraints;
+package org.jcsp.constraints.nary;
 
 import org.jcsp.assignments.Assignment;
 import org.jcsp.domains.Domain;

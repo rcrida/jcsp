@@ -1,4 +1,4 @@
-package org.jcsp.constraints;
+package org.jcsp.constraints.binary;
 
 import lombok.val;
 import org.jcsp.assignments.Assignment;

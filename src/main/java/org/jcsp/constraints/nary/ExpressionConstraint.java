@@ -1,11 +1,9 @@
-package org.jcsp.constraints;
+package org.jcsp.constraints.nary;
 
 import lombok.experimental.SuperBuilder;
 import org.jcsp.assignments.Assignment;
-import org.jcsp.variables.Variable;
 import org.jspecify.annotations.NonNull;
 
-import java.util.Set;
 import java.util.function.Function;
 
 /**

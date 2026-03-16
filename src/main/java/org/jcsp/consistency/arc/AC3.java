@@ -3,12 +3,10 @@ package org.jcsp.consistency.arc;
 import lombok.extern.slf4j.Slf4j;
 import lombok.val;
 import org.jcsp.ConstraintSatisfactionProblem;
-import org.jcsp.assignments.Assignment;
-import org.jcsp.constraints.BinaryConstraint;
+import org.jcsp.constraints.binary.BinaryConstraint;
 import org.jcsp.domains.Domain;
 
 import java.util.ArrayDeque;
-import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Stream;

@@ -2,7 +2,7 @@ package org.jcsp.consistency.arc;
 
 import lombok.val;
 import org.jcsp.ConstraintSatisfactionProblem;
-import org.jcsp.constraints.BinaryConstraint;
+import org.jcsp.constraints.binary.BinaryConstraint;
 import org.jcsp.domains.DomainObjectSet;
 import org.jcsp.domains.IntRangeDomain;
 import org.jcsp.relations.BinaryTuple;

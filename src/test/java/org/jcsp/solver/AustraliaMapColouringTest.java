@@ -3,7 +3,7 @@ package org.jcsp.solver;
 import lombok.val;
 import org.jcsp.ConstraintSatisfactionProblem;
 import org.jcsp.assignments.Assignment;
-import org.jcsp.constraints.BinaryConstraint;
+import org.jcsp.constraints.binary.BinaryConstraint;
 import org.jcsp.domains.Domain;
 import org.jcsp.domains.EnumDomain;
 import org.jcsp.relations.BinaryNotEqualsRelation;

@@ -1,9 +1,10 @@
-package org.jcsp.constraints;
+package org.jcsp.constraints.nary;
 
 import lombok.Singular;
 import lombok.Value;
 import lombok.experimental.NonFinal;
 import lombok.experimental.SuperBuilder;
+import org.jcsp.constraints.Constraint;
 import org.jcsp.variables.Variable;
 
 import java.util.Set;

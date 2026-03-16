@@ -3,7 +3,7 @@ package org.jcsp.consistency.node;
 import lombok.extern.slf4j.Slf4j;
 import lombok.val;
 import org.jcsp.ConstraintSatisfactionProblem;
-import org.jcsp.constraints.UnaryConstraint;
+import org.jcsp.constraints.unary.UnaryConstraint;
 import org.jcsp.domains.Domain;
 
 import java.util.HashMap;

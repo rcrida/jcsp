@@ -1,6 +1,7 @@
-package org.jcsp.constraints;
+package org.jcsp.constraints.binary;
 
 import org.jcsp.assignments.Assignment;
+import org.jcsp.constraints.Constraint;
 import org.jcsp.relations.BinaryRelation;
 import org.jcsp.variables.Variable;
 import org.jspecify.annotations.NonNull;

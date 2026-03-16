@@ -1,6 +1,5 @@
-package org.jcsp.constraints;
+package org.jcsp.constraints.nary;
 
-import lombok.Value;
 import lombok.experimental.SuperBuilder;
 import org.jcsp.assignments.Assignment;
 import org.jspecify.annotations.NonNull;

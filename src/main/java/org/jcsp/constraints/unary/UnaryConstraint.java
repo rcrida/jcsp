@@ -1,6 +1,7 @@
-package org.jcsp.constraints;
+package org.jcsp.constraints.unary;
 
 import org.jcsp.assignments.Assignment;
+import org.jcsp.constraints.Constraint;
 import org.jcsp.relations.UnaryRelation;
 import org.jcsp.variables.Variable;
 import org.jspecify.annotations.NonNull;
