@@ -35,7 +35,7 @@ public class CryptarithmeticTest {
     public static ConstraintSatisfactionProblem twoPlusTwoEqualsFour() {
         return ConstraintSatisfactionProblem.builder()
                 .variables(Set.of(t, w, o, f, u, r, c1, c2, c3))
-                .constraint(new AllDiffConstraint(Set.of(t, w, o, f, u, r)))
+                .constraint(AllDiffConstraint.builder().variables(Set.of(t, w, o, f, u, r)).build())
                 .constraint(new ExpressionConstraint(Set.of(o, r, c1), assignment -> {
                     val O = (int) assignment.getValue(o).get();
                     val R = (int) assignment.getValue(r).get();

@@ -1,12 +1,12 @@
 package org.jcsp.constraints;
 
+import lombok.Value;
+import lombok.experimental.SuperBuilder;
 import org.jcsp.assignments.Assignment;
-import org.jcsp.variables.Variable;
 import org.jspecify.annotations.NonNull;
 
 import java.util.HashSet;
 import java.util.Objects;
-import java.util.Set;
 
 /**
  * Represents the "all-different" constraint in a constraint satisfaction problem (CSP).
@@ -20,11 +20,12 @@ import java.util.Set;
  * This implementation is thread-safe as it uses immutable data structures
  * provided by the {@link Assignment} and ensures no internal state mutation.
  */
-public record AllDiffConstraint(@NonNull Set<Variable> variables) implements Constraint {
+@SuperBuilder
+public class AllDiffConstraint extends NaryConstraint {
 
     @Override
     public boolean isSatisfiedBy(@NonNull Assignment assignment) {
-        final var allValues = assignment.extractPartialAssignment(variables).getValues().values();
+        final var allValues = assignment.extractPartialAssignment(getVariables()).getValues().values();
         final var allSize = allValues.size();
         if (allSize < 2) {
             return true;
@@ -44,7 +45,7 @@ public record AllDiffConstraint(@NonNull Set<Variable> variables) implements Con
     }
 
     @Override
-    public String toString() {
-        return "<(" + String.join(", ", variables.stream().map(Object::toString).sorted().toList()) + "), AllDiff>";
+    public String getRelation() {
+        return "AllDiff";
     }
 }

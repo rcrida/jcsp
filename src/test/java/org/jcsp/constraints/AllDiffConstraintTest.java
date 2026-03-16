@@ -35,7 +35,7 @@ public class AllDiffConstraintTest {
 
     @BeforeEach
     void setUp() {
-        allDiffConstraint = new AllDiffConstraint(Set.of(variable1, variable2, variable3));
+        allDiffConstraint = AllDiffConstraint.builder().variables(Set.of(variable1, variable2, variable3)).build();
     }
 
     @Test
