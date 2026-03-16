@@ -25,6 +25,11 @@ public record BinaryConstraint(@NonNull Variable left, @NonNull Variable right, 
     }
 
     @Override
+    public String getRelation() {
+        return "";
+    }
+
+    @Override
     public String toString() {
         return "<(" + left + ", " + right + "), " + relation + ">";
     }

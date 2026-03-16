@@ -1,27 +1,29 @@
 package org.jcsp.constraints.unary;
 
+import lombok.Value;
+import lombok.experimental.NonFinal;
+import lombok.experimental.SuperBuilder;
 import org.jcsp.assignments.Assignment;
 import org.jcsp.constraints.Constraint;
-import org.jcsp.relations.UnaryRelation;
 import org.jcsp.variables.Variable;
 import org.jspecify.annotations.NonNull;
+import org.jspecify.annotations.Nullable;
 
-public record UnaryConstraint(@NonNull Variable variable, @NonNull UnaryRelation relation) implements Constraint {
-    public static UnaryConstraint of(@NonNull Variable variable, @NonNull UnaryRelation relation) {
-        return new UnaryConstraint(variable, relation);
-    }
+@Value
+@NonFinal
+@SuperBuilder
+public abstract class UnaryConstraint implements Constraint {
+    @NonNull Variable variable;
 
     @Override
     public boolean isSatisfiedBy(@NonNull Assignment assignment) {
-        return relation.isSatisfied(assignment);
+        return isSatisfiedBy(assignment.getValue(variable).orElse(null));
     }
 
-    public boolean isSatisfied(@NonNull Object value) {
-        return relation.isSatisfied(value);
-    }
+    public abstract boolean isSatisfiedBy(@Nullable Object value);
 
     @Override
     public String toString() {
-        return "<(" + variable + "), " + relation + ">";
+        return "<(" + variable + "), " + getRelation() + ">";
     }
 }

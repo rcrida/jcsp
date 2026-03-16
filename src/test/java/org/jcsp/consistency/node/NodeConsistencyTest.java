@@ -2,10 +2,9 @@ package org.jcsp.consistency.node;
 
 import lombok.val;
 import org.jcsp.ConstraintSatisfactionProblem;
-import org.jcsp.constraints.unary.UnaryConstraint;
+import org.jcsp.constraints.unary.UnaryNotEqualsConstraint;
 import org.jcsp.domains.DomainObjectSet;
 import org.jcsp.domains.EnumDomain;
-import org.jcsp.relations.UnaryNotEqualsRelation;
 import org.junit.jupiter.api.Test;
 
 import java.util.EnumSet;
@@ -24,7 +23,7 @@ public class NodeConsistencyTest {
         val builder = ConstraintSatisfactionProblem.builder();
         val SA = builder.createVariable("SA", domain);
         builder
-                .constraint(UnaryConstraint.of(SA, UnaryNotEqualsRelation.builder().variable(SA).value(Colour.GREEN).build()));
+                .constraint(UnaryNotEqualsConstraint.of(SA, Colour.GREEN));
         val problem = builder.build();
         System.out.println(problem);
         val arcConstrainedProblem = NodeConsistency.INSTANCE.apply(problem).get();
@@ -38,9 +37,9 @@ public class NodeConsistencyTest {
         val builder = ConstraintSatisfactionProblem.builder();
         val SA = builder.createVariable("SA", domain);
         builder
-                .constraint(UnaryConstraint.of(SA, UnaryNotEqualsRelation.builder().variable(SA).value(Colour.RED).build()))
-                .constraint(UnaryConstraint.of(SA, UnaryNotEqualsRelation.builder().variable(SA).value(Colour.GREEN).build()))
-                .constraint(UnaryConstraint.of(SA, UnaryNotEqualsRelation.builder().variable(SA).value(Colour.BLUE).build()));
+                .constraint(UnaryNotEqualsConstraint.of(SA, Colour.RED))
+                .constraint(UnaryNotEqualsConstraint.of(SA, Colour.GREEN))
+                .constraint(UnaryNotEqualsConstraint.of(SA, Colour.BLUE));
         val problem = builder.build();
         System.out.println(problem);
         assertThat(NodeConsistency.INSTANCE.apply(problem)).isEmpty();
@@ -51,7 +50,7 @@ public class NodeConsistencyTest {
         val domain = new EnumDomain(EnumSet.of(Colour.RED, Colour.GREEN));
         val builder = ConstraintSatisfactionProblem.builder();
         val WA = builder.createVariable("WA", domain);
-        builder.constraint(UnaryConstraint.of(WA, UnaryNotEqualsRelation.builder().variable(WA).value(Colour.BLUE).build()));
+        builder.constraint(UnaryNotEqualsConstraint.of(WA, Colour.BLUE));
         val problem = builder.build();
         assertThat(NodeConsistency.INSTANCE.apply(problem))
                 .isPresent()
@@ -66,8 +65,8 @@ public class NodeConsistencyTest {
         val WA = builder.createVariable("WA", domain);
         val NT = builder.createVariable("NT", domain);
         builder
-                .constraint(UnaryConstraint.of(WA, UnaryNotEqualsRelation.builder().variable(WA).value(Colour.GREEN).build()))
-                .constraint(UnaryConstraint.of(NT, UnaryNotEqualsRelation.builder().variable(NT).value(Colour.RED).build()));
+                .constraint(UnaryNotEqualsConstraint.of(WA, Colour.GREEN))
+                .constraint(UnaryNotEqualsConstraint.of(NT, Colour.RED));
         val problem = builder.build();
         val result = NodeConsistency.INSTANCE.apply(problem);
         assertThat(result).isPresent();

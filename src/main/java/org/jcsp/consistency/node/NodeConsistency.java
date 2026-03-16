@@ -30,7 +30,7 @@ public class NodeConsistency {
                 .toList();
         val variableDomains = new HashMap<>(problem.getVariableDomains());
         for (UnaryConstraint constraint : unaryConstraints) {
-            val variable = constraint.variable();
+            val variable = constraint.getVariable();
             val domain = variableDomains.get(variable);
             val optionalRevisedDomain = revise(domain, constraint);
             if (optionalRevisedDomain.isPresent()) {
@@ -50,7 +50,7 @@ public class NodeConsistency {
         val revised = new AtomicBoolean(false);
         val revisedDomainBuilder = domain.toBuilder();
         domain.stream().forEach(x -> {
-            if (!constraint.isSatisfied(x)) {
+            if (!constraint.isSatisfiedBy(x)) {
                 revisedDomainBuilder.delete(x);
                 revised.set(true);
             }

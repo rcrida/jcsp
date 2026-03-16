@@ -1,4 +1,4 @@
-package org.jcsp.relations;
+package org.jcsp.constraints.unary;
 
 import org.jcsp.assignments.Assignment;
 import org.jcsp.domains.Domain;
@@ -11,34 +11,30 @@ import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
 
 import java.util.Map;
-import java.util.Objects;
 import java.util.function.Predicate;
 import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-public class UnaryValueRelationTest {
+public class UnaryValueConstraintTest {
     static final Object VALUE = 5;
     static final Domain DOMAIN = new IntRangeDomain(0, 100);
     static final Variable.Factory VARIABLE_FACTORY = new Variable.Factory() {};
 
     Variable variable = VARIABLE_FACTORY.create("variable", DOMAIN);
-    UnaryValueRelation relation;
+    UnaryValueConstraint constraint;
 
     @BeforeEach
     void setUp() {
-        relation = UnaryValueRelation.builder()
-                .variable(variable)
-                .value(VALUE)
-                .build();
+        constraint = UnaryValueConstraint.of(variable, VALUE);
     }
 
     @Test
-    void isSatisfied_true() {
-        assertThat(relation.isSatisfied(VALUE)).isTrue();
+    void isSatisfiedBy_true() {
+        assertThat(constraint.isSatisfiedBy(VALUE)).isTrue();
     }
 
-    static Stream<Arguments> isSatisfied_false() {
+    static Stream<Arguments> isSatisfiedBy_false() {
         return DOMAIN.stream()
                 .filter(Predicate.not(VALUE::equals))
                 .map(Arguments::of);
@@ -46,17 +42,17 @@ public class UnaryValueRelationTest {
 
     @ParameterizedTest
     @MethodSource
-    void isSatisfied_false(Object value) {
-        assertThat(relation.isSatisfied(new Assignment(Map.of(variable, value)))).isFalse();
+    void isSatisfiedBy_false(Object value) {
+        assertThat(constraint.isSatisfiedBy(new Assignment(Map.of(variable, value)))).isFalse();
     }
 
     @Test
-    void isSatisfied_unknown() {
-        assertThat(relation.isSatisfied(new Assignment(Map.of()))).isTrue();
+    void isSatisfiedBy_unknown() {
+        assertThat(constraint.isSatisfiedBy(new Assignment(Map.of()))).isTrue();
     }
 
     @Test
     void testToString() {
-        assertThat(relation.toString()).isEqualTo("{(5)}");
+        assertThat(constraint.toString()).isEqualTo("<(variable), {(5)}>");
     }
 }

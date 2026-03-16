@@ -60,6 +60,11 @@ public class BinaryConstraintTest {
     }
 
     @Test
+    void getRelation() {
+        assertThat(constraint.getRelation()).isEqualTo("");
+    }
+
+    @Test
     void testToString() {
         assertThat(constraint.toString()).isEqualTo("<(X, Y), binaryRelation>");
     }
