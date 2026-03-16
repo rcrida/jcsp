@@ -1,4 +1,4 @@
-package org.jcsp.relations;
+package org.jcsp.constraints.binary;
 
 import org.jcsp.assignments.Assignment;
 import org.jcsp.domains.Domain;
@@ -16,7 +16,7 @@ import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-public class BinaryTuplesRelationTest {
+public class ReversedBinaryConstraintTest {
     static final List<BinaryTuple> TUPLES = List.of(
             BinaryTuple.of(0, 0),
             BinaryTuple.of(1, 1),
@@ -28,28 +28,29 @@ public class BinaryTuplesRelationTest {
 
     Variable left = VARIABLE_FACTORY.create("left", DOMAIN);
     Variable right = VARIABLE_FACTORY.create("right", DOMAIN);
-    BinaryTuplesRelation relation;
+    ReversedBinaryConstraint constraint;
 
     @BeforeEach
     void setUp() {
-        relation = BinaryTuplesRelation.builder()
+        constraint = BinaryTuplesConstraint.builder()
                 .left(left)
                 .right(right)
                 .binaryTuples(TUPLES)
-                .build();
+                .build()
+                .reversed();
     }
 
-    static Stream<Arguments> isSatisfied_true() {
+    static Stream<Arguments> isSatisfiedBy_true() {
         return TUPLES.stream().map(Arguments::of);
     }
 
     @ParameterizedTest
     @MethodSource
-    void isSatisfied_true(BinaryTuple tuple) {
-        assertThat(relation.isSatisfied(new Assignment(Map.of(left, tuple.left(), right, tuple.right())))).isTrue();
+    void isSatisfiedBy_true(BinaryTuple tuple) {
+        assertThat(constraint.isSatisfiedBy(new Assignment(Map.of(left, tuple.left(), right, tuple.right())))).isTrue();
     }
 
-    static Stream<Arguments> isSatisfied_false() {
+    static Stream<Arguments> isSatisfiedBy_false() {
         // all combinations excluding the accepted ones in TUPLES
         return DOMAIN.stream()
                 .flatMap(left -> DOMAIN.stream()
@@ -61,19 +62,12 @@ public class BinaryTuplesRelationTest {
 
     @ParameterizedTest
     @MethodSource
-    void isSatisfied_false(BinaryTuple tuple) {
-        assertThat(relation.isSatisfied(new Assignment(Map.of(left, tuple.left(), right, tuple.right())))).isFalse();
-    }
-
-    @Test
-    void isSatisfied_unknowns() {
-        assertThat(relation.isSatisfied(new Assignment(Map.of()))).isTrue();
-        assertThat(relation.isSatisfied(new Assignment(Map.of(left, 0)))).isTrue();
-        assertThat(relation.isSatisfied(new Assignment(Map.of(right, 1)))).isTrue();
+    void isSatisfiedBy_false(BinaryTuple tuple) {
+        assertThat(constraint.isSatisfiedBy(new Assignment(Map.of(left, tuple.left(), right, tuple.right())))).isFalse();
     }
 
     @Test
     void testToString() {
-        assertThat(relation.toString()).isEqualTo("{(0, 0), (1, 1), (2, 4), (3, 9)}");
+        assertThat(constraint.toString()).isEqualTo("<(right, left), reversed {(0, 0), (1, 1), (2, 4), (3, 9)}>");
     }
 }

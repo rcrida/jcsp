@@ -30,7 +30,7 @@ public class LeastConstrainingValueOrderer implements DomainValuesOrderer {
         final var binaryConstraints = csp.getConstraints().stream()
                 .filter(BinaryConstraint.class::isInstance)
                 .map(BinaryConstraint.class::cast)
-                .filter(constraint -> constraint.left().equals(variable) || constraint.right().equals(variable))
+                .filter(constraint -> constraint.getLeft().equals(variable) || constraint.getRight().equals(variable))
                 .toList();
 
         return csp.getVariableDomains().get(variable).stream()
@@ -52,11 +52,11 @@ public class LeastConstrainingValueOrderer implements DomainValuesOrderer {
             final Variable neighbour;
             final BinaryConstraint directedConstraint;
 
-            if (constraint.left().equals(variable)) {
-                neighbour = constraint.right();
+            if (constraint.getLeft().equals(variable)) {
+                neighbour = constraint.getRight();
                 directedConstraint = constraint;
             } else {
-                neighbour = constraint.left();
+                neighbour = constraint.getLeft();
                 directedConstraint = constraint.reversed();
             }
 
@@ -67,7 +67,7 @@ public class LeastConstrainingValueOrderer implements DomainValuesOrderer {
             final var neighbourDomain = csp.getVariableDomains().get(neighbour);
 
             eliminated += neighbourDomain.stream()
-                    .filter(neighbourValue -> !directedConstraint.isSatisfied(value, neighbourValue))
+                    .filter(neighbourValue -> !directedConstraint.isSatisfiedBy(value, neighbourValue))
                     .count();
         }
 

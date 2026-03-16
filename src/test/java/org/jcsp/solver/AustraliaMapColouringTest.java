@@ -3,10 +3,9 @@ package org.jcsp.solver;
 import lombok.val;
 import org.jcsp.ConstraintSatisfactionProblem;
 import org.jcsp.assignments.Assignment;
-import org.jcsp.constraints.binary.BinaryConstraint;
+import org.jcsp.constraints.binary.BinaryNotEqualsConstraint;
 import org.jcsp.domains.Domain;
 import org.jcsp.domains.EnumDomain;
-import org.jcsp.relations.BinaryNotEqualsRelation;
 import org.jcsp.search.BacktrackingSearch;
 import org.jcsp.search.order.LeastConstrainingValueOrderer;
 import org.jcsp.search.selector.MinimumRemainingValuesSelector;
@@ -36,15 +35,15 @@ public class AustraliaMapColouringTest {
     public static ConstraintSatisfactionProblem problem() {
         return ConstraintSatisfactionProblem.builder()
                 .variables(Set.of(WA, NT, Q, NSW, V, SA, T))
-                .constraint(BinaryConstraint.of(SA, WA, BinaryNotEqualsRelation.builder().left(SA).right(WA).build()))
-                .constraint(BinaryConstraint.of(SA, NT, BinaryNotEqualsRelation.builder().left(SA).right(NT).build()))
-                .constraint(BinaryConstraint.of(SA, Q, BinaryNotEqualsRelation.builder().left(SA).right(Q).build()))
-                .constraint(BinaryConstraint.of(SA, NSW, BinaryNotEqualsRelation.builder().left(SA).right(NSW).build()))
-                .constraint(BinaryConstraint.of(SA, V, BinaryNotEqualsRelation.builder().left(SA).right(V).build()))
-                .constraint(BinaryConstraint.of(WA, NT, BinaryNotEqualsRelation.builder().left(WA).right(NT).build()))
-                .constraint(BinaryConstraint.of(NT, Q, BinaryNotEqualsRelation.builder().left(NT).right(Q).build()))
-                .constraint(BinaryConstraint.of(Q, NSW, BinaryNotEqualsRelation.builder().left(Q).right(NSW).build()))
-                .constraint(BinaryConstraint.of(NSW, V, BinaryNotEqualsRelation.builder().left(NSW).right(V).build()))
+                .constraint(BinaryNotEqualsConstraint.builder().left(SA).right(WA).build())
+                .constraint(BinaryNotEqualsConstraint.builder().left(SA).right(NT).build())
+                .constraint(BinaryNotEqualsConstraint.builder().left(SA).right(Q).build())
+                .constraint(BinaryNotEqualsConstraint.builder().left(SA).right(NSW).build())
+                .constraint(BinaryNotEqualsConstraint.builder().left(SA).right(V).build())
+                .constraint(BinaryNotEqualsConstraint.builder().left(WA).right(NT).build())
+                .constraint(BinaryNotEqualsConstraint.builder().left(NT).right(Q).build())
+                .constraint(BinaryNotEqualsConstraint.builder().left(Q).right(NSW).build())
+                .constraint(BinaryNotEqualsConstraint.builder().left(NSW).right(V).build())
                 .build();
     }
 

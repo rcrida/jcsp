@@ -1,4 +1,4 @@
-package org.jcsp.relations;
+package org.jcsp.constraints.binary;
 
 import org.jcsp.assignments.Assignment;
 import org.jcsp.domains.Domain;
@@ -11,17 +11,17 @@ import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-public class BinaryNotEqualsRelationTest {
+public class BinaryNotEqualsConstraintTest {
     static final Domain DOMAIN = new IntRangeDomain(0, 10);
     static final Variable.Factory VARIABLE_FACTORY = new Variable.Factory() {};
 
     Variable left = VARIABLE_FACTORY.create("left", DOMAIN);
     Variable right = VARIABLE_FACTORY.create("right", DOMAIN);
-    BinaryNotEqualsRelation relation;
+    BinaryNotEqualsConstraint constraint;
 
     @BeforeEach
     void setUp() {
-        relation = BinaryNotEqualsRelation.builder()
+        constraint = BinaryNotEqualsConstraint.builder()
                 .left(left)
                 .right(right)
                 .build();
@@ -29,23 +29,23 @@ public class BinaryNotEqualsRelationTest {
 
     @Test
     void isSatisfied_true() {
-        assertThat(relation.isSatisfied(new Assignment(Map.of(left, 0, right, 1)))).isTrue();
+        assertThat(constraint.isSatisfiedBy(new Assignment(Map.of(left, 0, right, 1)))).isTrue();
     }
 
     @Test
     void isSatisfied_false() {
-        assertThat(relation.isSatisfied(new Assignment(Map.of(left, 0, right, 0)))).isFalse();
+        assertThat(constraint.isSatisfiedBy(new Assignment(Map.of(left, 0, right, 0)))).isFalse();
     }
 
     @Test
     void isSatisfied_unknowns() {
-        assertThat(relation.isSatisfied(new Assignment(Map.of()))).isTrue();
-        assertThat(relation.isSatisfied(new Assignment(Map.of(left, 0)))).isTrue();
-        assertThat(relation.isSatisfied(new Assignment(Map.of(right, 1)))).isTrue();
+        assertThat(constraint.isSatisfiedBy(new Assignment(Map.of()))).isTrue();
+        assertThat(constraint.isSatisfiedBy(new Assignment(Map.of(left, 0)))).isTrue();
+        assertThat(constraint.isSatisfiedBy(new Assignment(Map.of(right, 1)))).isTrue();
     }
 
     @Test
     void testToString() {
-        assertThat(relation.toString()).isEqualTo("left != right");
+        assertThat(constraint.toString()).isEqualTo("<(left, right), left != right>");
     }
 }

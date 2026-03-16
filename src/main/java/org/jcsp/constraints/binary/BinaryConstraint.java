@@ -1,36 +1,34 @@
 package org.jcsp.constraints.binary;
 
+import lombok.Value;
+import lombok.experimental.NonFinal;
+import lombok.experimental.SuperBuilder;
 import org.jcsp.assignments.Assignment;
 import org.jcsp.constraints.Constraint;
-import org.jcsp.relations.BinaryRelation;
 import org.jcsp.variables.Variable;
 import org.jspecify.annotations.NonNull;
+import org.jspecify.annotations.Nullable;
 
-public record BinaryConstraint(@NonNull Variable left, @NonNull Variable right, @NonNull BinaryRelation relation) implements Constraint {
-    public static BinaryConstraint of(@NonNull Variable left, @NonNull Variable right, @NonNull BinaryRelation relation) {
-        return new BinaryConstraint(left, right, relation);
-    }
+@Value
+@NonFinal
+@SuperBuilder
+public abstract class BinaryConstraint implements Constraint {
+    @NonNull Variable left;
+    @NonNull Variable right;
 
     @Override
     public boolean isSatisfiedBy(@NonNull Assignment assignment) {
-        return relation.isSatisfied(assignment);
+        return isSatisfiedBy(assignment.getValue(left).orElse(null), assignment.getValue(right).orElse(null));
     }
 
-    public boolean isSatisfied(@NonNull Object leftValue, @NonNull Object rightValue) {
-        return relation.isSatisfied(leftValue, rightValue);
-    }
+    public abstract boolean isSatisfiedBy(@Nullable Object leftValue, @Nullable Object rightValue);
 
-    public BinaryConstraint reversed() {
-        return new BinaryConstraint(right, left, relation.reversed());
-    }
-
-    @Override
-    public String getRelation() {
-        return "";
+    public ReversedBinaryConstraint reversed() {
+        return ReversedBinaryConstraint.builder().left(right).right(left).constraint(this).build();
     }
 
     @Override
     public String toString() {
-        return "<(" + left + ", " + right + "), " + relation + ">";
+        return "<(" + left + ", " + right + "), " + getRelation() + ">";
     }
 }

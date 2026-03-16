@@ -2,11 +2,10 @@ package org.jcsp.consistency.arc;
 
 import lombok.val;
 import org.jcsp.ConstraintSatisfactionProblem;
-import org.jcsp.constraints.binary.BinaryConstraint;
+import org.jcsp.constraints.binary.BinaryTuplesConstraint;
 import org.jcsp.domains.DomainObjectSet;
 import org.jcsp.domains.IntRangeDomain;
-import org.jcsp.relations.BinaryTuple;
-import org.jcsp.relations.BinaryTuplesRelation;
+import org.jcsp.constraints.binary.BinaryTuple;
 import org.jcsp.solver.AustraliaMapColouringTest;
 import org.junit.jupiter.api.Test;
 
@@ -27,11 +26,11 @@ public class AC3Test {
         val builder = ConstraintSatisfactionProblem.builder();
         val left = builder.createVariable("left", domain);
         val right = builder.createVariable("right", domain);
-        builder.constraint(BinaryConstraint.of(left, right, BinaryTuplesRelation.builder()
+        builder.constraint(BinaryTuplesConstraint.builder()
                 .left(left)
                 .right(right)
                 .binaryTuples(tuples)
-                .build()));
+                .build());
         val problem = builder.build();
         System.out.println(problem);
         val arcConstrainedProblem = AC3.INSTANCE.apply(problem).get();
@@ -81,11 +80,11 @@ public class AC3Test {
         val builder = ConstraintSatisfactionProblem.builder();
         val left = builder.createVariable("left", domain);
         val right = builder.createVariable("right", domain);
-        builder.constraint(BinaryConstraint.of(left, right, BinaryTuplesRelation.builder()
+        builder.constraint(BinaryTuplesConstraint.builder()
                 .left(left)
                 .right(right)
                 .binaryTuples(tuples)
-                .build()));
+                .build());
         val problem = builder.build();
         System.out.println(problem);
         assertThat(AC3.INSTANCE.apply(problem)).isEmpty();

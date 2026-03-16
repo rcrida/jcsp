@@ -3,8 +3,8 @@ package org.jcsp.search.order;
 import org.jcsp.ConstraintSatisfactionProblem;
 import org.jcsp.assignments.Assignment;
 import org.jcsp.constraints.binary.BinaryConstraint;
+import org.jcsp.constraints.binary.BinaryNotEqualsConstraint;
 import org.jcsp.domains.DomainObjectSet;
-import org.jcsp.relations.BinaryNotEqualsRelation;
 import org.jcsp.variables.Variable;
 import org.junit.jupiter.api.Test;
 
@@ -26,7 +26,7 @@ class LeastConstrainingValueOrdererTest {
         // Setup CSP
         Variable A = FACTORY.create("A", DomainObjectSet.builder().value(1).value(2).value(3).build());
         Variable B = FACTORY.create("B", DomainObjectSet.builder().value(1).value(2).value(3).build());
-        BinaryConstraint constraint = BinaryConstraint.of(A, B, BinaryNotEqualsRelation.builder().left(A).right(B).build());
+        BinaryConstraint constraint = BinaryNotEqualsConstraint.builder().left(A).right(B).build();
 
         ConstraintSatisfactionProblem csp = ConstraintSatisfactionProblem.builder()
                 .variable(A)
@@ -54,8 +54,8 @@ class LeastConstrainingValueOrdererTest {
         Variable B = FACTORY.create("B", DomainObjectSet.builder().value(1).value(2).value(3).build());
         Variable C = FACTORY.create("C", DomainObjectSet.builder().value(1).value(2).value(3).build());
 
-        BinaryConstraint constraint1 = BinaryConstraint.of(A, B, BinaryNotEqualsRelation.builder().left(A).right(B).build());
-        BinaryConstraint constraint2 = BinaryConstraint.of(A, C, BinaryNotEqualsRelation.builder().left(A).right(C).build());
+        BinaryConstraint constraint1 = BinaryNotEqualsConstraint.builder().left(A).right(B).build();
+        BinaryConstraint constraint2 = BinaryNotEqualsConstraint.builder().left(A).right(C).build();
 
         ConstraintSatisfactionProblem csp = ConstraintSatisfactionProblem.builder()
                 .variable(A)
@@ -106,7 +106,7 @@ class LeastConstrainingValueOrdererTest {
         Variable A = FACTORY.create("A", DomainObjectSet.builder().value(1).value(2).value(3).build());
         Variable B = FACTORY.create("B", DomainObjectSet.builder().value(1).value(2).value(3).build());
 
-        BinaryConstraint constraint = BinaryConstraint.of(A, B, BinaryNotEqualsRelation.builder().left(A).right(B).build());
+        BinaryConstraint constraint = BinaryNotEqualsConstraint.builder().left(A).right(B).build();
 
         ConstraintSatisfactionProblem csp = ConstraintSatisfactionProblem.builder()
                 .variable(A)

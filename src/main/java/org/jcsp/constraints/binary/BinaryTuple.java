@@ -1,4 +1,4 @@
-package org.jcsp.relations;
+package org.jcsp.constraints.binary;
 
 import org.jspecify.annotations.NonNull;
 

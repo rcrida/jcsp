@@ -37,8 +37,8 @@ public class AC3 implements ArcConsistency {
         final var queue = new ArrayDeque<>(binaryConstraints);
         while (!queue.isEmpty()) {
             final var arc = queue.poll();
-            val X_i = arc.left();
-            val X_j = arc.right();
+            val X_i = arc.getLeft();
+            val X_j = arc.getRight();
             final var D_i = problem.getVariableDomains().get(X_i);
             final var optionalRevisedDomain1 = revise(problem, D_i, arc);
             if (optionalRevisedDomain1.isPresent()) {
@@ -49,8 +49,8 @@ public class AC3 implements ArcConsistency {
                 }
                 builder.variableDomain(X_i, revisedDomain1);
                 val X_iNeighbours = binaryConstraints.stream()
-                        .filter(c -> !c.left().equals(X_j))
-                        .filter(c -> c.right().equals(X_i))
+                        .filter(c -> !c.getLeft().equals(X_j))
+                        .filter(c -> c.getRight().equals(X_i))
                         .toList();
                 queue.addAll(X_iNeighbours);
             }
@@ -62,8 +62,8 @@ public class AC3 implements ArcConsistency {
         final var revised = new AtomicBoolean(false);
         final var revisedDomain1Builder = domain1.toBuilder();
         domain1.stream().forEach(x -> {
-            final var domain2 = problem.getVariableDomains().get(constraint.right());
-            if (domain2.stream().noneMatch(y -> constraint.isSatisfied(x, y))) {
+            final var domain2 = problem.getVariableDomains().get(constraint.getRight());
+            if (domain2.stream().noneMatch(y -> constraint.isSatisfiedBy(x, y))) {
                 revisedDomain1Builder.delete(x);
                 revised.set(true);
             }

@@ -15,7 +15,8 @@ public class UnaryValueConstraint extends UnaryConstraint {
         return builder().variable(variable).value(value).build();
     }
 
-    @NonNull Object value;
+    @NonNull
+    Object value;
 
     @Override
     public boolean isSatisfiedBy(@Nullable Object value) {

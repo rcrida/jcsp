@@ -13,7 +13,8 @@ import org.jspecify.annotations.Nullable;
 @NonFinal
 @SuperBuilder
 public abstract class UnaryConstraint implements Constraint {
-    @NonNull Variable variable;
+    @NonNull
+    Variable variable;
 
     @Override
     public boolean isSatisfiedBy(@NonNull Assignment assignment) {
