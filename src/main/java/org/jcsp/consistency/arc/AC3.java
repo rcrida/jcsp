@@ -7,8 +7,10 @@ import org.jcsp.constraints.binary.BinaryConstraint;
 import org.jcsp.domains.Domain;
 
 import java.util.ArrayDeque;
+import java.util.HashMap;
 import java.util.Optional;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 /**
@@ -28,39 +30,38 @@ public class AC3 implements ArcConsistency {
 
     @Override
     public Optional<ConstraintSatisfactionProblem> apply(ConstraintSatisfactionProblem problem) {
-        final var builder = problem.toBuilder();
-        final var binaryConstraints = problem.getConstraints().stream()
-                .filter(c -> c instanceof BinaryConstraint)
-                .map(c -> (BinaryConstraint) c)
-                .flatMap(c -> Stream.of(c, c.reversed()))
-                .toList();
-        final var queue = new ArrayDeque<>(binaryConstraints);
+        val variableDomains = new HashMap<>(problem.getVariableDomains());
+        val allBinaryConstraints = problem.getAllBinaryConstraints().stream()
+                .flatMap(c ->Stream.of(c, c.reversed()))
+                .collect(Collectors.toSet());
+        System.out.println(allBinaryConstraints.stream().filter(c -> c.getLeft().toString().equals("A1")).toList());
+        val queue = new ArrayDeque<>(allBinaryConstraints);
         while (!queue.isEmpty()) {
-            final var arc = queue.poll();
+            val arc = queue.poll();
             val X_i = arc.getLeft();
             val X_j = arc.getRight();
-            final var D_i = problem.getVariableDomains().get(X_i);
-            final var optionalRevisedDomain1 = revise(problem, D_i, arc);
+            val D_i = variableDomains.get(X_i);
+            val optionalRevisedDomain1 = revise(problem, D_i, arc);
             if (optionalRevisedDomain1.isPresent()) {
-                final var revisedDomain1 = optionalRevisedDomain1.get();
+                val revisedDomain1 = optionalRevisedDomain1.get();
                 if (revisedDomain1.isEmpty()) {
                     log.warn("Domain of variable {} is empty after AC3", X_i);
                     return Optional.empty();
                 }
-                builder.variableDomain(X_i, revisedDomain1);
-                val X_iNeighbours = binaryConstraints.stream()
+                variableDomains.put(X_i, revisedDomain1);
+                val X_iNeighbours = allBinaryConstraints.stream()
                         .filter(c -> !c.getLeft().equals(X_j))
                         .filter(c -> c.getRight().equals(X_i))
                         .toList();
                 queue.addAll(X_iNeighbours);
             }
         }
-        return Optional.of(builder.build());
+        return Optional.of(problem.toBuilder().variableDomains(variableDomains).build());
     }
 
     private Optional<Domain> revise(ConstraintSatisfactionProblem problem, Domain domain1, BinaryConstraint constraint) {
-        final var revised = new AtomicBoolean(false);
-        final var revisedDomain1Builder = domain1.toBuilder();
+        val revised = new AtomicBoolean(false);
+        val revisedDomain1Builder = domain1.toBuilder();
         domain1.stream().forEach(x -> {
             final var domain2 = problem.getVariableDomains().get(constraint.getRight());
             if (domain2.stream().noneMatch(y -> constraint.isSatisfiedBy(x, y))) {

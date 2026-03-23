@@ -1,11 +1,13 @@
 package org.jcsp.constraints.nary;
 
 import lombok.experimental.SuperBuilder;
+import lombok.val;
 import org.jcsp.assignments.Assignment;
+import org.jcsp.constraints.binary.BinaryConstraint;
+import org.jcsp.constraints.binary.BinaryNotEqualsConstraint;
 import org.jspecify.annotations.NonNull;
 
-import java.util.HashSet;
-import java.util.Objects;
+import java.util.*;
 
 /**
  * Represents the "all-different" constraint in a constraint satisfaction problem (CSP).
@@ -46,5 +48,22 @@ public class AllDiffConstraint extends NaryConstraint {
     @Override
     public String getRelation() {
         return "AllDiff";
+    }
+
+    @Override
+    public Optional<Set<BinaryConstraint>> getAsBinaryConstraints() {
+        val variables = new ArrayList<>(getVariables());
+        val binaryConstraints = new HashSet<BinaryConstraint>();
+
+        for (int i = 0; i < variables.size(); i++) {
+            for (int j = i + 1; j < variables.size(); j++) {
+                binaryConstraints.add(BinaryNotEqualsConstraint.builder()
+                        .left(variables.get(i))
+                        .right(variables.get(j))
+                        .build());
+            }
+        }
+
+        return Optional.of(binaryConstraints);
     }
 }
