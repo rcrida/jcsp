@@ -4,6 +4,7 @@ import lombok.Value;
 import lombok.extern.slf4j.Slf4j;
 import org.jcsp.ConstraintSatisfactionProblem;
 import org.jcsp.assignments.Assignment;
+import org.jcsp.consistency.Inference;
 import org.jcsp.consistency.arc.AC3;
 import org.jcsp.consistency.node.NodeConsistency;
 import org.jcsp.search.BacktrackingSearch;
@@ -16,6 +17,8 @@ import java.util.stream.Stream;
 @Value
 public class SolverImpl implements Solver {
     @NonNull
+    Inference inference;
+    @NonNull
     BacktrackingSearch backtrackingSearch;
 
     @Override
@@ -25,12 +28,7 @@ public class SolverImpl implements Solver {
 
     @Override
     public Stream<Assignment> getSolutions(@NonNull ConstraintSatisfactionProblem csp) {
-        return NodeConsistency.INSTANCE.apply(csp)
-                .flatMap(nodeConsistent -> {
-                    log.info("Applying AC3 to node consistent problem {}", nodeConsistent);
-                    return AC3.INSTANCE.apply(nodeConsistent);
-                })
-                .stream()
+        return inference.apply(csp).stream()
                 .flatMap(arcConsistent -> {
                     log.info("Searching arc-consistent problem {}", arcConsistent);
                     return backtrackingSearch.searchStream(arcConsistent);

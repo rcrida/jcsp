@@ -3,6 +3,7 @@ package org.jcsp.solver;
 import lombok.val;
 import org.jcsp.ConstraintSatisfactionProblem;
 import org.jcsp.assignments.Assignment;
+import org.jcsp.consistency.DefaultInference;
 import org.jcsp.constraints.binary.BinaryNotEqualsConstraint;
 import org.jcsp.domains.Domain;
 import org.jcsp.domains.EnumDomain;
@@ -50,7 +51,7 @@ public class AustraliaMapColouringTest {
     @Test
     void solution() {
         val csp = problem();
-        val solver = new SolverImpl(new BacktrackingSearch(new MinimumRemainingValuesSelector(), new LeastConstrainingValueOrderer()));
+        val solver = new SolverImpl(DefaultInference.INSTANCE, new BacktrackingSearch(new MinimumRemainingValuesSelector(), new LeastConstrainingValueOrderer(), DefaultInference.INSTANCE));
         val optionalSolution = solver.getSolution(csp);
         System.out.println(optionalSolution);
         assertThat(optionalSolution).hasValueSatisfying(value ->
@@ -73,7 +74,7 @@ public class AustraliaMapColouringTest {
     @Test
     void searchStream() {
         val csp = problem();
-        val solver = new SolverImpl(new BacktrackingSearch(new MinimumRemainingValuesSelector(), new LeastConstrainingValueOrderer()));
+        val solver = new SolverImpl(DefaultInference.INSTANCE, new BacktrackingSearch(new MinimumRemainingValuesSelector(), new LeastConstrainingValueOrderer(), DefaultInference.INSTANCE));
         assertThat(solver.getSolutions(csp)).hasSize(18);
     }
 }

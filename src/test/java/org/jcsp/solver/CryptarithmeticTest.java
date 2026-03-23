@@ -3,6 +3,7 @@ package org.jcsp.solver;
 import lombok.val;
 import org.jcsp.ConstraintSatisfactionProblem;
 import org.jcsp.assignments.Assignment;
+import org.jcsp.consistency.DefaultInference;
 import org.jcsp.constraints.nary.AllDiffConstraint;
 import org.jcsp.constraints.nary.ExpressionConstraint;
 import org.jcsp.domains.Domain;
@@ -67,7 +68,7 @@ public class CryptarithmeticTest {
     @Test
     void solution() {
         val csp = twoPlusTwoEqualsFour();
-        val solver = new SolverImpl(new BacktrackingSearch(new MinimumRemainingValuesSelector(), new LeastConstrainingValueOrderer()));
+        val solver = new SolverImpl(DefaultInference.INSTANCE, new BacktrackingSearch(new MinimumRemainingValuesSelector(), new LeastConstrainingValueOrderer(), DefaultInference.INSTANCE));
         val optionalSolution = solver.getSolution(csp);
         System.out.println(optionalSolution);
         assertThat(optionalSolution).contains(new Assignment(Map.of(
@@ -86,7 +87,9 @@ public class CryptarithmeticTest {
     @Test
     void searchStream() {
         val csp = twoPlusTwoEqualsFour();
-        val solver = new SolverImpl(new BacktrackingSearch(new MinimumRemainingValuesSelector(), new LeastConstrainingValueOrderer()));
-        assertThat(solver.getSolutions(csp)).hasSize(19);
+        val solver = new SolverImpl(DefaultInference.INSTANCE, new BacktrackingSearch(new MinimumRemainingValuesSelector(), new LeastConstrainingValueOrderer(), DefaultInference.INSTANCE));
+        val solutions = solver.getSolutions(csp).toList();
+        System.out.println(solutions);
+        assertThat(solutions).hasSize(19);
     }
 }

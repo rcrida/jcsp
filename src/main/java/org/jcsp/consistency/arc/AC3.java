@@ -34,7 +34,6 @@ public class AC3 implements ArcConsistency {
         val allBinaryConstraints = problem.getAllBinaryConstraints().stream()
                 .flatMap(c ->Stream.of(c, c.reversed()))
                 .collect(Collectors.toSet());
-        System.out.println(allBinaryConstraints.stream().filter(c -> c.getLeft().toString().equals("A1")).toList());
         val queue = new ArrayDeque<>(allBinaryConstraints);
         while (!queue.isEmpty()) {
             val arc = queue.poll();
