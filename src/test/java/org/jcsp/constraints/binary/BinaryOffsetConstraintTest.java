@@ -1,0 +1,111 @@
+package org.jcsp.constraints.binary;
+
+import lombok.val;
+import org.jcsp.domains.Domain;
+import org.jcsp.domains.IntRangeDomain;
+import org.jcsp.variables.Variable;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
+
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.stream.Stream;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+
+public class BinaryOffsetConstraintTest {
+    static final Domain DOMAIN = new IntRangeDomain(0, 10);
+    static final Variable.Factory VARIABLE_FACTORY = new Variable.Factory() {};
+    static final Variable LEFT = VARIABLE_FACTORY.create("left", DOMAIN);
+    static final Variable RIGHT = VARIABLE_FACTORY.create("right", DOMAIN);
+
+    static Stream<Arguments> isSatisfiedBy() {
+        return Stream.of(
+                Arguments.of(5, Operator.EQ, null, null, true),
+                Arguments.of(5, Operator.EQ, null, 19, true),
+                Arguments.of(5, Operator.EQ, 0, null, true),
+                Arguments.of(5, Operator.EQ, 0, 5, true),
+                Arguments.of(5, Operator.EQ, 0, 6, false),
+                Arguments.of((byte) 5, Operator.EQ, (byte) 0, (byte) 5, true),
+                Arguments.of((short) 5, Operator.EQ, (short) 0, (short) 5, true),
+                Arguments.of(5L, Operator.EQ, 0L, 5L, true),
+                Arguments.of(5.0f, Operator.EQ, 0.0f, 5.0f, true),
+                Arguments.of(5.0, Operator.EQ, 0.0, 5.0, true)
+        );
+    }
+
+    @ParameterizedTest
+    @MethodSource
+    void isSatisfiedBy(Number offset, Operator operator, Object left, Object right, boolean expected) {
+        val constraint = BinaryOffsetConstraint.builder().left(LEFT).right(RIGHT).offset(offset).operator(operator).build();
+        assertThat(constraint.isSatisfiedBy(left, right)).isEqualTo(expected);
+    }
+
+    @Test
+    void isSatisfiedBy_unsupportedValue() {
+        val constraint = BinaryOffsetConstraint.builder().left(LEFT).right(RIGHT).offset(5).operator(Operator.EQ).build();
+        assertThatThrownBy(() -> constraint.isSatisfiedBy("zero", 5))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessage("Unsupported value type: class java.lang.String");
+    }
+
+    static Stream<Arguments> reversed() {
+        return Stream.of(
+                Arguments.of((byte) 5, Operator.GT, (byte) -5, Operator.LEQ),
+                Arguments.of((short) 5, Operator.LT, (short) -5, Operator.GEQ),
+                Arguments.of(5, Operator.EQ, -5, Operator.EQ),
+                Arguments.of(5L, Operator.NEQ, -5L, Operator.NEQ),
+                Arguments.of(5.0f, Operator.LEQ, -5.0f, Operator.GT),
+                Arguments.of(5.0, Operator.GEQ, -5.0, Operator.LT)
+        );
+    }
+
+    @ParameterizedTest
+    @MethodSource
+    void reversed(Number offset, Operator operator, Number reversedOffset, Operator reversedOperator) {
+        val constraint = BinaryOffsetConstraint.builder().left(LEFT).right(RIGHT).offset(offset).operator(operator).build();
+        val reversedConstraint = BinaryOffsetConstraint.builder().left(RIGHT).right(LEFT).offset(reversedOffset).operator(reversedOperator).build();;
+        assertThat(constraint.reversed()).isEqualTo(reversedConstraint);
+    }
+
+    @Test
+    void reversed_unsupportedType() {
+        val constraint = BinaryOffsetConstraint.builder().left(LEFT).right(RIGHT).offset(new AtomicInteger(0)).operator(Operator.EQ).build();
+        assertThatThrownBy(() -> constraint.reversed())
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessage("Unsupported offset type: class java.util.concurrent.atomic.AtomicInteger");
+    }
+
+    static Stream<Arguments> testToString() {
+        return Stream.of(
+                Arguments.of((byte) 5, "<(left, right), left + 5 == right>"),
+                Arguments.of((byte) -5, "<(left, right), left - 5 == right>"),
+                Arguments.of((short) 5, "<(left, right), left + 5 == right>"),
+                Arguments.of((short) -5, "<(left, right), left - 5 == right>"),
+                Arguments.of(5, "<(left, right), left + 5 == right>"),
+                Arguments.of(-5, "<(left, right), left - 5 == right>"),
+                Arguments.of(5L, "<(left, right), left + 5 == right>"),
+                Arguments.of(-5L, "<(left, right), left - 5 == right>"),
+                Arguments.of(5.0f, "<(left, right), left + 5.0 == right>"),
+                Arguments.of(-5.0f, "<(left, right), left - 5.0 == right>"),
+                Arguments.of(5.0, "<(left, right), left + 5.0 == right>"),
+                Arguments.of(-5.0, "<(left, right), left - 5.0 == right>")
+        );
+    }
+
+    @ParameterizedTest
+    @MethodSource
+    void testToString(Number offset, String expected) {
+        assertThat(BinaryOffsetConstraint.builder().left(LEFT).right(RIGHT).offset(offset).operator(Operator.EQ).build()).asString().isEqualTo(expected);
+    }
+
+    @Test
+    void toString_unsupportedValue() {
+        val constraint = BinaryOffsetConstraint.builder().left(LEFT).right(RIGHT).offset(new AtomicInteger(0)).operator(Operator.EQ).build();
+        assertThatThrownBy(() -> constraint.toString())
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessage("Unsupported offset type: class java.util.concurrent.atomic.AtomicInteger");
+    }
+}

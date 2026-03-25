@@ -48,6 +48,14 @@ public class ConstraintSatisfactionProblem {
             return variable;
         }
 
+        public Variable[] create1dVariableArray(@NonNull String[] labels, @NonNull String namePrefix, @NonNull Domain domain) {
+            final var variables = new Variable[labels.length];
+            for (int i = 0; i < labels.length; i++) {
+                variables[i] = createVariable(String.format("%s%s", namePrefix, labels[i]), domain);
+            }
+            return variables;
+        }
+
         public Variable[][] create2dVariableArray(@NonNull String[] rows, @NonNull String[] columns, @NonNull String namePrefix, @NonNull Domain domain) {
             final var variables = new Variable[rows.length][columns.length];
             for (int i = 0; i < rows.length; i++) {

@@ -32,7 +32,7 @@ public class ReversedBinaryConstraintTest {
 
     @BeforeEach
     void setUp() {
-        constraint = BinaryTuplesConstraint.builder()
+        constraint = (ReversedBinaryConstraint) BinaryTuplesConstraint.builder()
                 .left(left)
                 .right(right)
                 .binaryTuples(TUPLES)

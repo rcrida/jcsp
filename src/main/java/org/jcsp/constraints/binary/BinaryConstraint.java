@@ -23,7 +23,7 @@ public abstract class BinaryConstraint implements Constraint {
 
     public abstract boolean isSatisfiedBy(@Nullable Object leftValue, @Nullable Object rightValue);
 
-    public ReversedBinaryConstraint reversed() {
+    public BinaryConstraint reversed() {
         return ReversedBinaryConstraint.builder().left(right).right(left).constraint(this).build();
     }
 
