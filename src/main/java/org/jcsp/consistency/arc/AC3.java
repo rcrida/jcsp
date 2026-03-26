@@ -5,10 +5,10 @@ import lombok.val;
 import org.jcsp.ConstraintSatisfactionProblem;
 import org.jcsp.constraints.binary.BinaryConstraint;
 import org.jcsp.domains.Domain;
+import org.jcsp.variables.Variable;
+import org.jspecify.annotations.NonNull;
 
-import java.util.ArrayDeque;
-import java.util.HashMap;
-import java.util.Optional;
+import java.util.*;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
@@ -30,11 +30,15 @@ public class AC3 implements ArcConsistency {
 
     @Override
     public Optional<ConstraintSatisfactionProblem> apply(ConstraintSatisfactionProblem problem) {
-        val variableDomains = new HashMap<>(problem.getVariableDomains());
         val allBinaryConstraints = problem.getAllBinaryConstraints().stream()
                 .flatMap(c ->Stream.of(c, c.reversed()))
                 .collect(Collectors.toSet());
         val queue = new ArrayDeque<>(allBinaryConstraints);
+        return applyQueue(problem, queue, allBinaryConstraints);
+    }
+
+    public Optional<ConstraintSatisfactionProblem> applyQueue(ConstraintSatisfactionProblem problem, Queue<BinaryConstraint> queue, Set<BinaryConstraint> allBinaryConstraints) {
+        val variableDomains = new HashMap<>(problem.getVariableDomains());
         while (!queue.isEmpty()) {
             val arc = queue.poll();
             val X_i = arc.getLeft();
@@ -62,7 +66,7 @@ public class AC3 implements ArcConsistency {
         val revised = new AtomicBoolean(false);
         val revisedDomain1Builder = domain1.toBuilder();
         domain1.stream().forEach(x -> {
-            final var domain2 = problem.getVariableDomains().get(constraint.getRight());
+            val domain2 = problem.getVariableDomains().get(constraint.getRight());
             if (domain2.stream().noneMatch(y -> constraint.isSatisfiedBy(x, y))) {
                 revisedDomain1Builder.delete(x);
                 revised.set(true);

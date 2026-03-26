@@ -14,11 +14,5 @@ import java.util.Optional;
  */
 @FunctionalInterface
 public interface Inference {
-    default Optional<ConstraintSatisfactionProblem> apply(ConstraintSatisfactionProblem problem, Variable variable, Assignment assignment) {
-        val value = assignment.getValue(variable).orElseThrow();
-        val moreCsp = problem.toBuilder().constraint(UnaryValueConstraint.of(variable, value)).build();
-        return apply(moreCsp);
-    }
-
-    Optional<ConstraintSatisfactionProblem> apply(ConstraintSatisfactionProblem problem);
+    Optional<ConstraintSatisfactionProblem> apply(ConstraintSatisfactionProblem problem, Variable variable, Assignment assignment);
 }

@@ -27,6 +27,7 @@ public class BacktrackingSearch implements Search {
 
     private Stream<Assignment> searchStream(ConstraintSatisfactionProblem csp, Assignment assignment) {
         log.debug("Searching with assignment: {}", assignment);
+//        log.info("Search space: {}", csp.getSearchSpace());
         if (assignment.isComplete(csp)) {
             log.info("Found solution: {}", assignment);
             return Stream.of(assignment);

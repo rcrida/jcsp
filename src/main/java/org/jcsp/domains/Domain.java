@@ -8,6 +8,7 @@ import java.util.stream.Stream;
 public interface Domain {
     boolean contains(@Nullable Object value);
     boolean isEmpty();
+    long size();
     Stream<?> stream();
     Builder toBuilder();
 

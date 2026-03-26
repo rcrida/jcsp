@@ -3,7 +3,7 @@ package org.jcsp.solver;
 import lombok.val;
 import org.jcsp.ConstraintSatisfactionProblem;
 import org.jcsp.assignments.Assignment;
-import org.jcsp.consistency.DefaultInference;
+import org.jcsp.consistency.arc.MAC;
 import org.jcsp.constraints.binary.BinaryNotEqualsConstraint;
 import org.jcsp.domains.Domain;
 import org.jcsp.domains.EnumDomain;
@@ -13,6 +13,7 @@ import org.jcsp.search.selector.MinimumRemainingValuesSelector;
 import org.jcsp.variables.Variable;
 import org.junit.jupiter.api.Test;
 
+import java.math.BigInteger;
 import java.util.Map;
 import java.util.Set;
 
@@ -51,7 +52,8 @@ public class AustraliaMapColouringTest {
     @Test
     void solution() {
         val csp = problem();
-        val solver = new SolverImpl(DefaultInference.INSTANCE, new BacktrackingSearch(new MinimumRemainingValuesSelector(), new LeastConstrainingValueOrderer(), DefaultInference.INSTANCE));
+        assertThat(csp.getSearchSpace()).isEqualTo(BigInteger.valueOf(2187));
+        val solver = new SolverImpl(new BacktrackingSearch(new MinimumRemainingValuesSelector(), new LeastConstrainingValueOrderer(), MAC.INSTANCE));
         val optionalSolution = solver.getSolution(csp);
         System.out.println(optionalSolution);
         assertThat(optionalSolution).hasValueSatisfying(value ->
@@ -74,7 +76,7 @@ public class AustraliaMapColouringTest {
     @Test
     void searchStream() {
         val csp = problem();
-        val solver = new SolverImpl(DefaultInference.INSTANCE, new BacktrackingSearch(new MinimumRemainingValuesSelector(), new LeastConstrainingValueOrderer(), DefaultInference.INSTANCE));
+        val solver = new SolverImpl(new BacktrackingSearch(new MinimumRemainingValuesSelector(), new LeastConstrainingValueOrderer(), MAC.INSTANCE));
         assertThat(solver.getSolutions(csp)).hasSize(18);
     }
 }

@@ -3,7 +3,7 @@ package org.jcsp.solver;
 import lombok.val;
 import org.jcsp.ConstraintSatisfactionProblem;
 import org.jcsp.assignments.Assignment;
-import org.jcsp.consistency.DefaultInference;
+import org.jcsp.consistency.arc.MAC;
 import org.jcsp.constraints.nary.AllDiffConstraint;
 import org.jcsp.constraints.nary.ExpressionConstraint;
 import org.jcsp.domains.Domain;
@@ -14,6 +14,7 @@ import org.jcsp.search.selector.MinimumRemainingValuesSelector;
 import org.jcsp.variables.Variable;
 import org.junit.jupiter.api.Test;
 
+import java.math.BigInteger;
 import java.util.Map;
 import java.util.Set;
 
@@ -68,7 +69,8 @@ public class CryptarithmeticTest {
     @Test
     void solution() {
         val csp = twoPlusTwoEqualsFour();
-        val solver = new SolverImpl(DefaultInference.INSTANCE, new BacktrackingSearch(new MinimumRemainingValuesSelector(), new LeastConstrainingValueOrderer(), DefaultInference.INSTANCE));
+        assertThat(csp.getSearchSpace()).isEqualTo(BigInteger.valueOf(8000000));
+        val solver = new SolverImpl(new BacktrackingSearch(new MinimumRemainingValuesSelector(), new LeastConstrainingValueOrderer(), MAC.INSTANCE));
         val optionalSolution = solver.getSolution(csp);
         System.out.println(optionalSolution);
         assertThat(optionalSolution).contains(new Assignment(Map.of(
@@ -87,7 +89,7 @@ public class CryptarithmeticTest {
     @Test
     void searchStream() {
         val csp = twoPlusTwoEqualsFour();
-        val solver = new SolverImpl(DefaultInference.INSTANCE, new BacktrackingSearch(new MinimumRemainingValuesSelector(), new LeastConstrainingValueOrderer(), DefaultInference.INSTANCE));
+        val solver = new SolverImpl(new BacktrackingSearch(new MinimumRemainingValuesSelector(), new LeastConstrainingValueOrderer(), MAC.INSTANCE));
         val solutions = solver.getSolutions(csp).toList();
         System.out.println(solutions);
         assertThat(solutions).hasSize(19);

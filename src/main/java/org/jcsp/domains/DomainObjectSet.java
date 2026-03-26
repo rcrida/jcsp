@@ -28,6 +28,11 @@ public class DomainObjectSet implements Domain {
     }
 
     @Override
+    public long size() {
+        return values.size();
+    }
+
+    @Override
     public Stream<?> stream() {
         return values.stream();
     }

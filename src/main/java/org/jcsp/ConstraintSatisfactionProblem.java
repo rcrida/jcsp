@@ -11,6 +11,7 @@ import org.jcsp.domains.Domain;
 import org.jcsp.variables.Variable;
 import org.jspecify.annotations.NonNull;
 
+import java.math.BigInteger;
 import java.util.Collection;
 import java.util.Map;
 import java.util.Set;
@@ -37,6 +38,10 @@ public class ConstraintSatisfactionProblem {
                 .flatMap(Collection::stream)
                 .toList();
         return Stream.concat(binaryConstraints.stream(), inferredBinaryConstraints.stream()).collect(Collectors.toSet());
+    }
+
+    public BigInteger getSearchSpace() {
+        return getVariableDomains().values().stream().map(Domain::size).map(BigInteger::valueOf).reduce(BigInteger.ONE, BigInteger::multiply);
     }
 
     public static class ConstraintSatisfactionProblemBuilder {

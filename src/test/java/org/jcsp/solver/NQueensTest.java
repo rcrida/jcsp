@@ -3,7 +3,7 @@ package org.jcsp.solver;
 import lombok.val;
 import org.jcsp.ConstraintSatisfactionProblem;
 import org.jcsp.assignments.Assignment;
-import org.jcsp.consistency.DefaultInference;
+import org.jcsp.consistency.arc.MAC;
 import org.jcsp.constraints.binary.BinaryOffsetConstraint;
 import org.jcsp.constraints.binary.Operator;
 import org.jcsp.constraints.nary.AllDiffConstraint;
@@ -15,6 +15,7 @@ import org.jcsp.search.selector.MinimumRemainingValuesSelector;
 import org.jcsp.variables.Variable;
 import org.junit.jupiter.api.Test;
 
+import java.math.BigInteger;
 import java.util.Arrays;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -62,7 +63,7 @@ public class NQueensTest {
     static void printAssignment(Assignment assignment) {
         for (int i = 0; i < N; i++) {
             val col = (int) assignment.getValue(VARIABLES[i]).orElseThrow();
-            for (int j = 0; j < col; j++) {
+            for (int j = 1; j < col; j++) {
                 System.out.print(" ");
             }
             System.out.println("Q");
@@ -72,7 +73,8 @@ public class NQueensTest {
     @Test
     void solution() {
         val csp = nQueens();
-        val solver = new SolverImpl(DefaultInference.INSTANCE, new BacktrackingSearch(new MinimumRemainingValuesSelector(), new LeastConstrainingValueOrderer(), DefaultInference.INSTANCE));
+        assertThat(csp.getSearchSpace()).isEqualTo(BigInteger.valueOf(16777216));
+        val solver = new SolverImpl(new BacktrackingSearch(new MinimumRemainingValuesSelector(), new LeastConstrainingValueOrderer(), MAC.INSTANCE));
         val optionalSolution = solver.getSolution(csp);
         printAssignment(optionalSolution.orElseThrow());
     }
@@ -80,7 +82,7 @@ public class NQueensTest {
     @Test
     void solutions() {
         val csp = nQueens();
-        val solver = new SolverImpl(DefaultInference.INSTANCE, new BacktrackingSearch(new MinimumRemainingValuesSelector(), new LeastConstrainingValueOrderer(), DefaultInference.INSTANCE));
+        val solver = new SolverImpl(new BacktrackingSearch(new MinimumRemainingValuesSelector(), new LeastConstrainingValueOrderer(), MAC.INSTANCE));
         assertThat(solver.getSolutions(csp)).hasSize(92);
     }
 }
