@@ -1,7 +1,10 @@
 package org.jcsp.constraints;
 
 import org.jcsp.assignments.Assignment;
+import org.jcsp.variables.Variable;
 import org.jspecify.annotations.NonNull;
+
+import java.util.Set;
 
 /**
  * Represents a constraint in a constraint satisfaction problem (CSP).
@@ -12,4 +15,5 @@ import org.jspecify.annotations.NonNull;
 public interface Constraint {
     boolean isSatisfiedBy(@NonNull Assignment assignment);
     String getRelation();
+    Set<Variable> getVariables();
 }

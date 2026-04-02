@@ -5,6 +5,18 @@ import lombok.experimental.SuperBuilder;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 
+/**
+ * Represents a binary constraint with an offset applied to the left operand.
+ * This class is an extension of the {@link BinaryConstraint} and allows for a numerical offset
+ * adjustment to the left operand before comparison using a specified {@link Operator}.
+ * <p>
+ * The constraint is considered satisfied if the condition defined by the operator
+ * holds true after the offset is applied to the left operand and compared to the right operand.
+ * If either operand is null, the constraint is treated as implicitly satisfied.
+ * <p>
+ * This class supports various numerical types for the offset, including {@code Byte}, {@code Short},
+ * {@code Integer}, {@code Long}, {@code Float}, and {@code Double}.
+ */
 @SuperBuilder
 @EqualsAndHashCode(callSuper = true)
 public class BinaryOffsetConstraint  extends BinaryConstraint {

@@ -85,4 +85,12 @@ public class NQueensTest {
         val solver = new SolverImpl(new BacktrackingSearch(new MinimumRemainingValuesSelector(), new LeastConstrainingValueOrderer(), MAC.INSTANCE));
         assertThat(solver.getSolutions(csp)).hasSize(92);
     }
+
+    @Test
+    void localSolution() {
+        val csp = nQueens();
+        val solver = new MinConflictsSolver(500);
+        val optionalSolution = solver.getLocalSolution(csp, new RandomAssignmentFactory());
+        printAssignment(optionalSolution.orElseThrow());
+    }
 }

@@ -5,6 +5,9 @@ import org.jspecify.annotations.Nullable;
 
 import java.util.stream.Stream;
 
+/**
+ * Represents a collection of elements that defines the domain of values that a variable can take.
+ */
 public interface Domain {
     boolean contains(@Nullable Object value);
     boolean isEmpty();

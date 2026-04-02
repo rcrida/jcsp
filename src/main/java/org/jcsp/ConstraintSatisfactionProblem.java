@@ -18,6 +18,13 @@ import java.util.Set;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
+/**
+ * Represents a constraint satisfaction problem (CSP), which consists of a set of variables,
+ * each associated with a domain of values, and a set of constraints that must be satisfied.
+ * This class provides methods for constructing and analyzing the problem.
+ * It supports both binary and n-ary constraints and allows for the generation
+ * of equivalent binary constraints from n-ary ones.
+ */
 @Value
 @Builder(toBuilder = true)
 public class ConstraintSatisfactionProblem {

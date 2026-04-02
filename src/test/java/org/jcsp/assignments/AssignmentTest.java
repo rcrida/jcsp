@@ -1,5 +1,9 @@
 package org.jcsp.assignments;
 
+import lombok.val;
+import org.jcsp.ConstraintSatisfactionProblem;
+import org.jcsp.constraints.unary.UnaryNotEqualsConstraint;
+import org.jcsp.constraints.unary.UnaryValueConstraint;
 import org.jcsp.variables.Variable;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -59,5 +63,51 @@ public class AssignmentTest {
         var assignment = new Assignment(Map.of(variable, value, anotherVariable, anotherValue));
         var partialAssignment = assignment.extractPartialAssignment(Set.of(variable));
         assertThat(partialAssignment.getValues()).isEqualTo(Map.of(variable, value));
+    }
+
+    @Test
+    void withValue() {
+        when(variable.isAllowedValue(value)).thenReturn(true);
+        var assignment = new Assignment(Map.of(variable, value));
+        when(variable.isAllowedValue(anotherValue)).thenReturn(true);
+        assertThat(assignment.withValue(variable, anotherValue).getValue(variable)).contains(anotherValue);
+    }
+
+    @Test
+    void isSolution_true() {
+        when(variable.isAllowedValue(value)).thenReturn(true);
+        var assignment = new Assignment(Map.of(variable, value));
+        val csp = ConstraintSatisfactionProblem.builder()
+                .variable(variable)
+                .build();
+        assertThat(assignment.isComplete(csp)).isTrue();
+        assertThat(assignment.isConsistent(csp)).isTrue();
+        assertThat(assignment.isSolution(csp)).isTrue();
+    }
+
+    @Test
+    void isSolution_incomplete() {
+        when(variable.isAllowedValue(value)).thenReturn(true);
+        var assignment = new Assignment(Map.of(variable, value));
+        val csp = ConstraintSatisfactionProblem.builder()
+                .variable(variable)
+                .variable(anotherVariable)
+                .build();
+        assertThat(assignment.isComplete(csp)).isFalse();
+        assertThat(assignment.isConsistent(csp)).isTrue();
+        assertThat(assignment.isSolution(csp)).isFalse();
+    }
+
+    @Test
+    void isSolution_inconsistent() {
+        when(variable.isAllowedValue(value)).thenReturn(true);
+        var assignment = new Assignment(Map.of(variable, value));
+        val csp = ConstraintSatisfactionProblem.builder()
+                .variable(variable)
+                .constraint(UnaryNotEqualsConstraint.of(variable, value))
+                .build();
+        assertThat(assignment.isComplete(csp)).isTrue();
+        assertThat(assignment.isConsistent(csp)).isFalse();
+        assertThat(assignment.isSolution(csp)).isFalse();
     }
 }

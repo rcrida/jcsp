@@ -4,6 +4,10 @@ import lombok.Value;
 import org.jcsp.domains.Domain;
 import org.jspecify.annotations.NonNull;
 
+/**
+ * Represents a variable in a constraint satisfaction problem. Each variable
+ * has a name and a domain, which defines the set of allowed values it can take.
+ */
 public interface Variable {
     String getName();
     Domain getDomain();

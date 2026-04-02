@@ -79,4 +79,12 @@ public class AustraliaMapColouringTest {
         val solver = new SolverImpl(new BacktrackingSearch(new MinimumRemainingValuesSelector(), new LeastConstrainingValueOrderer(), MAC.INSTANCE));
         assertThat(solver.getSolutions(csp)).hasSize(18);
     }
+
+    @Test
+    void localSolution() {
+        val csp = problem();
+        val solver = new MinConflictsSolver(500);
+        val optionalSolution = solver.getLocalSolution(csp, new RandomAssignmentFactory());
+        System.out.println(optionalSolution);
+    }
 }

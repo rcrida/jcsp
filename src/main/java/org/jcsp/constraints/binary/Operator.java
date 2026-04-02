@@ -1,5 +1,23 @@
 package org.jcsp.constraints.binary;
 
+/**
+ * This enum represents a set of binary operators that can be used for comparison.
+ * Each operator is associated with a symbol and provides a specific implementation
+ * of a comparison between two objects.
+ * <p>
+ * The operators include:
+ * - EQ: Equal to (==)
+ * - NEQ: Not equal to (!=)
+ * - LT: Less than (<)
+ * - GT: Greater than (>)
+ * - LEQ: Less than or equal to (<=)
+ * - GEQ: Greater than or equal to (>=)
+ *<p>
+ * Instances of this enum are capable of comparing two objects based on their type.
+ * For objects that implement the {@link Comparable} interface, comparisons are done
+ * using the natural ordering defined by the {@link Comparable#compareTo(Object)} method.
+ * For equality-based operators (EQ and NEQ), comparisons rely on the {@link Object#equals(Object)} method.
+ */
 public enum Operator {
     EQ("==") {
         @Override

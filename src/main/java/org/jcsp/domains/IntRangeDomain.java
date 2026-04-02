@@ -3,6 +3,11 @@ package org.jcsp.domains;
 import java.util.HashSet;
 import java.util.Set;
 
+/**
+ * Represents a domain of integers defined by an inclusive range. This class is a specialization
+ * of {@link DomainObjectSet} that generates a set of integer values between the specified
+ * minimum and maximum bounds.
+ */
 public class IntRangeDomain extends DomainObjectSet {
     public IntRangeDomain(int minInclusive, int maxInclusive) {
         super(populateRange(minInclusive, maxInclusive));

@@ -12,6 +12,20 @@ import org.jspecify.annotations.NonNull;
 import java.util.Optional;
 import java.util.stream.Stream;
 
+/**
+ * An implementation of the {@link Solver} interface that provides methods for solving
+ * constraint satisfaction problems (CSPs) using a combination of node consistency,
+ * arc consistency (AC3), and backtracking search.
+ * <p>
+ * This class leverages the following techniques:
+ * <p>
+ * - **Node Consistency**: Ensures that all variables' values are consistent with their
+ *   unary constraints.
+ * - **Arc Consistency (AC3)**: Enforces binary constraints between variables by iterating
+ *   over arcs and progressively reducing the search space.
+ * - **Backtracking Search**: Explores possible assignments of variables recursively,
+ *   applying inference and heuristics to quickly find solutions while reducing the search space.
+ */
 @Slf4j
 @Value
 public class SolverImpl implements Solver {

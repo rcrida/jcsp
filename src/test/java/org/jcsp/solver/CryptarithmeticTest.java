@@ -94,4 +94,13 @@ public class CryptarithmeticTest {
         System.out.println(solutions);
         assertThat(solutions).hasSize(19);
     }
+
+    @Test
+    void localSolution() {
+        val csp = twoPlusTwoEqualsFour();
+        val solver = new MinConflictsSolver(500);
+        val optionalSolution = solver.getLocalSolution(csp, new RandomAssignmentFactory());
+        // there is no solution because the search space is sparse and we don't model all of the constraints as binary constraints
+        assertThat(optionalSolution).isEmpty();
+    }
 }

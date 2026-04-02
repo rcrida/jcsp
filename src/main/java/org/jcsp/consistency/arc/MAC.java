@@ -1,6 +1,5 @@
 package org.jcsp.consistency.arc;
 
-import lombok.extern.slf4j.Slf4j;
 import lombok.val;
 import org.jcsp.ConstraintSatisfactionProblem;
 import org.jcsp.assignments.Assignment;
@@ -14,11 +13,25 @@ import java.util.Optional;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
+/**
+ * Represents the Maintaining Arc Consistency (MAC) inference algorithm which is used in constraint satisfaction problems (CSPs).
+ * This class ensures arc consistency for a given assignment of a variable by enforcing constraints on binary relations.
+ */
 public class MAC implements Inference {
     public static final Inference INSTANCE = new MAC();
 
     private MAC() {}
 
+    /**
+     * Applies the Maintaining Arc Consistency (MAC) inference algorithm to enforce arc consistency
+     * for a constraint satisfaction problem (CSP) after assigning a value to a variable.
+     *
+     * @param problem The constraint satisfaction problem to which inference will be applied.
+     * @param variable The variable that has been assigned a new value in the CSP.
+     * @param assignment The current assignment of values to variables in the CSP.
+     * @return An {@code Optional} containing the updated constraint satisfaction problem if inference
+     *         is successful and maintains consistency; otherwise, an empty {@code Optional}.
+     */
     @Override
     public Optional<ConstraintSatisfactionProblem> apply(ConstraintSatisfactionProblem problem, Variable variable, Assignment assignment) {
         val value = assignment.getValue(variable).orElseThrow();

@@ -2,6 +2,7 @@ package org.jcsp.solver;
 
 import lombok.val;
 import org.jcsp.ConstraintSatisfactionProblem;
+import org.jcsp.assignments.Assignment;
 import org.jcsp.consistency.arc.MAC;
 import org.jcsp.constraints.nary.AllDiffConstraint;
 import org.jcsp.constraints.unary.UnaryValueConstraint;
@@ -89,17 +90,18 @@ public class SudokuTest {
         val csp = sudoku();
         assertThat(csp.getSearchSpace()).isEqualTo(new BigInteger("196627050475552913618075908526912116283103450944214766927315415537966391196809"));
         val solver = new SolverImpl(new BacktrackingSearch(new MinimumRemainingValuesSelector(), new LeastConstrainingValueOrderer(), MAC.INSTANCE));
-        val optionalSolution = solver.getSolution(csp)
-                .map(s -> {
-                    val solution = new int[9][9];
-                    for (int i = 0; i < ROWS.length; i++) {
-                        for (int j = 0; j < COLUMNS.length; j++) {
-                            solution[i][j] = (int) s.getValue(VARIABLES[i][j]).orElse(0);
-                        }
-                    }
-                    return solution;
-                });
+        val optionalSolution = solver.getSolution(csp).map(this::extractArray);
         optionalSolution.ifPresent(SudokuTest::print2dArray);
+    }
+
+    private int[][] extractArray(Assignment assignment) {
+        val solution = new int[9][9];
+        for (int i = 0; i < ROWS.length; i++) {
+            for (int j = 0; j < COLUMNS.length; j++) {
+                solution[i][j] = (int) assignment.getValue(VARIABLES[i][j]).orElse(0);
+            }
+        }
+        return solution;
     }
 
     @Test

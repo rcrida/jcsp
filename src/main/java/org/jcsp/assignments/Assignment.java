@@ -3,10 +3,10 @@ package org.jcsp.assignments;
 import lombok.Builder;
 import lombok.Singular;
 import lombok.Value;
+import lombok.extern.slf4j.Slf4j;
 import org.jcsp.ConstraintSatisfactionProblem;
 import org.jcsp.variables.Variable;
 import org.jspecify.annotations.NonNull;
-import org.jspecify.annotations.Nullable;
 
 import java.util.Map;
 import java.util.Optional;
@@ -26,6 +26,7 @@ import java.util.stream.Collectors;
  *   constraint satisfaction problem.
  * - Validating whether a value assignment satisfies specific constraints.
  */
+@Slf4j
 @Value
 @Builder(toBuilder = true)
 public class Assignment {
@@ -62,5 +63,9 @@ public class Assignment {
 
     public boolean isComplete(ConstraintSatisfactionProblem csp) {
         return csp.getVariableDomains().keySet().stream().allMatch(values::containsKey);
+    }
+
+    public boolean isSolution(ConstraintSatisfactionProblem csp) {
+        return isConsistent(csp) && isComplete(csp);
     }
 }

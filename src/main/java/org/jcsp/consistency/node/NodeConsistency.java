@@ -10,6 +10,12 @@ import java.util.HashMap;
 import java.util.Optional;
 import java.util.concurrent.atomic.AtomicBoolean;
 
+/**
+ * Represents a utility class for applying node consistency algorithms to
+ * constraint satisfaction problems. This class ensures that all unary
+ * constraints in a problem are satisfied by constraining the domains of variables
+ * accordingly.
+ */
 @Slf4j
 public class NodeConsistency {
     public static NodeConsistency INSTANCE = new NodeConsistency();

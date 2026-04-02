@@ -10,6 +10,9 @@ import java.util.Set;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
+/**
+ * Represents a set-based implementation of the {@link Domain} interface.
+ */
 @Value
 @NonFinal
 @Builder(toBuilder = true)
