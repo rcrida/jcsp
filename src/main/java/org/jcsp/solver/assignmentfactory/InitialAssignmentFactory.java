@@ -1,4 +1,4 @@
-package org.jcsp.solver;
+package org.jcsp.solver.assignmentfactory;
 
 import org.jcsp.ConstraintSatisfactionProblem;
 import org.jcsp.assignments.Assignment;

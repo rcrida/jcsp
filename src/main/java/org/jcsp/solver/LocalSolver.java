@@ -2,6 +2,7 @@ package org.jcsp.solver;
 
 import org.jcsp.ConstraintSatisfactionProblem;
 import org.jcsp.assignments.Assignment;
+import org.jcsp.solver.assignmentfactory.InitialAssignmentFactory;
 import org.jspecify.annotations.NonNull;
 
 import java.util.Optional;

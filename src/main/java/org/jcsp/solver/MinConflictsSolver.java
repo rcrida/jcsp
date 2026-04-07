@@ -6,6 +6,7 @@ import lombok.val;
 import org.jcsp.ConstraintSatisfactionProblem;
 import org.jcsp.assignments.Assignment;
 import org.jcsp.constraints.Constraint;
+import org.jcsp.solver.assignmentfactory.InitialAssignmentFactory;
 import org.jcsp.variables.Variable;
 import org.jspecify.annotations.NonNull;
 

@@ -10,6 +10,7 @@ import org.jcsp.domains.EnumDomain;
 import org.jcsp.search.BacktrackingSearch;
 import org.jcsp.search.order.LeastConstrainingValueOrderer;
 import org.jcsp.search.selector.MinimumRemainingValuesSelector;
+import org.jcsp.solver.assignmentfactory.RandomAssignmentFactory;
 import org.jcsp.variables.Variable;
 import org.junit.jupiter.api.Test;
 

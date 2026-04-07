@@ -1,4 +1,4 @@
-package org.jcsp.solver;
+package org.jcsp.solver.assignmentfactory;
 
 import lombok.val;
 import org.jcsp.ConstraintSatisfactionProblem;
