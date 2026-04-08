@@ -27,13 +27,13 @@ public class AustraliaMapColouringTest {
 
     public static Domain DOMAIN = EnumDomain.allOf(Colour.class);
     static Variable.Factory VARIABLE_FACTORY = new Variable.Factory() {};
-    static Variable WA = VARIABLE_FACTORY.create("WA", DOMAIN);
-    static Variable NT = VARIABLE_FACTORY.create("NT", DOMAIN);
-    static Variable Q = VARIABLE_FACTORY.create("Q", DOMAIN);
-    static Variable NSW = VARIABLE_FACTORY.create("NSW", DOMAIN);
-    static Variable V = VARIABLE_FACTORY.create("V", DOMAIN);
-    static Variable SA = VARIABLE_FACTORY.create("SA", DOMAIN);
-    static Variable T = VARIABLE_FACTORY.create("T", DOMAIN);
+    public static Variable WA = VARIABLE_FACTORY.create("WA", DOMAIN);
+    public static Variable NT = VARIABLE_FACTORY.create("NT", DOMAIN);
+    public static Variable Q = VARIABLE_FACTORY.create("Q", DOMAIN);
+    public static Variable NSW = VARIABLE_FACTORY.create("NSW", DOMAIN);
+    public static Variable V = VARIABLE_FACTORY.create("V", DOMAIN);
+    public static Variable SA = VARIABLE_FACTORY.create("SA", DOMAIN);
+    public static Variable T = VARIABLE_FACTORY.create("T", DOMAIN);
 
     public static ConstraintSatisfactionProblem problem() {
         return ConstraintSatisfactionProblem.builder()
@@ -50,12 +50,16 @@ public class AustraliaMapColouringTest {
                 .build();
     }
 
+    static Solver solver() {
+        val subproblemSolver = new SolverImpl(new BacktrackingSearch(new MinimumRemainingValuesSelector(), new LeastConstrainingValueOrderer(), MAC.INSTANCE));
+        return new IndependentSubproblemSolver(subproblemSolver);
+    }
+
     @Test
     void solution() {
         val csp = problem();
         assertThat(csp.getSearchSpace()).isEqualTo(BigInteger.valueOf(2187));
-        val solver = new SolverImpl(new BacktrackingSearch(new MinimumRemainingValuesSelector(), new LeastConstrainingValueOrderer(), MAC.INSTANCE));
-        val optionalSolution = solver.getSolution(csp);
+        val optionalSolution = solver().getSolution(csp);
         System.out.println(optionalSolution);
         assertThat(optionalSolution).hasValueSatisfying(value ->
                 assertThat(value).isIn(
@@ -77,8 +81,7 @@ public class AustraliaMapColouringTest {
     @Test
     void searchStream() {
         val csp = problem();
-        val solver = new SolverImpl(new BacktrackingSearch(new MinimumRemainingValuesSelector(), new LeastConstrainingValueOrderer(), MAC.INSTANCE));
-        assertThat(solver.getSolutions(csp)).hasSize(18);
+        assertThat(solver().getSolutions(csp)).hasSize(18);
     }
 
     @Test

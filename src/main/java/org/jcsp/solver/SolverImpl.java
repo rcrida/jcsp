@@ -33,11 +33,6 @@ public class SolverImpl implements Solver {
     BacktrackingSearch backtrackingSearch;
 
     @Override
-    public Optional<Assignment> getSolution(@NonNull ConstraintSatisfactionProblem csp) {
-        return getSolutions(csp).findFirst();
-    }
-
-    @Override
     public Stream<Assignment> getSolutions(@NonNull ConstraintSatisfactionProblem csp) {
         return NodeConsistency.INSTANCE.apply(csp)
                 .flatMap(nodeConsistent -> {

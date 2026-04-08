@@ -12,9 +12,16 @@ import org.jcsp.variables.Variable;
 import org.jspecify.annotations.NonNull;
 
 import java.math.BigInteger;
+import java.util.ArrayDeque;
 import java.util.Collection;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.List;
 import java.util.Map;
+import java.util.Queue;
 import java.util.Set;
+import java.util.function.Predicate;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -49,6 +56,54 @@ public class ConstraintSatisfactionProblem {
 
     public BigInteger getSearchSpace() {
         return getVariableDomains().values().stream().map(Domain::size).map(BigInteger::valueOf).reduce(BigInteger.ONE, BigInteger::multiply);
+    }
+
+    @NonNull
+    public Map<Variable, Set<Variable>> getNeighbours() {
+        val neighbours = new HashMap<Variable, Set<Variable>>();
+        for (Variable variable : getVariableDomains().keySet()) {
+            neighbours.put(variable, new HashSet<>());
+        }
+        for (Constraint constraint : getConstraints()) {
+            val variables = constraint.getVariables();
+            for (Variable variable : variables) {
+                neighbours.get(variable).addAll(variables);
+            }
+        }
+        for (Map.Entry<Variable, Set<Variable>> entry : neighbours.entrySet()) {
+            entry.getValue().remove(entry.getKey());
+        }
+        return Map.copyOf(neighbours);
+    }
+
+
+    @NonNull
+    public Set<ConstraintSatisfactionProblem> decomposeSubproblems() {
+        val neighbours = getNeighbours();
+        val unassignedVariables = new HashSet<>(neighbours.keySet());
+        val subproblems = new HashSet<ConstraintSatisfactionProblem>();
+        while (!unassignedVariables.isEmpty()) {
+            val subCsp = ConstraintSatisfactionProblem.builder();
+            val queue = new ArrayDeque<Variable>();
+            addUnassignedVariable(queue, unassignedVariables.iterator().next(), unassignedVariables);
+            while (!queue.isEmpty()) {
+                val variable = queue.poll();
+                subCsp.variable(variable);
+                subCsp.constraints(getConstraints().stream()
+                        .filter(c -> c.getVariables().contains(variable))
+                        .collect(Collectors.toSet()));
+                neighbours.get(variable).stream()
+                        .filter(unassignedVariables::contains)
+                        .forEach(neighbour -> addUnassignedVariable(queue, neighbour, unassignedVariables));
+            }
+            subproblems.add(subCsp.build());
+        }
+        return subproblems;
+    }
+
+    private void addUnassignedVariable(@NonNull Queue<Variable> queue, @NonNull Variable variable, @NonNull Set<Variable> unassignedVariables) {
+        queue.add(variable);
+        unassignedVariables.remove(variable);
     }
 
     public static class ConstraintSatisfactionProblemBuilder {

@@ -4,6 +4,7 @@ import lombok.Builder;
 import lombok.Singular;
 import lombok.Value;
 import lombok.extern.slf4j.Slf4j;
+import lombok.val;
 import org.jcsp.ConstraintSatisfactionProblem;
 import org.jcsp.variables.Variable;
 import org.jspecify.annotations.NonNull;
@@ -30,6 +31,8 @@ import java.util.stream.Collectors;
 @Value
 @Builder(toBuilder = true)
 public class Assignment {
+    public static Assignment EMPTY = Assignment.builder().build();
+
     @Singular
     Map<Variable, Object> values;
 
@@ -54,6 +57,12 @@ public class Assignment {
         return toBuilder()
                 .value(variable, value)
                 .build();
+    }
+
+    public Assignment merge(@NonNull Assignment another) {
+        val builder = toBuilder();
+        builder.values(another.getValues());
+        return builder.build();
     }
 
     public boolean isConsistent(ConstraintSatisfactionProblem csp) {

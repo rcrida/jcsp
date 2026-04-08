@@ -30,6 +30,11 @@ public class AssignmentTest {
     Object anotherValue;
 
     @Test
+    void empty() {
+        assertThat(Assignment.EMPTY.getValues()).isEmpty();
+    }
+
+    @Test
     void constructValid() {
         when(variable.isAllowedValue(value)).thenReturn(true);
         assertDoesNotThrow(() -> new Assignment(Map.of(variable, value)));
@@ -71,6 +76,17 @@ public class AssignmentTest {
         var assignment = new Assignment(Map.of(variable, value));
         when(variable.isAllowedValue(anotherValue)).thenReturn(true);
         assertThat(assignment.withValue(variable, anotherValue).getValue(variable)).contains(anotherValue);
+    }
+
+    @Test
+    void merge() {
+        when(variable.isAllowedValue(value)).thenReturn(true);
+        var assignment1 = new Assignment(Map.of(variable, value));
+        when(anotherVariable.isAllowedValue(anotherValue)).thenReturn(true);
+        var assignment2 = new Assignment(Map.of(anotherVariable, anotherValue));
+        assertThat(assignment1.merge(assignment2)).satisfies(merged -> {
+            assertThat(merged.getValues()).containsExactlyInAnyOrderEntriesOf(Map.of(variable, value, anotherVariable, anotherValue));
+        });
     }
 
     @Test

@@ -16,6 +16,8 @@ import java.util.stream.Stream;
  * either as a single solution or as a stream of solutions.
  */
 public interface Solver {
-    Optional<Assignment> getSolution(@NonNull ConstraintSatisfactionProblem csp);
+    default Optional<Assignment> getSolution(@NonNull ConstraintSatisfactionProblem csp) {
+        return getSolutions(csp).findFirst();
+    };
     Stream<Assignment> getSolutions(@NonNull ConstraintSatisfactionProblem csp);
 }
