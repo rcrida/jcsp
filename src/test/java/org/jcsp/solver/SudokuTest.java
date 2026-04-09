@@ -3,14 +3,10 @@ package org.jcsp.solver;
 import lombok.val;
 import org.jcsp.ConstraintSatisfactionProblem;
 import org.jcsp.assignments.Assignment;
-import org.jcsp.consistency.arc.MAC;
 import org.jcsp.constraints.nary.AllDiffConstraint;
 import org.jcsp.constraints.unary.UnaryValueConstraint;
 import org.jcsp.domains.Domain;
 import org.jcsp.domains.IntRangeDomain;
-import org.jcsp.search.BacktrackingSearch;
-import org.jcsp.search.order.LeastConstrainingValueOrderer;
-import org.jcsp.search.selector.MinimumRemainingValuesSelector;
 import org.jcsp.variables.Variable;
 import org.junit.jupiter.api.Test;
 
@@ -89,7 +85,7 @@ public class SudokuTest {
     void solution() {
         val csp = sudoku();
         assertThat(csp.getSearchSpace()).isEqualTo(new BigInteger("196627050475552913618075908526912116283103450944214766927315415537966391196809"));
-        val solver = new SolverImpl(new BacktrackingSearch(new MinimumRemainingValuesSelector(), new LeastConstrainingValueOrderer(), MAC.INSTANCE));
+        val solver = Solver.Factory.INSTANCE.createSolver();
         val optionalSolution = solver.getSolution(csp).map(this::extractArray);
         optionalSolution.ifPresent(SudokuTest::print2dArray);
     }
@@ -107,7 +103,7 @@ public class SudokuTest {
     @Test
     void solutions() {
         val csp = sudoku();
-        val solver = new SolverImpl(new BacktrackingSearch(new MinimumRemainingValuesSelector(), new LeastConstrainingValueOrderer(), MAC.INSTANCE));
+        val solver = Solver.Factory.INSTANCE.createSolver();
         assertThat(solver.getSolutions(csp)).hasSize(1);
     }
 }

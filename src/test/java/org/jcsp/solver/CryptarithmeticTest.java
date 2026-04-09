@@ -90,7 +90,7 @@ public class CryptarithmeticTest {
     @Test
     void searchStream() {
         val csp = twoPlusTwoEqualsFour();
-        val solver = new SolverImpl(new BacktrackingSearch(new MinimumRemainingValuesSelector(), new LeastConstrainingValueOrderer(), MAC.INSTANCE));
+        val solver = Solver.Factory.INSTANCE.createSolver();
         val solutions = solver.getSolutions(csp).toList();
         System.out.println(solutions);
         assertThat(solutions).hasSize(19);

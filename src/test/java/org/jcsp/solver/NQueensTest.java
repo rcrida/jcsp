@@ -3,15 +3,11 @@ package org.jcsp.solver;
 import lombok.val;
 import org.jcsp.ConstraintSatisfactionProblem;
 import org.jcsp.assignments.Assignment;
-import org.jcsp.consistency.arc.MAC;
 import org.jcsp.constraints.binary.BinaryOffsetConstraint;
 import org.jcsp.constraints.binary.Operator;
 import org.jcsp.constraints.nary.AllDiffConstraint;
 import org.jcsp.domains.Domain;
 import org.jcsp.domains.IntRangeDomain;
-import org.jcsp.search.BacktrackingSearch;
-import org.jcsp.search.order.LeastConstrainingValueOrderer;
-import org.jcsp.search.selector.MinimumRemainingValuesSelector;
 import org.jcsp.solver.assignmentfactory.RandomAssignmentFactory;
 import org.jcsp.variables.Variable;
 import org.junit.jupiter.api.Test;
@@ -75,7 +71,7 @@ public class NQueensTest {
     void solution() {
         val csp = nQueens();
         assertThat(csp.getSearchSpace()).isEqualTo(BigInteger.valueOf(16777216));
-        val solver = new SolverImpl(new BacktrackingSearch(new MinimumRemainingValuesSelector(), new LeastConstrainingValueOrderer(), MAC.INSTANCE));
+        val solver = Solver.Factory.INSTANCE.createSolver();
         val optionalSolution = solver.getSolution(csp);
         printAssignment(optionalSolution.orElseThrow());
     }
@@ -83,7 +79,7 @@ public class NQueensTest {
     @Test
     void solutions() {
         val csp = nQueens();
-        val solver = new SolverImpl(new BacktrackingSearch(new MinimumRemainingValuesSelector(), new LeastConstrainingValueOrderer(), MAC.INSTANCE));
+        val solver = Solver.Factory.INSTANCE.createSolver();
         assertThat(solver.getSolutions(csp)).hasSize(92);
     }
 
