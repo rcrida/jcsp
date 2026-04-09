@@ -42,20 +42,14 @@ public class ExpressionConstraintTest {
     @ParameterizedTest
     @ValueSource(booleans = {true, false})
     void isSatisfiedBy(boolean satisfied) {
-        when(domain.contains(value1)).thenReturn(true);
-        when(domain.contains(value2)).thenReturn(true);
-        when(variable1.getDomain()).thenReturn(domain);
-        when(variable2.getDomain()).thenReturn(domain);
-        when(variable1.isAllowedValue(value1)).thenCallRealMethod();
-        when(variable2.isAllowedValue(value2)).thenCallRealMethod();
-        var assignment = new Assignment(Map.of(variable1, value1, variable2, value2));
+        var assignment = Assignment.of(Map.of(variable1, value1, variable2, value2));
         when(expression.apply(assignment)).thenReturn(satisfied);
         assertThat(expressionConstraint.isSatisfiedBy(assignment)).isEqualTo(satisfied);
     }
 
     @Test
     void isSatisfiedBy_unknown() {
-        assertThat(expressionConstraint.isSatisfiedBy(new Assignment(Map.of()))).isTrue();
+        assertThat(expressionConstraint.isSatisfiedBy(Assignment.of(Map.of()))).isTrue();
     }
 
     @Test

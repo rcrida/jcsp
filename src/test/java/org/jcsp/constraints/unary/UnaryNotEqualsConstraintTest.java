@@ -21,7 +21,7 @@ public class UnaryNotEqualsConstraintTest {
     static final Domain DOMAIN = new IntRangeDomain(0, 100);
     static final Variable.Factory VARIABLE_FACTORY = Variable.Factory.INSTANCE;
 
-    Variable variable = VARIABLE_FACTORY.create("variable", DOMAIN);
+    Variable variable = VARIABLE_FACTORY.create("variable");
     UnaryNotEqualsConstraint constraint;
 
     @BeforeEach
@@ -43,12 +43,12 @@ public class UnaryNotEqualsConstraintTest {
     @ParameterizedTest
     @MethodSource
     void isSatisfiedBy_true(Object value) {
-        assertThat(constraint.isSatisfiedBy(new Assignment(Map.of(variable, value)))).isTrue();
+        assertThat(constraint.isSatisfiedBy(Assignment.of(Map.of(variable, value)))).isTrue();
     }
 
     @Test
     void isSatisfiedBy_unknown() {
-        assertThat(constraint.isSatisfiedBy(new Assignment(Map.of()))).isTrue();
+        assertThat(constraint.isSatisfiedBy(Assignment.of(Map.of()))).isTrue();
     }
 
     @Test

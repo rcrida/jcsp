@@ -10,7 +10,6 @@ import org.jcsp.search.order.DomainValuesOrderer;
 import org.jcsp.search.selector.UnassignedVariableSelector;
 import org.jspecify.annotations.NonNull;
 
-import java.util.Map;
 import java.util.stream.Stream;
 
 /**
@@ -40,7 +39,7 @@ public class BacktrackingSearch implements Search {
 
     @Override
     public Stream<Assignment> searchStream(ConstraintSatisfactionProblem csp) {
-        return searchStream(csp, new Assignment(Map.of()));
+        return searchStream(csp, Assignment.EMPTY);
     }
 
     private Stream<Assignment> searchStream(ConstraintSatisfactionProblem csp, Assignment assignment) {

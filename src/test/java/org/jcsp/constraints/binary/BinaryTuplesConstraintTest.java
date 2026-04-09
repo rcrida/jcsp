@@ -26,8 +26,8 @@ public class BinaryTuplesConstraintTest {
     static final Domain DOMAIN = new IntRangeDomain(0, 10);
     static final Variable.Factory VARIABLE_FACTORY = Variable.Factory.INSTANCE;
 
-    Variable left = VARIABLE_FACTORY.create("left", DOMAIN);
-    Variable right = VARIABLE_FACTORY.create("right", DOMAIN);
+    Variable left = VARIABLE_FACTORY.create("left");
+    Variable right = VARIABLE_FACTORY.create("right");
     BinaryTuplesConstraint relation;
 
     @BeforeEach
@@ -46,7 +46,7 @@ public class BinaryTuplesConstraintTest {
     @ParameterizedTest
     @MethodSource
     void isSatisfiedBy_true(BinaryTuple tuple) {
-        assertThat(relation.isSatisfiedBy(new Assignment(Map.of(left, tuple.left(), right, tuple.right())))).isTrue();
+        assertThat(relation.isSatisfiedBy(Assignment.of(Map.of(left, tuple.left(), right, tuple.right())))).isTrue();
     }
 
     static Stream<Arguments> isSatisfiedBy_false() {
@@ -62,14 +62,14 @@ public class BinaryTuplesConstraintTest {
     @ParameterizedTest
     @MethodSource
     void isSatisfiedBy_false(BinaryTuple tuple) {
-        assertThat(relation.isSatisfiedBy(new Assignment(Map.of(left, tuple.left(), right, tuple.right())))).isFalse();
+        assertThat(relation.isSatisfiedBy(Assignment.of(Map.of(left, tuple.left(), right, tuple.right())))).isFalse();
     }
 
     @Test
     void isSatisfied_unknowns() {
-        assertThat(relation.isSatisfiedBy(new Assignment(Map.of()))).isTrue();
-        assertThat(relation.isSatisfiedBy(new Assignment(Map.of(left, 0)))).isTrue();
-        assertThat(relation.isSatisfiedBy(new Assignment(Map.of(right, 1)))).isTrue();
+        assertThat(relation.isSatisfiedBy(Assignment.of(Map.of()))).isTrue();
+        assertThat(relation.isSatisfiedBy(Assignment.of(Map.of(left, 0)))).isTrue();
+        assertThat(relation.isSatisfiedBy(Assignment.of(Map.of(right, 1)))).isTrue();
     }
 
     @Test

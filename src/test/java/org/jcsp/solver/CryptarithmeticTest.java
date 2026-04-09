@@ -21,19 +21,27 @@ public class CryptarithmeticTest {
     static Domain DIGIT_DOMAIN = new IntRangeDomain(0, 9);
     static Domain CARRY_DOMAIN = new IntRangeDomain(0, 1);
     static Variable.Factory VARIABLE_FACTORY = Variable.Factory.INSTANCE;
-    static Variable t = VARIABLE_FACTORY.create("T", DIGIT_DOMAIN);
-    static Variable w = VARIABLE_FACTORY.create("W", DIGIT_DOMAIN);
-    static Variable o = VARIABLE_FACTORY.create("O", DIGIT_DOMAIN);
-    static Variable f = VARIABLE_FACTORY.create("F", DIGIT_DOMAIN);
-    static Variable u = VARIABLE_FACTORY.create("U", DIGIT_DOMAIN);
-    static Variable r = VARIABLE_FACTORY.create("R", DIGIT_DOMAIN);
-    static Variable c1 = VARIABLE_FACTORY.create("C1", CARRY_DOMAIN);
-    static Variable c2 = VARIABLE_FACTORY.create("C2", CARRY_DOMAIN);
-    static Variable c3 = VARIABLE_FACTORY.create("C3", CARRY_DOMAIN);
+    static Variable t = VARIABLE_FACTORY.create("T");
+    static Variable w = VARIABLE_FACTORY.create("W");
+    static Variable o = VARIABLE_FACTORY.create("O");
+    static Variable f = VARIABLE_FACTORY.create("F");
+    static Variable u = VARIABLE_FACTORY.create("U");
+    static Variable r = VARIABLE_FACTORY.create("R");
+    static Variable c1 = VARIABLE_FACTORY.create("C1");
+    static Variable c2 = VARIABLE_FACTORY.create("C2");
+    static Variable c3 = VARIABLE_FACTORY.create("C3");
 
     public static ConstraintSatisfactionProblem twoPlusTwoEqualsFour() {
         return ConstraintSatisfactionProblem.builder()
-                .variables(Set.of(t, w, o, f, u, r, c1, c2, c3))
+                .variableDomain(t, DIGIT_DOMAIN)
+                .variableDomain(w, DIGIT_DOMAIN)
+                .variableDomain(o, DIGIT_DOMAIN)
+                .variableDomain(f, DIGIT_DOMAIN)
+                .variableDomain(u, DIGIT_DOMAIN)
+                .variableDomain(r, DIGIT_DOMAIN)
+                .variableDomain(c1, CARRY_DOMAIN)
+                .variableDomain(c2, CARRY_DOMAIN)
+                .variableDomain(c3, CARRY_DOMAIN)
                 .constraint(AllDiffConstraint.builder().variables(Set.of(t, w, o, f, u, r)).build())
                 .constraint(ExpressionConstraint.builder().variables(Set.of(o, r, c1)).expression(assignment -> {
                     val O = (int) assignment.getValue(o).get();
@@ -70,7 +78,7 @@ public class CryptarithmeticTest {
         val solver = Solver.Factory.INSTANCE.createSolver();
         val optionalSolution = solver.getSolution(csp);
         System.out.println(optionalSolution);
-        assertThat(optionalSolution).contains(new Assignment(Map.of(
+        assertThat(optionalSolution).contains(Assignment.of(Map.of(
                 t, 1,
                 w, 3,
                 o, 2,

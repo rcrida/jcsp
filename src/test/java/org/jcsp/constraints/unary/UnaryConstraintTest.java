@@ -1,8 +1,6 @@
 package org.jcsp.constraints.unary;
 
 import lombok.experimental.SuperBuilder;
-import org.jcsp.domains.Domain;
-import org.jcsp.domains.IntRangeDomain;
 import org.jcsp.variables.Variable;
 import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.Test;
@@ -13,11 +11,9 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 @ExtendWith(MockitoExtension.class)
 public class UnaryConstraintTest {
-    static final Object VALUE = 5;
-    static final Domain DOMAIN = new IntRangeDomain(0, 100);
     static final Variable.Factory VARIABLE_FACTORY = Variable.Factory.INSTANCE;
 
-    Variable variable = VARIABLE_FACTORY.create("variable", DOMAIN);
+    Variable variable = VARIABLE_FACTORY.create("variable");
 
     @SuperBuilder
     static class TestUnaryConstraint extends UnaryConstraint {

@@ -12,7 +12,6 @@ import org.junit.jupiter.api.Test;
 
 import java.math.BigInteger;
 import java.util.Map;
-import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -23,17 +22,23 @@ public class AustraliaMapColouringTest {
 
     public static Domain DOMAIN = EnumDomain.allOf(Colour.class);
     static Variable.Factory VARIABLE_FACTORY = Variable.Factory.INSTANCE;
-    public static Variable WA = VARIABLE_FACTORY.create("WA", DOMAIN);
-    public static Variable NT = VARIABLE_FACTORY.create("NT", DOMAIN);
-    public static Variable Q = VARIABLE_FACTORY.create("Q", DOMAIN);
-    public static Variable NSW = VARIABLE_FACTORY.create("NSW", DOMAIN);
-    public static Variable V = VARIABLE_FACTORY.create("V", DOMAIN);
-    public static Variable SA = VARIABLE_FACTORY.create("SA", DOMAIN);
-    public static Variable T = VARIABLE_FACTORY.create("T", DOMAIN);
+    public static Variable WA = VARIABLE_FACTORY.create("WA");
+    public static Variable NT = VARIABLE_FACTORY.create("NT");
+    public static Variable Q = VARIABLE_FACTORY.create("Q");
+    public static Variable NSW = VARIABLE_FACTORY.create("NSW");
+    public static Variable V = VARIABLE_FACTORY.create("V");
+    public static Variable SA = VARIABLE_FACTORY.create("SA");
+    public static Variable T = VARIABLE_FACTORY.create("T");
 
     public static ConstraintSatisfactionProblem problem() {
         return ConstraintSatisfactionProblem.builder()
-                .variables(Set.of(WA, NT, Q, NSW, V, SA, T))
+                .variableDomain(WA, DOMAIN)
+                .variableDomain(NT, DOMAIN)
+                .variableDomain(Q, DOMAIN)
+                .variableDomain(NSW, DOMAIN)
+                .variableDomain(V, DOMAIN)
+                .variableDomain(SA, DOMAIN)
+                .variableDomain(T, DOMAIN)
                 .constraint(BinaryNotEqualsConstraint.builder().left(SA).right(WA).build())
                 .constraint(BinaryNotEqualsConstraint.builder().left(SA).right(NT).build())
                 .constraint(BinaryNotEqualsConstraint.builder().left(SA).right(Q).build())
@@ -54,17 +59,17 @@ public class AustraliaMapColouringTest {
         System.out.println(optionalSolution);
         assertThat(optionalSolution).hasValueSatisfying(value ->
                 assertThat(value).isIn(
-                        new Assignment(Map.of(
+                        Assignment.of(Map.of(
                                 WA, Colour.RED, NT, Colour.GREEN, Q, Colour.RED, NSW, Colour.GREEN, V, Colour.RED, SA, Colour.BLUE, T, Colour.RED)),
-                        new Assignment(Map.of(
+                        Assignment.of(Map.of(
                                 WA, Colour.RED, NT, Colour.BLUE, Q, Colour.RED, NSW, Colour.BLUE, V, Colour.RED, SA, Colour.GREEN, T, Colour.RED)),
-                        new Assignment(Map.of(
+                        Assignment.of(Map.of(
                                 WA, Colour.BLUE, NT, Colour.RED, Q, Colour.BLUE, NSW, Colour.RED, V, Colour.BLUE, SA, Colour.GREEN, T, Colour.RED)),
-                        new Assignment(Map.of(
+                        Assignment.of(Map.of(
                                 WA, Colour.GREEN, NT, Colour.RED, Q, Colour.GREEN, NSW, Colour.RED, V, Colour.GREEN, SA, Colour.BLUE, T, Colour.RED)),
-                        new Assignment(Map.of(
+                        Assignment.of(Map.of(
                                 WA, Colour.GREEN, NT, Colour.BLUE, Q, Colour.GREEN, NSW, Colour.BLUE, V, Colour.GREEN, SA, Colour.RED, T, Colour.RED)),
-                        new Assignment(Map.of(
+                        Assignment.of(Map.of(
                                 WA, Colour.BLUE, NT, Colour.GREEN, Q, Colour.BLUE, NSW, Colour.GREEN, V, Colour.BLUE, SA, Colour.RED, T, Colour.RED))
                 ));
     }

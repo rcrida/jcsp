@@ -14,14 +14,12 @@ import org.jspecify.annotations.NonNull;
 import java.math.BigInteger;
 import java.util.ArrayDeque;
 import java.util.Collection;
-import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
-import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Queue;
 import java.util.Set;
-import java.util.function.Predicate;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -39,6 +37,16 @@ public class ConstraintSatisfactionProblem {
     Map<Variable, Domain> variableDomains;
     @Singular
     Set<Constraint> constraints;
+
+    public Optional<Domain> getDomain(@NonNull Variable variable) {
+        return Optional.ofNullable(variableDomains.get(variable));
+    }
+
+    public boolean isAllowedValue(@NonNull Variable variable, @NonNull Object value) {
+        return getDomain(variable)
+                .map(domain -> domain.contains(value))
+                .orElse(false);
+    }
 
     public Set<BinaryConstraint> getAllBinaryConstraints() {
         val binaryConstraints = getConstraints().stream()
@@ -76,7 +84,6 @@ public class ConstraintSatisfactionProblem {
         return Map.copyOf(neighbours);
     }
 
-
     @NonNull
     public Set<ConstraintSatisfactionProblem> decomposeSubproblems() {
         val neighbours = getNeighbours();
@@ -88,7 +95,8 @@ public class ConstraintSatisfactionProblem {
             addUnassignedVariable(queue, unassignedVariables.iterator().next(), unassignedVariables);
             while (!queue.isEmpty()) {
                 val variable = queue.poll();
-                subCsp.variable(variable);
+                val domain = getDomain(variable).orElseThrow();
+                subCsp.variableDomain(variable, domain);
                 subCsp.constraints(getConstraints().stream()
                         .filter(c -> c.getVariables().contains(variable))
                         .collect(Collectors.toSet()));
@@ -110,7 +118,7 @@ public class ConstraintSatisfactionProblem {
         private final Variable.Factory variableFactory = Variable.Factory.INSTANCE;
 
         public Variable createVariable(String name, Domain domain) {
-            final var variable = variableFactory.create(name, domain);
+            final var variable = variableFactory.create(name);
             variableDomain(variable, domain);
             return variable;
         }
@@ -131,18 +139,6 @@ public class ConstraintSatisfactionProblem {
                 }
             }
             return variables;
-        }
-
-        public ConstraintSatisfactionProblemBuilder variables(Collection<Variable> variables) {
-            for (Variable variable : variables) {
-                variable(variable);
-            }
-            return this;
-        }
-
-        public ConstraintSatisfactionProblemBuilder variable(Variable variable) {
-            variableDomain(variable, variable.getDomain());
-            return this;
         }
     }
 }

@@ -1,8 +1,6 @@
 package org.jcsp.constraints.binary;
 
 import lombok.val;
-import org.jcsp.domains.Domain;
-import org.jcsp.domains.IntRangeDomain;
 import org.jcsp.variables.Variable;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -16,10 +14,9 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 public class BinaryOffsetConstraintTest {
-    static final Domain DOMAIN = new IntRangeDomain(0, 10);
     static final Variable.Factory VARIABLE_FACTORY = Variable.Factory.INSTANCE;
-    static final Variable LEFT = VARIABLE_FACTORY.create("left", DOMAIN);
-    static final Variable RIGHT = VARIABLE_FACTORY.create("right", DOMAIN);
+    static final Variable LEFT = VARIABLE_FACTORY.create("left");
+    static final Variable RIGHT = VARIABLE_FACTORY.create("right");
 
     static Stream<Arguments> isSatisfiedBy() {
         return Stream.of(

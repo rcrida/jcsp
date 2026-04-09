@@ -26,8 +26,8 @@ public class ReversedBinaryConstraintTest {
     static final Domain DOMAIN = new IntRangeDomain(0, 10);
     static final Variable.Factory VARIABLE_FACTORY = Variable.Factory.INSTANCE;
 
-    Variable left = VARIABLE_FACTORY.create("left", DOMAIN);
-    Variable right = VARIABLE_FACTORY.create("right", DOMAIN);
+    Variable left = VARIABLE_FACTORY.create("left");
+    Variable right = VARIABLE_FACTORY.create("right");
     ReversedBinaryConstraint constraint;
 
     @BeforeEach
@@ -47,7 +47,7 @@ public class ReversedBinaryConstraintTest {
     @ParameterizedTest
     @MethodSource
     void isSatisfiedBy_true(BinaryTuple tuple) {
-        assertThat(constraint.isSatisfiedBy(new Assignment(Map.of(left, tuple.left(), right, tuple.right())))).isTrue();
+        assertThat(constraint.isSatisfiedBy(Assignment.of(Map.of(left, tuple.left(), right, tuple.right())))).isTrue();
     }
 
     static Stream<Arguments> isSatisfiedBy_false() {
@@ -63,7 +63,7 @@ public class ReversedBinaryConstraintTest {
     @ParameterizedTest
     @MethodSource
     void isSatisfiedBy_false(BinaryTuple tuple) {
-        assertThat(constraint.isSatisfiedBy(new Assignment(Map.of(left, tuple.left(), right, tuple.right())))).isFalse();
+        assertThat(constraint.isSatisfiedBy(Assignment.of(Map.of(left, tuple.left(), right, tuple.right())))).isFalse();
     }
 
     @Test

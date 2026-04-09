@@ -13,7 +13,6 @@ import java.util.Map;
 import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
 public class AllDiffConstraintTest {
@@ -40,63 +39,32 @@ public class AllDiffConstraintTest {
 
     @Test
     void isSatisfiedByEmpty() {
-        assertThat(allDiffConstraint.isSatisfiedBy(new Assignment(Map.of()))).isTrue();
+        assertThat(allDiffConstraint.isSatisfiedBy(Assignment.of(Map.of()))).isTrue();
     }
 
     @Test
     void isSatisfiedBySingle() {
-        when(domain.contains(value1)).thenReturn(true);
-        when(variable1.getDomain()).thenReturn(domain);
-        when(variable1.isAllowedValue(value1)).thenCallRealMethod();
-        assertThat(allDiffConstraint.isSatisfiedBy(new Assignment(Map.of(variable1, value1)))).isTrue();
+        assertThat(allDiffConstraint.isSatisfiedBy(Assignment.of(Map.of(variable1, value1)))).isTrue();
     }
 
     @Test
     void isSatisfiedByDoubleDifferent() {
-        when(domain.contains(value1)).thenReturn(true);
-        when(domain.contains(value2)).thenReturn(true);
-        when(variable1.getDomain()).thenReturn(domain);
-        when(variable2.getDomain()).thenReturn(domain);
-        when(variable1.isAllowedValue(value1)).thenCallRealMethod();
-        when(variable2.isAllowedValue(value2)).thenCallRealMethod();
-        assertThat(allDiffConstraint.isSatisfiedBy(new Assignment(Map.of(variable1, value1, variable2, value2)))).isTrue();
+        assertThat(allDiffConstraint.isSatisfiedBy(Assignment.of(Map.of(variable1, value1, variable2, value2)))).isTrue();
     }
 
     @Test
     void isSatisfiedByDoubleSame() {
-        when(domain.contains(value1)).thenReturn(true);
-        when(variable1.getDomain()).thenReturn(domain);
-        when(variable2.getDomain()).thenReturn(domain);
-        when(variable1.isAllowedValue(value1)).thenCallRealMethod();
-        when(variable2.isAllowedValue(value1)).thenCallRealMethod();
-        assertThat(allDiffConstraint.isSatisfiedBy(new Assignment(Map.of(variable1, value1, variable2, value1)))).isFalse();
+        assertThat(allDiffConstraint.isSatisfiedBy(Assignment.of(Map.of(variable1, value1, variable2, value1)))).isFalse();
     }
 
     @Test
     void isSatisfiedByTripleDifferent() {
-        when(domain.contains(value1)).thenReturn(true);
-        when(domain.contains(value2)).thenReturn(true);
-        when(domain.contains(value3)).thenReturn(true);
-        when(variable1.getDomain()).thenReturn(domain);
-        when(variable2.getDomain()).thenReturn(domain);
-        when(variable3.getDomain()).thenReturn(domain);
-        when(variable1.isAllowedValue(value1)).thenCallRealMethod();
-        when(variable2.isAllowedValue(value2)).thenCallRealMethod();
-        when(variable3.isAllowedValue(value3)).thenCallRealMethod();
-        assertThat(allDiffConstraint.isSatisfiedBy(new Assignment(Map.of(variable1, value1, variable2, value2, variable3, value3)))).isTrue();
+        assertThat(allDiffConstraint.isSatisfiedBy(Assignment.of(Map.of(variable1, value1, variable2, value2, variable3, value3)))).isTrue();
     }
 
     @Test
     void isSatisfiedByTripleSame() {
-        when(domain.contains(value1)).thenReturn(true);
-        when(domain.contains(value2)).thenReturn(true);
-        when(variable1.getDomain()).thenReturn(domain);
-        when(variable2.getDomain()).thenReturn(domain);
-        when(variable3.getDomain()).thenReturn(domain);
-        when(variable1.isAllowedValue(value1)).thenCallRealMethod();
-        when(variable2.isAllowedValue(value2)).thenCallRealMethod();
-        when(variable3.isAllowedValue(value2)).thenCallRealMethod();
-        assertThat(allDiffConstraint.isSatisfiedBy(new Assignment(Map.of(variable1, value1, variable2, value2, variable3, value2)))).isFalse();
+        assertThat(allDiffConstraint.isSatisfiedBy(Assignment.of(Map.of(variable1, value1, variable2, value2, variable3, value2)))).isFalse();
     }
 
     @Test

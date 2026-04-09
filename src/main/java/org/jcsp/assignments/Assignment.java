@@ -36,11 +36,8 @@ public class Assignment {
     @Singular
     Map<Variable, Object> values;
 
-    public Assignment(Map<Variable, Object> values) {
-        for (Map.Entry<Variable, Object> entry : values.entrySet()) {
-            assert entry.getKey().isAllowedValue(entry.getValue()) : String.format("Invalid assigned value for variable '%s': %s", entry.getKey(), entry.getValue());
-        }
-        this.values = values;
+    public static Assignment of(Map<Variable, Object> values) {
+        return Assignment.builder().values(values).build();
     }
 
     public Optional<Object> getValue(@NonNull Variable variable) {
@@ -48,9 +45,11 @@ public class Assignment {
     }
 
     public Assignment extractPartialAssignment(@NonNull Set<Variable> variables) {
-        return new Assignment(values.entrySet().stream()
-                .filter(a -> variables.contains(a.getKey()))
-                .collect(Collectors.toUnmodifiableMap(Map.Entry::getKey, Map.Entry::getValue)));
+        return Assignment.builder()
+                .values(values.entrySet().stream()
+                        .filter(a -> variables.contains(a.getKey()))
+                        .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue)))
+                .build();
     }
 
     public Assignment withValue(@NonNull Variable variable, @NonNull Object value) {
@@ -66,15 +65,23 @@ public class Assignment {
     }
 
     public boolean isConsistent(ConstraintSatisfactionProblem csp) {
+        validateAssignment(csp);
         return csp.getConstraints().stream()
                 .allMatch(constraint -> constraint.isSatisfiedBy(this));
     }
 
     public boolean isComplete(ConstraintSatisfactionProblem csp) {
+        validateAssignment(csp);
         return csp.getVariableDomains().keySet().stream().allMatch(values::containsKey);
     }
 
     public boolean isSolution(ConstraintSatisfactionProblem csp) {
         return isConsistent(csp) && isComplete(csp);
+    }
+
+    private void validateAssignment(ConstraintSatisfactionProblem csp) {
+        for (Map.Entry<Variable, Object> entry : values.entrySet()) {
+            assert csp.isAllowedValue(entry.getKey(), entry.getValue()) : String.format("Invalid assigned value for variable '%s': %s", entry.getKey(), entry.getValue());
+        }
     }
 }

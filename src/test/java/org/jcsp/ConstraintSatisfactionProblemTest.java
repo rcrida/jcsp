@@ -16,6 +16,7 @@ import static org.jcsp.solver.AustraliaMapColouringTest.SA;
 import static org.jcsp.solver.AustraliaMapColouringTest.T;
 import static org.jcsp.solver.AustraliaMapColouringTest.V;
 import static org.jcsp.solver.AustraliaMapColouringTest.WA;
+import static org.jcsp.solver.AustraliaMapColouringTest.DOMAIN;
 
 public class ConstraintSatisfactionProblemTest {
     @Test
@@ -38,7 +39,12 @@ public class ConstraintSatisfactionProblemTest {
         val csp = AustraliaMapColouringTest.problem();
         val expected = Set.of(
                 ConstraintSatisfactionProblem.builder()
-                        .variables(Set.of(WA, NT, Q, NSW, V, SA))
+                        .variableDomain(WA, DOMAIN)
+                        .variableDomain(NT, DOMAIN)
+                        .variableDomain(Q, DOMAIN)
+                        .variableDomain(NSW, DOMAIN)
+                        .variableDomain(V, DOMAIN)
+                        .variableDomain(SA, DOMAIN)
                         .constraint(BinaryNotEqualsConstraint.builder().left(SA).right(WA).build())
                         .constraint(BinaryNotEqualsConstraint.builder().left(SA).right(NT).build())
                         .constraint(BinaryNotEqualsConstraint.builder().left(SA).right(Q).build())
@@ -50,7 +56,7 @@ public class ConstraintSatisfactionProblemTest {
                         .constraint(BinaryNotEqualsConstraint.builder().left(NSW).right(V).build())
                         .build(),
                 ConstraintSatisfactionProblem.builder()
-                        .variable(T)
+                        .variableDomain(T, DOMAIN)
                         .build()
         );
         assertThat(csp.decomposeSubproblems()).isEqualTo(expected);

@@ -4,6 +4,7 @@ import org.jcsp.ConstraintSatisfactionProblem;
 import org.jcsp.assignments.Assignment;
 import org.jcsp.constraints.binary.BinaryConstraint;
 import org.jcsp.constraints.binary.BinaryNotEqualsConstraint;
+import org.jcsp.domains.Domain;
 import org.jcsp.domains.DomainObjectSet;
 import org.jcsp.variables.Variable;
 import org.junit.jupiter.api.Test;
@@ -20,22 +21,23 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
  */
 class LeastConstrainingValueOrdererTest {
     static Variable.Factory FACTORY = Variable.Factory.INSTANCE;
+    static Domain DOMAIN = DomainObjectSet.builder().value(1).value(2).value(3).build();
 
     @Test
     void singleBinaryConstraint() {
         // Setup CSP
-        Variable A = FACTORY.create("A", DomainObjectSet.builder().value(1).value(2).value(3).build());
-        Variable B = FACTORY.create("B", DomainObjectSet.builder().value(1).value(2).value(3).build());
+        Variable A = FACTORY.create("A");
+        Variable B = FACTORY.create("B");
         BinaryConstraint constraint = BinaryNotEqualsConstraint.builder().left(A).right(B).build();
 
         ConstraintSatisfactionProblem csp = ConstraintSatisfactionProblem.builder()
-                .variable(A)
-                .variable(B)
+                .variableDomain(A, DOMAIN)
+                .variableDomain(B, DOMAIN)
                 .constraint(constraint)
                 .build();
 
         // Setup assignment
-        Assignment assignment = new Assignment(Map.of());
+        Assignment assignment = Assignment.of(Map.of());
 
         // Create system under test
         LeastConstrainingValueOrderer orderer = LeastConstrainingValueOrderer.INSTANCE;
@@ -50,23 +52,23 @@ class LeastConstrainingValueOrdererTest {
     @Test
     void multipleBinaryConstraints() {
         // Setup CSP
-        Variable A = FACTORY.create("A", DomainObjectSet.builder().value(1).value(2).value(3).build());
-        Variable B = FACTORY.create("B", DomainObjectSet.builder().value(1).value(2).value(3).build());
-        Variable C = FACTORY.create("C", DomainObjectSet.builder().value(1).value(2).value(3).build());
+        Variable A = FACTORY.create("A");
+        Variable B = FACTORY.create("B");
+        Variable C = FACTORY.create("C");
 
         BinaryConstraint constraint1 = BinaryNotEqualsConstraint.builder().left(A).right(B).build();
         BinaryConstraint constraint2 = BinaryNotEqualsConstraint.builder().left(A).right(C).build();
 
         ConstraintSatisfactionProblem csp = ConstraintSatisfactionProblem.builder()
-                .variable(A)
-                .variable(B)
-                .variable(C)
+                .variableDomain(A, DOMAIN)
+                .variableDomain(B, DOMAIN)
+                .variableDomain(C, DOMAIN)
                 .constraint(constraint1)
                 .constraint(constraint2)
                 .build();
 
         // Setup assignment
-        Assignment assignment = new Assignment(Map.of());
+        Assignment assignment = Assignment.of(Map.of());
 
         // Create system under test
         LeastConstrainingValueOrderer orderer = LeastConstrainingValueOrderer.INSTANCE;
@@ -81,14 +83,14 @@ class LeastConstrainingValueOrdererTest {
     @Test
     void noConstraints() {
         // Setup CSP with no constraints
-        Variable A = FACTORY.create("A", DomainObjectSet.builder().value(1).value(2).value(3).build());
+        Variable A = FACTORY.create("A");
 
         ConstraintSatisfactionProblem csp = ConstraintSatisfactionProblem.builder()
-                .variable(A)
+                .variableDomain(A, DOMAIN)
                 .build();
 
         // Setup assignment
-        Assignment assignment = new Assignment(Map.of());
+        Assignment assignment = Assignment.of(Map.of());
 
         // Create system under test
         LeastConstrainingValueOrderer orderer = LeastConstrainingValueOrderer.INSTANCE;
@@ -103,19 +105,19 @@ class LeastConstrainingValueOrdererTest {
     @Test
     void preAssignedVariable() {
         // Setup CSP
-        Variable A = FACTORY.create("A", DomainObjectSet.builder().value(1).value(2).value(3).build());
-        Variable B = FACTORY.create("B", DomainObjectSet.builder().value(1).value(2).value(3).build());
+        Variable A = FACTORY.create("A");
+        Variable B = FACTORY.create("B");
 
         BinaryConstraint constraint = BinaryNotEqualsConstraint.builder().left(A).right(B).build();
 
         ConstraintSatisfactionProblem csp = ConstraintSatisfactionProblem.builder()
-                .variable(A)
-                .variable(B)
+                .variableDomain(A, DOMAIN)
+                .variableDomain(B, DOMAIN)
                 .constraint(constraint)
                 .build();
 
         // Setup a partial assignment where B is already assigned
-        Assignment assignment = new Assignment(Map.of(B, 1));
+        Assignment assignment = Assignment.of(Map.of(B, 1));
 
         // Create system under test
         LeastConstrainingValueOrderer orderer = LeastConstrainingValueOrderer.INSTANCE;

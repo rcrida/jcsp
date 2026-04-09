@@ -53,7 +53,7 @@ public class AC3Test {
         val domain = new IntRangeDomain(0, 5);
         val builder = ConstraintSatisfactionProblem.builder();
         val variable = builder.createVariable("x", domain);
-        builder.variable(variable);
+        builder.variableDomain(variable, domain);
         val problem = builder.build();
         System.out.println(problem);
         val arcConstrainedProblem = AC3.INSTANCE.apply(problem).get();
