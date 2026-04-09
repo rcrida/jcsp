@@ -3,14 +3,10 @@ package org.jcsp.solver;
 import lombok.val;
 import org.jcsp.ConstraintSatisfactionProblem;
 import org.jcsp.assignments.Assignment;
-import org.jcsp.consistency.arc.MAC;
 import org.jcsp.constraints.nary.AllDiffConstraint;
 import org.jcsp.constraints.nary.ExpressionConstraint;
 import org.jcsp.domains.Domain;
 import org.jcsp.domains.IntRangeDomain;
-import org.jcsp.search.BacktrackingSearch;
-import org.jcsp.search.order.LeastConstrainingValueOrderer;
-import org.jcsp.search.selector.MinimumRemainingValuesSelector;
 import org.jcsp.solver.assignmentfactory.RandomAssignmentFactory;
 import org.jcsp.variables.Variable;
 import org.junit.jupiter.api.Test;
@@ -24,7 +20,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 public class CryptarithmeticTest {
     static Domain DIGIT_DOMAIN = new IntRangeDomain(0, 9);
     static Domain CARRY_DOMAIN = new IntRangeDomain(0, 1);
-    static Variable.Factory VARIABLE_FACTORY = new Variable.Factory() {};
+    static Variable.Factory VARIABLE_FACTORY = Variable.Factory.INSTANCE;
     static Variable t = VARIABLE_FACTORY.create("T", DIGIT_DOMAIN);
     static Variable w = VARIABLE_FACTORY.create("W", DIGIT_DOMAIN);
     static Variable o = VARIABLE_FACTORY.create("O", DIGIT_DOMAIN);
@@ -71,7 +67,7 @@ public class CryptarithmeticTest {
     void solution() {
         val csp = twoPlusTwoEqualsFour();
         assertThat(csp.getSearchSpace()).isEqualTo(BigInteger.valueOf(8000000));
-        val solver = new SolverImpl(new BacktrackingSearch(new MinimumRemainingValuesSelector(), new LeastConstrainingValueOrderer(), MAC.INSTANCE));
+        val solver = Solver.Factory.INSTANCE.createSolver();
         val optionalSolution = solver.getSolution(csp);
         System.out.println(optionalSolution);
         assertThat(optionalSolution).contains(new Assignment(Map.of(

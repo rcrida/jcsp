@@ -28,7 +28,7 @@ public interface Solver {
 
     interface Factory {
         Factory INSTANCE = () -> {
-            val subproblemSolver = new SolverImpl(new BacktrackingSearch(new MinimumRemainingValuesSelector(), new LeastConstrainingValueOrderer(), MAC.INSTANCE));
+            val subproblemSolver = new SolverImpl(new BacktrackingSearch(MinimumRemainingValuesSelector.INSTANCE, LeastConstrainingValueOrderer.INSTANCE, MAC.INSTANCE));
             return new IndependentSubproblemSolver(subproblemSolver);
         };
 

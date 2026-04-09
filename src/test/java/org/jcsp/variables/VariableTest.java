@@ -34,7 +34,7 @@ public class VariableTest {
 
     @Test
     void factory() {
-        var variableFactory = new Variable.Factory() {};
+        var variableFactory = Variable.Factory.INSTANCE;
         var name = UUID.randomUUID().toString();
         Variable variable = variableFactory.create(name, domain);
         assertThat(variable.getName()).isEqualTo(name);

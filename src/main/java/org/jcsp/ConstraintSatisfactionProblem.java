@@ -107,7 +107,7 @@ public class ConstraintSatisfactionProblem {
     }
 
     public static class ConstraintSatisfactionProblemBuilder {
-        private final Variable.Factory variableFactory = new Variable.Factory() {};
+        private final Variable.Factory variableFactory = Variable.Factory.INSTANCE;
 
         public Variable createVariable(String name, Domain domain) {
             final var variable = variableFactory.create(name, domain);

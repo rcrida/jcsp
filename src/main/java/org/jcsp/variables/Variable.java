@@ -29,6 +29,8 @@ public interface Variable {
     }
 
     interface Factory {
+        Factory INSTANCE = new Factory() {};
+
         default Variable create(String name, Domain domain) {
             return new Impl(name, domain);
         }

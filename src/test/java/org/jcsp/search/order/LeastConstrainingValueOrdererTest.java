@@ -19,7 +19,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
  * which orders domain values according to the Least Constraining Value heuristic.
  */
 class LeastConstrainingValueOrdererTest {
-    static Variable.Factory FACTORY = new Variable.Factory() {};
+    static Variable.Factory FACTORY = Variable.Factory.INSTANCE;
 
     @Test
     void singleBinaryConstraint() {
@@ -38,7 +38,7 @@ class LeastConstrainingValueOrdererTest {
         Assignment assignment = new Assignment(Map.of());
 
         // Create system under test
-        LeastConstrainingValueOrderer orderer = new LeastConstrainingValueOrderer();
+        LeastConstrainingValueOrderer orderer = LeastConstrainingValueOrderer.INSTANCE;
 
         // Execute
         List<?> orderedValues = orderer.order(csp, A, assignment);
@@ -69,7 +69,7 @@ class LeastConstrainingValueOrdererTest {
         Assignment assignment = new Assignment(Map.of());
 
         // Create system under test
-        LeastConstrainingValueOrderer orderer = new LeastConstrainingValueOrderer();
+        LeastConstrainingValueOrderer orderer = LeastConstrainingValueOrderer.INSTANCE;
 
         // Execute
         List<?> orderedValues = orderer.order(csp, A, assignment);
@@ -91,7 +91,7 @@ class LeastConstrainingValueOrdererTest {
         Assignment assignment = new Assignment(Map.of());
 
         // Create system under test
-        LeastConstrainingValueOrderer orderer = new LeastConstrainingValueOrderer();
+        LeastConstrainingValueOrderer orderer = LeastConstrainingValueOrderer.INSTANCE;
 
         // Execute
         List<?> orderedValues = orderer.order(csp, A, assignment);
@@ -118,7 +118,7 @@ class LeastConstrainingValueOrdererTest {
         Assignment assignment = new Assignment(Map.of(B, 1));
 
         // Create system under test
-        LeastConstrainingValueOrderer orderer = new LeastConstrainingValueOrderer();
+        LeastConstrainingValueOrderer orderer = LeastConstrainingValueOrderer.INSTANCE;
 
         // Execute
         List<?> orderedValues = orderer.order(csp, A, assignment);

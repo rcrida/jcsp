@@ -17,7 +17,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 public class BinaryOffsetConstraintTest {
     static final Domain DOMAIN = new IntRangeDomain(0, 10);
-    static final Variable.Factory VARIABLE_FACTORY = new Variable.Factory() {};
+    static final Variable.Factory VARIABLE_FACTORY = Variable.Factory.INSTANCE;
     static final Variable LEFT = VARIABLE_FACTORY.create("left", DOMAIN);
     static final Variable RIGHT = VARIABLE_FACTORY.create("right", DOMAIN);
 

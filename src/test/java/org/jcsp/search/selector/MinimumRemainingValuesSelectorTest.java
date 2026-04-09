@@ -39,7 +39,7 @@ public class MinimumRemainingValuesSelectorTest {
     @Mock
     Domain domain3;
 
-    MinimumRemainingValuesSelector selector = new MinimumRemainingValuesSelector();
+    MinimumRemainingValuesSelector selector = MinimumRemainingValuesSelector.INSTANCE;
 
     @Test
     void testSelectReturnsVariableWithSmallestRemainingDomain() {

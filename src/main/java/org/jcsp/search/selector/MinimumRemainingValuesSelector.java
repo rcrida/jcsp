@@ -25,6 +25,10 @@ import java.util.stream.Collectors;
  * If no unassigned variables are found, the method will throw an {@code IllegalStateException}.
  */
 public class MinimumRemainingValuesSelector implements UnassignedVariableSelector {
+    public static final MinimumRemainingValuesSelector INSTANCE = new MinimumRemainingValuesSelector();
+
+    private MinimumRemainingValuesSelector() {}
+
     @Override
     public Variable select(@NonNull ConstraintSatisfactionProblem csp, @NonNull Assignment assignment) {
         val unassignedVariableValueCounts = csp.getVariableDomains().entrySet().stream()

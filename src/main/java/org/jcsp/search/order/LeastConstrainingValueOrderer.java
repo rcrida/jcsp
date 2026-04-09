@@ -25,6 +25,10 @@ import java.util.List;
  * over the binary constraints involving the variable of interest and evaluating their satisfaction.
  */
 public class LeastConstrainingValueOrderer implements DomainValuesOrderer {
+    public static final LeastConstrainingValueOrderer INSTANCE = new LeastConstrainingValueOrderer();
+
+    private LeastConstrainingValueOrderer() {}
+
     @Override
     public List<?> order(@NonNull ConstraintSatisfactionProblem csp, @NonNull Variable variable, @NonNull Assignment assignment) {
         final var binaryConstraints = csp.getConstraints().stream()
