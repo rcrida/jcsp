@@ -4,7 +4,6 @@ import lombok.val;
 import org.jcsp.ConstraintSatisfactionProblem;
 import org.jcsp.assignments.Assignment;
 import org.jcsp.consistency.Inference;
-import org.jcsp.constraints.binary.Arc;
 import org.jcsp.constraints.binary.BinaryConstraint;
 import org.jcsp.domains.AssignedDomain;
 import org.jcsp.variables.Variable;

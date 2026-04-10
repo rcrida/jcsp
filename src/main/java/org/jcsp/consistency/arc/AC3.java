@@ -3,7 +3,6 @@ package org.jcsp.consistency.arc;
 import lombok.extern.slf4j.Slf4j;
 import lombok.val;
 import org.jcsp.ConstraintSatisfactionProblem;
-import org.jcsp.constraints.binary.Arc;
 import org.jcsp.constraints.binary.BinaryConstraint;
 import org.jcsp.domains.Domain;
 

@@ -4,6 +4,7 @@ import lombok.Value;
 import lombok.experimental.NonFinal;
 import lombok.experimental.SuperBuilder;
 import org.jcsp.assignments.Assignment;
+import org.jcsp.consistency.arc.Arc;
 import org.jcsp.constraints.Constraint;
 import org.jcsp.variables.Variable;
 import org.jspecify.annotations.NonNull;

@@ -1,4 +1,4 @@
-package org.jcsp.constraints.binary;
+package org.jcsp.consistency.arc;
 
 import org.jcsp.variables.Variable;
 import org.junit.jupiter.api.BeforeEach;
