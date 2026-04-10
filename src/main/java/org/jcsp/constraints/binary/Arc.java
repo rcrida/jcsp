@@ -5,6 +5,9 @@ import org.jcsp.assignments.Assignment;
 import org.jcsp.variables.Variable;
 import org.jspecify.annotations.NonNull;
 
+/**
+ * Represents a directed edge between two variables.
+ */
 @Value
 public class Arc {
     Variable left;
@@ -25,6 +28,6 @@ public class Arc {
 
     @Override
     public String toString() {
-        return "(" + left + ", " + right + ")";
+        return "(" + left + " -> " + right + ")";
     }
 }

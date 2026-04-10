@@ -27,6 +27,6 @@ public class ArcTest {
 
     @Test
     void testToString() {
-        assertThat(arc).asString().isEqualTo("(left, right)");
+        assertThat(arc).asString().isEqualTo("(left -> right)");
     }
 }
