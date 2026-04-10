@@ -48,33 +48,6 @@ public class BinaryOffsetConstraintTest {
                 .hasMessage("Unsupported value type: class java.lang.String");
     }
 
-    static Stream<Arguments> reversed() {
-        return Stream.of(
-                Arguments.of((byte) 5, Operator.GT, (byte) -5, Operator.LEQ),
-                Arguments.of((short) 5, Operator.LT, (short) -5, Operator.GEQ),
-                Arguments.of(5, Operator.EQ, -5, Operator.EQ),
-                Arguments.of(5L, Operator.NEQ, -5L, Operator.NEQ),
-                Arguments.of(5.0f, Operator.LEQ, -5.0f, Operator.GT),
-                Arguments.of(5.0, Operator.GEQ, -5.0, Operator.LT)
-        );
-    }
-
-    @ParameterizedTest
-    @MethodSource
-    void reversed(Number offset, Operator operator, Number reversedOffset, Operator reversedOperator) {
-        val constraint = BinaryOffsetConstraint.builder().left(LEFT).right(RIGHT).offset(offset).operator(operator).build();
-        val reversedConstraint = BinaryOffsetConstraint.builder().left(RIGHT).right(LEFT).offset(reversedOffset).operator(reversedOperator).build();;
-        assertThat(constraint.reversed()).isEqualTo(reversedConstraint);
-    }
-
-    @Test
-    void reversed_unsupportedType() {
-        val constraint = BinaryOffsetConstraint.builder().left(LEFT).right(RIGHT).offset(new AtomicInteger(0)).operator(Operator.EQ).build();
-        assertThatThrownBy(() -> constraint.reversed())
-                .isInstanceOf(IllegalStateException.class)
-                .hasMessage("Unsupported offset type: class java.util.concurrent.atomic.AtomicInteger");
-    }
-
     static Stream<Arguments> testToString() {
         return Stream.of(
                 Arguments.of((byte) 5, "<(left, right), left + 5 == right>"),
@@ -102,6 +75,14 @@ public class BinaryOffsetConstraintTest {
     void toString_unsupportedValue() {
         val constraint = BinaryOffsetConstraint.builder().left(LEFT).right(RIGHT).offset(new AtomicInteger(0)).operator(Operator.EQ).build();
         assertThatThrownBy(() -> constraint.toString())
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessage("Unsupported offset type: class java.util.concurrent.atomic.AtomicInteger");
+    }
+
+    @Test
+    void negatedOffset_unsupportedValue() {
+        val constraint = BinaryOffsetConstraint.builder().left(LEFT).right(RIGHT).offset(new AtomicInteger(0)).operator(Operator.EQ).build();
+        assertThatThrownBy(() -> constraint.negatedOffset())
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessage("Unsupported offset type: class java.util.concurrent.atomic.AtomicInteger");
     }

@@ -4,6 +4,7 @@ import lombok.val;
 import org.jcsp.ConstraintSatisfactionProblem;
 import org.jcsp.assignments.Assignment;
 import org.jcsp.consistency.Inference;
+import org.jcsp.constraints.binary.Arc;
 import org.jcsp.constraints.binary.BinaryConstraint;
 import org.jcsp.domains.AssignedDomain;
 import org.jcsp.variables.Variable;
@@ -11,7 +12,6 @@ import org.jcsp.variables.Variable;
 import java.util.ArrayDeque;
 import java.util.Optional;
 import java.util.stream.Collectors;
-import java.util.stream.Stream;
 
 /**
  * Represents the Maintaining Arc Consistency (MAC) inference algorithm which is used in constraint satisfaction problems (CSPs).
@@ -35,25 +35,22 @@ public class MAC implements Inference {
     @Override
     public Optional<ConstraintSatisfactionProblem> apply(ConstraintSatisfactionProblem problem, Variable variable, Assignment assignment) {
         val value = assignment.getValue(variable).orElseThrow();
-        val allBinaryConstraints = problem.getAllBinaryConstraints().stream()
-                .flatMap(c -> Stream.of(c, c.reversed()))
-                .collect(Collectors.toSet());
-        val variableConstraints = allBinaryConstraints.stream()
-                .filter(c -> isBinaryConstraintToX_i(c, variable))
-                .filter(c -> isNotAlreadyAssignedX_j(assignment, c))
+        val variableConstraints = problem.getAllBinaryConstraints().stream()
+                .flatMap(BinaryConstraint::getArcs)
+                .filter(arc -> isBinaryConstraintToX_i(arc, variable))
+                .filter(arc -> isNotAlreadyAssignedX_j(assignment, arc))
                 .collect(Collectors.toSet());
         val queue = new ArrayDeque<>(variableConstraints);
         return AC3.INSTANCE.applyQueue(
                 problem.toBuilder().variableDomain(variable, new AssignedDomain(value)).build(),
-                queue,
-                allBinaryConstraints);
+                queue);
     }
 
-    private static boolean isBinaryConstraintToX_i(BinaryConstraint constraint, Variable X_i) {
-        return constraint.getRight().equals(X_i);
+    private static boolean isBinaryConstraintToX_i(Arc arc, Variable X_i) {
+        return arc.getRight().equals(X_i);
     }
 
-    private static boolean isNotAlreadyAssignedX_j(Assignment assignment, BinaryConstraint constraint) {
-        return assignment.getValue(constraint.getLeft()).isEmpty();
+    private static boolean isNotAlreadyAssignedX_j(Assignment assignment, Arc arc) {
+        return assignment.getValue(arc.getLeft()).isEmpty();
     }
 }

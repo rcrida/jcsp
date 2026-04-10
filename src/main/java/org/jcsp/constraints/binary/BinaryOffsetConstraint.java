@@ -40,17 +40,7 @@ public class BinaryOffsetConstraint  extends BinaryConstraint {
                 : String.format("%s + %s %s %s", getLeft(), offset, operator.symbol, getRight());
     }
 
-    @Override
-    public BinaryConstraint reversed() {
-        return BinaryOffsetConstraint.builder()
-                .left(getRight())
-                .right(getLeft())
-                .offset(negatedOffset())
-                .operator(operator.reversed())
-                .build();
-    }
-
-    private Number negatedOffset() {
+    Number negatedOffset() {
         return switch (offset) {
             case Byte b -> (byte) -b;
             case Short s -> (short) -s;

@@ -10,6 +10,7 @@ import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 
 import java.util.Set;
+import java.util.stream.Stream;
 
 /**
  * Represents a binary constraint in a constraint satisfaction problem (CSP).
@@ -29,6 +30,11 @@ public abstract class BinaryConstraint implements Constraint {
         return isSatisfiedBy(assignment.getValue(left).orElse(null), assignment.getValue(right).orElse(null));
     }
 
+    public Variable getNeighbour(@NonNull Variable variable) {
+        assert variable == left || variable == right;
+        return variable == left ? right : left;
+    }
+
     public abstract boolean isSatisfiedBy(@Nullable Object leftValue, @Nullable Object rightValue);
 
     @Override
@@ -36,8 +42,8 @@ public abstract class BinaryConstraint implements Constraint {
         return Set.of(left, right);
     }
 
-    public BinaryConstraint reversed() {
-        return ReversedBinaryConstraint.builder().left(right).right(left).constraint(this).build();
+    public Stream<Arc> getArcs() {
+        return Stream.of(new Arc(left, right), new Arc(right, left));
     }
 
     @Override

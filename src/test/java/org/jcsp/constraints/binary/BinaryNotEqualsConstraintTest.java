@@ -1,8 +1,6 @@
 package org.jcsp.constraints.binary;
 
 import org.jcsp.assignments.Assignment;
-import org.jcsp.domains.Domain;
-import org.jcsp.domains.IntRangeDomain;
 import org.jcsp.variables.Variable;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -10,9 +8,9 @@ import org.junit.jupiter.api.Test;
 import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 public class BinaryNotEqualsConstraintTest {
-    static final Domain DOMAIN = new IntRangeDomain(0, 10);
     static final Variable.Factory VARIABLE_FACTORY = Variable.Factory.INSTANCE;
 
     Variable left = VARIABLE_FACTORY.create("left");
@@ -42,6 +40,18 @@ public class BinaryNotEqualsConstraintTest {
         assertThat(constraint.isSatisfiedBy(Assignment.of(Map.of()))).isTrue();
         assertThat(constraint.isSatisfiedBy(Assignment.of(Map.of(left, 0)))).isTrue();
         assertThat(constraint.isSatisfiedBy(Assignment.of(Map.of(right, 1)))).isTrue();
+    }
+
+    @Test
+    void getNeighbour() {
+        assertThat(constraint.getNeighbour(left)).isEqualTo(right);
+        assertThat(constraint.getNeighbour(right)).isEqualTo(left);
+    }
+
+    @Test
+    void getNeighbour_incorrect() {
+        assertThatThrownBy(() -> constraint.getNeighbour(VARIABLE_FACTORY.create("another")))
+                .isInstanceOf(AssertionError.class);
     }
 
     @Test

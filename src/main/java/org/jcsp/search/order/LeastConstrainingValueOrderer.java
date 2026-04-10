@@ -1,5 +1,6 @@
 package org.jcsp.search.order;
 
+import lombok.val;
 import org.jcsp.ConstraintSatisfactionProblem;
 import org.jcsp.assignments.Assignment;
 import org.jcsp.constraints.binary.BinaryConstraint;
@@ -8,6 +9,7 @@ import org.jspecify.annotations.NonNull;
 
 import java.util.Comparator;
 import java.util.List;
+import java.util.Map;
 
 /**
  * A strategy for ordering the domain values of a variable in a constraint satisfaction problem (CSP)
@@ -31,7 +33,7 @@ public class LeastConstrainingValueOrderer implements DomainValuesOrderer {
 
     @Override
     public List<?> order(@NonNull ConstraintSatisfactionProblem csp, @NonNull Variable variable, @NonNull Assignment assignment) {
-        final var binaryConstraints = csp.getConstraints().stream()
+        val binaryConstraints = csp.getConstraints().stream()
                 .filter(BinaryConstraint.class::isInstance)
                 .map(BinaryConstraint.class::cast)
                 .filter(constraint -> constraint.getLeft().equals(variable) || constraint.getRight().equals(variable))
@@ -53,25 +55,16 @@ public class LeastConstrainingValueOrderer implements DomainValuesOrderer {
         long eliminated = 0;
 
         for (BinaryConstraint constraint : constraints) {
-            final Variable neighbour;
-            final BinaryConstraint directedConstraint;
+            val neighbourVariable = constraint.getNeighbour(variable);
 
-            if (constraint.getLeft().equals(variable)) {
-                neighbour = constraint.getRight();
-                directedConstraint = constraint;
-            } else {
-                neighbour = constraint.getLeft();
-                directedConstraint = constraint.reversed();
-            }
-
-            if (assignment.getValue(neighbour).isPresent()) {
+            if (assignment.getValue(neighbourVariable).isPresent()) {
                 continue;
             }
 
-            final var neighbourDomain = csp.getVariableDomains().get(neighbour);
+            val neighbourDomain = csp.getVariableDomains().get(neighbourVariable);
 
             eliminated += neighbourDomain.stream()
-                    .filter(neighbourValue -> !directedConstraint.isSatisfiedBy(value, neighbourValue))
+                    .filter(neighbourValue -> !constraint.isSatisfiedBy(Assignment.of(Map.of(variable, value, neighbourVariable, neighbourValue))))
                     .count();
         }
 
