@@ -3,6 +3,7 @@ package org.jcsp;
 import lombok.Builder;
 import lombok.Singular;
 import lombok.Value;
+import lombok.experimental.NonFinal;
 import lombok.val;
 import org.jcsp.constraints.Constraint;
 import org.jcsp.constraints.binary.BinaryConstraint;
@@ -32,6 +33,7 @@ import java.util.stream.Stream;
  */
 @Value
 @Builder(toBuilder = true)
+@NonFinal
 public class ConstraintSatisfactionProblem {
     @Singular
     Map<Variable, Domain> variableDomains;
