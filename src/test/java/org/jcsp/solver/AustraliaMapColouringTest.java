@@ -16,7 +16,7 @@ import java.util.Map;
 import static org.assertj.core.api.Assertions.assertThat;
 
 public class AustraliaMapColouringTest {
-    enum Colour {
+    public enum Colour {
         RED, GREEN, BLUE
     }
 

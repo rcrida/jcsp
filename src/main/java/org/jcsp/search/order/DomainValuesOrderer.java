@@ -5,7 +5,7 @@ import org.jcsp.assignments.Assignment;
 import org.jcsp.variables.Variable;
 import org.jspecify.annotations.NonNull;
 
-import java.util.List;
+import java.util.stream.Stream;
 
 /**
  * A functional interface that defines a strategy for ordering the domain values of a variable
@@ -17,5 +17,5 @@ import java.util.List;
  */
 @FunctionalInterface
 public interface DomainValuesOrderer {
-    List<?> order(@NonNull ConstraintSatisfactionProblem csp, @NonNull Variable variable, @NonNull Assignment assignment);
+    Stream<?> order(@NonNull ConstraintSatisfactionProblem csp, @NonNull Variable variable, @NonNull Assignment assignment);
 }

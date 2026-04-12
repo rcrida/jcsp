@@ -49,7 +49,7 @@ public class BacktrackingSearch implements Search {
             return Stream.of(assignment);
         }
         val variable = unassignedVariableSelector.select(csp, assignment);
-        return domainValuesOrderer.order(csp, variable, assignment).stream()
+        return domainValuesOrderer.order(csp, variable, assignment)
                 .map(value -> assignment.withValue(variable, value))
                 .filter(next -> next.isConsistent(csp))
                 .flatMap(next -> inference.apply(csp, variable, next).stream()

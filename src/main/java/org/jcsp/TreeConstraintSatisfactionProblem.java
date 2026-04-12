@@ -1,6 +1,5 @@
 package org.jcsp;
 
-import lombok.extern.slf4j.Slf4j;
 import lombok.val;
 import org.jcsp.constraints.Constraint;
 import org.jcsp.domains.Domain;
@@ -11,7 +10,7 @@ import java.util.Map;
 import java.util.Set;
 
 public class TreeConstraintSatisfactionProblem extends ConstraintSatisfactionProblem {
-    TreeConstraintSatisfactionProblem(Map<Variable, Domain> variableDomains, Set<Constraint> constraints) {
+    public TreeConstraintSatisfactionProblem(Map<Variable, Domain> variableDomains, Set<Constraint> constraints) {
         super(variableDomains, constraints);
         validateTree();
     }

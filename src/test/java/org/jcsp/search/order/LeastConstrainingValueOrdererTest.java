@@ -12,7 +12,7 @@ import org.junit.jupiter.api.Test;
 import java.util.List;
 import java.util.Map;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.assertj.core.api.Assertions.assertThat;
 
 /**
  * Test class for the LeastConstrainingValueOrderer class.
@@ -42,11 +42,8 @@ class LeastConstrainingValueOrdererTest {
         // Create system under test
         LeastConstrainingValueOrderer orderer = LeastConstrainingValueOrderer.INSTANCE;
 
-        // Execute
-        List<?> orderedValues = orderer.order(csp, A, assignment);
-
         // Verify (Values should be ordered based on how many values they constrain for B)
-        assertEquals(List.of(1, 2, 3), orderedValues);
+        assertThat(orderer.order(csp, A, assignment).toList()).isEqualTo(List.of(1, 2, 3));
     }
 
     @Test
@@ -73,11 +70,8 @@ class LeastConstrainingValueOrdererTest {
         // Create system under test
         LeastConstrainingValueOrderer orderer = LeastConstrainingValueOrderer.INSTANCE;
 
-        // Execute
-        List<?> orderedValues = orderer.order(csp, A, assignment);
-
         // Verify (Values should be ordered based on the combined constraints for B and C)
-        assertEquals(List.of(1, 2, 3), orderedValues);
+        assertThat(orderer.order(csp, A, assignment).toList()).isEqualTo(List.of(1, 2, 3));
     }
 
     @Test
@@ -95,11 +89,8 @@ class LeastConstrainingValueOrdererTest {
         // Create system under test
         LeastConstrainingValueOrderer orderer = LeastConstrainingValueOrderer.INSTANCE;
 
-        // Execute
-        List<?> orderedValues = orderer.order(csp, A, assignment);
-
         // Verify (Values should remain in their original order)
-        assertEquals(List.of(1, 2, 3), orderedValues);
+        assertThat(orderer.order(csp, A, assignment).toList()).isEqualTo(List.of(1, 2, 3));
     }
 
     @Test
@@ -122,10 +113,7 @@ class LeastConstrainingValueOrdererTest {
         // Create system under test
         LeastConstrainingValueOrderer orderer = LeastConstrainingValueOrderer.INSTANCE;
 
-        // Execute
-        List<?> orderedValues = orderer.order(csp, A, assignment);
-
         // Verify (Values remain ordered based solely on constraints for unassigned neighbors)
-        assertEquals(List.of(1, 2, 3), orderedValues);
+        assertThat(orderer.order(csp, A, assignment).toList()).isEqualTo(List.of(1, 2, 3));
     }
 }

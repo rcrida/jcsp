@@ -44,7 +44,7 @@ public abstract class BinaryConstraint implements Constraint {
     }
 
     public Stream<Arc> getArcs() {
-        return Stream.of(new Arc(left, right), new Arc(right, left));
+        return Stream.of(Arc.of(left, right), Arc.of(right, left));
     }
 
     @Override

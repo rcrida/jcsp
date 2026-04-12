@@ -46,10 +46,10 @@ public class MAC implements Inference {
     }
 
     private static boolean isBinaryConstraintToX_i(Arc arc, Variable X_i) {
-        return arc.getRight().equals(X_i);
+        return arc.getTo().equals(X_i);
     }
 
     private static boolean isNotAlreadyAssignedX_j(Assignment assignment, Arc arc) {
-        return assignment.getValue(arc.getLeft()).isEmpty();
+        return assignment.getValue(arc.getFrom()).isEmpty();
     }
 }

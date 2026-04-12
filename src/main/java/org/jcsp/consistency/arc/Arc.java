@@ -10,24 +10,28 @@ import org.jspecify.annotations.NonNull;
  */
 @Value
 public class Arc {
-    Variable left;
-    Variable right;
+    Variable from;
+    Variable to;
 
-    public Arc(@NonNull Variable left, @NonNull Variable right) {
-        assert left != right;
-        this.left = left;
-        this.right = right;
+    public static Arc of(@NonNull Variable from, @NonNull Variable to) {
+        return new Arc(from, to);
     }
 
-    public Assignment toAssignment(@NonNull Object leftValue, @NonNull Object rightValue) {
+    public Arc(@NonNull Variable from, @NonNull Variable to) {
+        assert from != to;
+        this.from = from;
+        this.to = to;
+    }
+
+    public Assignment toAssignment(@NonNull Object fromValue, @NonNull Object toValue) {
         return Assignment.builder()
-                .value(left, leftValue)
-                .value(right, rightValue)
+                .value(from, fromValue)
+                .value(to, toValue)
                 .build();
     }
 
     @Override
     public String toString() {
-        return "(" + left + " -> " + right + ")";
+        return "(" + from + " -> " + to + ")";
     }
 }

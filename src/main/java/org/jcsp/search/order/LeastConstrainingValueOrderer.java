@@ -10,6 +10,7 @@ import org.jspecify.annotations.NonNull;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Stream;
 
 /**
  * A strategy for ordering the domain values of a variable in a constraint satisfaction problem (CSP)
@@ -32,7 +33,7 @@ public class LeastConstrainingValueOrderer implements DomainValuesOrderer {
     private LeastConstrainingValueOrderer() {}
 
     @Override
-    public List<?> order(@NonNull ConstraintSatisfactionProblem csp, @NonNull Variable variable, @NonNull Assignment assignment) {
+    public Stream<?> order(@NonNull ConstraintSatisfactionProblem csp, @NonNull Variable variable, @NonNull Assignment assignment) {
         val binaryConstraints = csp.getConstraints().stream()
                 .filter(BinaryConstraint.class::isInstance)
                 .map(BinaryConstraint.class::cast)
@@ -41,8 +42,7 @@ public class LeastConstrainingValueOrderer implements DomainValuesOrderer {
 
         return csp.getVariableDomains().get(variable).stream()
                 .sorted(Comparator.comparingLong(value ->
-                        countEliminatedValues(csp, assignment, variable, value, binaryConstraints)))
-                .toList();
+                        countEliminatedValues(csp, assignment, variable, value, binaryConstraints)));
     }
 
     private long countEliminatedValues(

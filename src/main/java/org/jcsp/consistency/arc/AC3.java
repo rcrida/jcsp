@@ -44,21 +44,20 @@ public class AC3 implements ArcConsistency {
         val variableDomains = new HashMap<>(problem.getVariableDomains());
         while (!queue.isEmpty()) {
             val arc = queue.poll();
-            val X_i = arc.getLeft();
-            val X_j = arc.getRight();
-            val D_i = variableDomains.get(X_i);
+            val X_i = arc.getFrom();
+            val X_j = arc.getTo();
             for (BinaryConstraint binaryConstraint : arcConstraints.get(arc)) {
-                val optionalRevisedDomain1 = revise(problem, D_i, arc, binaryConstraint);
-                if (optionalRevisedDomain1.isPresent()) {
-                    val revisedDomain1 = optionalRevisedDomain1.get();
-                    if (revisedDomain1.isEmpty()) {
+                val optionalRevisedD_i = revise(problem, arc, binaryConstraint);
+                if (optionalRevisedD_i.isPresent()) {
+                    val revisedD_i = optionalRevisedD_i.get();
+                    if (revisedD_i.isEmpty()) {
                         log.warn("Domain of variable {} is empty after AC3", X_i);
                         return Optional.empty();
                     }
-                    variableDomains.put(X_i, revisedDomain1);
+                    variableDomains.put(X_i, revisedD_i);
                     val X_iNeighbours = allArcs.stream()
-                            .filter(c -> !c.getLeft().equals(X_j))
-                            .filter(c -> c.getRight().equals(X_i))
+                            .filter(c -> !c.getFrom().equals(X_j))
+                            .filter(c -> c.getTo().equals(X_i))
                             .toList();
                     queue.addAll(X_iNeighbours);
                 }
@@ -67,16 +66,17 @@ public class AC3 implements ArcConsistency {
         return Optional.of(problem.toBuilder().variableDomains(variableDomains).build());
     }
 
-    private Optional<Domain> revise(ConstraintSatisfactionProblem problem, Domain domain1, Arc arc, BinaryConstraint constraint) {
+    public Optional<Domain> revise(ConstraintSatisfactionProblem problem, Arc arc, BinaryConstraint constraint) {
+        val D_i = problem.getVariableDomains().get(arc.getFrom());
         val revised = new AtomicBoolean(false);
-        val revisedDomain1Builder = domain1.toBuilder();
-        domain1.stream().forEach(x -> {
-            val domain2 = problem.getVariableDomains().get(arc.getRight());
+        val revisedD_iBuilder = D_i.toBuilder();
+        D_i.stream().forEach(x -> {
+            val domain2 = problem.getVariableDomains().get(arc.getTo());
             if (domain2.stream().noneMatch(y -> constraint.isSatisfiedBy(arc.toAssignment(x, y)))) {
-                revisedDomain1Builder.delete(x);
+                revisedD_iBuilder.delete(x);
                 revised.set(true);
             }
         });
-        return revised.get() ? Optional.of(revisedDomain1Builder.build()) : Optional.empty();
+        return revised.get() ? Optional.of(revisedD_iBuilder.build()) : Optional.empty();
     }
 }
