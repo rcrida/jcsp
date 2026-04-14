@@ -8,6 +8,7 @@ import org.jcsp.assignments.Assignment;
 import org.jcsp.consistency.Inference;
 import org.jcsp.search.order.DomainValuesOrderer;
 import org.jcsp.search.selector.UnassignedVariableSelector;
+import org.jcsp.solver.Solver;
 import org.jspecify.annotations.NonNull;
 
 import java.util.stream.Stream;
@@ -32,13 +33,13 @@ import java.util.stream.Stream;
  */
 @Slf4j
 @Value
-public class BacktrackingSearch implements Search {
+public class BacktrackingSearch implements Solver {
     @NonNull UnassignedVariableSelector unassignedVariableSelector;
     @NonNull DomainValuesOrderer domainValuesOrderer;
     @NonNull Inference inference;
 
     @Override
-    public Stream<Assignment> searchStream(ConstraintSatisfactionProblem csp) {
+    public Stream<Assignment> getSolutions(ConstraintSatisfactionProblem csp) {
         return searchStream(csp, Assignment.EMPTY);
     }
 

@@ -28,8 +28,11 @@ public interface Solver {
 
     interface Factory {
         Factory INSTANCE = () -> {
-            val subproblemSolver = new SolverImpl(new BacktrackingSearch(MinimumRemainingValuesSelector.INSTANCE, LeastConstrainingValueOrderer.INSTANCE, MAC.INSTANCE));
-            return new IndependentSubproblemSolver(subproblemSolver);
+            val backtrackingSearch = new BacktrackingSearch(MinimumRemainingValuesSelector.INSTANCE, LeastConstrainingValueOrderer.INSTANCE, MAC.INSTANCE);
+            val independentSubproblemSolver = new IndependentSubproblemSolver(backtrackingSearch);
+            val arcConsistentSolver = new ArcConsistentSolver(independentSubproblemSolver);
+            val nodeConsistentSolver = new NodeConsistentSolver(arcConsistentSolver);
+            return nodeConsistentSolver;
         };
 
         Solver createSolver();

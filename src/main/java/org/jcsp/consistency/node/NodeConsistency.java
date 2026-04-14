@@ -49,7 +49,9 @@ public class NodeConsistency {
                 variableDomains.put(variable, revisedDomain);
             }
         }
-        return Optional.of(builder.build());
+        val nodeConsistentProblem = builder.build();
+        log.info("Node consistent problem {}", nodeConsistentProblem);
+        return Optional.of(nodeConsistentProblem);
     }
 
     private Optional<Domain> revise(Domain domain, UnaryConstraint constraint) {
