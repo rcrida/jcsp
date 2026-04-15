@@ -32,13 +32,49 @@ import java.util.stream.Stream;
  * of equivalent binary constraints from n-ary ones.
  */
 @Value
-@Builder(toBuilder = true)
 @NonFinal
 public class ConstraintSatisfactionProblem {
-    @Singular
     Map<Variable, Domain> variableDomains;
-    @Singular
     Set<Constraint> constraints;
+    boolean isCyclic;
+    boolean isFullyConnected;
+
+    @Builder(toBuilder = true)
+    ConstraintSatisfactionProblem(@Singular Map<Variable, Domain> variableDomains, @Singular Set<Constraint> constraints) {
+        this.variableDomains = variableDomains;
+        this.constraints = constraints;
+
+        val visited = new HashSet<Variable>();
+        val neighbours = getNeighbours();
+        if (neighbours.isEmpty()) {
+            isCyclic = false;
+            isFullyConnected = false;
+        } else {
+            val startingVariable = neighbours.keySet().iterator().next();
+            isCyclic = isCyclic(startingVariable, null, neighbours, visited);
+            isFullyConnected = visited.size() == neighbours.size();
+        }
+    }
+
+    public boolean isTree() {
+        return !isCyclic && isFullyConnected;
+    }
+
+    private boolean isCyclic(Variable src, Variable prt, Map<Variable, Set<Variable>> neighbours, Set<Variable> visited) {
+        visited.add(src);
+        for (Variable neighbour : neighbours.get(src)) {
+            if (!visited.contains(neighbour)) {
+                if (isCyclic(neighbour, src, neighbours, visited)) {
+                    return true;
+                }
+            } else {
+                if (neighbour != prt) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
 
     public Optional<Domain> getDomain(@NonNull Variable variable) {
         return Optional.ofNullable(variableDomains.get(variable));

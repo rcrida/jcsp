@@ -1,6 +1,6 @@
 package org.jcsp.solver.tree.selector;
 
-import org.jcsp.TreeConstraintSatisfactionProblem;
+import org.jcsp.ConstraintSatisfactionProblem;
 import org.jcsp.assignments.Assignment;
 import org.jcsp.consistency.arc.Arc;
 import org.jcsp.variables.Variable;
@@ -19,7 +19,7 @@ import java.util.List;
  */
 @FunctionalInterface
 public interface TreeUnassignedVariableSelector {
-    Variable select(@NonNull TreeConstraintSatisfactionProblem csp, @NonNull Assignment assignment);
+    Variable select(@NonNull ConstraintSatisfactionProblem csp, @NonNull Assignment assignment);
 
     interface Factory {
         Factory INSTANCE = TopologicalUnassignedVariableSelector::new;

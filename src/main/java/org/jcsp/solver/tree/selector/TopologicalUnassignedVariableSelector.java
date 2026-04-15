@@ -1,7 +1,7 @@
 package org.jcsp.solver.tree.selector;
 
 import lombok.Value;
-import org.jcsp.TreeConstraintSatisfactionProblem;
+import org.jcsp.ConstraintSatisfactionProblem;
 import org.jcsp.assignments.Assignment;
 import org.jcsp.consistency.arc.Arc;
 import org.jcsp.variables.Variable;
@@ -14,7 +14,8 @@ public class TopologicalUnassignedVariableSelector implements TreeUnassignedVari
     @NonNull List<Arc> topoligicallySortedArcs;
 
     @Override
-    public Variable select(@NonNull TreeConstraintSatisfactionProblem csp, @NonNull Assignment assignment) {
+    public Variable select(@NonNull ConstraintSatisfactionProblem csp, @NonNull Assignment assignment) {
+        assert csp.isTree();
         return topoligicallySortedArcs.stream()
                 .map(Arc::getTo)
                 .filter(node -> assignment.getValue(node).isEmpty())

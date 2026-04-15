@@ -1,7 +1,7 @@
 package org.jcsp.solver.tree.sorter;
 
 import lombok.val;
-import org.jcsp.TreeConstraintSatisfactionProblem;
+import org.jcsp.ConstraintSatisfactionProblem;
 import org.jcsp.consistency.arc.Arc;
 import org.jcsp.variables.Variable;
 import org.jspecify.annotations.NonNull;
@@ -17,7 +17,8 @@ public class BFSTopologicalSorter implements TopologicalSorter {
     private BFSTopologicalSorter() {}
 
     @Override
-    public List<Arc> sort(@NonNull TreeConstraintSatisfactionProblem tcsp, @NonNull Variable root) {
+    public List<Arc> sort(@NonNull ConstraintSatisfactionProblem tcsp, @NonNull Variable root) {
+        assert tcsp.isTree();
         val queue = new ArrayDeque<>(List.of(root));
         val visited = new HashSet<Variable>();
         val result = new ArrayList<Arc>();

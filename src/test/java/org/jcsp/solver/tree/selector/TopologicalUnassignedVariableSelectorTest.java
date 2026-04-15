@@ -1,6 +1,6 @@
 package org.jcsp.solver.tree.selector;
 
-import org.jcsp.TreeConstraintSatisfactionProblem;
+import org.jcsp.ConstraintSatisfactionProblem;
 import org.jcsp.assignments.Assignment;
 import org.jcsp.consistency.arc.Arc;
 import org.jcsp.constraints.binary.BinaryNotEqualsConstraint;
@@ -14,7 +14,6 @@ import org.junit.jupiter.params.provider.MethodSource;
 
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -26,9 +25,11 @@ public class TopologicalUnassignedVariableSelectorTest {
     static final Variable A = FACTORY.create("A");
     static final Variable B = FACTORY.create("B");
     static final List<Arc> ARCS = List.of(Arc.of(A, B));
-    static final TreeConstraintSatisfactionProblem TCSP = new TreeConstraintSatisfactionProblem(
-            Map.of(A, DOMAIN, B, DOMAIN), Set.of(BinaryNotEqualsConstraint.builder().left(A).right(B).build())
-    );
+    static final ConstraintSatisfactionProblem TCSP = ConstraintSatisfactionProblem.builder()
+            .variableDomain(A, DOMAIN)
+            .variableDomain(B, DOMAIN)
+            .constraint(BinaryNotEqualsConstraint.builder().left(A).right(B).build())
+            .build();
     TopologicalUnassignedVariableSelector selector = new TopologicalUnassignedVariableSelector(ARCS);
 
     static Stream<Arguments> select() {
@@ -49,5 +50,11 @@ public class TopologicalUnassignedVariableSelectorTest {
         assertThatThrownBy(() -> selector.select(TCSP, Assignment.of(Map.of(A, 1, B, 2))))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessage("No unassigned arc found");
+    }
+
+    @Test
+    void select_assertIsTree() {
+        assertThatThrownBy(() -> selector.select(ConstraintSatisfactionProblem.builder().build(), Assignment.EMPTY))
+                .isInstanceOf(AssertionError.class);
     }
 }

@@ -3,7 +3,7 @@ package org.jcsp.solver.tree;
 import lombok.Value;
 import lombok.extern.slf4j.Slf4j;
 import lombok.val;
-import org.jcsp.TreeConstraintSatisfactionProblem;
+import org.jcsp.ConstraintSatisfactionProblem;
 import org.jcsp.assignments.Assignment;
 import org.jcsp.consistency.arc.AC3;
 import org.jcsp.consistency.arc.Arc;
@@ -29,7 +29,8 @@ public class TreeSolverImpl implements TreeSolver {
     TreeUnassignedVariableSelector.Factory selectorFactory;
 
     @Override
-    public Stream<Assignment> getSolutions(@NonNull TreeConstraintSatisfactionProblem tcsp) {
+    public Stream<Assignment> getSolutions(@NonNull ConstraintSatisfactionProblem tcsp) {
+        assert tcsp.isTree();
         var assignment = Assignment.EMPTY;
         val rootVariableDomain = tcsp.getVariableDomains().entrySet().iterator().next();
         val root = rootVariableDomain.getKey();
@@ -53,7 +54,7 @@ public class TreeSolverImpl implements TreeSolver {
                 .flatMap(rootAssignment -> populateAssignment(finalTcsp, rootAssignment, unassignedVariableSelector));
     }
 
-    Optional<TreeConstraintSatisfactionProblem> makeArcConsistent(@NonNull TreeConstraintSatisfactionProblem tcsp, @NonNull Variable parent, @NonNull Variable node) {
+    Optional<ConstraintSatisfactionProblem> makeArcConsistent(@NonNull ConstraintSatisfactionProblem tcsp, @NonNull Variable parent, @NonNull Variable node) {
         val allBinaryConstraints = tcsp.getAllBinaryConstraints();
         val arcConstraints = allBinaryConstraints.stream()
                 .flatMap(binaryConstraint -> binaryConstraint.getArcs()
@@ -72,10 +73,10 @@ public class TreeSolverImpl implements TreeSolver {
                 variableDomains.put(parent, revisedD);
             }
         }
-        return Optional.of(new TreeConstraintSatisfactionProblem(variableDomains, tcsp.getConstraints()));
+        return Optional.of(tcsp.toBuilder().clearVariableDomains().variableDomains(variableDomains).build());
     }
 
-    Stream<Assignment> populateAssignment(@NonNull TreeConstraintSatisfactionProblem tcsp, @NonNull Assignment assignment, @NonNull TreeUnassignedVariableSelector selector) {
+    Stream<Assignment> populateAssignment(@NonNull ConstraintSatisfactionProblem tcsp, @NonNull Assignment assignment, @NonNull TreeUnassignedVariableSelector selector) {
         log.debug("Searching tree with assignment: {}", assignment);
         if (assignment.isComplete(tcsp)) {
             log.info("Found tree solution {}", assignment);
