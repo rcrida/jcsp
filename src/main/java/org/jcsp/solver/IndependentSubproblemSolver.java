@@ -26,12 +26,15 @@ public class IndependentSubproblemSolver implements Solver {
     @Override
     public Stream<Assignment> getSolutions(@NonNull ConstraintSatisfactionProblem csp) {
         val subproblems = csp.decomposeSubproblems();
-        log.info("Solving subproblems {}", subproblems);
-
-        return subproblems.stream()
-                .map(s -> (Supplier<Stream<Assignment>>) () -> subproblemSolver.getSolutions(s))
-                .reduce((s1, s2) ->
-                        () -> s1.get().flatMap(a1 -> s2.get().map(a1::merge)))
-                .orElse(Stream::empty).get();
+        if (subproblems.size() > 1) {
+            log.info("Solving subproblems {}", subproblems);
+            return subproblems.stream()
+                    .map(s -> (Supplier<Stream<Assignment>>) () -> subproblemSolver.getSolutions(s))
+                    .reduce((s1, s2) ->
+                            () -> s1.get().flatMap(a1 -> s2.get().map(a1::merge)))
+                    .orElse(Stream::empty).get();
+        } else {
+            return subproblemSolver.getSolutions(csp);
+        }
     }
 }

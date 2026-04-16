@@ -34,6 +34,18 @@ public class ConstraintSatisfactionProblemTest {
     Domain domain;
 
     @Test
+    void validateConstraints() {
+        Variable a = VARIABLE_FACTORY.create("A");
+        Variable b = VARIABLE_FACTORY.create("B");
+        assertThatThrownBy(() -> ConstraintSatisfactionProblem.builder()
+                .variableDomain(a, domain)
+                .constraint(BinaryNotEqualsConstraint.builder().left(a).right(b).build())
+                .build())
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("Constraints reference unknown variables [B]");
+    }
+
+    @Test
     void getNeightbours() {
         val csp = AustraliaMapColouringTest.problem();
         val expected = Map.of(

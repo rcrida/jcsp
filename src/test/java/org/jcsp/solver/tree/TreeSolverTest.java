@@ -29,7 +29,7 @@ public class TreeSolverTest {
 
     public static Domain DOMAIN = new EnumDomain(EnumSet.of(RED, GREEN));
     public static Domain DOMAIN_RED_ONLY = new EnumDomain(EnumSet.of(RED));
-    ConstraintSatisfactionProblem australiaWithoutSA = ConstraintSatisfactionProblem.builder()
+    public static ConstraintSatisfactionProblem AUSTRALIA_WITHOUT_SA = ConstraintSatisfactionProblem.builder()
             .variableDomain(WA, DOMAIN)
             .variableDomain(NT, DOMAIN)
             .variableDomain(Q, DOMAIN)
@@ -44,7 +44,7 @@ public class TreeSolverTest {
 
     @Test
     void getSolution() {
-        val optionalSolution = treeSolver.getSolution(australiaWithoutSA);
+        val optionalSolution = treeSolver.getSolution(AUSTRALIA_WITHOUT_SA);
         assertThat(optionalSolution).hasValueSatisfying(solution -> {
             assertThat(solution).isIn(
                     Assignment.of(Map.of(WA, RED, NT, GREEN, Q, RED, NSW, GREEN, V, RED)),
@@ -55,7 +55,7 @@ public class TreeSolverTest {
 
     @Test
     void getSolutions() {
-        assertThat(treeSolver.getSolutions(australiaWithoutSA)).hasSize(2);
+        assertThat(treeSolver.getSolutions(AUSTRALIA_WITHOUT_SA)).hasSize(2);
     }
 
     @Test

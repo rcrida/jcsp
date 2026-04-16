@@ -31,7 +31,7 @@ public class DomainObjectSet implements Domain {
     }
 
     @Override
-    public long size() {
+    public int size() {
         return values.size();
     }
 

@@ -5,8 +5,13 @@ import org.jcsp.ConstraintSatisfactionProblem;
 import org.jcsp.assignments.Assignment;
 import org.jcsp.consistency.arc.MAC;
 import org.jcsp.search.BacktrackingSearch;
+import org.jcsp.search.order.DefaultValueOrderer;
 import org.jcsp.search.order.LeastConstrainingValueOrderer;
 import org.jcsp.search.selector.MinimumRemainingValuesSelector;
+import org.jcsp.solver.tree.TreeSolver;
+import org.jcsp.solver.tree.cutsetconditioning.CutsetConditioningSolver;
+import org.jcsp.solver.tree.selector.TreeUnassignedVariableSelector;
+import org.jcsp.solver.tree.sorter.BFSTopologicalSorter;
 import org.jspecify.annotations.NonNull;
 
 import java.util.Optional;
@@ -29,7 +34,11 @@ public interface Solver {
     interface Factory {
         Factory INSTANCE = () -> {
             val backtrackingSearch = new BacktrackingSearch(MinimumRemainingValuesSelector.INSTANCE, LeastConstrainingValueOrderer.INSTANCE, MAC.INSTANCE);
-            val independentSubproblemSolver = new IndependentSubproblemSolver(backtrackingSearch);
+            val treeSolver = new TreeSolver(BFSTopologicalSorter.INSTANCE, DefaultValueOrderer.INSTANCE, TreeUnassignedVariableSelector.Factory.INSTANCE);
+            val cutsetConditioningSolver = new CutsetConditioningSolver(
+                    backtrackingSearch,
+                    treeSolver);
+            val independentSubproblemSolver = new IndependentSubproblemSolver(cutsetConditioningSolver);
             val arcConsistentSolver = new ArcConsistentSolver(independentSubproblemSolver);
             val nodeConsistentSolver = new NodeConsistentSolver(arcConsistentSolver);
             return nodeConsistentSolver;

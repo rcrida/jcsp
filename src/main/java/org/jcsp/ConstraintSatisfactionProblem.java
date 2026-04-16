@@ -21,6 +21,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Queue;
 import java.util.Set;
+import java.util.function.Predicate;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -43,6 +44,7 @@ public class ConstraintSatisfactionProblem {
     ConstraintSatisfactionProblem(@Singular Map<Variable, Domain> variableDomains, @Singular Set<Constraint> constraints) {
         this.variableDomains = variableDomains;
         this.constraints = constraints;
+        validateConstraints();
 
         val visited = new HashSet<Variable>();
         val neighbours = getNeighbours();
@@ -56,8 +58,14 @@ public class ConstraintSatisfactionProblem {
         }
     }
 
-    public boolean isTree() {
-        return !isCyclic && isFullyConnected;
+    private void validateConstraints() {
+        val unknownVariables = constraints.stream()
+                .flatMap(c -> c.getVariables().stream())
+                .filter(Predicate.not(variableDomains::containsKey))
+                .collect(Collectors.toSet());
+        if (!unknownVariables.isEmpty()) {
+            throw new IllegalArgumentException(String.format("Constraints reference unknown variables %s", unknownVariables));
+        }
     }
 
     private boolean isCyclic(Variable src, Variable prt, Map<Variable, Set<Variable>> neighbours, Set<Variable> visited) {
@@ -74,6 +82,14 @@ public class ConstraintSatisfactionProblem {
             }
         }
         return false;
+    }
+
+    public boolean isTree() {
+        return !isCyclic && isFullyConnected;
+    }
+
+    public int getNumVariables() {
+        return variableDomains.size();
     }
 
     public Optional<Domain> getDomain(@NonNull Variable variable) {
@@ -122,6 +138,24 @@ public class ConstraintSatisfactionProblem {
         return Map.copyOf(neighbours);
     }
 
+    /**
+     * When there are N-ary constraints that can't be recreated as binary constraints
+     * then we don't want to split up the constraint during cycle cutset conditioning.
+     * The unsplittable constraints should belong entirely in the cycle cutset.
+     *
+     * @return the set of variables which should not be included in a tree during cycle
+     * cutset conditioning.
+     */
+    @NonNull
+    public Set<Variable> getUnsplittableVariables() {
+        return constraints.stream()
+                .filter(c -> c instanceof NaryConstraint)
+                .map(c -> (NaryConstraint) c)
+                .filter(c -> c.getAsBinaryConstraints().isEmpty())
+                .flatMap(c -> c.getVariables().stream())
+                .collect(Collectors.toSet());
+    }
+
     @NonNull
     public Set<ConstraintSatisfactionProblem> decomposeSubproblems() {
         val neighbours = getNeighbours();
@@ -150,6 +184,32 @@ public class ConstraintSatisfactionProblem {
     private void addUnassignedVariable(@NonNull Queue<Variable> queue, @NonNull Variable variable, @NonNull Set<Variable> unassignedVariables) {
         queue.add(variable);
         unassignedVariables.remove(variable);
+    }
+
+    public int countConstraints(@NonNull Variable variable) {
+        return Math.toIntExact(constraints.stream()
+                .filter(constraint -> constraint.getVariables().contains(variable))
+                .count());
+    }
+
+    public ConstraintSatisfactionProblem withVariableSubset(@NonNull Predicate<Variable> variablePredicate) {
+        val variableDomainSubset = getVariableDomains().entrySet().stream()
+                .filter(e -> variablePredicate.test(e.getKey()))
+                .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
+        val allConstraints = new HashSet<>(getConstraints());
+        // include inferred binary constraints for when multi-variable constraints are split between subsets to capture the constraints
+        // within the subset
+        allConstraints.addAll(getAllBinaryConstraints());
+        val constraintSubset = allConstraints.stream()
+                .filter(constraint -> constraint.getVariables().stream()
+                        .allMatch(variableDomainSubset::containsKey))
+                .toList();
+        return toBuilder()
+                .clearVariableDomains()
+                .variableDomains(variableDomainSubset)
+                .clearConstraints()
+                .constraints(constraintSubset)
+                .build();
     }
 
     public static class ConstraintSatisfactionProblemBuilder {
