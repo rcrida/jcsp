@@ -8,7 +8,6 @@ import org.jcsp.consistency.arc.Arc;
 import org.jcsp.constraints.Constraint;
 import org.jcsp.variables.Variable;
 import org.jspecify.annotations.NonNull;
-import org.jspecify.annotations.Nullable;
 
 import java.util.Set;
 import java.util.stream.Stream;
@@ -28,7 +27,10 @@ public abstract class BinaryConstraint implements Constraint {
 
     @Override
     public boolean isSatisfiedBy(@NonNull Assignment assignment) {
-        return isSatisfiedBy(assignment.getValue(left).orElse(null), assignment.getValue(right).orElse(null));
+        return assignment.getValue(left)
+                .flatMap(leftValue -> assignment.getValue(right)
+                        .map(rightValue -> isSatisfiedBy(leftValue, rightValue)))
+                .orElse(true);
     }
 
     public Variable getNeighbour(@NonNull Variable variable) {
@@ -36,7 +38,7 @@ public abstract class BinaryConstraint implements Constraint {
         return variable == left ? right : left;
     }
 
-    public abstract boolean isSatisfiedBy(@Nullable Object leftValue, @Nullable Object rightValue);
+    public abstract boolean isSatisfiedBy(@NonNull Object leftValue, @NonNull Object rightValue);
 
     @Override
     public Set<Variable> getVariables() {

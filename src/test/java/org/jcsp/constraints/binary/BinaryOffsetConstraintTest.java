@@ -1,15 +1,18 @@
 package org.jcsp.constraints.binary;
 
 import lombok.val;
+import org.jcsp.assignments.Assignment;
 import org.jcsp.variables.Variable;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
 
+import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Stream;
 
+import static org.assertj.core.api.Assertions.as;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
@@ -37,7 +40,14 @@ public class BinaryOffsetConstraintTest {
     @MethodSource
     void isSatisfiedBy(Number offset, Operator operator, Object left, Object right, boolean expected) {
         val constraint = BinaryOffsetConstraint.builder().left(LEFT).right(RIGHT).offset(offset).operator(operator).build();
-        assertThat(constraint.isSatisfiedBy(left, right)).isEqualTo(expected);
+        val assignmentBuilder = Assignment.builder();
+        if (left != null) {
+            assignmentBuilder.value(LEFT, left);
+        }
+        if (right != null) {
+            assignmentBuilder.value(RIGHT, right);
+        }
+        assertThat(constraint.isSatisfiedBy(assignmentBuilder.build())).isEqualTo(expected);
     }
 
     @Test

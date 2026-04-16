@@ -2,7 +2,7 @@ package org.jcsp.constraints.binary;
 
 import lombok.EqualsAndHashCode;
 import lombok.experimental.SuperBuilder;
-import org.jspecify.annotations.Nullable;
+import org.jspecify.annotations.NonNull;
 
 import java.util.Objects;
 
@@ -10,10 +10,7 @@ import java.util.Objects;
 @EqualsAndHashCode(callSuper = true)
 public class BinaryNotEqualsConstraint extends BinaryConstraint {
     @Override
-    public boolean isSatisfiedBy(@Nullable Object left, @Nullable Object right) {
-        if (left == null || right == null) {
-            return true;
-        }
+    public boolean isSatisfiedBy(@NonNull Object left, @NonNull Object right) {
         return !Objects.equals(left, right);
     }
 

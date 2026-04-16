@@ -3,7 +3,6 @@ package org.jcsp.constraints.binary;
 import lombok.EqualsAndHashCode;
 import lombok.experimental.SuperBuilder;
 import org.jspecify.annotations.NonNull;
-import org.jspecify.annotations.Nullable;
 
 /**
  * Represents a binary constraint with an offset applied to the left operand.
@@ -26,10 +25,7 @@ public class BinaryOffsetConstraint  extends BinaryConstraint {
     Operator operator;
 
     @Override
-    public boolean isSatisfiedBy(@Nullable Object left, @Nullable Object right) {
-        if (left == null || right == null) {
-            return true;
-        }
+    public boolean isSatisfiedBy(@NonNull Object left, @NonNull Object right) {
         return operator.compare(offsetValue(left), right);
     }
 
