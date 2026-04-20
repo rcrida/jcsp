@@ -1,4 +1,4 @@
-package org.jcsp.search.selector;
+package org.jcsp.solver.backtrackingsearch.selector;
 
 import org.jcsp.ConstraintSatisfactionProblem;
 import org.jcsp.assignments.Assignment;

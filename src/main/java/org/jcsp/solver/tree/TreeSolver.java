@@ -8,7 +8,7 @@ import org.jcsp.assignments.Assignment;
 import org.jcsp.consistency.arc.AC3;
 import org.jcsp.consistency.arc.Arc;
 import org.jcsp.constraints.binary.BinaryConstraint;
-import org.jcsp.search.order.DomainValuesOrderer;
+import org.jcsp.solver.backtrackingsearch.order.DomainValuesOrderer;
 import org.jcsp.solver.Solver;
 import org.jcsp.solver.tree.selector.TreeUnassignedVariableSelector;
 import org.jcsp.solver.tree.sorter.TopologicalSorter;

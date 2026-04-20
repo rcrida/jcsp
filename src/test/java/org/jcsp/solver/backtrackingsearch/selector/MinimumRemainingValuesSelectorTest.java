@@ -1,14 +1,13 @@
-package org.jcsp.search.selector;
+package org.jcsp.solver.backtrackingsearch.selector;
 
 import org.jcsp.ConstraintSatisfactionProblem;
 import org.jcsp.assignments.Assignment;
 import org.jcsp.domains.Domain;
+import org.jcsp.solver.backtrackingsearch.selector.MinimumRemainingValuesSelector;
 import org.jcsp.variables.Variable;
-import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
-import org.mockito.MockitoAnnotations;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.util.Map;

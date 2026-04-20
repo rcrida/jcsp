@@ -1,4 +1,4 @@
-package org.jcsp.search;
+package org.jcsp.solver.backtrackingsearch;
 
 import lombok.Value;
 import lombok.extern.slf4j.Slf4j;
@@ -6,8 +6,8 @@ import lombok.val;
 import org.jcsp.ConstraintSatisfactionProblem;
 import org.jcsp.assignments.Assignment;
 import org.jcsp.consistency.Inference;
-import org.jcsp.search.order.DomainValuesOrderer;
-import org.jcsp.search.selector.UnassignedVariableSelector;
+import org.jcsp.solver.backtrackingsearch.order.DomainValuesOrderer;
+import org.jcsp.solver.backtrackingsearch.selector.UnassignedVariableSelector;
 import org.jcsp.solver.Solver;
 import org.jspecify.annotations.NonNull;
 

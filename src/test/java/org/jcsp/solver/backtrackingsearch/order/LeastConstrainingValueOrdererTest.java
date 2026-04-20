@@ -1,4 +1,4 @@
-package org.jcsp.search.order;
+package org.jcsp.solver.backtrackingsearch.order;
 
 import org.jcsp.ConstraintSatisfactionProblem;
 import org.jcsp.assignments.Assignment;
@@ -6,6 +6,7 @@ import org.jcsp.constraints.binary.BinaryConstraint;
 import org.jcsp.constraints.binary.BinaryNotEqualsConstraint;
 import org.jcsp.domains.Domain;
 import org.jcsp.domains.DomainObjectSet;
+import org.jcsp.solver.backtrackingsearch.order.LeastConstrainingValueOrderer;
 import org.jcsp.variables.Variable;
 import org.junit.jupiter.api.Test;
 

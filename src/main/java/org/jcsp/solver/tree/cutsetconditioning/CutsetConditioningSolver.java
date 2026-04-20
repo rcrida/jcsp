@@ -8,7 +8,6 @@ import org.jcsp.assignments.Assignment;
 import org.jcsp.constraints.Constraint;
 import org.jcsp.domains.Domain;
 import org.jcsp.solver.Solver;
-import org.jcsp.solver.tree.TreeSolver;
 import org.jcsp.variables.Variable;
 import org.jspecify.annotations.NonNull;
 
@@ -19,7 +18,6 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
-import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Predicate;
 import java.util.stream.Stream;
 
@@ -100,7 +98,8 @@ public class CutsetConditioningSolver implements Solver {
 
     /**
      * Attempts to decompose a problem into a combination of a tree and a cycle cutset. Iterates through all the variables
-     * until it finds one that can be expanded to a tree.
+     * until it finds one that can be expanded to a tree. It uses the heuristic that starting with the least connected
+     * variables means they are less likely to be part of the cutset.
      *
      * @param csp a problem that may contain a tree
      * @return if a tree is found then a decomposition containing the tree and remaining cycleCutset, otherwise empty

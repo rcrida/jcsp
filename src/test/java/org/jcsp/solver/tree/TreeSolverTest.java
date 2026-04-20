@@ -6,7 +6,7 @@ import org.jcsp.assignments.Assignment;
 import org.jcsp.constraints.binary.BinaryNotEqualsConstraint;
 import org.jcsp.domains.Domain;
 import org.jcsp.domains.EnumDomain;
-import org.jcsp.search.order.DefaultValueOrderer;
+import org.jcsp.solver.backtrackingsearch.order.DefaultValueOrderer;
 import org.jcsp.solver.tree.selector.TreeUnassignedVariableSelector;
 import org.jcsp.solver.tree.sorter.BFSTopologicalSorter;
 import org.junit.jupiter.api.Test;

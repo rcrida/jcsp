@@ -1,4 +1,4 @@
-package org.jcsp.search.order;
+package org.jcsp.solver.backtrackingsearch.order;
 
 import lombok.val;
 import org.jcsp.ConstraintSatisfactionProblem;
@@ -8,7 +8,6 @@ import org.jcsp.variables.Variable;
 import org.jspecify.annotations.NonNull;
 
 import java.util.Comparator;
-import java.util.List;
 import java.util.Map;
 import java.util.stream.Stream;
 

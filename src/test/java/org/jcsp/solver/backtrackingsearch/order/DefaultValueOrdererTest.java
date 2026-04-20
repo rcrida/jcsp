@@ -1,9 +1,10 @@
-package org.jcsp.search.order;
+package org.jcsp.solver.backtrackingsearch.order;
 
 import org.jcsp.ConstraintSatisfactionProblem;
 import org.jcsp.assignments.Assignment;
 import org.jcsp.domains.Domain;
 import org.jcsp.domains.DomainObjectSet;
+import org.jcsp.solver.backtrackingsearch.order.DefaultValueOrderer;
 import org.jcsp.variables.Variable;
 import org.junit.jupiter.api.Test;
 
