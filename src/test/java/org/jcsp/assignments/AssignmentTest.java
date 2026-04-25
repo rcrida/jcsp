@@ -123,4 +123,10 @@ public class AssignmentTest {
                 .isInstanceOf(AssertionError.class)
                 .hasMessage("Invalid assigned value for variable 'variable': value");
     }
+
+    @Test
+    void testToString() {
+        val assignment = Assignment.of(Map.of(variable, value));
+        assertThat(assignment).asString().isEqualTo("{variable=value}");
+    }
 }

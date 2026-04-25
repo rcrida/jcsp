@@ -8,7 +8,7 @@ import java.util.Objects;
 
 @SuperBuilder
 @EqualsAndHashCode(callSuper = true)
-public class BinaryNotEqualsConstraint extends BinaryConstraint {
+public class BinaryNotEqualsConstraint extends SymmetricBinaryConstraint {
     @Override
     public boolean isSatisfiedBy(@NonNull Object left, @NonNull Object right) {
         return !Objects.equals(left, right);

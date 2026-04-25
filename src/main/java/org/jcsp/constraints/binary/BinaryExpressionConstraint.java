@@ -1,5 +1,6 @@
 package org.jcsp.constraints.binary;
 
+import lombok.EqualsAndHashCode;
 import lombok.experimental.SuperBuilder;
 import org.jspecify.annotations.NonNull;
 
@@ -14,6 +15,7 @@ import java.util.function.BiFunction;
  * and dependencies between variables.
  */
 @SuperBuilder
+@EqualsAndHashCode(callSuper = true)
 public class BinaryExpressionConstraint extends BinaryConstraint {
     @NonNull BiFunction<Object, Object, Boolean> expression;
 

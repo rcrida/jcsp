@@ -84,4 +84,9 @@ public class Assignment {
             assert csp.isAllowedValue(entry.getKey(), entry.getValue()) : String.format("Invalid assigned value for variable '%s': %s", entry.getKey(), entry.getValue());
         }
     }
+
+    @Override
+    public String toString() {
+        return String.valueOf(values);
+    }
 }

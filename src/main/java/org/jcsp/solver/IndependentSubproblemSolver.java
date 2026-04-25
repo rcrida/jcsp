@@ -7,6 +7,7 @@ import org.jcsp.ConstraintSatisfactionProblem;
 import org.jcsp.assignments.Assignment;
 import org.jspecify.annotations.NonNull;
 
+import java.util.Comparator;
 import java.util.function.Supplier;
 import java.util.stream.Stream;
 
@@ -29,6 +30,8 @@ public class IndependentSubproblemSolver implements Solver {
         if (subproblems.size() > 1) {
             log.info("Solving subproblems {}", subproblems);
             return subproblems.stream()
+                    // solve the bigger problems first so that the smaller problems are the ones that get solved repeatedly
+                    .sorted(Comparator.comparing(ConstraintSatisfactionProblem::getSearchSpace).reversed())
                     .map(s -> (Supplier<Stream<Assignment>>) () -> subproblemSolver.getSolutions(s))
                     .reduce((s1, s2) ->
                             () -> s1.get().flatMap(a1 -> s2.get().map(a1::merge)))

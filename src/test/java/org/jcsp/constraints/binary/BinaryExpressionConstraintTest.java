@@ -1,26 +1,18 @@
 package org.jcsp.constraints.binary;
 
+import lombok.val;
 import org.jcsp.assignments.Assignment;
-import org.jcsp.constraints.nary.ExpressionConstraint;
-import org.jcsp.domains.Domain;
 import org.jcsp.variables.Variable;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
-import org.junit.jupiter.params.provider.Arguments;
-import org.junit.jupiter.params.provider.CsvSource;
-import org.junit.jupiter.params.provider.MethodSource;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.util.Map;
-import java.util.Objects;
-import java.util.Set;
 import java.util.function.BiFunction;
-import java.util.function.Function;
-import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.when;
@@ -36,9 +28,9 @@ public class BinaryExpressionConstraintTest {
     @Mock
     Object value2;
     @Mock
-    Domain domain;
-    @Mock
     BiFunction<Object, Object, Boolean> expression;
+    @Mock
+    BiFunction<Object, Object, Boolean> anotherExpression;
     BinaryExpressionConstraint binaryExpressionConstraint;
 
     @BeforeEach
@@ -63,6 +55,13 @@ public class BinaryExpressionConstraintTest {
     @Test
     void testToString() {
         assertThat(binaryExpressionConstraint.toString()).isEqualTo("<(variable1, variable2), expression>");
-        System.out.println(BinaryExpressionConstraint.builder().left(variable1).right(variable2).expression(Objects::equals).build());
+    }
+
+    @Test
+    void equals() {
+        val anotherBinaryExpressionConstraint = BinaryExpressionConstraint.builder().left(variable1).right(variable2).expression(anotherExpression).build();
+        assertThat(binaryExpressionConstraint).isNotEqualTo(anotherBinaryExpressionConstraint);
+        val sameBinaryExpressionConstraint = BinaryExpressionConstraint.builder().left(variable1).right(variable2).expression(expression).build();
+        assertThat(binaryExpressionConstraint).isEqualTo(sameBinaryExpressionConstraint);
     }
 }

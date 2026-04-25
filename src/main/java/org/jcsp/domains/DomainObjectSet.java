@@ -1,7 +1,6 @@
 package org.jcsp.domains;
 
 import lombok.*;
-import lombok.experimental.FieldDefaults;
 import lombok.experimental.NonFinal;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;

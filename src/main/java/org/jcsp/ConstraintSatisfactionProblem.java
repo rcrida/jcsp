@@ -68,6 +68,10 @@ public class ConstraintSatisfactionProblem {
         }
     }
 
+    public boolean isEmpty() {
+        return variableDomains.isEmpty();
+    }
+
     private boolean isCyclic(Variable src, Variable prt, Map<Variable, Set<Variable>> neighbours, Set<Variable> visited) {
         visited.add(src);
         for (Variable neighbour : neighbours.get(src)) {
@@ -237,6 +241,18 @@ public class ConstraintSatisfactionProblem {
                 }
             }
             return variables;
+        }
+
+        public ConstraintSatisfactionProblemBuilder deleteVariable(@NonNull Variable variable) {
+            val index = this.variableDomains$key.indexOf(variable);
+            this.variableDomains$key.remove(index);
+            this.variableDomains$value.remove(index);
+
+            val binaryConstraintsOnVariable = this.constraints.stream()
+                    .filter(bc -> bc.getVariables().contains(variable))
+                    .toList();
+            this.constraints.removeAll(binaryConstraintsOnVariable);
+            return this;
         }
     }
 }

@@ -5,6 +5,7 @@ import org.jcsp.ConstraintSatisfactionProblem;
 import org.jcsp.assignments.Assignment;
 import org.jcsp.constraints.nary.AllDiffConstraint;
 import org.jcsp.constraints.nary.ExpressionConstraint;
+import org.jcsp.constraints.unary.UnaryNotEqualsConstraint;
 import org.jcsp.domains.Domain;
 import org.jcsp.domains.IntRangeDomain;
 import org.jcsp.solver.assignmentfactory.RandomAssignmentFactory;
@@ -68,6 +69,8 @@ public class CryptarithmeticTest {
                     val F = (int) assignment.getValue(f).get();
                     return C3 == F;
                 }).build())
+                .constraint(UnaryNotEqualsConstraint.of(t, 0))
+                .constraint(UnaryNotEqualsConstraint.of(f, 0))
                 .build();
     }
 
@@ -79,15 +82,15 @@ public class CryptarithmeticTest {
         val optionalSolution = solver.getSolution(csp);
         System.out.println(optionalSolution);
         assertThat(optionalSolution).contains(Assignment.of(Map.of(
-                t, 1,
+                t, 7,
                 w, 3,
-                o, 2,
-                f, 0,
+                o, 4,
+                f, 1,
                 u, 6,
-                r, 4,
+                r, 8,
                 c1, 0,
                 c2, 0,
-                c3, 0
+                c3, 1
         )));
     }
 
@@ -97,7 +100,7 @@ public class CryptarithmeticTest {
         val solver = Solver.Factory.INSTANCE.createSolver();
         val solutions = solver.getSolutions(csp).toList();
         System.out.println(solutions);
-        assertThat(solutions).hasSize(19);
+        assertThat(solutions).hasSize(7);
     }
 
     @Test
