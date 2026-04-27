@@ -3,7 +3,6 @@ package org.jcsp.solver;
 import lombok.val;
 import org.jcsp.ConstraintSatisfactionProblem;
 import org.jcsp.assignments.Assignment;
-import org.jcsp.constraints.binary.BinaryOffsetConstraint;
 import org.jcsp.constraints.binary.Operator;
 import org.jcsp.domains.Domain;
 import org.jcsp.domains.IntRangeDomain;
@@ -35,23 +34,13 @@ public class NQueensTest {
         // down right diagonal constraints
         for (int i = 0; i < N; i++) {
             for (int j = i + 1; j < N; j++) {
-                cspBuilder.constraint(BinaryOffsetConstraint.builder()
-                        .left(VARIABLES[i])
-                        .right(VARIABLES[j])
-                        .offset(j - i)
-                        .operator(Operator.NEQ)
-                        .build());
+                cspBuilder.offsetConstraint(VARIABLES[i], j - i, Operator.NEQ, VARIABLES[j]);
             }
         }
         // down left diagonal constraints
         for (int i = 0; i < N; i++) {
             for (int j = 0; j < i; j++) {
-                cspBuilder.constraint(BinaryOffsetConstraint.builder()
-                        .left(VARIABLES[i])
-                        .right(VARIABLES[j])
-                        .offset(i - j)
-                        .operator(Operator.NEQ)
-                        .build());
+                cspBuilder.offsetConstraint(VARIABLES[i], i - j, Operator.NEQ, VARIABLES[j]);
             }
         }
         return cspBuilder.build();

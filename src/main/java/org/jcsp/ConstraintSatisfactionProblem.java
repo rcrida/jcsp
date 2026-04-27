@@ -8,8 +8,10 @@ import lombok.val;
 import org.jcsp.assignments.Assignment;
 import org.jcsp.constraints.Constraint;
 import org.jcsp.constraints.binary.BinaryConstraint;
+import org.jcsp.constraints.binary.BinaryOffsetConstraint;
 import org.jcsp.constraints.binary.BinaryPredicateConstraint;
 import org.jcsp.constraints.binary.BinaryNotEqualsConstraint;
+import org.jcsp.constraints.binary.Operator;
 import org.jcsp.constraints.nary.AllDiffConstraint;
 import org.jcsp.constraints.nary.PredicateConstraint;
 import org.jcsp.constraints.nary.NaryConstraint;
@@ -277,6 +279,10 @@ public class ConstraintSatisfactionProblem {
 
         public ConstraintSatisfactionProblemBuilder notEqualsConstraint(@NonNull Variable left, @NonNull Variable right) {
             return this.constraint(BinaryNotEqualsConstraint.builder().left(left).right(right).build());
+        }
+
+        public ConstraintSatisfactionProblemBuilder offsetConstraint(@NonNull Variable left, @NonNull Number offset, @NonNull Operator operator, @NonNull Variable right) {
+            return this.constraint(BinaryOffsetConstraint.builder().left(left).offset(offset).operator(operator).right(right).build());
         }
 
         public ConstraintSatisfactionProblemBuilder biPredicateConstraint(@NonNull Variable left, @NonNull Variable right, @NonNull BiPredicate<Object, Object> biPredicate) {
