@@ -2,7 +2,6 @@ package org.jcsp.domains;
 
 import org.jcsp.ConstraintSatisfactionProblem;
 import org.jcsp.assignments.Assignment;
-import org.jcsp.constraints.binary.BinaryExpressionConstraint;
 import org.jcsp.variables.Variable;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -25,16 +24,8 @@ public class AssignmentDomainTest {
             .variableDomain(variable1, domain1)
             .variableDomain(variable2, domain2)
             .variableDomain(variable3, domain3)
-            .constraint(BinaryExpressionConstraint.builder()
-                    .left(variable1)
-                    .right(variable2)
-                    .expression((v1, v2) -> !((int) v1 == 1 && v2 == "b"))
-                    .build())
-            .constraint(BinaryExpressionConstraint.builder()
-                    .left(variable2)
-                    .right(variable3)
-                    .expression((v2, v3) -> !(v2 == "a" && (boolean) v3))
-                    .build())
+            .biPredicateConstraint(variable1, variable2, (v1, v2) -> !((int) v1 == 1 && v2 == "b"))
+            .biPredicateConstraint(variable2, variable3, (v2, v3) -> !(v2 == "a" && (boolean) v3))
             .build();
     AssignmentDomain assignmentDomain;
 

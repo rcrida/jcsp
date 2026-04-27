@@ -3,7 +3,7 @@ package org.jcsp.solver.tree.cutsetconditioning;
 import lombok.val;
 import org.jcsp.ConstraintSatisfactionProblem;
 import org.jcsp.assignments.Assignment;
-import org.jcsp.constraints.nary.ExpressionConstraint;
+import org.jcsp.constraints.nary.PredicateConstraint;
 import org.jcsp.domains.Domain;
 import org.jcsp.domains.IntRangeDomain;
 import org.jcsp.solver.EmptyTest;
@@ -137,7 +137,7 @@ public class CutsetConditioningSolverTest {
                 .variableDomain(c, DOMAIN)
                 .variableDomain(d, DOMAIN)
                 .notEqualsConstraint(c, d)
-                .constraint(ExpressionConstraint.builder().variables(Set.of(a, b, c)).expression(assignment -> {
+                .constraint(PredicateConstraint.builder().variables(Set.of(a, b, c)).predicate(assignment -> {
                     val A = (int) assignment.getValue(a).get();
                     val B = (int) assignment.getValue(b).get();
                     val C = (int) assignment.getValue(c).get();

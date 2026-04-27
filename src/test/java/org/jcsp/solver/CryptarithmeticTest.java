@@ -3,7 +3,6 @@ package org.jcsp.solver;
 import lombok.val;
 import org.jcsp.ConstraintSatisfactionProblem;
 import org.jcsp.assignments.Assignment;
-import org.jcsp.constraints.nary.ExpressionConstraint;
 import org.jcsp.constraints.unary.UnaryNotEqualsConstraint;
 import org.jcsp.domains.Domain;
 import org.jcsp.domains.IntRangeDomain;
@@ -43,31 +42,31 @@ public class CryptarithmeticTest {
                 .variableDomain(c2, CARRY_DOMAIN)
                 .variableDomain(c3, CARRY_DOMAIN)
                 .allDiffConstraint(Set.of(t, w, o, f, u, r))
-                .constraint(ExpressionConstraint.builder().variables(Set.of(o, r, c1)).expression(assignment -> {
+                .predicateConstraint(Set.of(o, r, c1), assignment -> {
                     val O = (int) assignment.getValue(o).get();
                     val R = (int) assignment.getValue(r).get();
                     val C1 = (int) assignment.getValue(c1).get();
                     return O + O == R + 10 * C1;
-                }).build())
-                .constraint(ExpressionConstraint.builder().variables(Set.of(c1, w, u, c2)).expression(assignment -> {
+                })
+                .predicateConstraint(Set.of(c1, w, u, c2), assignment -> {
                     val C1 = (int) assignment.getValue(c1).get();
                     val W = (int) assignment.getValue(w).get();
                     val U = (int) assignment.getValue(u).get();
                     val C2 = (int) assignment.getValue(c2).get();
                     return C1 + W + W == U + 10 * C2;
-                }).build())
-                .constraint(ExpressionConstraint.builder().variables(Set.of(c2, t, o, c3)).expression(assignment -> {
+                })
+                .predicateConstraint(Set.of(c2, t, o, c3), assignment -> {
                     val C2 = (int) assignment.getValue(c2).get();
                     val T = (int) assignment.getValue(t).get();
                     val O = (int) assignment.getValue(o).get();
                     val C3 = (int) assignment.getValue(c3).get();
                     return C2 + T + T == O + 10 * C3;
-                }).build())
-                .constraint(ExpressionConstraint.builder().variables(Set.of(c3, f)).expression(assignment -> {
+                })
+                .predicateConstraint(Set.of(c3, f), assignment -> {
                     val C3 = (int) assignment.getValue(c3).get();
                     val F = (int) assignment.getValue(f).get();
                     return C3 == F;
-                }).build())
+                })
                 .constraint(UnaryNotEqualsConstraint.of(t, 0))
                 .constraint(UnaryNotEqualsConstraint.of(f, 0))
                 .build();

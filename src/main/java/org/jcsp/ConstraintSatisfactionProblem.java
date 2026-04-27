@@ -5,10 +5,13 @@ import lombok.Singular;
 import lombok.Value;
 import lombok.experimental.NonFinal;
 import lombok.val;
+import org.jcsp.assignments.Assignment;
 import org.jcsp.constraints.Constraint;
 import org.jcsp.constraints.binary.BinaryConstraint;
+import org.jcsp.constraints.binary.BinaryPredicateConstraint;
 import org.jcsp.constraints.binary.BinaryNotEqualsConstraint;
 import org.jcsp.constraints.nary.AllDiffConstraint;
+import org.jcsp.constraints.nary.PredicateConstraint;
 import org.jcsp.constraints.nary.NaryConstraint;
 import org.jcsp.domains.Domain;
 import org.jcsp.variables.Variable;
@@ -23,6 +26,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Queue;
 import java.util.Set;
+import java.util.function.BiPredicate;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
@@ -263,6 +267,14 @@ public class ConstraintSatisfactionProblem {
 
         public ConstraintSatisfactionProblemBuilder notEqualsConstraint(@NonNull Variable left, @NonNull Variable right) {
             return this.constraint(BinaryNotEqualsConstraint.builder().left(left).right(right).build());
+        }
+
+        public ConstraintSatisfactionProblemBuilder biPredicateConstraint(@NonNull Variable left, @NonNull Variable right, @NonNull BiPredicate<Object, Object> biPredicate) {
+            return this.constraint(BinaryPredicateConstraint.builder().left(left).right(right).biPredicate(biPredicate).build());
+        }
+
+        public ConstraintSatisfactionProblemBuilder predicateConstraint(@NonNull Set<Variable> variables, @NonNull Predicate<Assignment> predicate) {
+            return this.constraint(PredicateConstraint.builder().variables(variables).predicate(predicate).build());
         }
     }
 }

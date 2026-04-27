@@ -13,13 +13,13 @@ import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.util.Map;
 import java.util.Set;
-import java.util.function.Function;
+import java.util.function.Predicate;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
-public class ExpressionConstraintTest {
+public class PredicateConstraintTest {
     @Mock
     Variable variable1;
     @Mock
@@ -31,29 +31,29 @@ public class ExpressionConstraintTest {
     @Mock
     Domain domain;
     @Mock
-    Function<Assignment, Boolean> expression;
-    ExpressionConstraint expressionConstraint;
+    Predicate<Assignment> predicate;
+    PredicateConstraint predicateConstraint;
 
     @BeforeEach
     void setUp() {
-        expressionConstraint = ExpressionConstraint.builder().variables(Set.of(variable1, variable2)).expression(expression).build();
+        predicateConstraint = PredicateConstraint.builder().variables(Set.of(variable1, variable2)).predicate(predicate).build();
     }
 
     @ParameterizedTest
     @ValueSource(booleans = {true, false})
     void isSatisfiedBy(boolean satisfied) {
         var assignment = Assignment.of(Map.of(variable1, value1, variable2, value2));
-        when(expression.apply(assignment)).thenReturn(satisfied);
-        assertThat(expressionConstraint.isSatisfiedBy(assignment)).isEqualTo(satisfied);
+        when(predicate.test(assignment)).thenReturn(satisfied);
+        assertThat(predicateConstraint.isSatisfiedBy(assignment)).isEqualTo(satisfied);
     }
 
     @Test
     void isSatisfiedBy_unknown() {
-        assertThat(expressionConstraint.isSatisfiedBy(Assignment.of(Map.of()))).isTrue();
+        assertThat(predicateConstraint.isSatisfiedBy(Assignment.of(Map.of()))).isTrue();
     }
 
     @Test
     void testToString() {
-        assertThat(expressionConstraint.toString()).isEqualTo("<(variable1, variable2), expression>");
+        assertThat(predicateConstraint.toString()).isEqualTo("<(variable1, variable2), predicate>");
     }
 }
