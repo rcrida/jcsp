@@ -2,7 +2,6 @@ package org.jcsp.solver.tree.decomposition.decomposer;
 
 import lombok.val;
 import org.jcsp.ConstraintSatisfactionProblem;
-import org.jcsp.constraints.binary.BinaryNotEqualsConstraint;
 import org.jcsp.domains.Domain;
 import org.jcsp.domains.IntRangeDomain;
 import org.jcsp.solver.tree.decomposition.decomposer.variableselector.ArbitraryVariableSelector;
@@ -37,14 +36,14 @@ public class TreeDecomposerImplTest {
                 .variableDomain(V3, DOMAIN)
                 .variableDomain(V4, DOMAIN)
                 .variableDomain(V5, DOMAIN)
-                .constraint(BinaryNotEqualsConstraint.builder().left(V0).right(V1).build())
-                .constraint(BinaryNotEqualsConstraint.builder().left(V0).right(V2).build())
-                .constraint(BinaryNotEqualsConstraint.builder().left(V1).right(V2).build())
-                .constraint(BinaryNotEqualsConstraint.builder().left(V1).right(V3).build())
-                .constraint(BinaryNotEqualsConstraint.builder().left(V2).right(V4).build())
-                .constraint(BinaryNotEqualsConstraint.builder().left(V3).right(V4).build())
-                .constraint(BinaryNotEqualsConstraint.builder().left(V3).right(V5).build())
-                .constraint(BinaryNotEqualsConstraint.builder().left(V4).right(V5).build())
+                .notEqualsConstraint(V0, V1)
+                .notEqualsConstraint(V0, V2)
+                .notEqualsConstraint(V1, V2)
+                .notEqualsConstraint(V1, V3)
+                .notEqualsConstraint(V2, V4)
+                .notEqualsConstraint(V3, V4)
+                .notEqualsConstraint(V3, V5)
+                .notEqualsConstraint(V4, V5)
                 .build();
         val treeDecomposition = treeDecomposer.decompose(csp, 1024).get();
         val treeVariable1 = VARIABLE_FACTORY.create("[V0, V1, V2]");

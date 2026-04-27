@@ -3,7 +3,6 @@ package org.jcsp.solver.tree;
 import lombok.val;
 import org.jcsp.ConstraintSatisfactionProblem;
 import org.jcsp.assignments.Assignment;
-import org.jcsp.constraints.binary.BinaryNotEqualsConstraint;
 import org.jcsp.domains.Domain;
 import org.jcsp.domains.EnumDomain;
 import org.jcsp.solver.backtrackingsearch.order.DefaultValueOrderer;
@@ -35,10 +34,10 @@ public class TreeSolverTest {
             .variableDomain(Q, DOMAIN)
             .variableDomain(NSW, DOMAIN)
             .variableDomain(V, DOMAIN)
-            .constraint(BinaryNotEqualsConstraint.builder().left(WA).right(NT).build())
-            .constraint(BinaryNotEqualsConstraint.builder().left(NT).right(Q).build())
-            .constraint(BinaryNotEqualsConstraint.builder().left(Q).right(NSW).build())
-            .constraint(BinaryNotEqualsConstraint.builder().left(NSW).right(V).build())
+            .notEqualsConstraint(WA, NT)
+            .notEqualsConstraint(NT, Q)
+            .notEqualsConstraint(Q, NSW)
+            .notEqualsConstraint(NSW, V)
             .build();
     TreeSolver treeSolver = new TreeSolver(BFSTopologicalSorter.INSTANCE, DefaultValueOrderer.INSTANCE, TreeUnassignedVariableSelector.Factory.INSTANCE);
 
@@ -63,7 +62,7 @@ public class TreeSolverTest {
         val australiaWithoutSAAndInsufficientDomains = ConstraintSatisfactionProblem.builder()
                 .variableDomain(WA, DOMAIN_RED_ONLY)
                 .variableDomain(NT, DOMAIN_RED_ONLY)
-                .constraint(BinaryNotEqualsConstraint.builder().left(WA).right(NT).build())
+                .notEqualsConstraint(WA, NT)
                 .build();
         assertThat(treeSolver.getSolution(australiaWithoutSAAndInsufficientDomains)).isEmpty();
     }
@@ -73,7 +72,7 @@ public class TreeSolverTest {
         val problem = ConstraintSatisfactionProblem.builder()
                 .variableDomain(WA, DOMAIN)
                 .variableDomain(NT, DOMAIN_RED_ONLY)
-                .constraint(BinaryNotEqualsConstraint.builder().left(WA).right(NT).build())
+                .notEqualsConstraint(WA, NT)
                 .build();
         assertThat(treeSolver.makeArcConsistent(problem, WA, NT).get().getDomain(WA).get().stream().toList()).isEqualTo(List.of(GREEN));
     }

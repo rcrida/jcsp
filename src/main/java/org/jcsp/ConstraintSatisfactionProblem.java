@@ -7,6 +7,8 @@ import lombok.experimental.NonFinal;
 import lombok.val;
 import org.jcsp.constraints.Constraint;
 import org.jcsp.constraints.binary.BinaryConstraint;
+import org.jcsp.constraints.binary.BinaryNotEqualsConstraint;
+import org.jcsp.constraints.nary.AllDiffConstraint;
 import org.jcsp.constraints.nary.NaryConstraint;
 import org.jcsp.domains.Domain;
 import org.jcsp.variables.Variable;
@@ -253,6 +255,14 @@ public class ConstraintSatisfactionProblem {
                     .toList();
             this.constraints.removeAll(binaryConstraintsOnVariable);
             return this;
+        }
+
+        public ConstraintSatisfactionProblemBuilder allDiffConstraint(@NonNull Set<Variable> variables) {
+            return this.constraint(AllDiffConstraint.builder().variables(variables).build());
+        }
+
+        public ConstraintSatisfactionProblemBuilder notEqualsConstraint(@NonNull Variable left, @NonNull Variable right) {
+            return this.constraint(BinaryNotEqualsConstraint.builder().left(left).right(right).build());
         }
     }
 }

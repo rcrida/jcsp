@@ -3,7 +3,6 @@ package org.jcsp.solver;
 import lombok.val;
 import org.jcsp.ConstraintSatisfactionProblem;
 import org.jcsp.assignments.Assignment;
-import org.jcsp.constraints.nary.AllDiffConstraint;
 import org.jcsp.constraints.nary.ExpressionConstraint;
 import org.jcsp.constraints.unary.UnaryNotEqualsConstraint;
 import org.jcsp.domains.Domain;
@@ -43,7 +42,7 @@ public class CryptarithmeticTest {
                 .variableDomain(c1, CARRY_DOMAIN)
                 .variableDomain(c2, CARRY_DOMAIN)
                 .variableDomain(c3, CARRY_DOMAIN)
-                .constraint(AllDiffConstraint.builder().variables(Set.of(t, w, o, f, u, r)).build())
+                .allDiffConstraint(Set.of(t, w, o, f, u, r))
                 .constraint(ExpressionConstraint.builder().variables(Set.of(o, r, c1)).expression(assignment -> {
                     val O = (int) assignment.getValue(o).get();
                     val R = (int) assignment.getValue(r).get();

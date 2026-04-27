@@ -2,11 +2,8 @@ package org.jcsp.solver.backtrackingsearch.order;
 
 import org.jcsp.ConstraintSatisfactionProblem;
 import org.jcsp.assignments.Assignment;
-import org.jcsp.constraints.binary.BinaryConstraint;
-import org.jcsp.constraints.binary.BinaryNotEqualsConstraint;
 import org.jcsp.domains.Domain;
 import org.jcsp.domains.DomainObjectSet;
-import org.jcsp.solver.backtrackingsearch.order.LeastConstrainingValueOrderer;
 import org.jcsp.variables.Variable;
 import org.junit.jupiter.api.Test;
 
@@ -29,12 +26,11 @@ class LeastConstrainingValueOrdererTest {
         // Setup CSP
         Variable A = FACTORY.create("A");
         Variable B = FACTORY.create("B");
-        BinaryConstraint constraint = BinaryNotEqualsConstraint.builder().left(A).right(B).build();
 
         ConstraintSatisfactionProblem csp = ConstraintSatisfactionProblem.builder()
                 .variableDomain(A, DOMAIN)
                 .variableDomain(B, DOMAIN)
-                .constraint(constraint)
+                .notEqualsConstraint(A, B)
                 .build();
 
         // Setup assignment
@@ -54,15 +50,12 @@ class LeastConstrainingValueOrdererTest {
         Variable B = FACTORY.create("B");
         Variable C = FACTORY.create("C");
 
-        BinaryConstraint constraint1 = BinaryNotEqualsConstraint.builder().left(A).right(B).build();
-        BinaryConstraint constraint2 = BinaryNotEqualsConstraint.builder().left(A).right(C).build();
-
         ConstraintSatisfactionProblem csp = ConstraintSatisfactionProblem.builder()
                 .variableDomain(A, DOMAIN)
                 .variableDomain(B, DOMAIN)
                 .variableDomain(C, DOMAIN)
-                .constraint(constraint1)
-                .constraint(constraint2)
+                .notEqualsConstraint(A, B)
+                .notEqualsConstraint(A, C)
                 .build();
 
         // Setup assignment
@@ -100,12 +93,10 @@ class LeastConstrainingValueOrdererTest {
         Variable A = FACTORY.create("A");
         Variable B = FACTORY.create("B");
 
-        BinaryConstraint constraint = BinaryNotEqualsConstraint.builder().left(A).right(B).build();
-
         ConstraintSatisfactionProblem csp = ConstraintSatisfactionProblem.builder()
                 .variableDomain(A, DOMAIN)
                 .variableDomain(B, DOMAIN)
-                .constraint(constraint)
+                .notEqualsConstraint(A, B)
                 .build();
 
         // Setup a partial assignment where B is already assigned

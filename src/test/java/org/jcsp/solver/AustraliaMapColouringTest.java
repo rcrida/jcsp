@@ -3,7 +3,6 @@ package org.jcsp.solver;
 import lombok.val;
 import org.jcsp.ConstraintSatisfactionProblem;
 import org.jcsp.assignments.Assignment;
-import org.jcsp.constraints.binary.BinaryNotEqualsConstraint;
 import org.jcsp.domains.Domain;
 import org.jcsp.domains.EnumDomain;
 import org.jcsp.solver.assignmentfactory.RandomAssignmentFactory;
@@ -39,15 +38,15 @@ public class AustraliaMapColouringTest {
                 .variableDomain(V, DOMAIN)
                 .variableDomain(SA, DOMAIN)
                 .variableDomain(T, DOMAIN)
-                .constraint(BinaryNotEqualsConstraint.builder().left(SA).right(WA).build())
-                .constraint(BinaryNotEqualsConstraint.builder().left(SA).right(NT).build())
-                .constraint(BinaryNotEqualsConstraint.builder().left(SA).right(Q).build())
-                .constraint(BinaryNotEqualsConstraint.builder().left(SA).right(NSW).build())
-                .constraint(BinaryNotEqualsConstraint.builder().left(SA).right(V).build())
-                .constraint(BinaryNotEqualsConstraint.builder().left(WA).right(NT).build())
-                .constraint(BinaryNotEqualsConstraint.builder().left(NT).right(Q).build())
-                .constraint(BinaryNotEqualsConstraint.builder().left(Q).right(NSW).build())
-                .constraint(BinaryNotEqualsConstraint.builder().left(NSW).right(V).build())
+                .notEqualsConstraint(SA, WA)
+                .notEqualsConstraint(SA, NT)
+                .notEqualsConstraint(SA, Q)
+                .notEqualsConstraint(SA, NSW)
+                .notEqualsConstraint(SA, V)
+                .notEqualsConstraint(WA, NT)
+                .notEqualsConstraint(NT, Q)
+                .notEqualsConstraint(Q, NSW)
+                .notEqualsConstraint(NSW, V)
                 .build();
     }
 

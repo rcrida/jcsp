@@ -3,8 +3,6 @@ package org.jcsp.solver.tree.cutsetconditioning;
 import lombok.val;
 import org.jcsp.ConstraintSatisfactionProblem;
 import org.jcsp.assignments.Assignment;
-import org.jcsp.constraints.binary.BinaryNotEqualsConstraint;
-import org.jcsp.constraints.nary.AllDiffConstraint;
 import org.jcsp.constraints.nary.ExpressionConstraint;
 import org.jcsp.domains.Domain;
 import org.jcsp.domains.IntRangeDomain;
@@ -42,13 +40,13 @@ public class CutsetConditioningSolverTest {
             .variableDomain(T3, DOMAIN)
             .variableDomain(T4, DOMAIN)
             .variableDomain(C, DOMAIN)
-            .constraint(BinaryNotEqualsConstraint.builder().left(C).right(T1).build())
-            .constraint(BinaryNotEqualsConstraint.builder().left(C).right(T2).build())
-            .constraint(BinaryNotEqualsConstraint.builder().left(C).right(T3).build())
-            .constraint(BinaryNotEqualsConstraint.builder().left(C).right(T4).build())
-            .constraint(BinaryNotEqualsConstraint.builder().left(T1).right(T2).build())
-            .constraint(BinaryNotEqualsConstraint.builder().left(T2).right(T3).build())
-            .constraint(BinaryNotEqualsConstraint.builder().left(T3).right(T4).build())
+            .notEqualsConstraint(C, T1)
+            .notEqualsConstraint(C, T2)
+            .notEqualsConstraint(C, T3)
+            .notEqualsConstraint(C, T4)
+            .notEqualsConstraint(T1, T2)
+            .notEqualsConstraint(T2, T3)
+            .notEqualsConstraint(T3, T4)
             .build();
 
     @Mock
@@ -85,7 +83,7 @@ public class CutsetConditioningSolverTest {
                 .variableDomain(a, DOMAIN)
                 .variableDomain(b, DOMAIN)
                 .variableDomain(c, DOMAIN)
-                .constraint(AllDiffConstraint.builder().variables(Set.of(a, b, c)).build())
+                .allDiffConstraint(Set.of(a, b, c))
                 .build();
         val assignment = Assignment.builder().value(a, 1).build();
         when(cycleCutsetSolver.getSolutions(csp)).thenReturn(Stream.of(assignment));
@@ -105,9 +103,9 @@ public class CutsetConditioningSolverTest {
                 .variableDomain(T2, CONSTRAINED_DOMAIN)
                 .variableDomain(T3, CONSTRAINED_DOMAIN)
                 .variableDomain(T4, CONSTRAINED_DOMAIN)
-                .constraint(BinaryNotEqualsConstraint.builder().left(T1).right(T2).build())
-                .constraint(BinaryNotEqualsConstraint.builder().left(T2).right(T3).build())
-                .constraint(BinaryNotEqualsConstraint.builder().left(T3).right(T4).build())
+                .notEqualsConstraint(T1, T2)
+                .notEqualsConstraint(T2, T3)
+                .notEqualsConstraint(T3, T4)
                 .build();
         val treeAssignment = Assignment.of(Map.of(T1, 2, T2, 3, T3, 4, T4, 5));
         when(treeSolver.getSolutions(tree)).thenReturn(Stream.of(treeAssignment));
@@ -138,7 +136,7 @@ public class CutsetConditioningSolverTest {
                 .variableDomain(b, DOMAIN)
                 .variableDomain(c, DOMAIN)
                 .variableDomain(d, DOMAIN)
-                .constraint(BinaryNotEqualsConstraint.builder().left(c).right(d).build())
+                .notEqualsConstraint(c, d)
                 .constraint(ExpressionConstraint.builder().variables(Set.of(a, b, c)).expression(assignment -> {
                     val A = (int) assignment.getValue(a).get();
                     val B = (int) assignment.getValue(b).get();

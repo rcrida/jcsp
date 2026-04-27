@@ -5,7 +5,6 @@ import org.jcsp.ConstraintSatisfactionProblem;
 import org.jcsp.assignments.Assignment;
 import org.jcsp.constraints.binary.BinaryOffsetConstraint;
 import org.jcsp.constraints.binary.Operator;
-import org.jcsp.constraints.nary.AllDiffConstraint;
 import org.jcsp.domains.Domain;
 import org.jcsp.domains.IntRangeDomain;
 import org.jcsp.solver.assignmentfactory.RandomAssignmentFactory;
@@ -14,6 +13,7 @@ import org.junit.jupiter.api.Test;
 
 import java.math.BigInteger;
 import java.util.Arrays;
+import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -31,7 +31,7 @@ public class NQueensTest {
         VARIABLES = cspBuilder.create1dVariableArray(labels, "Q", DOMAIN);
         System.out.println(Arrays.toString(VARIABLES));
         // vertical constraint
-        cspBuilder.constraint(AllDiffConstraint.builder().variables(Arrays.asList(VARIABLES)).build());
+        cspBuilder.allDiffConstraint(Set.of(VARIABLES));
         // down right diagonal constraints
         for (int i = 0; i < N; i++) {
             for (int j = i + 1; j < N; j++) {

@@ -3,7 +3,6 @@ package org.jcsp.solver.tree.selector;
 import org.jcsp.ConstraintSatisfactionProblem;
 import org.jcsp.assignments.Assignment;
 import org.jcsp.consistency.arc.Arc;
-import org.jcsp.constraints.binary.BinaryNotEqualsConstraint;
 import org.jcsp.domains.Domain;
 import org.jcsp.domains.DomainObjectSet;
 import org.jcsp.variables.Variable;
@@ -28,7 +27,7 @@ public class TopologicalUnassignedVariableSelectorTest {
     static final ConstraintSatisfactionProblem TCSP = ConstraintSatisfactionProblem.builder()
             .variableDomain(A, DOMAIN)
             .variableDomain(B, DOMAIN)
-            .constraint(BinaryNotEqualsConstraint.builder().left(A).right(B).build())
+            .notEqualsConstraint(A, B)
             .build();
     TopologicalUnassignedVariableSelector selector = new TopologicalUnassignedVariableSelector(ARCS);
 

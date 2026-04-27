@@ -2,7 +2,6 @@ package org.jcsp.solver.tree.sorter;
 
 import org.jcsp.ConstraintSatisfactionProblem;
 import org.jcsp.consistency.arc.Arc;
-import org.jcsp.constraints.binary.BinaryNotEqualsConstraint;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
@@ -23,10 +22,10 @@ public class BFSTopologicalSorterTest {
             .variableDomain(Q, DOMAIN)
             .variableDomain(NSW, DOMAIN)
             .variableDomain(V, DOMAIN)
-            .constraint(BinaryNotEqualsConstraint.builder().left(WA).right(NT).build())
-            .constraint(BinaryNotEqualsConstraint.builder().left(NT).right(Q).build())
-            .constraint(BinaryNotEqualsConstraint.builder().left(Q).right(NSW).build())
-            .constraint(BinaryNotEqualsConstraint.builder().left(NSW).right(V).build())
+            .notEqualsConstraint(WA, NT)
+            .notEqualsConstraint(NT, Q)
+            .notEqualsConstraint(Q, NSW)
+            .notEqualsConstraint(NSW, V)
             .build();
 
     @Test

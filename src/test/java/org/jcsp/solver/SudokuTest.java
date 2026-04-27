@@ -3,7 +3,6 @@ package org.jcsp.solver;
 import lombok.val;
 import org.jcsp.ConstraintSatisfactionProblem;
 import org.jcsp.assignments.Assignment;
-import org.jcsp.constraints.nary.AllDiffConstraint;
 import org.jcsp.constraints.unary.UnaryValueConstraint;
 import org.jcsp.domains.Domain;
 import org.jcsp.domains.IntRangeDomain;
@@ -12,6 +11,9 @@ import org.junit.jupiter.api.Test;
 
 import java.math.BigInteger;
 import java.util.Arrays;
+import java.util.HashSet;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -29,27 +31,27 @@ public class SudokuTest {
         }
         // row constraints
         for (int i = 0; i < ROWS.length; i++) {
-            val row = Arrays.asList(VARIABLES[i]);
-            cspBuilder.constraint(AllDiffConstraint.builder().variables(row).build());
+            val row = Set.of(VARIABLES[i]);
+            cspBuilder.allDiffConstraint(row);
         }
         // column constraints
         for (int j = 0; j < COLUMNS.length; j++) {
             int finalJ = j;
             val column = Arrays.stream(VARIABLES)
                     .map(row -> row[finalJ])
-                    .toList();
-            cspBuilder.constraint(AllDiffConstraint.builder().variables(column).build());
+                    .collect(Collectors.toSet());
+            cspBuilder.allDiffConstraint(column);
         }
         // square constraints
         for (int i = 0; i < ROWS.length; i += 3) {
             for (int j = 0; j < COLUMNS.length; j += 3) {
-                val allDiffBuilder = AllDiffConstraint.builder();
+                val square = new HashSet<Variable>();
                 for (int r = 0; r < 3; r++) {
                     for (int c = 0; c < 3; c++) {
-                        allDiffBuilder.variable(VARIABLES[i+r][j+c]);
+                        square.add(VARIABLES[i+r][j+c]);
                     }
                 }
-                cspBuilder.constraint(allDiffBuilder.build());
+                cspBuilder.allDiffConstraint(square);
             }
         }
         // global constraints

@@ -4,7 +4,6 @@ import lombok.val;
 import org.jcsp.constraints.binary.BinaryNotEqualsConstraint;
 import org.jcsp.constraints.binary.BinaryOffsetConstraint;
 import org.jcsp.constraints.binary.Operator;
-import org.jcsp.constraints.nary.AllDiffConstraint;
 import org.jcsp.domains.Domain;
 import org.jcsp.solver.AustraliaMapColouringTest;
 import org.jcsp.variables.Variable;
@@ -39,7 +38,7 @@ public class ConstraintSatisfactionProblemTest {
         Variable b = VARIABLE_FACTORY.create("B");
         assertThatThrownBy(() -> ConstraintSatisfactionProblem.builder()
                 .variableDomain(a, domain)
-                .constraint(BinaryNotEqualsConstraint.builder().left(a).right(b).build())
+                .notEqualsConstraint(a, b)
                 .build())
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessage("Constraints reference unknown variables [B]");
@@ -71,15 +70,15 @@ public class ConstraintSatisfactionProblemTest {
                         .variableDomain(NSW, DOMAIN)
                         .variableDomain(V, DOMAIN)
                         .variableDomain(SA, DOMAIN)
-                        .constraint(BinaryNotEqualsConstraint.builder().left(SA).right(WA).build())
-                        .constraint(BinaryNotEqualsConstraint.builder().left(SA).right(NT).build())
-                        .constraint(BinaryNotEqualsConstraint.builder().left(SA).right(Q).build())
-                        .constraint(BinaryNotEqualsConstraint.builder().left(SA).right(NSW).build())
-                        .constraint(BinaryNotEqualsConstraint.builder().left(SA).right(V).build())
-                        .constraint(BinaryNotEqualsConstraint.builder().left(WA).right(NT).build())
-                        .constraint(BinaryNotEqualsConstraint.builder().left(NT).right(Q).build())
-                        .constraint(BinaryNotEqualsConstraint.builder().left(Q).right(NSW).build())
-                        .constraint(BinaryNotEqualsConstraint.builder().left(NSW).right(V).build())
+                        .notEqualsConstraint(SA, WA)
+                        .notEqualsConstraint(SA, NT)
+                        .notEqualsConstraint(SA, Q)
+                        .notEqualsConstraint(SA, NSW)
+                        .notEqualsConstraint(SA, V)
+                        .notEqualsConstraint(WA, NT)
+                        .notEqualsConstraint(NT, Q)
+                        .notEqualsConstraint(Q, NSW)
+                        .notEqualsConstraint(NSW, V)
                         .build(),
                 ConstraintSatisfactionProblem.builder()
                         .variableDomain(T, DOMAIN)
@@ -98,7 +97,7 @@ public class ConstraintSatisfactionProblemTest {
                 .variableDomain(a, domain)
                 .variableDomain(b, domain)
                 .variableDomain(c, domain)
-                .constraint(AllDiffConstraint.builder().variable(a).variable(b).variable(c).build())
+                .allDiffConstraint(Set.of(a, b, c))
                 .build();
         assertThat(csp.isCyclic()).isTrue();
         assertThat(csp.isTree()).isFalse();
@@ -134,8 +133,8 @@ public class ConstraintSatisfactionProblemTest {
                 .variableDomain(a, domain)
                 .variableDomain(b, domain)
                 .variableDomain(c, domain)
-                .constraint(BinaryNotEqualsConstraint.builder().left(a).right(b).build())
-                .constraint(BinaryNotEqualsConstraint.builder().left(a).right(c).build())
+                .notEqualsConstraint(a, b)
+                .notEqualsConstraint(a, c)
                 .build();
         assertThat(csp.isTree()).isTrue();
     }
@@ -147,7 +146,7 @@ public class ConstraintSatisfactionProblemTest {
         val csp = ConstraintSatisfactionProblem.builder()
                 .variableDomain(a, domain)
                 .variableDomain(b, domain)
-                .constraint(BinaryNotEqualsConstraint.builder().left(a).right(b).build())
+                .notEqualsConstraint(a, b)
                 .constraint(BinaryOffsetConstraint.builder().left(a).right(b).offset(0).operator(Operator.NEQ).build())
                 .build();
         assertThat(csp.isTree()).isTrue();
