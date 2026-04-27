@@ -3,7 +3,6 @@ package org.jcsp.solver;
 import lombok.val;
 import org.jcsp.ConstraintSatisfactionProblem;
 import org.jcsp.assignments.Assignment;
-import org.jcsp.constraints.unary.UnaryNotEqualsConstraint;
 import org.jcsp.domains.Domain;
 import org.jcsp.domains.IntRangeDomain;
 import org.jcsp.solver.assignmentfactory.RandomAssignmentFactory;
@@ -67,8 +66,8 @@ public class CryptarithmeticTest {
                     val F = (int) assignment.getValue(f).get();
                     return C3 == F;
                 })
-                .constraint(UnaryNotEqualsConstraint.of(t, 0))
-                .constraint(UnaryNotEqualsConstraint.of(f, 0))
+                .notEqualsConstraint(t, 0)
+                .notEqualsConstraint(f, 0)
                 .build();
     }
 

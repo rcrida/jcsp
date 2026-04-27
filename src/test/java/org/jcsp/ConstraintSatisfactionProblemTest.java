@@ -1,7 +1,6 @@
 package org.jcsp;
 
 import lombok.val;
-import org.jcsp.constraints.binary.BinaryNotEqualsConstraint;
 import org.jcsp.constraints.binary.BinaryOffsetConstraint;
 import org.jcsp.constraints.binary.Operator;
 import org.jcsp.domains.Domain;

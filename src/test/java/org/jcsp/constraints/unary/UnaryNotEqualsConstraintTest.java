@@ -26,7 +26,7 @@ public class UnaryNotEqualsConstraintTest {
 
     @BeforeEach
     void setUp() {
-        constraint = UnaryNotEqualsConstraint.of(variable, VALUE);
+        constraint = UnaryNotEqualsConstraint.builder().variable(variable).value(VALUE).build();
     }
 
     @Test

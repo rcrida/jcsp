@@ -13,6 +13,8 @@ import org.jcsp.constraints.binary.BinaryNotEqualsConstraint;
 import org.jcsp.constraints.nary.AllDiffConstraint;
 import org.jcsp.constraints.nary.PredicateConstraint;
 import org.jcsp.constraints.nary.NaryConstraint;
+import org.jcsp.constraints.unary.UnaryNotEqualsConstraint;
+import org.jcsp.constraints.unary.UnaryValueConstraint;
 import org.jcsp.domains.Domain;
 import org.jcsp.variables.Variable;
 import org.jspecify.annotations.NonNull;
@@ -259,6 +261,14 @@ public class ConstraintSatisfactionProblem {
                     .toList();
             this.constraints.removeAll(binaryConstraintsOnVariable);
             return this;
+        }
+
+        public ConstraintSatisfactionProblemBuilder equalsConstraint(@NonNull Variable variable, @NonNull Object value) {
+            return this.constraint(UnaryValueConstraint.builder().variable(variable).value(value).build());
+        }
+
+        public ConstraintSatisfactionProblemBuilder notEqualsConstraint(@NonNull Variable variable, @NonNull Object value) {
+            return this.constraint(UnaryNotEqualsConstraint.builder().variable(variable).value(value).build());
         }
 
         public ConstraintSatisfactionProblemBuilder allDiffConstraint(@NonNull Set<Variable> variables) {

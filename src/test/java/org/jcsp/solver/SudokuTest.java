@@ -3,7 +3,6 @@ package org.jcsp.solver;
 import lombok.val;
 import org.jcsp.ConstraintSatisfactionProblem;
 import org.jcsp.assignments.Assignment;
-import org.jcsp.constraints.unary.UnaryValueConstraint;
 import org.jcsp.domains.Domain;
 import org.jcsp.domains.IntRangeDomain;
 import org.jcsp.variables.Variable;
@@ -70,7 +69,7 @@ public class SudokuTest {
         for (int i = 0; i < ROWS.length; i++) {
             for (int j = 0; j < COLUMNS.length; j++) {
                 if (constraints[i][j] != 0) {
-                    cspBuilder.constraint(UnaryValueConstraint.of(VARIABLES[i][j], constraints[i][j]));
+                    cspBuilder.equalsConstraint(VARIABLES[i][j], constraints[i][j]);
                 }
             }
         }

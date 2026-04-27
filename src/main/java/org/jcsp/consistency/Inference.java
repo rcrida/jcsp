@@ -1,9 +1,7 @@
 package org.jcsp.consistency;
 
-import lombok.val;
 import org.jcsp.ConstraintSatisfactionProblem;
 import org.jcsp.assignments.Assignment;
-import org.jcsp.constraints.unary.UnaryValueConstraint;
 import org.jcsp.variables.Variable;
 
 import java.util.Optional;

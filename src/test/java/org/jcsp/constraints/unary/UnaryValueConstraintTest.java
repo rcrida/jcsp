@@ -26,7 +26,7 @@ public class UnaryValueConstraintTest {
 
     @BeforeEach
     void setUp() {
-        constraint = UnaryValueConstraint.of(variable, VALUE);
+        constraint = UnaryValueConstraint.builder().variable(variable).value(VALUE).build();
     }
 
     @Test

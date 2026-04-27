@@ -2,7 +2,6 @@ package org.jcsp.assignments;
 
 import lombok.val;
 import org.jcsp.ConstraintSatisfactionProblem;
-import org.jcsp.constraints.unary.UnaryNotEqualsConstraint;
 import org.jcsp.domains.Domain;
 import org.jcsp.variables.Variable;
 import org.junit.jupiter.api.Test;
@@ -99,7 +98,7 @@ public class AssignmentTest {
         val assignment = Assignment.of(Map.of(variable, value));
         val csp = ConstraintSatisfactionProblem.builder()
                 .variableDomain(variable, domain)
-                .constraint(UnaryNotEqualsConstraint.of(variable, value))
+                .notEqualsConstraint(variable, value)
                 .build();
         assertThat(assignment.isComplete(csp)).isTrue();
         assertThat(assignment.isConsistent(csp)).isFalse();

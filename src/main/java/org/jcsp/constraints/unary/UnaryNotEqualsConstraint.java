@@ -2,7 +2,6 @@ package org.jcsp.constraints.unary;
 
 import lombok.EqualsAndHashCode;
 import lombok.experimental.SuperBuilder;
-import org.jcsp.variables.Variable;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 
@@ -11,10 +10,6 @@ import java.util.Objects;
 @SuperBuilder
 @EqualsAndHashCode(callSuper = true)
 public class UnaryNotEqualsConstraint extends UnaryConstraint {
-    public static UnaryNotEqualsConstraint of(@NonNull Variable variable, @NonNull Object value) {
-        return builder().variable(variable).value(value).build();
-    }
-
     @NonNull Object value;
 
     @Override
