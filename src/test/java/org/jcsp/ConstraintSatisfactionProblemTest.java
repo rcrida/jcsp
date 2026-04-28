@@ -11,6 +11,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
@@ -151,4 +152,10 @@ public class ConstraintSatisfactionProblemTest {
         assertThat(csp.isTree()).isTrue();
     }
 
+    @Test
+    void builder_notEqualsChainConstraint_asserts() {
+        Variable a = VARIABLE_FACTORY.create("A");
+        assertThatThrownBy(() -> ConstraintSatisfactionProblem.builder().notEqualsChainConstraint(List.of(a)))
+                .isInstanceOf(AssertionError.class);
+    }
 }

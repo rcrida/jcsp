@@ -10,6 +10,7 @@ import org.jcsp.variables.Variable;
 import org.junit.jupiter.api.Test;
 
 import java.math.BigInteger;
+import java.util.List;
 import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -43,10 +44,7 @@ public class AustraliaMapColouringTest {
                 .notEqualsConstraint(SA, Q)
                 .notEqualsConstraint(SA, NSW)
                 .notEqualsConstraint(SA, V)
-                .notEqualsConstraint(WA, NT)
-                .notEqualsConstraint(NT, Q)
-                .notEqualsConstraint(Q, NSW)
-                .notEqualsConstraint(NSW, V)
+                .notEqualsChainConstraint(List.of(WA, NT, Q, NSW, V))
                 .build();
     }
 
