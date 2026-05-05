@@ -26,8 +26,8 @@ import static org.mockito.Mockito.when;
 @ExtendWith(MockitoExtension.class)
 public class CutsetConditioningSolverTest {
     static final Variable.Factory VARIABLE_FACTORY = Variable.Factory.INSTANCE;
-    static final Domain DOMAIN = new IntRangeDomain(1, 9);
-    static final Domain CONSTRAINED_DOMAIN = new IntRangeDomain(2, 9);
+    static final Domain DOMAIN = IntRangeDomain.of(1, 9);
+    static final Domain CONSTRAINED_DOMAIN = IntRangeDomain.of(2, 9);
     static final Assignment ASSIGNMENT = Assignment.EMPTY;
     static final Variable T1 = VARIABLE_FACTORY.create("T1"); // t variables form a tree
     static final Variable T2 = VARIABLE_FACTORY.create("T2");
@@ -120,7 +120,7 @@ public class CutsetConditioningSolverTest {
         val cutsetAssignment = Assignment.builder().value(C, 1).build();
         when(treeSolver.getSolutions(cutset)).thenReturn(Stream.of(cutsetAssignment));
 
-        val smallDomain = new IntRangeDomain(1, 1);
+        val smallDomain = IntRangeDomain.of(1, 1);
         // when 1 is removed from T1 domain there will be nothing left, hence no solution
         assertThat(cutsetConditioningSolver.getSolutions(CUTSET_CONDITIONING_PROBLEM.toBuilder().variableDomain(T1, smallDomain).build())).isEmpty();
     }

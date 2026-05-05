@@ -17,7 +17,7 @@ import java.util.stream.Collectors;
 import static org.assertj.core.api.Assertions.assertThat;
 
 public class SudokuTest {
-    static Domain DOMAIN = new IntRangeDomain(1, 9);
+    static Domain DOMAIN = IntRangeDomain.of(1, 9);
     static String[] ROWS = {"A", "B", "C", "D", "E", "F", "G", "H", "I"};
     static String[] COLUMNS = {"1", "2", "3", "4", "5", "6", "7", "8", "9"};
     static Variable[][] VARIABLES;

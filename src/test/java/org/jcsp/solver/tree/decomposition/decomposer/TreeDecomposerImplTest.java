@@ -13,7 +13,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 public class TreeDecomposerImplTest {
     static final Variable.Factory VARIABLE_FACTORY = Variable.Factory.INSTANCE;
-    static Domain DOMAIN = new IntRangeDomain(1, 3);
+    static Domain DOMAIN = IntRangeDomain.of(1, 3);
     static final Variable V0 = VARIABLE_FACTORY.create("V0");
     static final Variable V1 = VARIABLE_FACTORY.create("V1");
     static final Variable V2 = VARIABLE_FACTORY.create("V2");

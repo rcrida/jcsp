@@ -18,7 +18,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 public class NQueensTest {
     static int N = 8;
-    static Domain DOMAIN = new IntRangeDomain(1, N);
+    static Domain DOMAIN = IntRangeDomain.of(1, N);
     static Variable[] VARIABLES;
 
     public static ConstraintSatisfactionProblem nQueens() {

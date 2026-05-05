@@ -18,7 +18,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 public class UnaryNotEqualsConstraintTest {
     static final Object VALUE = 5;
-    static final Domain DOMAIN = new IntRangeDomain(0, 100);
+    static final Domain DOMAIN = IntRangeDomain.of(0, 100);
     static final Variable.Factory VARIABLE_FACTORY = Variable.Factory.INSTANCE;
 
     Variable variable = VARIABLE_FACTORY.create("variable");

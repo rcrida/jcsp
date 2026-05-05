@@ -9,7 +9,11 @@ import java.util.Set;
  * minimum and maximum bounds.
  */
 public class IntRangeDomain extends DomainObjectSet {
-    public IntRangeDomain(int minInclusive, int maxInclusive) {
+    public static IntRangeDomain of(int minInclusive, int maxInclusive) {
+        return new IntRangeDomain(minInclusive, maxInclusive);
+    }
+
+    private IntRangeDomain(int minInclusive, int maxInclusive) {
         super(populateRange(minInclusive, maxInclusive));
     }
 

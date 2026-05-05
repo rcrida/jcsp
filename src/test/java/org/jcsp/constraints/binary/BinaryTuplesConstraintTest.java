@@ -23,7 +23,7 @@ public class BinaryTuplesConstraintTest {
             BinaryTuple.of(2, 4),
             BinaryTuple.of(3, 9)
     );
-    static final Domain DOMAIN = new IntRangeDomain(0, 10);
+    static final Domain DOMAIN = IntRangeDomain.of(0, 10);
     static final Variable.Factory VARIABLE_FACTORY = Variable.Factory.INSTANCE;
 
     Variable left = VARIABLE_FACTORY.create("left");

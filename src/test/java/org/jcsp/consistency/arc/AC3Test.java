@@ -22,7 +22,7 @@ import static org.jcsp.solver.AustraliaMapColouringTest.WA;
 public class AC3Test {
     @Test
     void applyYEqualsX2() {
-        val domain = new IntRangeDomain(0, 10);
+        val domain = IntRangeDomain.of(0, 10);
         val tuples = List.of(
                 BinaryTuple.of(0, 0),
                 BinaryTuple.of(1, 1),
@@ -56,7 +56,7 @@ public class AC3Test {
 
     @Test
     void singleVariableNoConstraints() {
-        val domain = new IntRangeDomain(0, 5);
+        val domain = IntRangeDomain.of(0, 5);
         val builder = ConstraintSatisfactionProblem.builder();
         val variable = builder.createVariable("x", domain);
         builder.variableDomain(variable, domain);
@@ -115,7 +115,7 @@ public class AC3Test {
 
     @Test
     void inconsistent() {
-        val domain = new IntRangeDomain(0, 10);
+        val domain = IntRangeDomain.of(0, 10);
         val tuples = List.of(
                 BinaryTuple.of(0, 11)
         );

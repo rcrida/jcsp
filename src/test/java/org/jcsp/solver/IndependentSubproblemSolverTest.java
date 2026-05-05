@@ -20,10 +20,10 @@ public class IndependentSubproblemSolverTest {
 
     // Two independent subproblems: {V1 != V2} over {1,2,3} and {V3 != V4} over {1,2}
     static ConstraintSatisfactionProblem TWO_SUBPROBLEM_CSP = ConstraintSatisfactionProblem.builder()
-            .variableDomain(V1, new IntRangeDomain(1, 3))
-            .variableDomain(V2, new IntRangeDomain(1, 3))
-            .variableDomain(V3, new IntRangeDomain(1, 2))
-            .variableDomain(V4, new IntRangeDomain(1, 2))
+            .variableDomain(V1, IntRangeDomain.of(1, 3))
+            .variableDomain(V2, IntRangeDomain.of(1, 3))
+            .variableDomain(V3, IntRangeDomain.of(1, 2))
+            .variableDomain(V4, IntRangeDomain.of(1, 2))
             .notEqualsConstraint(V1, V2)
             .notEqualsConstraint(V3, V4)
             .build();
@@ -39,8 +39,8 @@ public class IndependentSubproblemSolverTest {
     @Test
     void getSolutions_singleSubproblem() {
         val csp = ConstraintSatisfactionProblem.builder()
-                .variableDomain(V1, new IntRangeDomain(1, 2))
-                .variableDomain(V2, new IntRangeDomain(1, 2))
+                .variableDomain(V1, IntRangeDomain.of(1, 2))
+                .variableDomain(V2, IntRangeDomain.of(1, 2))
                 .notEqualsConstraint(V1, V2)
                 .build();
         assertThat(solver.getSolutions(csp)).hasSize(2);
