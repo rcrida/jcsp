@@ -6,19 +6,20 @@ import lombok.val;
 import org.jcsp.ConstraintSatisfactionProblem;
 import org.jcsp.assignments.Assignment;
 import org.jcsp.constraints.Constraint;
+import org.jcsp.constraints.unary.UnaryConstraint;
 import org.jcsp.solver.assignmentfactory.InitialAssignmentFactory;
 import org.jcsp.variables.Variable;
 import org.jspecify.annotations.NonNull;
 
-import java.security.SecureRandom;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.function.Function;
+import java.util.concurrent.ThreadLocalRandom;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 /**
  * The {@code MinConflictsSolver} class implements the local search technique for solving
@@ -45,7 +46,6 @@ import java.util.stream.Collectors;
 @Slf4j
 @Value
 public class MinConflictsSolver implements LocalSolver {
-    private static final SecureRandom RANDOM = new SecureRandom();
     int maxSteps;
 
     @Override
@@ -77,13 +77,22 @@ public class MinConflictsSolver implements LocalSolver {
      * @return A variable that is in conflict based on the current assignment. If multiple
      *         variables are in conflict, a randomly selected one is returned.
      */
+    // Binary constraints expanded from n-ary constraints give better conflict granularity than
+    // treating an n-ary constraint as a single violation. Unary constraints are added separately
+    // as they have no binary representation.
+    private Stream<Constraint> conflictConstraints(@NonNull ConstraintSatisfactionProblem csp) {
+        return Stream.concat(
+                csp.getAllBinaryConstraints().stream(),
+                csp.getConstraints().stream().filter(c -> c instanceof UnaryConstraint));
+    }
+
     private @NonNull Variable selectConflictedVariable(@NonNull ConstraintSatisfactionProblem csp, @NonNull Assignment current) {
         val conflictedVariables = csp.getConstraints().stream()
                 .filter(Predicate.not(constraint -> constraint.isSatisfiedBy(current)))
                 .flatMap(constraint -> constraint.getVariables().stream())
                 .distinct()
                 .toList();
-        return conflictedVariables.get(RANDOM.nextInt(conflictedVariables.size()));
+        return conflictedVariables.get(ThreadLocalRandom.current().nextInt(conflictedVariables.size()));
     }
 
     /**
@@ -99,18 +108,19 @@ public class MinConflictsSolver implements LocalSolver {
      * @return The value from the variable's domain that minimizes the total weight of violated constraints.
      */
     private @NonNull Object minimizeConflicts(@NonNull ConstraintSatisfactionProblem csp, @NonNull Variable variable, @NonNull Assignment current, @NonNull Map<Constraint, Double> constraintWeights) {
-        val variableConstraints = csp.getAllBinaryConstraints().stream()
+        val variableConstraints = conflictConstraints(csp)
                 .filter(constraint -> constraint.getVariables().contains(variable))
                 .toList();
         val domain = csp.getVariableDomains().get(variable);
         val valueWeights = domain.stream()
                 .collect(Collectors.toMap(v -> v, v -> weighConflicts(variable, v, current, variableConstraints, constraintWeights)));
         log.debug("Value weights: {}", valueWeights);
-        val leastConflictedValue = valueWeights.entrySet().stream()
-                .min(Comparator.comparing((Function<Map.Entry<?, Double>, Double>) Map.Entry::getValue))
+        val minWeight = valueWeights.values().stream().min(Comparator.naturalOrder()).orElseThrow();
+        val leastConflictedValues = valueWeights.entrySet().stream()
+                .filter(e -> e.getValue().equals(minWeight))
                 .map(Map.Entry::getKey)
-                .orElseThrow();
-        return leastConflictedValue;
+                .toList();
+        return leastConflictedValues.get(ThreadLocalRandom.current().nextInt(leastConflictedValues.size()));
     }
 
     /**
@@ -149,7 +159,7 @@ public class MinConflictsSolver implements LocalSolver {
      *                check which constraints are not satisfied.
      */
     private void updateWeights(@NonNull ConstraintSatisfactionProblem csp, @NonNull Map<Constraint, Double> constraintWeights, @NonNull Assignment current) {
-        csp.getAllBinaryConstraints().stream()
+        conflictConstraints(csp)
                 .filter(Predicate.not(constraint -> constraint.isSatisfiedBy(current)))
                 .forEach(constraint -> {
                     val currentWeight = constraintWeights.getOrDefault(constraint, 1.0);

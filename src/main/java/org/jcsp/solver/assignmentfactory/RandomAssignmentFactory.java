@@ -6,7 +6,7 @@ import org.jcsp.assignments.Assignment;
 import org.jcsp.domains.Domain;
 import org.jspecify.annotations.NonNull;
 
-import java.security.SecureRandom;
+import java.util.concurrent.ThreadLocalRandom;
 
 /**
  * A factory implementation of the {@link InitialAssignmentFactory} interface that generates
@@ -18,8 +18,6 @@ import java.security.SecureRandom;
  * intended as a starting point for further refinement.
  */
 public class RandomAssignmentFactory implements InitialAssignmentFactory {
-    private static final SecureRandom RANDOM = new SecureRandom();
-
     @Override
     public Assignment getAssignment(@NonNull ConstraintSatisfactionProblem csp) {
         val builder = Assignment.builder();
@@ -29,6 +27,6 @@ public class RandomAssignmentFactory implements InitialAssignmentFactory {
 
     private Object getRandomValue(Domain domain) {
         val list = domain.stream().toList();
-        return list.get((int) RANDOM.nextLong(domain.size()));
+        return list.get(ThreadLocalRandom.current().nextInt(domain.size()));
     }
 }
