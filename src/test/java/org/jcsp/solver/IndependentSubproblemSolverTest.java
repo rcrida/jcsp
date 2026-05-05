@@ -8,7 +8,6 @@ import org.jcsp.variables.Variable;
 import org.junit.jupiter.api.Test;
 
 import java.util.concurrent.atomic.AtomicInteger;
-import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -61,14 +60,15 @@ public class IndependentSubproblemSolverTest {
     }
 
     @Test
-    void getSolutions_firstSolutionOnlyComputesFirstOfEachSubproblem() {
-        val callCount = new AtomicInteger();
-        Solver countingInner = csp -> Stream.of(inner.getSolutions(csp).findFirst().orElseThrow())
-                .peek(a -> callCount.incrementAndGet());
-        val counting = new IndependentSubproblemSolver(countingInner);
+    void getSolutions_innerSubproblemSolutionsCachedAcrossIterations() {
+        val elementCount = new AtomicInteger();
+        val counting = new IndependentSubproblemSolver(
+                csp -> inner.getSolutions(csp).peek(a -> elementCount.incrementAndGet()));
 
-        counting.getSolutions(TWO_SUBPROBLEM_CSP).findFirst();
+        counting.getSolutions(TWO_SUBPROBLEM_CSP).limit(3).toList();
 
-        assertThat(callCount.get()).isEqualTo(2);
+        // sp1 (V1!=V2 over {1,2,3}) contributes 2 elements, sp2 (V3!=V4 over {1,2}) has 2 elements
+        // computed once and replayed from cache for sp1's second element — 2+2=4 total
+        assertThat(elementCount.get()).isEqualTo(4);
     }
 }
