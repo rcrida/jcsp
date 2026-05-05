@@ -36,6 +36,10 @@ public class Assignment {
     @Singular
     Map<Variable, Object> values;
 
+    public static Assignment of(Variable variable, Object value) {
+        return Assignment.builder().value(variable, value).build();
+    }
+
     public static Assignment of(Map<Variable, Object> values) {
         return Assignment.builder().values(values).build();
     }

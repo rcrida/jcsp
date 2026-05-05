@@ -33,7 +33,6 @@ public class TreeSolver implements Solver {
     public Stream<Assignment> getSolutions(@NonNull ConstraintSatisfactionProblem tcsp) {
         assert tcsp.isTree();
         log.info("Searching {}", tcsp);
-        var assignment = Assignment.EMPTY;
         val rootVariableDomain = tcsp.getVariableDomains().entrySet().iterator().next();
         val root = rootVariableDomain.getKey();
         val X = topologicalSorter.sort(tcsp, root);
@@ -53,7 +52,7 @@ public class TreeSolver implements Solver {
         val domain = finalTcsp.getDomain(root).get();
         log.info("Domain {}", domain);
         return domain.stream()
-                .map(value -> assignment.withValue(root, value))
+                .map(value -> Assignment.of(root, value))
                 .flatMap(rootAssignment -> populateAssignment(finalTcsp, rootAssignment, unassignedVariableSelector));
     }
 
