@@ -28,21 +28,15 @@ public class TreeSolver implements Solver {
     public Stream<Assignment> getSolutions(@NonNull ConstraintSatisfactionProblem tcsp) {
         assert tcsp.isTree();
         log.info("Searching {}", tcsp);
-        val rootVariableDomain = tcsp.getVariableDomains().entrySet().iterator().next();
-        val root = rootVariableDomain.getKey();
+        val root = tcsp.getVariableDomains().entrySet().iterator().next().getKey();
         val X = topologicalSorter.sort(tcsp, root);
-        for (Arc arc_j : X.reversed()) {
-            val parentX_j = arc_j.getFrom();
-            val X_j = arc_j.getTo();
-            val optionalTcsp = makeArcConsistent(tcsp, parentX_j, X_j);
-            if (optionalTcsp.isPresent()) {
-                tcsp = optionalTcsp.get();
-            } else {
-                return Stream.empty();
-            }
-        }
-
-        val finalTcsp = tcsp;
+        val arcConsistentTcsp = X.reversed().stream()
+                .reduce(
+                        Optional.of(tcsp),
+                        (optCsp, arc) -> optCsp.flatMap(csp -> makeArcConsistent(csp, arc.getFrom(), arc.getTo())),
+                        (a, b) -> b);
+        if (arcConsistentTcsp.isEmpty()) return Stream.empty();
+        val finalTcsp = arcConsistentTcsp.get();
         val unassignedVariableSelector = selectorFactory.createSelector(X);
         val domain = finalTcsp.getDomain(root).get();
         log.info("Domain {}", domain);
