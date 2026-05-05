@@ -30,13 +30,13 @@ public class TreeSolver implements Solver {
         log.info("Searching {}", tcsp);
         val root = tcsp.getVariableDomains().entrySet().iterator().next().getKey();
         val X = topologicalSorter.sort(tcsp, root);
-        val arcConsistentTcsp = X.reversed().stream()
-                .reduce(
-                        Optional.of(tcsp),
-                        (optCsp, arc) -> optCsp.flatMap(csp -> makeArcConsistent(csp, arc.getFrom(), arc.getTo())),
-                        (a, b) -> b);
-        if (arcConsistentTcsp.isEmpty()) return Stream.empty();
-        val finalTcsp = arcConsistentTcsp.get();
+        var current = tcsp;
+        for (Arc arc : X.reversed()) {
+            val result = makeArcConsistent(current, arc.getFrom(), arc.getTo());
+            if (result.isEmpty()) return Stream.empty();
+            current = result.get();
+        }
+        val finalTcsp = current;
         val unassignedVariableSelector = selectorFactory.createSelector(X);
         val domain = finalTcsp.getDomain(root).get();
         log.info("Domain {}", domain);
