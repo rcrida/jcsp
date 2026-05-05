@@ -24,7 +24,7 @@ ConstraintSatisfactionProblem csp = ConstraintSatisfactionProblem.builder()
     .allDiffConstraint(v1, v2, v3)
     .build();
 
-Solver.Factory.create(csp).getSolutions().forEach(System.out::println);
+Solver.Factory.INSTANCE.createSolver().getSolutions(csp).forEach(System.out::println);
 ```
 
 ## Solver Chain
