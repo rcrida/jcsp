@@ -4,14 +4,20 @@ import lombok.val;
 import org.jcsp.ConstraintSatisfactionProblem;
 import org.jcsp.constraints.binary.BinaryTuplesConstraint;
 import org.jcsp.domains.DomainObjectSet;
+import org.jcsp.domains.EnumDomain;
 import org.jcsp.domains.IntRangeDomain;
 import org.jcsp.constraints.binary.BinaryTuple;
 import org.jcsp.solver.AustraliaMapColouringTest;
 import org.junit.jupiter.api.Test;
 
+import java.util.EnumSet;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.jcsp.solver.AustraliaMapColouringTest.Colour.GREEN;
+import static org.jcsp.solver.AustraliaMapColouringTest.Colour.RED;
+import static org.jcsp.solver.AustraliaMapColouringTest.NT;
+import static org.jcsp.solver.AustraliaMapColouringTest.WA;
 
 public class AC3Test {
     @Test
@@ -69,6 +75,42 @@ public class AC3Test {
         arcConstrainedProblem.getVariableDomains().keySet().stream().forEach(state -> {
             assertThat(arcConstrainedProblem.getVariableDomains().get(state)).isEqualTo(AustraliaMapColouringTest.DOMAIN);
         });
+    }
+
+    @Test
+    void reviseArc_revisedDomain() {
+        val twoColours = new EnumDomain(EnumSet.of(RED, GREEN));
+        val redOnly = new EnumDomain(EnumSet.of(RED));
+        val problem = ConstraintSatisfactionProblem.builder()
+                .variableDomain(WA, twoColours)
+                .variableDomain(NT, redOnly)
+                .notEqualsConstraint(WA, NT)
+                .build();
+        val result = AC3.INSTANCE.revise(problem, Arc.of(WA, NT));
+        assertThat(result.get().getDomain(WA).get().stream().toList()).isEqualTo(List.of(GREEN));
+    }
+
+    @Test
+    void reviseArc_noRevisionNeeded() {
+        val twoColours = new EnumDomain(EnumSet.of(RED, GREEN));
+        val problem = ConstraintSatisfactionProblem.builder()
+                .variableDomain(WA, twoColours)
+                .variableDomain(NT, twoColours)
+                .notEqualsConstraint(WA, NT)
+                .build();
+        val result = AC3.INSTANCE.revise(problem, Arc.of(WA, NT));
+        assertThat(result.get().getDomain(WA).get()).isEqualTo(twoColours);
+    }
+
+    @Test
+    void reviseArc_emptyDomain() {
+        val redOnly = new EnumDomain(EnumSet.of(RED));
+        val problem = ConstraintSatisfactionProblem.builder()
+                .variableDomain(WA, redOnly)
+                .variableDomain(NT, redOnly)
+                .notEqualsConstraint(WA, NT)
+                .build();
+        assertThat(AC3.INSTANCE.revise(problem, Arc.of(WA, NT))).isEmpty();
     }
 
     @Test

@@ -7,7 +7,6 @@ import org.jcsp.ConstraintSatisfactionProblem;
 import org.jcsp.assignments.Assignment;
 import org.jcsp.consistency.arc.AC3;
 import org.jcsp.consistency.arc.Arc;
-import org.jcsp.constraints.binary.BinaryConstraint;
 import org.jcsp.solver.backtrackingsearch.order.DomainValuesOrderer;
 import org.jcsp.solver.Solver;
 import org.jcsp.solver.tree.selector.TreeUnassignedVariableSelector;
@@ -15,11 +14,7 @@ import org.jcsp.solver.tree.sorter.TopologicalSorter;
 import org.jcsp.variables.Variable;
 import org.jspecify.annotations.NonNull;
 
-import java.util.AbstractMap;
-import java.util.HashMap;
-import java.util.Map;
 import java.util.Optional;
-import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 @Slf4j
@@ -57,25 +52,7 @@ public class TreeSolver implements Solver {
     }
 
     Optional<ConstraintSatisfactionProblem> makeArcConsistent(@NonNull ConstraintSatisfactionProblem tcsp, @NonNull Variable parent, @NonNull Variable node) {
-        val allBinaryConstraints = tcsp.getAllBinaryConstraints();
-        val arcConstraints = allBinaryConstraints.stream()
-                .flatMap(binaryConstraint -> binaryConstraint.getArcs()
-                        .map(arc -> new AbstractMap.SimpleEntry<>(arc, binaryConstraint)))
-                .collect(Collectors.groupingBy(Map.Entry::getKey, Collectors.mapping(Map.Entry::getValue, Collectors.toList())));
-        val arc = Arc.of(parent, node);
-        val variableDomains = new HashMap<>(tcsp.getVariableDomains());
-        for (BinaryConstraint binaryConstraint : arcConstraints.get(arc)) {
-            val optionalRevisedD = AC3.INSTANCE.revise(tcsp, arc, binaryConstraint);
-            if (optionalRevisedD.isPresent()) {
-                val revisedD = optionalRevisedD.get();
-                if (revisedD.isEmpty()) {
-                    log.warn("Domain of variable {} is empty after MAKE-ARC-CONSISTENT({}, {})", arc.getTo(), arc.getFrom(), arc.getTo());
-                    return Optional.empty();
-                }
-                variableDomains.put(parent, revisedD);
-            }
-        }
-        return Optional.of(tcsp.toBuilder().clearVariableDomains().variableDomains(variableDomains).build());
+        return AC3.INSTANCE.revise(tcsp, Arc.of(parent, node));
     }
 
     Stream<Assignment> populateAssignment(@NonNull ConstraintSatisfactionProblem tcsp, @NonNull Assignment assignment, @NonNull TreeUnassignedVariableSelector selector) {

@@ -65,6 +65,25 @@ public class AC3 implements ArcConsistency {
         return Optional.of(problem.toBuilder().variableDomains(variableDomains).build());
     }
 
+    public Optional<ConstraintSatisfactionProblem> revise(ConstraintSatisfactionProblem problem, Arc arc) {
+        val arcConstraints = problem.getAllBinaryConstraints().stream()
+                .filter(bc -> bc.getArcs().anyMatch(arc::equals))
+                .toList();
+        val variableDomains = new HashMap<>(problem.getVariableDomains());
+        for (BinaryConstraint binaryConstraint : arcConstraints) {
+            val optionalRevisedD = revise(problem, arc, binaryConstraint);
+            if (optionalRevisedD.isPresent()) {
+                val revisedD = optionalRevisedD.get();
+                if (revisedD.isEmpty()) {
+                    log.warn("Domain of variable {} is empty after revising arc {}", arc.getFrom(), arc);
+                    return Optional.empty();
+                }
+                variableDomains.put(arc.getFrom(), revisedD);
+            }
+        }
+        return Optional.of(problem.toBuilder().variableDomains(variableDomains).build());
+    }
+
     public Optional<Domain> revise(ConstraintSatisfactionProblem problem, Arc arc, BinaryConstraint constraint) {
         val D_i = problem.getVariableDomains().get(arc.getFrom());
         val D_j = problem.getVariableDomains().get(arc.getTo());
