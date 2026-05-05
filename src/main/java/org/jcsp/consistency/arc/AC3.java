@@ -7,7 +7,6 @@ import org.jcsp.constraints.binary.BinaryConstraint;
 import org.jcsp.domains.Domain;
 
 import java.util.*;
-import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Collectors;
 
 /**
@@ -21,7 +20,7 @@ import java.util.stream.Collectors;
  */
 @Slf4j
 public class AC3 implements ArcConsistency {
-    public static AC3 INSTANCE = new AC3();
+    public static final AC3 INSTANCE = new AC3();
 
     private AC3() {}
 
@@ -68,15 +67,13 @@ public class AC3 implements ArcConsistency {
 
     public Optional<Domain> revise(ConstraintSatisfactionProblem problem, Arc arc, BinaryConstraint constraint) {
         val D_i = problem.getVariableDomains().get(arc.getFrom());
-        val revised = new AtomicBoolean(false);
-        val revisedD_iBuilder = D_i.toBuilder();
-        D_i.stream().forEach(x -> {
-            val domain2 = problem.getVariableDomains().get(arc.getTo());
-            if (domain2.stream().noneMatch(y -> constraint.isSatisfiedBy(arc.toAssignment(x, y)))) {
-                revisedD_iBuilder.delete(x);
-                revised.set(true);
-            }
-        });
-        return revised.get() ? Optional.of(revisedD_iBuilder.build()) : Optional.empty();
+        val D_j = problem.getVariableDomains().get(arc.getTo());
+        val valuesToDelete = D_i.stream()
+                .filter(x -> D_j.stream().noneMatch(y -> constraint.isSatisfiedBy(arc.toAssignment(x, y))))
+                .toList();
+        if (valuesToDelete.isEmpty()) return Optional.empty();
+        val revisedBuilder = D_i.toBuilder();
+        valuesToDelete.forEach(revisedBuilder::delete);
+        return Optional.of(revisedBuilder.build());
     }
 }

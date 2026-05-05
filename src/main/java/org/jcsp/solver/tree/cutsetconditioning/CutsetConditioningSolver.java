@@ -71,13 +71,12 @@ public class CutsetConditioningSolver implements Solver {
         }
 
         private Domain revise(@NonNull Variable X_i, @NonNull Domain D_i, @NonNull Assignment cutsetAssignment, @NonNull Constraint constraint) {
-            val revisedD_iBuilder = D_i.toBuilder();
-            D_i.stream().forEach(x -> {
-                if (!constraint.isSatisfiedBy(cutsetAssignment.withValue(X_i, x))) {
-                    revisedD_iBuilder.delete(x);
-                }
-            });
-            return revisedD_iBuilder.build();
+            val valuesToDelete = D_i.stream()
+                    .filter(x -> !constraint.isSatisfiedBy(cutsetAssignment.withValue(X_i, x)))
+                    .toList();
+            val revisedBuilder = D_i.toBuilder();
+            valuesToDelete.forEach(revisedBuilder::delete);
+            return revisedBuilder.build();
         }
     }
 
