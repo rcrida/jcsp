@@ -40,8 +40,9 @@ public class TreeSolver implements Solver {
         val unassignedVariableSelector = selectorFactory.createSelector(X);
         val domain = finalTcsp.getDomain(root).get();
         log.info("Domain {}", domain);
+        val start = Assignment.empty();
         return domain.stream()
-                .map(value -> Assignment.of(root, value))
+                .map(value -> start.withValue(root, value))
                 .flatMap(rootAssignment -> populateAssignment(finalTcsp, rootAssignment, unassignedVariableSelector));
     }
 

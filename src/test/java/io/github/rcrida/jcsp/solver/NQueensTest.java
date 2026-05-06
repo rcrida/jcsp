@@ -63,6 +63,7 @@ public class NQueensTest {
         val solver = Solver.Factory.INSTANCE.createSolver();
         val optionalSolution = solver.getSolution(csp);
         printAssignment(optionalSolution.orElseThrow());
+        System.out.println(optionalSolution.orElseThrow().getStatistics());
     }
 
     @Test

@@ -31,7 +31,7 @@ public class AssignmentTest {
 
     @Test
     void empty() {
-        assertThat(Assignment.EMPTY.getValues()).isEmpty();
+        assertThat(Assignment.empty().getValues()).isEmpty();
     }
 
     @Test
@@ -59,12 +59,43 @@ public class AssignmentTest {
     }
 
     @Test
+    void withValueIncrementsNodesExplored() {
+        val assignment = Assignment.empty();
+        val next = assignment.withValue(variable, value);
+        assertThat(assignment.getStatistics().getNodesExplored().get()).isEqualTo(1);
+        assertThat(next.getStatistics()).isSameAs(assignment.getStatistics());
+    }
+
+    @Test
     void merge() {
         val assignment1 = Assignment.of(Map.of(variable, value));
         val assignment2 = Assignment.of(Map.of(anotherVariable, anotherValue));
         assertThat(assignment1.merge(assignment2)).satisfies(merged -> {
             assertThat(merged.getValues()).containsExactlyInAnyOrderEntriesOf(Map.of(variable, value, anotherVariable, anotherValue));
         });
+    }
+
+    @Test
+    void mergeAccumulatesStatistics() {
+        val assignment1 = Assignment.empty();
+        assignment1.getStatistics().incrementNodesExplored();
+        val assignment2 = Assignment.empty();
+        assignment2.getStatistics().incrementConstraintChecks();
+        val merged = assignment1.merge(assignment2);
+        assertThat(merged.getStatistics().getNodesExplored().get()).isEqualTo(1);
+        assertThat(merged.getStatistics().getConstraintChecks().get()).isEqualTo(1);
+    }
+
+    @Test
+    void isConsistentIncrementsConstraintChecks() {
+        when(domain.contains(value)).thenReturn(true);
+        val assignment = Assignment.of(Map.of(variable, value));
+        val csp = ConstraintSatisfactionProblem.builder()
+                .variableDomain(variable, domain)
+                .notEqualsConstraint(variable, anotherValue)
+                .build();
+        assignment.isConsistent(csp);
+        assertThat(assignment.getStatistics().getConstraintChecks().get()).isEqualTo(1);
     }
 
     @Test

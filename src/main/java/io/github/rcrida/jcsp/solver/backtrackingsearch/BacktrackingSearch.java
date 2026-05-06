@@ -40,7 +40,7 @@ public class BacktrackingSearch implements Solver {
 
     @Override
     public Stream<Assignment> getSolutions(ConstraintSatisfactionProblem csp) {
-        return searchStream(csp, Assignment.EMPTY);
+        return searchStream(csp, Assignment.empty());
     }
 
     private Stream<Assignment> searchStream(ConstraintSatisfactionProblem csp, Assignment assignment) {

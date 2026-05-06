@@ -33,7 +33,7 @@ public class TopologicalUnassignedVariableSelectorTest {
 
     static Stream<Arguments> select() {
         return Stream.of(
-                Arguments.of(Assignment.EMPTY, B),
+                Arguments.of(Assignment.empty(), B),
                 Arguments.of(Assignment.of(Map.of(A, 1)), B)
         );
     }
@@ -53,7 +53,7 @@ public class TopologicalUnassignedVariableSelectorTest {
 
     @Test
     void select_assertIsTree() {
-        assertThatThrownBy(() -> selector.select(ConstraintSatisfactionProblem.builder().build(), Assignment.EMPTY))
+        assertThatThrownBy(() -> selector.select(ConstraintSatisfactionProblem.builder().build(), Assignment.empty()))
                 .isInstanceOf(AssertionError.class);
     }
 }

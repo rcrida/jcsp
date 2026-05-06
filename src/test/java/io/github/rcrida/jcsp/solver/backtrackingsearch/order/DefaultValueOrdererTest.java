@@ -22,11 +22,11 @@ public class DefaultValueOrdererTest {
 
     @Test
     void order() {
-        assertThat(DefaultValueOrderer.INSTANCE.order(CSP, A, Assignment.EMPTY).toList()).isEqualTo(List.of(1, 2, 3));
+        assertThat(DefaultValueOrderer.INSTANCE.order(CSP, A, Assignment.empty()).toList()).isEqualTo(List.of(1, 2, 3));
     }
 
     @Test
     void order_unknownVariable() {
-        assertThat(DefaultValueOrderer.INSTANCE.order(CSP, B, Assignment.EMPTY)).isEmpty();
+        assertThat(DefaultValueOrderer.INSTANCE.order(CSP, B, Assignment.empty())).isEmpty();
     }
 }

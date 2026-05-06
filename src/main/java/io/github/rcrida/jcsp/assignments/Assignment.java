@@ -1,7 +1,9 @@
 package io.github.rcrida.jcsp.assignments;
 
 import lombok.Builder;
+import lombok.EqualsAndHashCode;
 import lombok.Singular;
+import lombok.ToString;
 import lombok.Value;
 import lombok.extern.slf4j.Slf4j;
 import lombok.val;
@@ -14,31 +16,20 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 
-/**
- * Represents an immutable mapping of variables to their assigned values. This class ensures
- * that all assigned values comply with the constraints set by the variables' respective domains.
- * <p>
- * The {@code Assignment} class performs validation at construction time to ensure that
- * every assigned value is consistent with the variable's domain. If an invalid value is
- * detected, an {@code AssertionError} is thrown.
- * <p>
- * Example scenarios where this class may be used include:
- * - Representing a partial or complete assignment of values for a set of variables in a
- *   constraint satisfaction problem.
- * - Validating whether a value assignment satisfies specific constraints.
- */
 @Slf4j
 @Value
 @Builder(toBuilder = true)
 public class Assignment {
-    public static Assignment EMPTY = Assignment.builder().build();
+    public static Assignment empty() {
+        return Assignment.builder().build();
+    }
 
     @Singular
     Map<Variable, Object> values;
 
-    public static Assignment of(Variable variable, Object value) {
-        return Assignment.builder().value(variable, value).build();
-    }
+    @EqualsAndHashCode.Exclude
+    @Builder.Default
+    Statistics statistics = new Statistics();
 
     public static Assignment of(Map<Variable, Object> values) {
         return Assignment.builder().values(values).build();
@@ -57,21 +48,26 @@ public class Assignment {
     }
 
     public Assignment withValue(@NonNull Variable variable, @NonNull Object value) {
-        return toBuilder()
-                .value(variable, value)
-                .build();
+        val next = toBuilder().value(variable, value).build();
+        next.statistics.incrementNodesExplored();
+        return next;
     }
 
     public Assignment merge(@NonNull Assignment another) {
         val builder = toBuilder();
         builder.values(another.getValues());
-        return builder.build();
+        val merged = builder.build();
+        merged.statistics.add(another.statistics);
+        return merged;
     }
 
     public boolean isConsistent(ConstraintSatisfactionProblem csp) {
         validateAssignment(csp);
         return csp.getConstraints().stream()
-                .allMatch(constraint -> constraint.isSatisfiedBy(this));
+                .allMatch(constraint -> {
+                    statistics.incrementConstraintChecks();
+                    return constraint.isSatisfiedBy(this);
+                });
     }
 
     public boolean isComplete(ConstraintSatisfactionProblem csp) {

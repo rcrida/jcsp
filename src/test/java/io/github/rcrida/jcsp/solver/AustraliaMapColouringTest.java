@@ -54,21 +54,24 @@ public class AustraliaMapColouringTest {
         assertThat(csp.getSearchSpace()).isEqualTo(BigInteger.valueOf(2187));
         val optionalSolution = Solver.Factory.INSTANCE.createSolver().getSolution(csp);
         System.out.println(optionalSolution);
-        assertThat(optionalSolution).hasValueSatisfying(value ->
-                assertThat(value).isIn(
-                        Assignment.of(Map.of(
-                                WA, Colour.RED, NT, Colour.GREEN, Q, Colour.RED, NSW, Colour.GREEN, V, Colour.RED, SA, Colour.BLUE, T, Colour.RED)),
-                        Assignment.of(Map.of(
-                                WA, Colour.RED, NT, Colour.BLUE, Q, Colour.RED, NSW, Colour.BLUE, V, Colour.RED, SA, Colour.GREEN, T, Colour.RED)),
-                        Assignment.of(Map.of(
-                                WA, Colour.BLUE, NT, Colour.RED, Q, Colour.BLUE, NSW, Colour.RED, V, Colour.BLUE, SA, Colour.GREEN, T, Colour.RED)),
-                        Assignment.of(Map.of(
-                                WA, Colour.GREEN, NT, Colour.RED, Q, Colour.GREEN, NSW, Colour.RED, V, Colour.GREEN, SA, Colour.BLUE, T, Colour.RED)),
-                        Assignment.of(Map.of(
-                                WA, Colour.GREEN, NT, Colour.BLUE, Q, Colour.GREEN, NSW, Colour.BLUE, V, Colour.GREEN, SA, Colour.RED, T, Colour.RED)),
-                        Assignment.of(Map.of(
-                                WA, Colour.BLUE, NT, Colour.GREEN, Q, Colour.BLUE, NSW, Colour.GREEN, V, Colour.BLUE, SA, Colour.RED, T, Colour.RED))
-                ));
+        assertThat(optionalSolution).hasValueSatisfying(value -> {
+                    assertThat(value).isIn(
+                            Assignment.of(Map.of(
+                                    WA, Colour.RED, NT, Colour.GREEN, Q, Colour.RED, NSW, Colour.GREEN, V, Colour.RED, SA, Colour.BLUE, T, Colour.RED)),
+                            Assignment.of(Map.of(
+                                    WA, Colour.RED, NT, Colour.BLUE, Q, Colour.RED, NSW, Colour.BLUE, V, Colour.RED, SA, Colour.GREEN, T, Colour.RED)),
+                            Assignment.of(Map.of(
+                                    WA, Colour.BLUE, NT, Colour.RED, Q, Colour.BLUE, NSW, Colour.RED, V, Colour.BLUE, SA, Colour.GREEN, T, Colour.RED)),
+                            Assignment.of(Map.of(
+                                    WA, Colour.GREEN, NT, Colour.RED, Q, Colour.GREEN, NSW, Colour.RED, V, Colour.GREEN, SA, Colour.BLUE, T, Colour.RED)),
+                            Assignment.of(Map.of(
+                                    WA, Colour.GREEN, NT, Colour.BLUE, Q, Colour.GREEN, NSW, Colour.BLUE, V, Colour.GREEN, SA, Colour.RED, T, Colour.RED)),
+                            Assignment.of(Map.of(
+                                    WA, Colour.BLUE, NT, Colour.GREEN, Q, Colour.BLUE, NSW, Colour.GREEN, V, Colour.BLUE, SA, Colour.RED, T, Colour.RED)));
+                    assertThat(value.getStatistics().getNodesExplored().get()).isLessThanOrEqualTo(6);
+                    assertThat(value.getStatistics().getConstraintChecks().get()).isLessThanOrEqualTo(254);
+                }
+        );
     }
 
     @Test

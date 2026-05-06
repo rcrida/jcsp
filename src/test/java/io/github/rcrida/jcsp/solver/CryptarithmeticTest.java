@@ -78,17 +78,21 @@ public class CryptarithmeticTest {
         val solver = Solver.Factory.INSTANCE.createSolver();
         val optionalSolution = solver.getSolution(csp);
         System.out.println(optionalSolution);
-        assertThat(optionalSolution).contains(Assignment.of(Map.of(
-                t, 7,
-                w, 3,
-                o, 4,
-                f, 1,
-                u, 6,
-                r, 8,
-                c1, 0,
-                c2, 0,
-                c3, 1
-        )));
+        assertThat(optionalSolution).hasValueSatisfying(value -> {
+            assertThat(value).isEqualTo(Assignment.of(Map.of(
+                    t, 7,
+                    w, 3,
+                    o, 4,
+                    f, 1,
+                    u, 6,
+                    r, 8,
+                    c1, 0,
+                    c2, 0,
+                    c3, 1
+            )));
+            assertThat(value.getStatistics().getNodesExplored().get()).isLessThanOrEqualTo(477);
+            assertThat(value.getStatistics().getConstraintChecks().get()).isLessThanOrEqualTo(1790);
+        });
     }
 
     @Test

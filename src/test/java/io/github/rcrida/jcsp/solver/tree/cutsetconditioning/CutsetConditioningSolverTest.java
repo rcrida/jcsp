@@ -28,7 +28,7 @@ public class CutsetConditioningSolverTest {
     static final Variable.Factory VARIABLE_FACTORY = Variable.Factory.INSTANCE;
     static final Domain DOMAIN = IntRangeDomain.of(1, 9);
     static final Domain CONSTRAINED_DOMAIN = IntRangeDomain.of(2, 9);
-    static final Assignment ASSIGNMENT = Assignment.EMPTY;
+    static final Assignment ASSIGNMENT = Assignment.empty();
     static final Variable T1 = VARIABLE_FACTORY.create("T1"); // t variables form a tree
     static final Variable T2 = VARIABLE_FACTORY.create("T2");
     static final Variable T3 = VARIABLE_FACTORY.create("T3");
@@ -63,8 +63,8 @@ public class CutsetConditioningSolverTest {
     @Test
     void getSolutions_empty() {
         val emptyCsp = EmptyTest.problem();
-        when(cycleCutsetSolver.getSolutions(emptyCsp)).thenReturn(Stream.of(Assignment.EMPTY));
-        assertThat(cutsetConditioningSolver.getSolutions(emptyCsp)).containsExactly(Assignment.EMPTY);
+        when(cycleCutsetSolver.getSolutions(emptyCsp)).thenReturn(Stream.of(Assignment.empty()));
+        assertThat(cutsetConditioningSolver.getSolutions(emptyCsp)).containsExactly(Assignment.empty());
     }
 
     @Test

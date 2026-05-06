@@ -14,6 +14,7 @@ import java.util.HashSet;
 import java.util.Set;
 import java.util.stream.Collectors;
 
+import static org.assertj.core.api.Assertions.as;
 import static org.assertj.core.api.Assertions.assertThat;
 
 public class SudokuTest {
@@ -87,8 +88,11 @@ public class SudokuTest {
         val csp = sudoku();
         assertThat(csp.getSearchSpace()).isEqualTo(new BigInteger("196627050475552913618075908526912116283103450944214766927315415537966391196809"));
         val solver = Solver.Factory.INSTANCE.createSolver();
-        val optionalSolution = solver.getSolution(csp).map(this::extractArray);
-        optionalSolution.ifPresent(SudokuTest::print2dArray);
+        val optionalSolution = solver.getSolution(csp);
+        optionalSolution.ifPresent(assignment -> {
+            print2dArray(extractArray(assignment));
+            System.out.println(assignment.getStatistics());
+        });
     }
 
     private int[][] extractArray(Assignment assignment) {

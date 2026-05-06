@@ -38,6 +38,6 @@ public class TreeDecompositionSolver implements Solver {
     private Assignment recomposeAssignment(@NonNull Assignment treeAssignment) {
         return treeAssignment.getValues().values().stream()
                 .map(a -> (Assignment) a)
-                .reduce(Assignment.EMPTY, Assignment::merge);
+                .reduce(Assignment.empty(), Assignment::merge);
     }
 }
