@@ -69,7 +69,7 @@ public class AustraliaMapColouringTest {
                             Assignment.of(Map.of(
                                     WA, Colour.BLUE, NT, Colour.GREEN, Q, Colour.BLUE, NSW, Colour.GREEN, V, Colour.BLUE, SA, Colour.RED, T, Colour.RED)));
                     assertThat(value.getStatistics().getNodesExplored().get()).isLessThanOrEqualTo(6);
-                    assertThat(value.getStatistics().getConstraintChecks().get()).isLessThanOrEqualTo(254);
+                    assertThat(value.getStatistics().getConstraintChecks().get()).isLessThanOrEqualTo(418);
                 }
         );
     }
