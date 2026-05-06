@@ -12,6 +12,14 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 </dependency>
 ```
 
+## Publishing
+
+```bash
+mvn deploy    # Sign, package, and publish to Maven Central
+```
+
+Requires GPG key and Maven Central token in `~/.m2/settings.xml` under server id `central`.
+
 ## Build & Test Commands
 
 ```bash
