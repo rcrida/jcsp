@@ -1,5 +1,7 @@
 # CSP — Constraint Satisfaction Problem Solver
 
+[![Maven Central](https://img.shields.io/maven-central/v/io.github.rcrida/jcsp)](https://central.sonatype.com/artifact/io.github.rcrida/jcsp)
+
 A Java library implementing classic AI algorithms for solving Constraint Satisfaction Problems (CSPs).
 
 ## Features
@@ -34,6 +36,16 @@ The default solver applies strategies in order, each preprocessing the problem b
 ```
 NodeConsistency → ArcConsistency (AC3) → IndependentSubproblems
     → TreeDecomposition → CutsetConditioning → TreeSolver / BacktrackingSearch
+```
+
+## Installation
+
+```xml
+<dependency>
+    <groupId>io.github.rcrida</groupId>
+    <artifactId>jcsp</artifactId>
+    <version>2.0.0</version>
+</dependency>
 ```
 
 ## Building
