@@ -2,6 +2,16 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Maven Coordinates
+
+```xml
+<dependency>
+    <groupId>io.github.rcrida</groupId>
+    <artifactId>jcsp</artifactId>
+    <version>2.0.0</version>
+</dependency>
+```
+
 ## Build & Test Commands
 
 ```bash
