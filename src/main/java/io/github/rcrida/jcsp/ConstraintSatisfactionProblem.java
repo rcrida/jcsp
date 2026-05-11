@@ -410,7 +410,7 @@ public class ConstraintSatisfactionProblem {
          *
          * @param left the first variable
          * @param offset numerical offset, should have same type as variable domain, can be positive or negative, will be added
-         * @param operator the type of comparison to perform, eg ==, !=, <, <=, >=, >
+         * @param operator the type of comparison to perform, eg ==, !=, &lt;, &lt;=, &gt;=, &gt;
          * @param right the second variable
          * @return the builder
          */

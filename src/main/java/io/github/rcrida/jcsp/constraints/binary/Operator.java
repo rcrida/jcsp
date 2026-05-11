@@ -8,10 +8,10 @@ package io.github.rcrida.jcsp.constraints.binary;
  * The operators include:
  * - EQ: Equal to (==)
  * - NEQ: Not equal to (!=)
- * - LT: Less than (<)
- * - GT: Greater than (>)
- * - LEQ: Less than or equal to (<=)
- * - GEQ: Greater than or equal to (>=)
+ * - LT: Less than (&lt;)
+ * - GT: Greater than (&gt;)
+ * - LEQ: Less than or equal to (&lt;=)
+ * - GEQ: Greater than or equal to (&gt;=)
  *<p>
  * Instances of this enum are capable of comparing two objects based on their type.
  * For objects that implement the {@link Comparable} interface, comparisons are done
