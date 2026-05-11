@@ -18,6 +18,8 @@ import java.util.Optional;
 import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -25,6 +27,7 @@ public class TreeDecompositionSolverTest {
     static final Variable.Factory F = Variable.Factory.INSTANCE;
 
     // Original problem: 5 variables, domain 1-10 → search space = 10^5 = 100,000
+    // With targetTreewidth=7: maxDomainSize = min(10^7, 1_000_000) = 1,000,000
     static final Variable V1 = F.create("v1");
     static final Variable V2 = F.create("v2");
     static final Variable V3 = F.create("v3");
@@ -71,14 +74,14 @@ public class TreeDecompositionSolverTest {
 
     @BeforeEach
     void setUp() {
-        solver = new TreeDecompositionSolver(treeDecomposer, treeSolver, defaultSolver, 1024);
+        solver = new TreeDecompositionSolver(treeDecomposer, treeSolver, defaultSolver, 7);
     }
 
     @Test
     void getSolutions_decompositionApplied() {
         val originalAssignment = Assignment.of(Map.of(V1, 1, V2, 2));
         val treeSolution = Assignment.builder().value(C1, originalAssignment).build();
-        when(treeDecomposer.decompose(ORIGINAL_CSP, 1024)).thenReturn(Optional.of(TREE_CSP));
+        when(treeDecomposer.decompose(eq(ORIGINAL_CSP), anyInt())).thenReturn(Optional.of(TREE_CSP));
         when(treeSolver.getSolutions(TREE_CSP)).thenReturn(Stream.of(treeSolution));
 
         assertThat(solver.getSolutions(ORIGINAL_CSP)).containsExactly(originalAssignment);
@@ -87,7 +90,7 @@ public class TreeDecompositionSolverTest {
     @Test
     void getSolutions_decompositionSkippedDueToComplexity() {
         val fallbackAssignment = Assignment.of(Map.of(S1, 1));
-        when(treeDecomposer.decompose(SMALL_ORIGINAL_CSP, 1024)).thenReturn(Optional.of(EXPENSIVE_TREE_CSP));
+        when(treeDecomposer.decompose(eq(SMALL_ORIGINAL_CSP), anyInt())).thenReturn(Optional.of(EXPENSIVE_TREE_CSP));
         when(defaultSolver.getSolutions(SMALL_ORIGINAL_CSP)).thenReturn(Stream.of(fallbackAssignment));
 
         assertThat(solver.getSolutions(SMALL_ORIGINAL_CSP)).containsExactly(fallbackAssignment);
@@ -96,10 +99,37 @@ public class TreeDecompositionSolverTest {
     @Test
     void getSolutions_noDecomposition() {
         val fallbackAssignment = Assignment.of(Map.of(V1, 1));
-        when(treeDecomposer.decompose(ORIGINAL_CSP, 1024)).thenReturn(Optional.empty());
+        when(treeDecomposer.decompose(eq(ORIGINAL_CSP), anyInt())).thenReturn(Optional.empty());
         when(defaultSolver.getSolutions(ORIGINAL_CSP)).thenReturn(Stream.of(fallbackAssignment));
 
         assertThat(solver.getSolutions(ORIGINAL_CSP)).containsExactly(fallbackAssignment);
+    }
+
+    @Test
+    void maxDomainSizeScalesWithDomainSize() {
+        // d=2, tw=7: min(2^7, 1_000_000) = 128
+        // d=3, tw=7: min(3^7, 1_000_000) = 2187
+        // d=10, tw=7: min(10^7, 1_000_000) = 1_000_000 (capped)
+        val binaryDomainCsp = ConstraintSatisfactionProblem.builder()
+                .variableDomain(V1, IntRangeDomain.of(1, 2))
+                .build();
+        val ternaryDomainCsp = ConstraintSatisfactionProblem.builder()
+                .variableDomain(V1, IntRangeDomain.of(1, 3))
+                .build();
+        val largeDomainCsp = ConstraintSatisfactionProblem.builder()
+                .variableDomain(V1, IntRangeDomain.of(1, 10))
+                .build();
+        when(treeDecomposer.decompose(eq(binaryDomainCsp), eq(128))).thenReturn(Optional.empty());
+        when(treeDecomposer.decompose(eq(ternaryDomainCsp), eq(2187))).thenReturn(Optional.empty());
+        when(treeDecomposer.decompose(eq(largeDomainCsp), eq(1_000_000))).thenReturn(Optional.empty());
+        when(defaultSolver.getSolutions(binaryDomainCsp)).thenReturn(Stream.empty());
+        when(defaultSolver.getSolutions(ternaryDomainCsp)).thenReturn(Stream.empty());
+        when(defaultSolver.getSolutions(largeDomainCsp)).thenReturn(Stream.empty());
+
+        solver.getSolutions(binaryDomainCsp).toList();
+        solver.getSolutions(ternaryDomainCsp).toList();
+        solver.getSolutions(largeDomainCsp).toList();
+        // Mockito verifies that decompose was called with the expected maxDomainSize values
     }
 
     @Test

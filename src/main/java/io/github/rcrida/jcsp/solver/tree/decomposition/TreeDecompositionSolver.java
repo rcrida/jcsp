@@ -14,18 +14,31 @@ import java.util.Comparator;
 import java.util.stream.Stream;
 
 /**
- * Transforms a problem into a tree representation by creating groups of variables (clique/junction tree)
+ * Transforms a problem into a tree representation by creating groups of variables (clique/junction tree).
+ *
+ * <p>The clique domain size limit is computed as {@code d^targetTreewidth} (capped at
+ * {@value #MAX_DOMAIN_SIZE_CAP}), where {@code d} is the largest variable domain in the problem.
+ * This makes the bound domain-aware: binary problems tolerate higher effective treewidth than
+ * large-domain ones within the same memory budget.
  */
 @Slf4j
 @Value
 public class TreeDecompositionSolver implements Solver {
+    static final int MAX_DOMAIN_SIZE_CAP = 1_000_000;
+
     @NonNull TreeDecomposer treeDecomposer;
     @NonNull Solver treeSolver;
     @NonNull Solver defaultSolver;
-    int maxDomainSize;
+    int targetTreewidth;
 
     @Override
     public Stream<Assignment> getSolutions(@NonNull ConstraintSatisfactionProblem csp) {
+        int d = csp.getVariableDomains().values().stream()
+                .mapToInt(Domain::size)
+                .max()
+                .orElse(1);
+        int maxDomainSize = (int) Math.min(Math.pow(d, targetTreewidth), MAX_DOMAIN_SIZE_CAP);
+        log.info("d={}, targetTreewidth={}, maxDomainSize={}", d, targetTreewidth, maxDomainSize);
         return treeDecomposer.decompose(csp, maxDomainSize)
                 .filter(treeCsp -> shouldApplyDecomposition(treeCsp, csp))
                 .map(treeCsp -> treeSolver.getSolutions(treeCsp).map(this::recomposeAssignment))
