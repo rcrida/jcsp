@@ -6,27 +6,40 @@ A Java library implementing classic AI algorithms for solving Constraint Satisfa
 
 ## Features
 
-- **Multiple solving strategies**: backtracking search, tree solver, cutset conditioning, tree decomposition, independent subproblem decomposition, and min-conflicts local search
+- **Multiple solving strategies**: backtracking search, tree solver, cutset conditioning, tree decomposition, and independent subproblem decomposition
 - **Consistency preprocessing**: AC3 arc consistency and node consistency for domain pruning
 - **Flexible constraint types**: unary, binary (equals, not-equals, offset, predicate, tuples), and n-ary (AllDiff, predicate)
 - **Functional style**: immutable value objects, composable solver decorators, and a lazy `Stream<Assignment>` API throughout
-- **Heuristics**: Minimum Remaining Values (MRV) variable selection and Least Constraining Value (LCV) ordering
+- **Heuristics**: MRV variable selection, LCV value ordering, and Minimum Degree variable elimination for tree decomposition
 
 ## Usage
 
 ```java
-Variable v1 = Variable.Factory.INSTANCE.create("V1");
-Variable v2 = Variable.Factory.INSTANCE.create("V2");
-Variable v3 = Variable.Factory.INSTANCE.create("V3");
+Variable.Factory F = Variable.Factory.INSTANCE;
+Variable v1 = F.create("v1");
+Variable v2 = F.create("v2");
+Variable v3 = F.create("v3");
 
 ConstraintSatisfactionProblem csp = ConstraintSatisfactionProblem.builder()
-    .variable(v1).domain(v1, IntRangeDomain.of(1, 3))
-    .variable(v2).domain(v2, IntRangeDomain.of(1, 3))
-    .variable(v3).domain(v3, IntRangeDomain.of(1, 3))
+    .variableDomain(v1, IntRangeDomain.of(1, 3))
+    .variableDomain(v2, IntRangeDomain.of(1, 3))
+    .variableDomain(v3, IntRangeDomain.of(1, 3))
     .allDiffConstraint(v1, v2, v3)
     .build();
 
 Solver.Factory.INSTANCE.createSolver().getSolutions(csp).forEach(System.out::println);
+```
+
+### Constraint builder methods
+
+```java
+builder.equalsConstraint(v1, v2)                       // v1 == v2
+builder.notEqualsConstraint(v1, v2)                    // v1 != v2
+builder.notEqualsChainConstraint(v1, v2, v3)           // AllDiff over a chain
+builder.allDiffConstraint(v1, v2, v3)                  // all different
+builder.offsetConstraint(v1, v2, offset)               // v1 == v2 + offset
+builder.biPredicateConstraint(v1, v2, predicate)       // custom binary predicate
+builder.predicateConstraint(predicate, v1, v2, v3)     // custom n-ary predicate
 ```
 
 ## Solver Chain
@@ -38,13 +51,15 @@ NodeConsistency → ArcConsistency (AC3) → IndependentSubproblems
     → TreeDecomposition → CutsetConditioning → TreeSolver / BacktrackingSearch
 ```
 
+Tree decomposition uses a domain-aware clique size limit (`d^targetTreewidth`, capped at 1,000,000) and only applies when the estimated tree complexity is less than the original search space. Cutset conditioning applies a practical three-tier complexity guard before conditioning.
+
 ## Installation
 
 ```xml
 <dependency>
     <groupId>io.github.rcrida</groupId>
     <artifactId>jcsp</artifactId>
-    <version>2.0.0</version>
+    <version>2.1.0</version>
 </dependency>
 ```
 
