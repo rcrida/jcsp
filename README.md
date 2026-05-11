@@ -65,7 +65,7 @@ Tree decomposition uses a domain-aware clique size limit (`d^targetTreewidth`, c
 
 ## Building
 
-Requires JDK 25 and Maven 3.x.
+Requires JDK 21+ and Maven 3.x.
 
 ```bash
 mvn test          # run all tests
