@@ -10,6 +10,7 @@ import io.github.rcrida.jcsp.constraints.Constraint;
 import io.github.rcrida.jcsp.constraints.binary.BinaryConstraint;
 import io.github.rcrida.jcsp.constraints.binary.BinaryOffsetConstraint;
 import io.github.rcrida.jcsp.constraints.binary.BinaryPredicateConstraint;
+import io.github.rcrida.jcsp.constraints.binary.BinaryEqualsConstraint;
 import io.github.rcrida.jcsp.constraints.binary.BinaryNotEqualsConstraint;
 import io.github.rcrida.jcsp.constraints.binary.Operator;
 import io.github.rcrida.jcsp.constraints.nary.AllDiffConstraint;
@@ -340,6 +341,17 @@ public class ConstraintSatisfactionProblem {
          */
         public ConstraintSatisfactionProblemBuilder equalsConstraint(@NonNull Variable variable, @NonNull Object value) {
             return this.constraint(UnaryValueConstraint.builder().variable(variable).value(value).build());
+        }
+
+        /**
+         * Create a binary constraint that constraints two specified variables to have the same value.
+         *
+         * @param left first variable of the pair
+         * @param right second variable of the pair
+         * @return the builder
+         */
+        public ConstraintSatisfactionProblemBuilder equalsConstraint(@NonNull Variable left, @NonNull Variable right) {
+            return this.constraint(BinaryEqualsConstraint.builder().left(left).right(right).build());
         }
 
         /**
