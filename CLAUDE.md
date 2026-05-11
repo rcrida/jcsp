@@ -8,7 +8,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 <dependency>
     <groupId>io.github.rcrida</groupId>
     <artifactId>jcsp</artifactId>
-    <version>2.0.0</version>
+    <version>2.1.0</version>
 </dependency>
 ```
 
@@ -19,6 +19,8 @@ mvn deploy    # Sign, package, and publish to Maven Central
 ```
 
 Requires GPG key and Maven Central token in `~/.m2/settings.xml` under server id `central`.
+
+When creating a new release: bump the version in `pom.xml`, update `README.md` (installation version + any new features/API changes), commit, tag, push, and create a GitHub release.
 
 ## Build & Test Commands
 
@@ -72,7 +74,7 @@ csp.predicateConstraint(predicate, v1, v2, ...) // n-ary predicate
 
 ### Key Conventions
 
-- **Immutability**: `Assignment`, `Variable`, and constraint objects use Lombok `@Value`; `CSP` uses `@Builder`/`@Singular`
+- **Immutability**: `Assignment`, `Variable`, and constraint objects use Lombok `@Value`; `CSP` uses `@Builder`/`@Singular`. Use `@Value` for any new immutable class — it provides `@ToString`, `@EqualsAndHashCode`, `@RequiredArgsConstructor`, and final fields automatically.
 - **Lombok**: `@Value`, `@Builder`, `@SuperBuilder`, `@Singular`, `@Slf4j` are used extensively — do not add manual boilerplate that Lombok already provides
 - **Null safety**: JSpecify `@NonNull`/`@Nullable` annotations throughout; `Optional` used for nullable returns
 - **Logging**: All solvers/consistency algorithms use `@Slf4j` (SLF4J) for debug/info logging
