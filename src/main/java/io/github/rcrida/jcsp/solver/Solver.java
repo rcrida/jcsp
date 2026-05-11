@@ -12,7 +12,7 @@ import io.github.rcrida.jcsp.solver.tree.TreeSolver;
 import io.github.rcrida.jcsp.solver.tree.cutsetconditioning.CutsetConditioningSolver;
 import io.github.rcrida.jcsp.solver.tree.decomposition.TreeDecompositionSolver;
 import io.github.rcrida.jcsp.solver.tree.decomposition.decomposer.TreeDecomposerImpl;
-import io.github.rcrida.jcsp.solver.tree.decomposition.decomposer.variableselector.ArbitraryVariableSelector;
+import io.github.rcrida.jcsp.solver.tree.decomposition.decomposer.variableselector.MinimumDegreeVariableSelector;
 import io.github.rcrida.jcsp.solver.tree.selector.TreeUnassignedVariableSelector;
 import io.github.rcrida.jcsp.solver.tree.sorter.BFSTopologicalSorter;
 import org.jspecify.annotations.NonNull;
@@ -41,7 +41,7 @@ public interface Solver {
             val cutsetConditioningSolver = new CutsetConditioningSolver(
                     backtrackingSearch,
                     treeSolver);
-            val treeDecompositionSolver = new TreeDecompositionSolver(new TreeDecomposerImpl(ArbitraryVariableSelector.Factory.INSTANCE), treeSolver, cutsetConditioningSolver, 1024);
+            val treeDecompositionSolver = new TreeDecompositionSolver(new TreeDecomposerImpl(MinimumDegreeVariableSelector.Factory.INSTANCE), treeSolver, cutsetConditioningSolver, 1024);
             val independentSubproblemSolver = new IndependentSubproblemSolver(treeDecompositionSolver);
             val arcConsistentSolver = new ArcConsistentSolver(independentSubproblemSolver);
             val nodeConsistentSolver = new NodeConsistentSolver(arcConsistentSolver);
