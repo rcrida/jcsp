@@ -72,7 +72,7 @@ public class TreeDecomposerImpl implements TreeDecomposer {
 
         List<CliqueEdge> edges = getCliqueEdges(maximal);
 
-        Map<Integer, Set<Integer>> tree = getMinimumSpanningTree(maximal, edges);
+        Map<Integer, Set<Integer>> tree = getMaximumSpanningTree(maximal, edges);
 
         val treeBuilder = ConstraintSatisfactionProblem.builder();
         val cliqueVariables = new ArrayList<Variable>();
@@ -192,8 +192,8 @@ public class TreeDecomposerImpl implements TreeDecomposer {
         return edges;
     }
 
-    private static @NonNull Map<Integer, Set<Integer>> getMinimumSpanningTree(List<Set<Variable>> maximal, List<CliqueEdge> edges) {
-        // Kruskal minimum spanning tree
+    private static @NonNull Map<Integer, Set<Integer>> getMaximumSpanningTree(List<Set<Variable>> maximal, List<CliqueEdge> edges) {
+        // Kruskal maximum spanning tree — edges sorted descending, maximises separator sizes
         int m = maximal.size();
         UnionFind uf = new UnionFind(m);
         Map<Integer, Set<Integer>> tree = new HashMap<>();
