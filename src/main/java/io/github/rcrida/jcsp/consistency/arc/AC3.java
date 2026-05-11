@@ -39,7 +39,8 @@ public class AC3 implements ArcConsistency {
                 .flatMap(binaryConstraint -> binaryConstraint.getArcs()
                         .map(arc -> new AbstractMap.SimpleEntry<>(arc, binaryConstraint)))
                 .collect(Collectors.groupingBy(Map.Entry::getKey, Collectors.mapping(Map.Entry::getValue, Collectors.toList())));
-        val allArcs = arcConstraints.keySet();
+        val arcsByTarget = arcConstraints.keySet().stream()
+                .collect(Collectors.groupingBy(Arc::getTo));
         val variableDomains = new HashMap<>(problem.getVariableDomains());
         while (!queue.isEmpty()) {
             val arc = queue.poll();
@@ -54,9 +55,8 @@ public class AC3 implements ArcConsistency {
                         return Optional.empty();
                     }
                     variableDomains.put(X_i, revisedD_i);
-                    val X_iNeighbours = allArcs.stream()
+                    val X_iNeighbours = arcsByTarget.getOrDefault(X_i, List.of()).stream()
                             .filter(c -> !c.getFrom().equals(X_j))
-                            .filter(c -> c.getTo().equals(X_i))
                             .toList();
                     queue.addAll(X_iNeighbours);
                 }
