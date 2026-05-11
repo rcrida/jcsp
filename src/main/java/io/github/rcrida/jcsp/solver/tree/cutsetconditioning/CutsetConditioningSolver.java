@@ -16,6 +16,7 @@ import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.function.Predicate;
@@ -105,12 +106,20 @@ public class CutsetConditioningSolver implements Solver {
      */
     private Optional<Decomposition> decomposeCsp(@NonNull ConstraintSatisfactionProblem csp) {
         val unsplittableVariables = csp.getUnsplittableVariables();
+        val constraintCounts = computeConstraintCounts(csp);
         return csp.getVariableDomains().keySet().stream()
                 .filter(Predicate.not(unsplittableVariables::contains))
-                .sorted(Comparator.comparing(csp::countConstraints)) // start with least constrained variables
-                .map(variable -> decomposeCsp(csp, unsplittableVariables, variable))
+                .sorted(Comparator.comparing(constraintCounts::get))
+                .map(variable -> decomposeCsp(csp, unsplittableVariables, variable, constraintCounts))
                 .flatMap(Optional::stream)
                 .findFirst();
+    }
+
+    private static Map<Variable, Integer> computeConstraintCounts(@NonNull ConstraintSatisfactionProblem csp) {
+        val counts = new HashMap<Variable, Integer>();
+        csp.getVariableDomains().keySet().forEach(v -> counts.put(v, 0));
+        csp.getConstraints().forEach(c -> c.getVariables().forEach(v -> counts.merge(v, 1, Integer::sum)));
+        return counts;
     }
 
     /**
@@ -122,7 +131,7 @@ public class CutsetConditioningSolver implements Solver {
      * @param variable seed variable to expand to tree
      * @return
      */
-    private Optional<Decomposition> decomposeCsp(@NonNull ConstraintSatisfactionProblem csp, @NonNull Set<Variable> unsplittableVariables, @NonNull Variable variable) {
+    private Optional<Decomposition> decomposeCsp(@NonNull ConstraintSatisfactionProblem csp, @NonNull Set<Variable> unsplittableVariables, @NonNull Variable variable, @NonNull Map<Variable, Integer> constraintCounts) {
         log.debug("Decompose from {}", variable);
         val queue = new ArrayDeque<>(List.of(variable));
         val visited = new HashSet<Variable>();
@@ -138,7 +147,7 @@ public class CutsetConditioningSolver implements Solver {
                 val unvisited = neighbours.get(node).stream()
                         .filter(Predicate.not(unsplittableVariables::contains))
                         .filter(v -> csp.getVariableDomains().containsKey(v))
-                        .sorted(Comparator.comparing(csp::countConstraints))
+                        .sorted(Comparator.comparing(constraintCounts::get))
                         .filter(v -> !visited.contains(v))
                         .toList();
                 queue.addAll(unvisited);

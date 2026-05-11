@@ -255,18 +255,6 @@ public class ConstraintSatisfactionProblem {
     }
 
     /**
-     * Count the number of constraints that are applicable to the specified variable.
-     *
-     * @param variable the specified variable
-     * @return the number of problem constraints that reference the variable
-     */
-    public int countConstraints(@NonNull Variable variable) {
-        return Math.toIntExact(constraints.stream()
-                .filter(constraint -> constraint.getVariables().contains(variable))
-                .count());
-    }
-
-    /**
      * Extract a subset of the current problem that contains only the variables accepted by the
      * specified predicate. This is used by cycle-cutset conditioning to separate the cycle-cutset
      * from the remaining tree.
