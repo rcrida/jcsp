@@ -64,6 +64,7 @@ public class Assignment {
     public boolean isConsistent(ConstraintSatisfactionProblem csp) {
         validateAssignment(csp);
         return csp.getConstraints().stream()
+                .filter(constraint -> constraint.getVariables().stream().anyMatch(values::containsKey))
                 .allMatch(constraint -> {
                     statistics.incrementConstraintChecks();
                     return constraint.isSatisfiedBy(this);
