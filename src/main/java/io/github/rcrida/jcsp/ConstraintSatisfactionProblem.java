@@ -52,7 +52,15 @@ public class ConstraintSatisfactionProblem {
     Set<Constraint> constraints;
     boolean isCyclic;
     boolean isFullyConnected;
+    /**
+     * A map containing each variable in the problem that has at least one neighbour, along with its neighbours.
+     */
     @EqualsAndHashCode.Exclude Map<Variable, Set<Variable>> neighbours;
+    /**
+     * A set of all binary constraints applicable to this problem. Where possible casts n-ary constrains
+     * as additional binary constraints. Ignores n-ary constraints that aren't decomposable.
+     */
+    @EqualsAndHashCode.Exclude Set<BinaryConstraint> allBinaryConstraints;
 
     /**
      * Constructor ensures constraints reference known variables and determines whether graph is cyclic and/or
@@ -68,6 +76,7 @@ public class ConstraintSatisfactionProblem {
         validateConstraints();
 
         this.neighbours = computeNeighbours();
+        this.allBinaryConstraints = computeAllBinaryConstraints();
         val visited = new HashSet<Variable>();
         if (this.neighbours.isEmpty()) {
             isCyclic = false;
@@ -149,13 +158,7 @@ public class ConstraintSatisfactionProblem {
                 .orElse(false);
     }
 
-    /**
-     * Get a set of all binary constraints applicable to this problem. Where possible casts n-ary constrains
-     * as additional binary constraints. Ignores n-ary constraints that aren't decomposable.
-     *
-     * @return all of the binary constraints applicable to this problem
-     */
-    public Set<BinaryConstraint> getAllBinaryConstraints() {
+    private Set<BinaryConstraint> computeAllBinaryConstraints() {
         val binaryConstraints = getConstraints().stream()
                 .filter(c -> c instanceof BinaryConstraint)
                 .map(c -> (BinaryConstraint) c)
@@ -166,7 +169,7 @@ public class ConstraintSatisfactionProblem {
                 .flatMap(c -> c.getAsBinaryConstraints().stream())
                 .flatMap(Collection::stream)
                 .toList();
-        return Stream.concat(binaryConstraints.stream(), inferredBinaryConstraints.stream()).collect(Collectors.toSet());
+        return Stream.concat(binaryConstraints.stream(), inferredBinaryConstraints.stream()).collect(Collectors.toUnmodifiableSet());
     }
 
     /**
@@ -189,10 +192,12 @@ public class ConstraintSatisfactionProblem {
                 neighbours.get(variable).addAll(variables);
             }
         }
+        val result = new HashMap<Variable, Set<Variable>>();
         for (Map.Entry<Variable, Set<Variable>> entry : neighbours.entrySet()) {
             entry.getValue().remove(entry.getKey());
+            result.put(entry.getKey(), Set.copyOf(entry.getValue()));
         }
-        return Map.copyOf(neighbours);
+        return Map.copyOf(result);
     }
 
     /**
