@@ -1,6 +1,7 @@
 package io.github.rcrida.jcsp;
 
 import lombok.Builder;
+import lombok.EqualsAndHashCode;
 import lombok.Singular;
 import lombok.Value;
 import lombok.experimental.NonFinal;
@@ -51,6 +52,7 @@ public class ConstraintSatisfactionProblem {
     Set<Constraint> constraints;
     boolean isCyclic;
     boolean isFullyConnected;
+    @EqualsAndHashCode.Exclude Map<Variable, Set<Variable>> neighbours;
 
     /**
      * Constructor ensures constraints reference known variables and determines whether graph is cyclic and/or
@@ -65,15 +67,15 @@ public class ConstraintSatisfactionProblem {
         this.constraints = constraints;
         validateConstraints();
 
+        this.neighbours = computeNeighbours();
         val visited = new HashSet<Variable>();
-        val neighbours = getNeighbours();
-        if (neighbours.isEmpty()) {
+        if (this.neighbours.isEmpty()) {
             isCyclic = false;
             isFullyConnected = false;
         } else {
-            val startingVariable = neighbours.keySet().iterator().next();
-            isCyclic = isCyclic(startingVariable, null, neighbours, visited);
-            isFullyConnected = visited.size() == neighbours.size();
+            val startingVariable = this.neighbours.keySet().iterator().next();
+            isCyclic = isCyclic(startingVariable, null, this.neighbours, visited);
+            isFullyConnected = visited.size() == this.neighbours.size();
         }
     }
 
@@ -176,13 +178,7 @@ public class ConstraintSatisfactionProblem {
         return getVariableDomains().values().stream().map(Domain::size).map(BigInteger::valueOf).reduce(BigInteger.ONE, BigInteger::multiply);
     }
 
-    /**
-     * Produces a map containing each variable in the problem that has at least one neighbour, along with its neighbours.
-     *
-     * @return a map containing variables and their neighbouring variables
-     */
-    @NonNull
-    public Map<Variable, Set<Variable>> getNeighbours() {
+    private Map<Variable, Set<Variable>> computeNeighbours() {
         val neighbours = new HashMap<Variable, Set<Variable>>();
         for (Variable variable : getVariableDomains().keySet()) {
             neighbours.put(variable, new HashSet<>());
