@@ -1,20 +1,24 @@
 package io.github.rcrida.jcsp.solver;
 
+import io.github.rcrida.jcsp.assignments.Assignment;
 import lombok.val;
 import io.github.rcrida.jcsp.ConstraintSatisfactionProblem;
 import io.github.rcrida.jcsp.domains.DomainObjectSet;
 import io.github.rcrida.jcsp.variables.Variable;
 import org.junit.jupiter.api.Test;
 
-import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.EnumMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.function.BiPredicate;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.entry;
 
 /**
  * Timetable scheduling modelled as graph colouring. Each (Group, Subject) pairing is a
@@ -55,6 +59,11 @@ public class TimetableSchedulingViaColouringTest {
         @Override public String toString() { return slot + "/" + teacher; }
     }
 
+    record GroupSubject(Group group, Subject subject) implements Variable {
+        @Override public String getName() { return toString(); }
+        @Override public String toString() { return group + "/" + subject; }
+    }
+
     static final Map<Subject, Set<Teacher>> ELIGIBLE_TEACHERS = Map.of(
             Subject.MATH,             Set.of(Teacher.DR_SMITH),
             Subject.PHYSICS,          Set.of(Teacher.DR_SMITH, Teacher.DR_JONES),
@@ -71,17 +80,16 @@ public class TimetableSchedulingViaColouringTest {
             Group.HUMANITIES, List.of(Subject.ENGLISH, Subject.HISTORY, Subject.CHEMISTRY)
     ));
 
-    static final Map<Group, Map<Subject, Variable>> VARIABLES = buildVariables();
+    static final List<GroupSubject> VARIABLES = buildVariables();
 
-    static Map<Group, Map<Subject, Variable>> buildVariables() {
-        val factory = Variable.Factory.INSTANCE;
-        val result = new EnumMap<Group, Map<Subject, Variable>>(Group.class);
-        CURRICULUM.forEach((group, subjects) -> {
-            val subjectVars = new EnumMap<Subject, Variable>(Subject.class);
-            subjects.forEach(subject -> subjectVars.put(subject, factory.create(group + "_" + subject)));
-            result.put(group, subjectVars);
-        });
-        return Collections.unmodifiableMap(result);
+    static List<GroupSubject> buildVariables() {
+        return CURRICULUM.entrySet().stream()
+                .flatMap(e -> {
+                    val group = e.getKey();
+                    return e.getValue().stream()
+                            .map(subject -> new GroupSubject(group, subject));
+                })
+                .toList();
     }
 
     // Courses in the same student group must occupy different time slots.
@@ -108,38 +116,36 @@ public class TimetableSchedulingViaColouringTest {
         val builder = ConstraintSatisfactionProblem.builder();
 
         // Register each (group, subject) variable with its domain
-        CURRICULUM.forEach((group, subjects) ->
-                subjects.forEach(subject ->
-                        builder.variableDomain(VARIABLES.get(group).get(subject), domainFor(subject))));
+        VARIABLES.forEach(groupSubject ->
+                builder.variableDomain(groupSubject, domainFor(groupSubject.subject())));
 
         // Within-group: all subjects in the same group must be in different slots
         CURRICULUM.forEach((group, subjects) -> {
+            val subjectMap = VARIABLES.stream()
+                    .filter(gs -> gs.group().equals(group))
+                    .collect(Collectors.toMap(
+                            GroupSubject::subject,
+                            Function.identity()));
             for (int i = 0; i < subjects.size(); i++)
-                for (int j = i + 1; j < subjects.size(); j++)
+                for (int j = i + 1; j < subjects.size(); j++) {
                     builder.biPredicateConstraint(
-                            VARIABLES.get(group).get(subjects.get(i)),
-                            VARIABLES.get(group).get(subjects.get(j)),
+                            subjectMap.get(subjects.get(i)),
+                            subjectMap.get(subjects.get(j)),
                             DIFFERENT_SLOT);
+                }
         });
 
         // Cross-group: teacher clash between variables from different groups
         // whose eligible teacher sets overlap
-        val pairings = new ArrayList<Map.Entry<Group, Subject>>();
-        CURRICULUM.forEach((group, subjects) ->
-                subjects.forEach(subject -> pairings.add(Map.entry(group, subject))));
-
-        for (int i = 0; i < pairings.size(); i++) {
-            for (int j = i + 1; j < pairings.size(); j++) {
-                val p1 = pairings.get(i);
-                val p2 = pairings.get(j);
-                if (p1.getKey() != p2.getKey()) {
-                    val teachers1 = ELIGIBLE_TEACHERS.get(p1.getValue());
-                    val teachers2 = ELIGIBLE_TEACHERS.get(p2.getValue());
+        for (int i = 0; i < VARIABLES.size(); i++) {
+            for (int j = i + 1; j < VARIABLES.size(); j++) {
+                val v1 = VARIABLES.get(i);
+                val v2 = VARIABLES.get(j);
+                if (v1.group() != v2.group()) {
+                    val teachers1 = ELIGIBLE_TEACHERS.get(v1.subject());
+                    val teachers2 = ELIGIBLE_TEACHERS.get(v2.subject());
                     if (!Collections.disjoint(teachers1, teachers2))
-                        builder.biPredicateConstraint(
-                                VARIABLES.get(p1.getKey()).get(p1.getValue()),
-                                VARIABLES.get(p2.getKey()).get(p2.getValue()),
-                                NO_TEACHER_CLASH);
+                        builder.biPredicateConstraint(v1, v2, NO_TEACHER_CLASH);
                 }
             }
         }
@@ -155,6 +161,7 @@ public class TimetableSchedulingViaColouringTest {
             assertThat(assignment.isSolution(csp)).isTrue();
             System.out.println("Schedule:   " + assignment);
             System.out.println("Statistics: " + assignment.getStatistics());
+            printOrderByGroup(assignment);
         });
     }
 
@@ -164,5 +171,24 @@ public class TimetableSchedulingViaColouringTest {
         val solutions = Solver.Factory.INSTANCE.createSolver().getSolutions(csp).toList();
         System.out.println("Total valid schedules: " + solutions.size());
         assertThat(solutions).hasSize(2880);
+    }
+
+    static void printOrderByGroup(Assignment assignment) {
+        System.out.println(assignment.getValues().entrySet().stream()
+                .map(e -> Map.entry((GroupSubject) e.getKey(), (ClassSchedule) e.getValue()))
+                .sorted(Comparator.comparing(e -> e.getValue().slot()))
+                .collect(Collectors.groupingBy(e -> (e.getKey()).group(),
+                        Collectors.mapping(e -> entryToSlotTeacherSubject(e.getKey(), e.getValue()), Collectors.toList()))));
+    }
+
+    record SlotTeacherSubject(TimeSlot slot, Teacher teacher, Subject subject) {
+        @Override
+        public String toString() {
+            return slot + "/" + teacher + "/" + subject;
+        }
+    }
+
+    static SlotTeacherSubject entryToSlotTeacherSubject(GroupSubject groupSubject, ClassSchedule classSchedule) {
+        return new SlotTeacherSubject(classSchedule.slot(), classSchedule.teacher(), groupSubject.subject());
     }
 }
