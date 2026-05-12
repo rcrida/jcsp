@@ -1,7 +1,10 @@
 package io.github.rcrida.jcsp;
 
+import lombok.AccessLevel;
+import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.EqualsAndHashCode;
+import lombok.Getter;
 import lombok.Singular;
 import lombok.Value;
 import lombok.experimental.NonFinal;
@@ -22,11 +25,10 @@ import io.github.rcrida.jcsp.constraints.unary.UnaryValueConstraint;
 import io.github.rcrida.jcsp.domains.Domain;
 import io.github.rcrida.jcsp.variables.Variable;
 import org.jspecify.annotations.NonNull;
+import org.jspecify.annotations.Nullable;
 
 import java.math.BigInteger;
 import java.util.ArrayDeque;
-import java.util.Collection;
-import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -36,7 +38,6 @@ import java.util.Set;
 import java.util.function.BiPredicate;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
-import java.util.stream.Stream;
 
 /**
  * Represents a constraint satisfaction problem (CSP), which consists of a set of variables,
@@ -47,48 +48,45 @@ import java.util.stream.Stream;
  */
 @Value
 @NonFinal
+@AllArgsConstructor(access = AccessLevel.NONE)
 public class ConstraintSatisfactionProblem {
     Map<Variable, Domain> variableDomains;
-    Set<Constraint> constraints;
-    boolean isCyclic;
-    boolean isFullyConnected;
-    /**
-     * A map containing each variable in the problem that has at least one neighbour, along with its neighbours.
-     */
-    @EqualsAndHashCode.Exclude Map<Variable, Set<Variable>> neighbours;
-    /**
-     * A set of all binary constraints applicable to this problem. Where possible casts n-ary constrains
-     * as additional binary constraints. Ignores n-ary constraints that aren't decomposable.
-     */
-    @EqualsAndHashCode.Exclude Set<BinaryConstraint> allBinaryConstraints;
+    @Getter(AccessLevel.NONE) @EqualsAndHashCode.Exclude ConstraintGraph constraintGraph;
 
     /**
      * Constructor ensures constraints reference known variables and determines whether graph is cyclic and/or
-     * fully connected.
+     * fully connected. When a {@code constraintGraph} is supplied whose constraint set matches {@code constraints}
+     * (e.g. via {@link #toBuilder()} during domain-only updates) it is reused directly, avoiding redundant
+     * recomputation of neighbours and binary constraints.
      *
      * @param variableDomains the variables and their corresponding domains for the problem
      * @param constraints the constraints that will apply to the solution
+     * @param constraintGraph pre-computed constraint graph to reuse, or {@code null} to compute fresh
      */
-    @Builder(toBuilder = true)
-    ConstraintSatisfactionProblem(@Singular Map<Variable, Domain> variableDomains, @Singular Set<Constraint> constraints) {
+    @Builder
+    ConstraintSatisfactionProblem(@Singular Map<Variable, Domain> variableDomains, @Singular Set<Constraint> constraints, @Nullable ConstraintGraph constraintGraph) {
         this.variableDomains = variableDomains;
-        this.constraints = constraints;
-        validateConstraints();
-
-        this.neighbours = computeNeighbours();
-        this.allBinaryConstraints = computeAllBinaryConstraints();
-        val visited = new HashSet<Variable>();
-        if (this.neighbours.isEmpty()) {
-            isCyclic = false;
-            isFullyConnected = false;
+        if (constraintGraph != null && constraintGraph.getConstraints().equals(constraints)) {
+            this.constraintGraph = constraintGraph;
         } else {
-            val startingVariable = this.neighbours.keySet().iterator().next();
-            isCyclic = isCyclic(startingVariable, null, this.neighbours, visited);
-            isFullyConnected = visited.size() == this.neighbours.size();
+            validateConstraints(variableDomains, constraints);
+            this.constraintGraph = new ConstraintGraph(constraints, variableDomains.keySet());
         }
     }
 
-    private void validateConstraints() {
+    /**
+     * Returns a builder pre-populated from this instance, sharing the existing {@link ConstraintGraph}
+     * reference. Domain-only modifications via the builder will reuse the constraint graph without
+     * recomputation; modifications to the constraint set will trigger a fresh computation.
+     */
+    public ConstraintSatisfactionProblemBuilder toBuilder() {
+        return builder()
+                .variableDomains(variableDomains)
+                .constraints(constraintGraph.getConstraints())
+                .constraintGraph(constraintGraph);
+    }
+
+    private static void validateConstraints(Map<Variable, Domain> variableDomains, Set<Constraint> constraints) {
         val unknownVariables = constraints.stream()
                 .flatMap(c -> c.getVariables().stream())
                 .filter(Predicate.not(variableDomains::containsKey))
@@ -107,27 +105,44 @@ public class ConstraintSatisfactionProblem {
         return variableDomains.isEmpty();
     }
 
-    private boolean isCyclic(Variable src, Variable prt, Map<Variable, Set<Variable>> neighbours, Set<Variable> visited) {
-        visited.add(src);
-        for (Variable neighbour : neighbours.get(src)) {
-            if (!visited.contains(neighbour)) {
-                if (isCyclic(neighbour, src, neighbours, visited)) {
-                    return true;
-                }
-            } else {
-                if (neighbour != prt) {
-                    return true;
-                }
-            }
-        }
-        return false;
-    }
-
     /**
      * @return true if the problem graph is a tree
      */
     public boolean isTree() {
-        return !isCyclic && isFullyConnected;
+        return constraintGraph.isTree();
+    }
+
+    /**
+     * @return true if the constraint graph contains a cycle
+     */
+    public boolean isCyclic() {
+        return constraintGraph.isCyclic();
+    }
+
+    /**
+     * @return true if all variables with constraints are reachable from each other
+     */
+    public boolean isFullyConnected() {
+        return constraintGraph.isFullyConnected();
+    }
+
+    /**
+     * A map containing each variable in the problem that has at least one neighbour, along with its neighbours.
+     */
+    public Map<Variable, Set<Variable>> getNeighbours() {
+        return constraintGraph.getNeighbours();
+    }
+
+    /**
+     * A set of all binary constraints applicable to this problem. Where possible casts n-ary constrains
+     * as additional binary constraints. Ignores n-ary constraints that aren't decomposable.
+     */
+    public Set<BinaryConstraint> getAllBinaryConstraints() {
+        return constraintGraph.getAllBinaryConstraints();
+    }
+
+    public Set<Constraint> getConstraints() {
+        return constraintGraph.getConstraints();
     }
 
     /**
@@ -158,20 +173,6 @@ public class ConstraintSatisfactionProblem {
                 .orElse(false);
     }
 
-    private Set<BinaryConstraint> computeAllBinaryConstraints() {
-        val binaryConstraints = getConstraints().stream()
-                .filter(c -> c instanceof BinaryConstraint)
-                .map(c -> (BinaryConstraint) c)
-                .toList();
-        val inferredBinaryConstraints = getConstraints().stream()
-                .filter(c -> c instanceof NaryConstraint)
-                .map(c -> (NaryConstraint) c)
-                .flatMap(c -> c.getAsBinaryConstraints().stream())
-                .flatMap(Collection::stream)
-                .toList();
-        return Stream.concat(binaryConstraints.stream(), inferredBinaryConstraints.stream()).collect(Collectors.toUnmodifiableSet());
-    }
-
     /**
      * Calculates the size of the search space as the product of the sizes of all of the variable domains.
      *
@@ -179,25 +180,6 @@ public class ConstraintSatisfactionProblem {
      */
     public BigInteger getSearchSpace() {
         return getVariableDomains().values().stream().map(Domain::size).map(BigInteger::valueOf).reduce(BigInteger.ONE, BigInteger::multiply);
-    }
-
-    private Map<Variable, Set<Variable>> computeNeighbours() {
-        val neighbours = new HashMap<Variable, Set<Variable>>();
-        for (Variable variable : getVariableDomains().keySet()) {
-            neighbours.put(variable, new HashSet<>());
-        }
-        for (Constraint constraint : getConstraints()) {
-            val variables = constraint.getVariables();
-            for (Variable variable : variables) {
-                neighbours.get(variable).addAll(variables);
-            }
-        }
-        val result = new HashMap<Variable, Set<Variable>>();
-        for (Map.Entry<Variable, Set<Variable>> entry : neighbours.entrySet()) {
-            entry.getValue().remove(entry.getKey());
-            result.put(entry.getKey(), Set.copyOf(entry.getValue()));
-        }
-        return Map.copyOf(result);
     }
 
     /**
@@ -210,7 +192,7 @@ public class ConstraintSatisfactionProblem {
      */
     @NonNull
     public Set<Variable> getUnsplittableVariables() {
-        return constraints.stream()
+        return getConstraints().stream()
                 .filter(c -> c instanceof NaryConstraint)
                 .map(c -> (NaryConstraint) c)
                 .filter(c -> c.getAsBinaryConstraints().isEmpty())
@@ -318,6 +300,7 @@ public class ConstraintSatisfactionProblem {
                     .filter(bc -> bc.getVariables().contains(variable))
                     .toList();
             this.constraints.removeAll(binaryConstraintsOnVariable);
+            this.constraintGraph = null;
             return this;
         }
 
