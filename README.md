@@ -59,7 +59,7 @@ Tree decomposition uses a domain-aware clique size limit (`d^targetTreewidth`, c
 <dependency>
     <groupId>io.github.rcrida</groupId>
     <artifactId>jcsp</artifactId>
-    <version>2.1.0</version>
+    <version>2.1.1</version>
 </dependency>
 ```
 
