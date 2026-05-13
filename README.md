@@ -12,6 +12,7 @@ A Java library implementing classic AI algorithms for solving Constraint Satisfa
 - **Boolean domain**: `BooleanDomain` for modelling binary assignment problems (e.g. timetabling as a 0-1 matrix)
 - **Functional style**: immutable value objects, composable solver decorators, and a lazy `Stream<Assignment>` API throughout
 - **Heuristics**: MRV variable selection, LCV value ordering, and Minimum Degree variable elimination for tree decomposition
+- **Local search initialisation**: `RandomAssignmentFactory` and `GreedyAssignmentFactory` (least-conflicting value) for seeding `MinConflictsSolver`
 
 ## Usage
 
@@ -61,7 +62,7 @@ Tree decomposition uses a domain-aware clique size limit (`d^targetTreewidth`, c
 <dependency>
     <groupId>io.github.rcrida</groupId>
     <artifactId>jcsp</artifactId>
-    <version>2.2.0</version>
+    <version>2.3.0</version>
 </dependency>
 ```
 
