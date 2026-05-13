@@ -14,10 +14,9 @@ public abstract class SymmetricBinaryConstraint extends BinaryConstraint {
     public boolean equals(Object o) {
         if (o == this) {
             return true;
-        } else if (!(o instanceof SymmetricBinaryConstraint)) {
+        } else if (!(o instanceof SymmetricBinaryConstraint other)) {
             return false;
         } else {
-            SymmetricBinaryConstraint other = (SymmetricBinaryConstraint)o;
             if (!other.canEqual(this)) {
                 return false;
             } else {
