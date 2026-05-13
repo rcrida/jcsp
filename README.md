@@ -8,7 +8,8 @@ A Java library implementing classic AI algorithms for solving Constraint Satisfa
 
 - **Multiple solving strategies**: backtracking search, tree solver, cutset conditioning, tree decomposition, and independent subproblem decomposition
 - **Consistency preprocessing**: AC3 arc consistency and node consistency for domain pruning
-- **Flexible constraint types**: unary, binary (equals, not-equals, offset, predicate, tuples), and n-ary (AllDiff, predicate)
+- **Flexible constraint types**: unary, binary (equals, not-equals, offset, predicate, tuples), and n-ary (AllDiff, AtMostOne, predicate)
+- **Boolean domain**: `BooleanDomain` for modelling binary assignment problems (e.g. timetabling as a 0-1 matrix)
 - **Functional style**: immutable value objects, composable solver decorators, and a lazy `Stream<Assignment>` API throughout
 - **Heuristics**: MRV variable selection, LCV value ordering, and Minimum Degree variable elimination for tree decomposition
 
@@ -37,6 +38,7 @@ builder.equalsConstraint(v1, v2)                       // v1 == v2
 builder.notEqualsConstraint(v1, v2)                    // v1 != v2
 builder.notEqualsChainConstraint(v1, v2, v3)           // AllDiff over a chain
 builder.allDiffConstraint(v1, v2, v3)                  // all different
+builder.atMostOneConstraint(Set.of(v1, v2, v3))        // at most one boolean variable is true
 builder.offsetConstraint(v1, v2, offset)               // v1 == v2 + offset
 builder.biPredicateConstraint(v1, v2, predicate)       // custom binary predicate
 builder.predicateConstraint(predicate, v1, v2, v3)     // custom n-ary predicate
@@ -59,7 +61,7 @@ Tree decomposition uses a domain-aware clique size limit (`d^targetTreewidth`, c
 <dependency>
     <groupId>io.github.rcrida</groupId>
     <artifactId>jcsp</artifactId>
-    <version>2.1.1</version>
+    <version>2.2.0</version>
 </dependency>
 ```
 
