@@ -38,7 +38,7 @@ public class TreeSolver implements Solver {
         }
         val finalTcsp = current;
         val unassignedVariableSelector = selectorFactory.createSelector(X);
-        val domain = finalTcsp.getDomain(root).get();
+        val domain = finalTcsp.getDomain(root);
         log.info("Domain {}", domain);
         val start = Assignment.empty();
         return domain.stream()

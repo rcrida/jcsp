@@ -80,7 +80,7 @@ public class TreeDecomposerImpl implements TreeDecomposer {
             val cliqueVariableDomains = clique.stream()
                     .collect(Collectors.toMap(
                             v -> v,
-                            v -> csp.getDomain(v).get()));
+                            csp::getDomain));
             val cliqueDomainMaxSize = cliqueVariableDomains.values().stream()
                     .map(Domain::size)
                     .map(BigInteger::valueOf)

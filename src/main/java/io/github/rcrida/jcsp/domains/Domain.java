@@ -3,6 +3,7 @@ package io.github.rcrida.jcsp.domains;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 
+import java.util.List;
 import java.util.stream.Stream;
 
 /**
@@ -13,6 +14,9 @@ public interface Domain {
     boolean isEmpty();
     int size();
     Stream<?> stream();
+    default List<?> toList() {
+        return stream().toList();
+    }
     Builder toBuilder();
 
     interface Builder {

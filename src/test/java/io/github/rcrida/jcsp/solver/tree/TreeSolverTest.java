@@ -74,7 +74,7 @@ public class TreeSolverTest {
                 .variableDomain(NT, DOMAIN_RED_ONLY)
                 .notEqualsConstraint(WA, NT)
                 .build();
-        assertThat(treeSolver.makeArcConsistent(problem, WA, NT).get().getDomain(WA).get().stream().toList()).isEqualTo(List.of(GREEN));
+        assertThat(treeSolver.makeArcConsistent(problem, WA, NT).get().getDomain(WA).toList()).isEqualTo(List.of(GREEN));
     }
 
     @Test

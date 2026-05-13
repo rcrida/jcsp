@@ -13,6 +13,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ThreadLocalRandom;
+import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * An {@link InitialAssignmentFactory} that builds an initial assignment greedily: variables are
@@ -44,23 +45,22 @@ public class GreedyAssignmentFactory implements InitialAssignmentFactory {
                 .filter(c -> c.getVariables().contains(variable))
                 .toList();
 
-        val domainValues = csp.getVariableDomains().get(variable).stream().toList();
-        int bestViolations = Integer.MAX_VALUE;
+        AtomicInteger bestViolations = new AtomicInteger(Integer.MAX_VALUE);
         List<Object> bestValues = new ArrayList<>();
-        for (Object value : domainValues) {
+        csp.getDomain(variable).stream().forEach(value -> {
             val candidate = Assignment.of(addEntry(current, variable, value));
             int violations = (int) constraintsOnVariable.stream()
                     .filter(c -> c.getVariables().stream().allMatch(v -> candidate.getValue(v).isPresent()))
                     .filter(c -> !c.isSatisfiedBy(candidate))
                     .count();
-            if (violations < bestViolations) {
-                bestViolations = violations;
+            if (violations < bestViolations.get()) {
+                bestViolations.set(violations);
                 bestValues.clear();
                 bestValues.add(value);
-            } else if (violations == bestViolations) {
+            } else if (violations == bestViolations.get()) {
                 bestValues.add(value);
             }
-        }
+        });
         return bestValues.get(ThreadLocalRandom.current().nextInt(bestValues.size()));
     }
 

@@ -33,7 +33,7 @@ public class MinimumRemainingValuesSelector implements UnassignedVariableSelecto
     public Variable select(@NonNull ConstraintSatisfactionProblem csp, @NonNull Assignment assignment) {
         val unassignedVariableValueCounts = csp.getVariableDomains().entrySet().stream()
                 .filter(entry -> assignment.getValue(entry.getKey()).isEmpty())
-                .collect(Collectors.toMap(Map.Entry::getKey, entry -> entry.getValue().stream().count()));
+                .collect(Collectors.toMap(Map.Entry::getKey, entry -> entry.getValue().size()));
         return unassignedVariableValueCounts.entrySet().stream()
                 .min(Comparator.comparingLong(Map.Entry::getValue))
                 .map(Map.Entry::getKey)

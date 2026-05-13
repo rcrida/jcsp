@@ -87,7 +87,7 @@ public class AC3Test {
                 .notEqualsConstraint(WA, NT)
                 .build();
         val result = AC3.INSTANCE.revise(problem, Arc.of(WA, NT));
-        assertThat(result.get().getDomain(WA).get().stream().toList()).isEqualTo(List.of(GREEN));
+        assertThat(result.get().getDomain(WA).toList()).isEqualTo(List.of(GREEN));
     }
 
     @Test
@@ -99,7 +99,7 @@ public class AC3Test {
                 .notEqualsConstraint(WA, NT)
                 .build();
         val result = AC3.INSTANCE.revise(problem, Arc.of(WA, NT));
-        assertThat(result.get().getDomain(WA).get()).isEqualTo(twoColours);
+        assertThat(result.get().getDomain(WA)).isEqualTo(twoColours);
     }
 
     @Test

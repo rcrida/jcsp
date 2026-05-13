@@ -157,8 +157,17 @@ public class ConstraintSatisfactionProblem {
      * @param variable whose domain we are interested in
      * @return the domain of the specified variable, or empty, if the problem does not contain the variable
      */
-    public Optional<Domain> getDomain(@NonNull Variable variable) {
+    public Optional<Domain> findDomain(@NonNull Variable variable) {
         return Optional.ofNullable(variableDomains.get(variable));
+    }
+
+    /**
+     * @param variable whose domain we are interested in
+     * @return the domain of the specified variable
+     * @throws java.util.NoSuchElementException if the problem does not contain the variable
+     */
+    public Domain getDomain(@NonNull Variable variable) {
+        return Optional.ofNullable(variableDomains.get(variable)).orElseThrow();
     }
 
     /**
@@ -169,7 +178,7 @@ public class ConstraintSatisfactionProblem {
      * @return true if the problem contains the variable and the domain of the variable contains the value
      */
     public boolean isAllowedValue(@NonNull Variable variable, @NonNull Object value) {
-        return getDomain(variable)
+        return findDomain(variable)
                 .map(domain -> domain.contains(value))
                 .orElse(false);
     }
@@ -218,7 +227,7 @@ public class ConstraintSatisfactionProblem {
             addUnassignedVariable(queue, unassignedVariables.iterator().next(), unassignedVariables);
             while (!queue.isEmpty()) {
                 val variable = queue.poll();
-                val domain = getDomain(variable).orElseThrow();
+                val domain = getDomain(variable);
                 subCsp.variableDomain(variable, domain);
                 subCsp.constraints(getConstraints().stream()
                         .filter(c -> c.getVariables().contains(variable))

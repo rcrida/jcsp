@@ -32,7 +32,7 @@ public class RandomAssignmentFactory implements InitialAssignmentFactory {
     }
 
     private Object getRandomValue(Domain domain) {
-        val list = domain.stream().toList();
-        return list.get(ThreadLocalRandom.current().nextInt(domain.size()));
+        int index = ThreadLocalRandom.current().nextInt(domain.size());
+        return domain.stream().skip(index).findAny().get();
     }
 }

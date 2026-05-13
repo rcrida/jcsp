@@ -11,7 +11,6 @@ import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.util.Map;
 import java.util.Optional;
-import java.util.stream.Stream;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -54,9 +53,9 @@ public class MinimumRemainingValuesSelectorTest {
         when(assignment.getValue(variable3)).thenReturn(Optional.empty());
 
         // Mock domain size
-        when(domain1.stream()).thenReturn((Stream) Stream.of(1, 2, 3));  // Size 3
-        when(domain2.stream()).thenReturn((Stream) Stream.of(1, 2));     // Size 2
-        when(domain3.stream()).thenReturn((Stream) Stream.of(1, 2, 3, 4)); // Size 4
+        when(domain1.size()).thenReturn(3);
+        when(domain2.size()).thenReturn(2);
+        when(domain3.size()).thenReturn(4);
 
         // Act
         Variable selected = selector.select(csp, assignment);

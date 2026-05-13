@@ -5,6 +5,7 @@ import lombok.experimental.NonFinal;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 
+import java.util.List;
 import java.util.Set;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
@@ -37,6 +38,11 @@ public class DomainObjectSet implements Domain {
     @Override
     public Stream<?> stream() {
         return values.stream();
+    }
+
+    @Override
+    public List<?> toList() {
+        return List.copyOf(values);
     }
 
     @Override

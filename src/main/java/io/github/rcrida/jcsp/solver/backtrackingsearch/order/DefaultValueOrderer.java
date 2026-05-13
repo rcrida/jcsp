@@ -15,6 +15,6 @@ public class DefaultValueOrderer implements DomainValuesOrderer {
 
     @Override
     public Stream<?> order(@NonNull ConstraintSatisfactionProblem csp, @NonNull Variable variable, @NonNull Assignment assignment) {
-        return csp.getDomain(variable).stream().flatMap(Domain::stream);
+        return csp.findDomain(variable).stream().flatMap(Domain::stream);
     }
 }
