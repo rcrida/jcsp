@@ -18,6 +18,7 @@ import io.github.rcrida.jcsp.constraints.binary.BinaryEqualsConstraint;
 import io.github.rcrida.jcsp.constraints.binary.BinaryNotEqualsConstraint;
 import io.github.rcrida.jcsp.constraints.binary.Operator;
 import io.github.rcrida.jcsp.constraints.nary.AllDiffConstraint;
+import io.github.rcrida.jcsp.constraints.nary.AtMostOneConstraint;
 import io.github.rcrida.jcsp.constraints.nary.PredicateConstraint;
 import io.github.rcrida.jcsp.constraints.nary.NaryConstraint;
 import io.github.rcrida.jcsp.constraints.unary.UnaryNotEqualsConstraint;
@@ -345,6 +346,18 @@ public class ConstraintSatisfactionProblem {
          */
         public ConstraintSatisfactionProblemBuilder allDiffConstraint(@NonNull Set<Variable> variables) {
             return this.constraint(AllDiffConstraint.builder().variables(variables).build());
+        }
+
+        /**
+         * Constrain a list of boolean variables so that at most one is {@code true}.
+         * Implemented as pairwise binary constraints — each pair cannot both be {@code true}.
+         * Suitable for use with {@link io.github.rcrida.jcsp.domains.BooleanDomain}.
+         *
+         * @param variables the boolean variables to constrain
+         * @return the builder
+         */
+        public ConstraintSatisfactionProblemBuilder atMostOneConstraint(@NonNull Set<Variable> variables) {
+            return this.constraint(AtMostOneConstraint.builder().variables(variables).build());
         }
 
         /**
