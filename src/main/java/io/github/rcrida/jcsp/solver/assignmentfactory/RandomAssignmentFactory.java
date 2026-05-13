@@ -1,5 +1,7 @@
 package io.github.rcrida.jcsp.solver.assignmentfactory;
 
+import lombok.AccessLevel;
+import lombok.NoArgsConstructor;
 import lombok.val;
 import io.github.rcrida.jcsp.ConstraintSatisfactionProblem;
 import io.github.rcrida.jcsp.assignments.Assignment;
@@ -17,7 +19,11 @@ import java.util.concurrent.ThreadLocalRandom;
  * The generated assignment may not satisfy the problem's constraints and is primarily
  * intended as a starting point for further refinement.
  */
+@NoArgsConstructor(access = AccessLevel.PRIVATE)
 public class RandomAssignmentFactory implements InitialAssignmentFactory {
+
+    public static final RandomAssignmentFactory INSTANCE = new RandomAssignmentFactory();
+
     @Override
     public Assignment getAssignment(@NonNull ConstraintSatisfactionProblem csp) {
         val builder = Assignment.builder();
