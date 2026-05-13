@@ -8,7 +8,6 @@ import io.github.rcrida.jcsp.variables.Variable;
 import org.junit.jupiter.api.Test;
 
 import java.util.Collections;
-import java.util.Comparator;
 import java.util.EnumMap;
 import java.util.List;
 import java.util.Map;
@@ -158,9 +157,8 @@ public class TimetableSchedulingViaColouringTest {
         val solution = Solver.Factory.INSTANCE.createSolver().getSolution(csp);
         assertThat(solution).hasValueSatisfying(assignment -> {
             assertThat(assignment.isSolution(csp)).isTrue();
-            System.out.println("Schedule:   " + assignment);
             System.out.println("Statistics: " + assignment.getStatistics());
-            printOrderByGroup(assignment);
+            printTimetable(assignment);
         });
     }
 
@@ -172,22 +170,26 @@ public class TimetableSchedulingViaColouringTest {
         assertThat(solutions).hasSize(2880);
     }
 
-    static void printOrderByGroup(Assignment assignment) {
-        System.out.println(assignment.getValues().entrySet().stream()
-                .map(e -> Map.entry((GroupSubject) e.getKey(), (ClassSchedule) e.getValue()))
-                .sorted(Comparator.comparing(e -> e.getValue().slot()))
-                .collect(Collectors.groupingBy(e -> (e.getKey()).group(),
-                        Collectors.mapping(e -> entryToSlotTeacherSubject(e.getKey(), e.getValue()), Collectors.toList()))));
-    }
+    static void printTimetable(Assignment assignment) {
+        val lookup = new java.util.HashMap<TimeSlot, java.util.Map<Group, String>>();
+        for (TimeSlot ts : TimeSlot.values()) lookup.put(ts, new java.util.HashMap<>());
+        assignment.getValues().entrySet().forEach(e -> {
+            val gs = (GroupSubject) e.getKey();
+            val cs = (ClassSchedule) e.getValue();
+            lookup.get(cs.slot()).put(gs.group(), gs.subject() + " (" + cs.teacher() + ")");
+        });
 
-    record SlotTeacherSubject(TimeSlot slot, Teacher teacher, Subject subject) {
-        @Override
-        public String toString() {
-            return slot + "/" + teacher + "/" + subject;
+        int col = 32;
+        String sep = "-".repeat(10 + (col + 2) * Group.values().length + 1);
+        System.out.println("\n--- Timetable ---");
+        System.out.printf("%-10s", "");
+        for (Group g : Group.values()) System.out.printf("| %-" + col + "s", g);
+        System.out.println("|");
+        System.out.println(sep);
+        for (TimeSlot ts : TimeSlot.values()) {
+            System.out.printf("%-10s", ts);
+            for (Group g : Group.values()) System.out.printf("| %-" + col + "s", lookup.get(ts).getOrDefault(g, ""));
+            System.out.println("|");
         }
-    }
-
-    static SlotTeacherSubject entryToSlotTeacherSubject(GroupSubject groupSubject, ClassSchedule classSchedule) {
-        return new SlotTeacherSubject(classSchedule.slot(), classSchedule.teacher(), groupSubject.subject());
     }
 }

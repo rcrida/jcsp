@@ -10,6 +10,7 @@ import org.junit.jupiter.api.Test;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.EnumMap;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -162,12 +163,27 @@ public class TimetableSchedulingBinaryAssignmentTest {
     }
 
     static void printTimetable(Assignment solution) {
-        System.out.println("\n--- Timetable ---");
+        val lookup = new HashMap<Timeslot, Map<Group, String>>();
+        for (Timeslot ts : Timeslot.values()) lookup.put(ts, new HashMap<>());
         for (Lesson lesson : LESSONS) {
             Z.get(lesson).entrySet().stream()
                     .filter(e -> solution.getValue(e.getValue()).equals(Optional.of(true)))
                     .findFirst()
-                    .ifPresent(e -> System.out.printf("%-30s -> %s%n", lesson, e.getKey()));
+                    .ifPresent(e -> lookup.get(e.getKey().slot().timeslot()).put(lesson.group(),
+                            lesson.subject() + " (" + e.getKey().teacher() + ", " + e.getKey().slot().room() + ")"));
+        }
+
+        int col = 36;
+        String sep = "-".repeat(10 + (col + 2) * Group.values().length + 1);
+        System.out.println("\n--- Timetable ---");
+        System.out.printf("%-10s", "");
+        for (Group g : Group.values()) System.out.printf("| %-" + col + "s", g);
+        System.out.println("|");
+        System.out.println(sep);
+        for (Timeslot ts : Timeslot.values()) {
+            System.out.printf("%-10s", ts);
+            for (Group g : Group.values()) System.out.printf("| %-" + col + "s", lookup.get(ts).getOrDefault(g, ""));
+            System.out.println("|");
         }
     }
 
