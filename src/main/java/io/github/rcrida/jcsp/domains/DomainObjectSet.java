@@ -22,7 +22,7 @@ public class DomainObjectSet implements Domain {
 
     @Override
     public boolean contains(@Nullable Object value) {
-        return values.contains(value);
+        return value != null && values.contains(value);
     }
 
     @Override
