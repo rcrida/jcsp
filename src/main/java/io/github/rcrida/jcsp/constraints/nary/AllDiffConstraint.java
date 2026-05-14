@@ -2,7 +2,6 @@ package io.github.rcrida.jcsp.constraints.nary;
 
 import lombok.experimental.SuperBuilder;
 import lombok.val;
-import io.github.rcrida.jcsp.assignments.Assignment;
 import io.github.rcrida.jcsp.constraints.binary.BinaryConstraint;
 import io.github.rcrida.jcsp.constraints.binary.BinaryNotEqualsConstraint;
 import org.jspecify.annotations.NonNull;
@@ -19,28 +18,22 @@ import java.util.*;
  * - For three or more assigned values, the constraint ensures all values are unique.
  * <p>
  * This implementation is thread-safe as it uses immutable data structures
- * provided by the {@link Assignment} and ensures no internal state mutation.
+ * provided by the {@link io.github.rcrida.jcsp.assignments.Assignment} and ensures no internal state mutation.
  */
 @SuperBuilder
-public class AllDiffConstraint extends NaryConstraint {
+public class AllDiffConstraint<T> extends UniformNaryConstraint<T> {
 
     @Override
-    public boolean isSatisfiedBy(@NonNull Assignment assignment) {
-        final var allValues = assignment.extractPartialAssignment(getVariables()).getValues().values();
-        final var allSize = allValues.size();
-        if (allSize < 2) {
-            return true;
+    protected boolean isSatisfiedByValues(@NonNull Collection<T> values) {
+        val size = values.size();
+        if (size < 2) return true;
+        if (size == 2) {
+            val iterator = values.iterator();
+            return !Objects.equals(iterator.next(), iterator.next());
         }
-        if (allSize == 2) {
-            final var iterator = allValues.iterator();
-            final var first = iterator.next();
-            final var second = iterator.next();
-            return !Objects.equals(first, second);
-        }
-        final var dedupedValues = new HashSet<>();
-        for (Object value : allValues) {
-            if (!dedupedValues.add(value))
-                return false;
+        val deduped = new HashSet<T>();
+        for (T value : values) {
+            if (!deduped.add(value)) return false;
         }
         return true;
     }
@@ -54,7 +47,6 @@ public class AllDiffConstraint extends NaryConstraint {
     public Optional<Set<BinaryConstraint>> getAsBinaryConstraints() {
         val variables = new ArrayList<>(getVariables());
         val binaryConstraints = new HashSet<BinaryConstraint>();
-
         for (int i = 0; i < variables.size(); i++) {
             for (int j = i + 1; j < variables.size(); j++) {
                 binaryConstraints.add(BinaryNotEqualsConstraint.builder()
@@ -63,7 +55,6 @@ public class AllDiffConstraint extends NaryConstraint {
                         .build());
             }
         }
-
         return Optional.of(binaryConstraints);
     }
 }

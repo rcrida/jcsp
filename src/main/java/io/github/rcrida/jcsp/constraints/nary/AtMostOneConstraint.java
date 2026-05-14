@@ -2,12 +2,12 @@ package io.github.rcrida.jcsp.constraints.nary;
 
 import lombok.experimental.SuperBuilder;
 import lombok.val;
-import io.github.rcrida.jcsp.assignments.Assignment;
 import io.github.rcrida.jcsp.constraints.binary.BinaryConstraint;
 import io.github.rcrida.jcsp.constraints.binary.BinaryPredicateConstraint;
 import org.jspecify.annotations.NonNull;
 
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.HashSet;
 import java.util.Optional;
 import java.util.Set;
@@ -19,15 +19,13 @@ import java.util.function.BiPredicate;
  * Suitable for use with {@link io.github.rcrida.jcsp.domains.BooleanDomain}.
  */
 @SuperBuilder
-public class AtMostOneConstraint extends NaryConstraint {
+public class AtMostOneConstraint extends UniformNaryConstraint<Boolean> {
 
     public static final @NonNull BiPredicate<Object, Object> AT_MOST_ONE_TRUE = (a, b) -> !(a.equals(true) && b.equals(true));
 
     @Override
-    public boolean isSatisfiedBy(@NonNull Assignment assignment) {
-        return assignment.extractPartialAssignment(getVariables()).getValues().values().stream()
-                .filter(Boolean.TRUE::equals)
-                .count() <= 1;
+    protected boolean isSatisfiedByValues(@NonNull Collection<Boolean> values) {
+        return values.stream().filter(b -> b).count() <= 1;
     }
 
     @Override
@@ -39,7 +37,6 @@ public class AtMostOneConstraint extends NaryConstraint {
     public Optional<Set<BinaryConstraint>> getAsBinaryConstraints() {
         val variables = new ArrayList<>(getVariables());
         val binaryConstraints = new HashSet<BinaryConstraint>();
-
         for (int i = 0; i < variables.size(); i++) {
             for (int j = i + 1; j < variables.size(); j++) {
                 binaryConstraints.add(BinaryPredicateConstraint.builder()
@@ -49,7 +46,6 @@ public class AtMostOneConstraint extends NaryConstraint {
                         .build());
             }
         }
-
         return Optional.of(binaryConstraints);
     }
 }
