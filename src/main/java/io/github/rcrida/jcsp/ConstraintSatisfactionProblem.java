@@ -22,6 +22,7 @@ import io.github.rcrida.jcsp.constraints.nary.AtMostOneConstraint;
 import io.github.rcrida.jcsp.constraints.nary.PredicateConstraint;
 import io.github.rcrida.jcsp.constraints.nary.NaryConstraint;
 import io.github.rcrida.jcsp.constraints.unary.UnaryNotEqualsConstraint;
+import io.github.rcrida.jcsp.constraints.unary.UnaryPredicateConstraint;
 import io.github.rcrida.jcsp.constraints.unary.UnaryValueConstraint;
 import io.github.rcrida.jcsp.domains.Domain;
 import io.github.rcrida.jcsp.variables.Variable;
@@ -321,8 +322,8 @@ public class ConstraintSatisfactionProblem {
          * @param value the value the variable must take
          * @return the builder
          */
-        public ConstraintSatisfactionProblemBuilder equalsConstraint(@NonNull Variable variable, @NonNull Object value) {
-            return this.constraint(UnaryValueConstraint.builder().variable(variable).value(value).build());
+        public <T> ConstraintSatisfactionProblemBuilder equalsConstraint(@NonNull Variable variable, @NonNull T value) {
+            return this.constraint(UnaryValueConstraint.<T>builder().variable(variable).value(value).build());
         }
 
         /**
@@ -343,8 +344,19 @@ public class ConstraintSatisfactionProblem {
          * @param value the value the variable must not take
          * @return the builder
          */
-        public ConstraintSatisfactionProblemBuilder notEqualsConstraint(@NonNull Variable variable, @NonNull Object value) {
-            return this.constraint(UnaryNotEqualsConstraint.builder().variable(variable).value(value).build());
+        public <T> ConstraintSatisfactionProblemBuilder notEqualsConstraint(@NonNull Variable variable, @NonNull T value) {
+            return this.constraint(UnaryNotEqualsConstraint.<T>builder().variable(variable).value(value).build());
+        }
+
+        /**
+         * Create a unary constraint that evaluates a typed predicate against the value of a single variable.
+         *
+         * @param variable the variable to be constrained
+         * @param predicate determines whether the variable's value satisfies the constraint
+         * @return the builder
+         */
+        public <T> ConstraintSatisfactionProblemBuilder predicateConstraint(@NonNull Variable variable, @NonNull Predicate<T> predicate) {
+            return this.constraint(UnaryPredicateConstraint.<T>builder().variable(variable).predicate(predicate).build());
         }
 
         /**

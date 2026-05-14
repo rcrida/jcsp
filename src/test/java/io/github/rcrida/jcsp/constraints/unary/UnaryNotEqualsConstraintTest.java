@@ -31,7 +31,7 @@ public class UnaryNotEqualsConstraintTest {
 
     @Test
     void isSatisfiedBy_false() {
-        assertThat(constraint.isSatisfiedBy(VALUE)).isFalse();
+        assertThat(constraint.isSatisfiedByValue(VALUE)).isFalse();
     }
 
     static Stream<Arguments> isSatisfiedBy_true() {

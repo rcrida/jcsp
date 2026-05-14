@@ -32,10 +32,10 @@ public class NodeConsistency {
         val builder = problem.toBuilder();
         val unaryConstraints = problem.getConstraints().stream()
                 .filter(c -> c instanceof UnaryConstraint)
-                .map(c -> (UnaryConstraint) c)
+                .map(c -> (UnaryConstraint<?>) c)
                 .toList();
         val variableDomains = new HashMap<>(problem.getVariableDomains());
-        for (UnaryConstraint constraint : unaryConstraints) {
+        for (UnaryConstraint<?> constraint : unaryConstraints) {
             val variable = constraint.getVariable();
             val domain = variableDomains.get(variable);
             val optionalRevisedDomain = revise(domain, constraint);
@@ -54,11 +54,11 @@ public class NodeConsistency {
         return Optional.of(nodeConsistentProblem);
     }
 
-    private Optional<Domain> revise(Domain domain, UnaryConstraint constraint) {
+    private Optional<Domain<?>> revise(Domain<?> domain, UnaryConstraint<?> constraint) {
         val revised = new AtomicBoolean(false);
         val revisedDomainBuilder = domain.toBuilder();
         domain.stream().forEach(x -> {
-            if (!constraint.isSatisfiedBy(x)) {
+            if (!constraint.isSatisfiedByValue(x)) {
                 revisedDomainBuilder.delete(x);
                 revised.set(true);
             }

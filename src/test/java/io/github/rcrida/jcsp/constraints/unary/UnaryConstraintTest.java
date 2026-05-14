@@ -16,10 +16,10 @@ public class UnaryConstraintTest {
     Variable variable = VARIABLE_FACTORY.create("variable");
 
     @SuperBuilder
-    static class TestUnaryConstraint extends UnaryConstraint {
+    static class TestUnaryConstraint extends UnaryConstraint<Object> {
 
         @Override
-        public boolean isSatisfiedBy(@Nullable Object value) {
+        protected boolean checkValue(@Nullable Object value) {
             return false;
         }
 
@@ -28,7 +28,7 @@ public class UnaryConstraintTest {
             return "testRelation";
         }
     }
-    UnaryConstraint constraint = TestUnaryConstraint.builder().variable(variable).build();
+    UnaryConstraint<?> constraint = TestUnaryConstraint.builder().variable(variable).build();
 
     @Test
     void getVariables() {

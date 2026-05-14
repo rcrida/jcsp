@@ -158,4 +158,14 @@ public class ConstraintSatisfactionProblemTest {
         assertThatThrownBy(() -> ConstraintSatisfactionProblem.builder().notEqualsChainConstraint(List.of(a)))
                 .isInstanceOf(AssertionError.class);
     }
+
+    @Test
+    void builder_predicateConstraint() {
+        Variable a = VARIABLE_FACTORY.create("A");
+        val csp = ConstraintSatisfactionProblem.builder()
+                .variableDomain(a, domain)
+                .predicateConstraint(a, (Integer v) -> v > 3)
+                .build();
+        assertThat(csp.getConstraints()).hasSize(1);
+    }
 }
