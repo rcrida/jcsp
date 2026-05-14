@@ -35,7 +35,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  */
 public class TimetableSchedulingBinaryAssignmentTest {
 
-    enum Timeslot  { SLOT_1, SLOT_2, SLOT_3, SLOT_4 }
+    enum Timeslot  { SLOT_1, SLOT_2, SLOT_3, SLOT_4, SLOT_5 }
     enum RoomType  { CLASSROOM, LAB, COMPUTER_LAB }
     enum Room {
         ROOM_A(RoomType.CLASSROOM),
@@ -71,6 +71,12 @@ public class TimetableSchedulingBinaryAssignmentTest {
             Subject.COMPUTER_SCIENCE, RoomType.COMPUTER_LAB
     );
 
+    static final Map<Teacher, Set<Timeslot>> UNAVAILABLE = Map.of(
+            Teacher.DR_SMITH, Set.of(Timeslot.SLOT_1),   // departmental meeting
+            Teacher.DR_JONES, Set.of(Timeslot.SLOT_5),   // teaches at another school
+            Teacher.DR_BROWN, Set.of(Timeslot.SLOT_2)    // part-time commitment
+    );
+
     static final Map<Subject, Set<Teacher>> ELIGIBLE_TEACHERS = Map.of(
             Subject.MATH,             Set.of(Teacher.DR_SMITH),
             Subject.PHYSICS,          Set.of(Teacher.DR_SMITH, Teacher.DR_JONES),
@@ -102,6 +108,7 @@ public class TimetableSchedulingBinaryAssignmentTest {
         val requiredType = REQUIRED_ROOM_TYPE.get(lesson.subject());
         return ELIGIBLE_TEACHERS.get(lesson.subject()).stream()
                 .flatMap(t -> Arrays.stream(Timeslot.values())
+                        .filter(ts -> !UNAVAILABLE.getOrDefault(t, Set.of()).contains(ts))
                         .flatMap(ts -> Arrays.stream(Room.values())
                                 .filter(r -> r.type == requiredType)
                                 .map(r -> new TeacherSlot(t, new Slot(ts, r)))))
