@@ -15,5 +15,5 @@ import java.util.Set;
 public interface Constraint {
     boolean isSatisfiedBy(@NonNull Assignment assignment);
     String getRelation();
-    Set<Variable> getVariables();
+    Set<Variable<?>> getVariables();
 }

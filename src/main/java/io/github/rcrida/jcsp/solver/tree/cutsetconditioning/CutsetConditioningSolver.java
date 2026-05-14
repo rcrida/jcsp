@@ -56,7 +56,7 @@ public class CutsetConditioningSolver implements Solver {
             for (Constraint constraint : overlappingConstraints) {
                 val overlappingVariables = new HashSet<>(constraint.getVariables());
                 overlappingVariables.retainAll(variableDomains.keySet());
-                for (Variable X_i : overlappingVariables) {
+                for (Variable<?> X_i : overlappingVariables) {
                     val D_i = variableDomains.get(X_i);
                     val revisedDomain = revise(X_i, D_i, cutsetAssignment, constraint);
                     if (revisedDomain.isEmpty()) {
@@ -71,7 +71,7 @@ public class CutsetConditioningSolver implements Solver {
             return Optional.of(constrainedTree);
         }
 
-        private Domain revise(@NonNull Variable X_i, @NonNull Domain D_i, @NonNull Assignment cutsetAssignment, @NonNull Constraint constraint) {
+        private Domain<?> revise(@NonNull Variable<?> X_i, @NonNull Domain<?> D_i, @NonNull Assignment cutsetAssignment, @NonNull Constraint constraint) {
             val valuesToDelete = D_i.stream()
                     .filter(x -> !constraint.isSatisfiedBy(cutsetAssignment.withValue(X_i, x)))
                     .toList();
@@ -115,8 +115,8 @@ public class CutsetConditioningSolver implements Solver {
                 .findFirst();
     }
 
-    private static Map<Variable, Integer> computeConstraintCounts(@NonNull ConstraintSatisfactionProblem csp) {
-        val counts = new HashMap<Variable, Integer>();
+    private static Map<Variable<?>, Integer> computeConstraintCounts(@NonNull ConstraintSatisfactionProblem csp) {
+        val counts = new HashMap<Variable<?>, Integer>();
         csp.getVariableDomains().keySet().forEach(v -> counts.put(v, 0));
         csp.getConstraints().forEach(c -> c.getVariables().forEach(v -> counts.merge(v, 1, Integer::sum)));
         return counts;
@@ -131,11 +131,12 @@ public class CutsetConditioningSolver implements Solver {
      * @param variable seed variable to expand to tree
      * @return
      */
-    private Optional<Decomposition> decomposeCsp(@NonNull ConstraintSatisfactionProblem csp, @NonNull Set<Variable> unsplittableVariables, @NonNull Variable variable, @NonNull Map<Variable, Integer> constraintCounts) {
+    private Optional<Decomposition> decomposeCsp(@NonNull ConstraintSatisfactionProblem csp, @NonNull Set<Variable<?>> unsplittableVariables, @NonNull Variable<?> variable, @NonNull Map<Variable<?>, Integer> constraintCounts) {
         log.debug("Decompose from {}", variable);
-        val queue = new ArrayDeque<>(List.of(variable));
-        val visited = new HashSet<Variable>();
-        val treeVariables = new HashSet<Variable>();
+        val queue = new ArrayDeque<Variable<?>>();
+        queue.add(variable);
+        val visited = new HashSet<Variable<?>>();
+        val treeVariables = new HashSet<Variable<?>>();
         val neighbours = csp.getNeighbours();
         while (!queue.isEmpty()) {
             val node = queue.poll();
@@ -157,8 +158,8 @@ public class CutsetConditioningSolver implements Solver {
         val problemSize = csp.getVariableDomains().size();
         val cycleCutsetSize = problemSize - treeSize;
         if (treeSize > 1 && isComplexityDecreased(csp, cycleCutsetSize)) {
-            final Predicate<Variable> treePredicate = treeVariables::contains;
-            final Predicate<Variable> cycleCutsetPredicate = Predicate.not(treePredicate);
+            final Predicate<Variable<?>> treePredicate = treeVariables::contains;
+            final Predicate<Variable<?>> cycleCutsetPredicate = Predicate.not(treePredicate);
             val cycleCutset = csp.withVariableSubset(cycleCutsetPredicate);
             val tree = csp.withVariableSubset(treePredicate);
             val overlappingConstraints = new HashSet<>(csp.getConstraints());

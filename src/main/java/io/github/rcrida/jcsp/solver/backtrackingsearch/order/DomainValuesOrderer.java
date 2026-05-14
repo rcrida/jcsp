@@ -17,5 +17,5 @@ import java.util.stream.Stream;
  */
 @FunctionalInterface
 public interface DomainValuesOrderer {
-    Stream<?> order(@NonNull ConstraintSatisfactionProblem csp, @NonNull Variable variable, @NonNull Assignment assignment);
+    Stream<?> order(@NonNull ConstraintSatisfactionProblem csp, @NonNull Variable<?> variable, @NonNull Assignment assignment);
 }

@@ -19,13 +19,13 @@ import static org.assertj.core.api.Assertions.assertThat;
  */
 class LeastConstrainingValueOrdererTest {
     static Variable.Factory FACTORY = Variable.Factory.INSTANCE;
-    static Domain DOMAIN = DomainObjectSet.builder().value(1).value(2).value(3).build();
+    static Domain<Integer> DOMAIN = DomainObjectSet.<Integer>builder().value(1).value(2).value(3).build();
 
     @Test
     void singleBinaryConstraint() {
         // Setup CSP
-        Variable A = FACTORY.create("A");
-        Variable B = FACTORY.create("B");
+        Variable<Integer> A = FACTORY.create("A");
+        Variable<Integer> B = FACTORY.create("B");
 
         ConstraintSatisfactionProblem csp = ConstraintSatisfactionProblem.builder()
                 .variableDomain(A, DOMAIN)
@@ -46,9 +46,9 @@ class LeastConstrainingValueOrdererTest {
     @Test
     void multipleBinaryConstraints() {
         // Setup CSP
-        Variable A = FACTORY.create("A");
-        Variable B = FACTORY.create("B");
-        Variable C = FACTORY.create("C");
+        Variable<Integer> A = FACTORY.create("A");
+        Variable<Integer> B = FACTORY.create("B");
+        Variable<Integer> C = FACTORY.create("C");
 
         ConstraintSatisfactionProblem csp = ConstraintSatisfactionProblem.builder()
                 .variableDomain(A, DOMAIN)
@@ -71,7 +71,7 @@ class LeastConstrainingValueOrdererTest {
     @Test
     void noConstraints() {
         // Setup CSP with no constraints
-        Variable A = FACTORY.create("A");
+        Variable<Integer> A = FACTORY.create("A");
 
         ConstraintSatisfactionProblem csp = ConstraintSatisfactionProblem.builder()
                 .variableDomain(A, DOMAIN)
@@ -90,8 +90,8 @@ class LeastConstrainingValueOrdererTest {
     @Test
     void preAssignedVariable() {
         // Setup CSP
-        Variable A = FACTORY.create("A");
-        Variable B = FACTORY.create("B");
+        Variable<Integer> A = FACTORY.create("A");
+        Variable<Integer> B = FACTORY.create("B");
 
         ConstraintSatisfactionProblem csp = ConstraintSatisfactionProblem.builder()
                 .variableDomain(A, DOMAIN)

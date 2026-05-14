@@ -16,5 +16,5 @@ import org.jspecify.annotations.NonNull;
  */
 @FunctionalInterface
 public interface UnassignedVariableSelector {
-    Variable select(@NonNull ConstraintSatisfactionProblem csp, @NonNull Assignment assignment);
+    Variable<?> select(@NonNull ConstraintSatisfactionProblem csp, @NonNull Assignment assignment);
 }

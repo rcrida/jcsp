@@ -20,9 +20,9 @@ import static org.mockito.Mockito.when;
 @ExtendWith(MockitoExtension.class)
 public class BinaryPredicateConstraintTest {
     @Mock
-    Variable variable1;
+    Variable<Object> variable1;
     @Mock
-    Variable variable2;
+    Variable<Object> variable2;
     @Mock
     Object value1;
     @Mock

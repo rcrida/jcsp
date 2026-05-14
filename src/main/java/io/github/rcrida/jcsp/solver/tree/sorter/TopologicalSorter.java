@@ -12,5 +12,5 @@ import java.util.List;
  * sorted relative to a provided root variable.
  */
 public interface TopologicalSorter {
-    List<Arc> sort(@NonNull ConstraintSatisfactionProblem tcsp, @NonNull Variable root);
+    List<Arc> sort(@NonNull ConstraintSatisfactionProblem tcsp, @NonNull Variable<?> root);
 }

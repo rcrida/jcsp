@@ -18,14 +18,13 @@ import org.jspecify.annotations.NonNull;
 @SuperBuilder
 @EqualsAndHashCode(callSuper = true)
 public class AssignmentVariableConsistencyConstraint extends SymmetricBinaryConstraint<Assignment> {
-    @NonNull Variable cliqueVariable;
+    @NonNull Variable<?> cliqueVariable;
 
     @Override
     public boolean isSatisfiedBy(@NonNull Assignment leftValue, @NonNull Assignment rightValue) {
-        return leftValue.getValue(cliqueVariable)
-                .flatMap(lv -> rightValue.getValue(cliqueVariable)
-                        .map(rv -> lv == rv))
-                .orElse(true);
+        val lv = leftValue.getValue(cliqueVariable);
+        val rv = rightValue.getValue(cliqueVariable);
+        return lv.isEmpty() || rv.isEmpty() || lv.get() == rv.get();
     }
 
     @Override

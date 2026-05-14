@@ -15,9 +15,9 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 @ExtendWith(MockitoExtension.class)
 public class AtMostOneConstraintTest {
-    @Mock Variable variable1;
-    @Mock Variable variable2;
-    @Mock Variable variable3;
+    @Mock Variable<Boolean> variable1;
+    @Mock Variable<Boolean> variable2;
+    @Mock Variable<Boolean> variable3;
 
     AtMostOneConstraint constraint;
 

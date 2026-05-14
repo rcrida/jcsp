@@ -27,17 +27,17 @@ public class AssignmentDomain extends DomainObjectSet<Assignment> {
      * @param variableDomains the set of clique variables and their associated domains
      * @param csp the original problem, used for determining which of the combinations of domain values are consistent
      */
-    public AssignmentDomain(@NonNull Map<Variable, Domain<?>> variableDomains, @NonNull ConstraintSatisfactionProblem csp) {
+    public AssignmentDomain(@NonNull Map<Variable<?>, Domain<?>> variableDomains, @NonNull ConstraintSatisfactionProblem csp) {
         super(populateCombinations(variableDomains, csp));
     }
 
-    private static Set<Assignment> populateCombinations(@NonNull Map<Variable, Domain<?>> variableDomains, @NonNull ConstraintSatisfactionProblem csp) {
+    private static Set<Assignment> populateCombinations(@NonNull Map<Variable<?>, Domain<?>> variableDomains, @NonNull ConstraintSatisfactionProblem csp) {
         // create a list of single variable assignments for each value of the domain of each variable
         val variableAssignments = variableDomains.entrySet().stream()
                 .collect(Collectors.toMap(
                         Map.Entry::getKey,
                         e -> e.getValue().stream()
-                                .map(v -> Assignment.of(Map.of(e.getKey(), v)))
+                                .map(v -> Assignment.builder().value(e.getKey(), v).build())
                                 .toList()));
         // now merge all the combinations of the variable assignments, as long as they are consistent
         return variableAssignments.values().stream()

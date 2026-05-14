@@ -16,18 +16,18 @@ import java.util.Set;
 import static org.assertj.core.api.Assertions.assertThat;
 
 public class CryptarithmeticTest {
-    static Domain DIGIT_DOMAIN = IntRangeDomain.of(0, 9);
-    static Domain CARRY_DOMAIN = IntRangeDomain.of(0, 1);
+    static Domain<Integer> DIGIT_DOMAIN = IntRangeDomain.of(0, 9);
+    static Domain<Integer> CARRY_DOMAIN = IntRangeDomain.of(0, 1);
     static Variable.Factory VARIABLE_FACTORY = Variable.Factory.INSTANCE;
-    static Variable t = VARIABLE_FACTORY.create("T");
-    static Variable w = VARIABLE_FACTORY.create("W");
-    static Variable o = VARIABLE_FACTORY.create("O");
-    static Variable f = VARIABLE_FACTORY.create("F");
-    static Variable u = VARIABLE_FACTORY.create("U");
-    static Variable r = VARIABLE_FACTORY.create("R");
-    static Variable c1 = VARIABLE_FACTORY.create("C1");
-    static Variable c2 = VARIABLE_FACTORY.create("C2");
-    static Variable c3 = VARIABLE_FACTORY.create("C3");
+    static Variable<Integer> t = VARIABLE_FACTORY.create("T");
+    static Variable<Integer> w = VARIABLE_FACTORY.create("W");
+    static Variable<Integer> o = VARIABLE_FACTORY.create("O");
+    static Variable<Integer> f = VARIABLE_FACTORY.create("F");
+    static Variable<Integer> u = VARIABLE_FACTORY.create("U");
+    static Variable<Integer> r = VARIABLE_FACTORY.create("R");
+    static Variable<Integer> c1 = VARIABLE_FACTORY.create("C1");
+    static Variable<Integer> c2 = VARIABLE_FACTORY.create("C2");
+    static Variable<Integer> c3 = VARIABLE_FACTORY.create("C3");
 
     public static ConstraintSatisfactionProblem twoPlusTwoEqualsFour() {
         return ConstraintSatisfactionProblem.builder()

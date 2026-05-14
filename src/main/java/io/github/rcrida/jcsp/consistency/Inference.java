@@ -12,5 +12,5 @@ import java.util.Optional;
  */
 @FunctionalInterface
 public interface Inference {
-    Optional<ConstraintSatisfactionProblem> apply(ConstraintSatisfactionProblem problem, Variable variable, Assignment assignment);
+    Optional<ConstraintSatisfactionProblem> apply(ConstraintSatisfactionProblem problem, Variable<?> variable, Assignment assignment);
 }

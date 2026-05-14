@@ -21,13 +21,12 @@ import java.util.Set;
 @SuperBuilder
 public abstract class UnaryConstraint<T> implements Constraint {
     @NonNull
-    Variable variable;
+    Variable<T> variable;
 
     @Override
-    @SuppressWarnings("unchecked")
     public final boolean isSatisfiedBy(@NonNull Assignment assignment) {
         return assignment.getValue(variable)
-                .map(value -> checkValue((T) value))
+                .map(this::checkValue)
                 .orElse(true);
     }
 
@@ -44,7 +43,7 @@ public abstract class UnaryConstraint<T> implements Constraint {
     protected abstract boolean checkValue(@NonNull T value);
 
     @Override
-    public Set<Variable> getVariables() {
+    public Set<Variable<?>> getVariables() {
         return Set.of(variable);
     }
 

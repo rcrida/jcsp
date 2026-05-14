@@ -5,6 +5,7 @@ import lombok.extern.slf4j.Slf4j;
 import lombok.val;
 import io.github.rcrida.jcsp.ConstraintSatisfactionProblem;
 import io.github.rcrida.jcsp.constraints.binary.BinaryTuplesConstraint;
+import io.github.rcrida.jcsp.assignments.Assignment;
 import io.github.rcrida.jcsp.domains.AssignmentDomain;
 import io.github.rcrida.jcsp.domains.Domain;
 import io.github.rcrida.jcsp.solver.tree.decomposition.decomposer.variableselector.VariableSelectionHeuristic;
@@ -68,19 +69,17 @@ public class TreeDecomposerImpl implements TreeDecomposer {
         if (csp.isEmpty() || csp.isTree()) {
             return Optional.empty();
         }
-        List<Set<Variable>> maximal = getMaximalCliqueBags(csp);
+        List<Set<Variable<?>>> maximal = getMaximalCliqueBags(csp);
 
         List<CliqueEdge> edges = getCliqueEdges(maximal);
 
         Map<Integer, Set<Integer>> tree = getMaximumSpanningTree(maximal, edges);
 
         val treeBuilder = ConstraintSatisfactionProblem.builder();
-        val cliqueVariables = new ArrayList<Variable>();
+        val cliqueVariables = new ArrayList<Variable<Assignment>>();
         for (val clique : maximal) {
-            val cliqueVariableDomains = clique.stream()
-                    .collect(Collectors.toMap(
-                            v -> v,
-                            csp::getDomain));
+            val cliqueVariableDomains = new java.util.HashMap<Variable<?>, Domain<?>>();
+            clique.forEach(v -> cliqueVariableDomains.put(v, csp.getDomain(v)));
             val cliqueDomainMaxSize = cliqueVariableDomains.values().stream()
                     .map(Domain::size)
                     .map(BigInteger::valueOf)
@@ -90,7 +89,7 @@ public class TreeDecomposerImpl implements TreeDecomposer {
                 return Optional.empty();
             }
             val cliqueDomain = new AssignmentDomain(cliqueVariableDomains, csp);
-            val cliqueVariable = treeBuilder.createVariable(cliqueVariableDomains.keySet().toString(), cliqueDomain);
+            val cliqueVariable = treeBuilder.<Assignment>createVariable(cliqueVariableDomains.keySet().toString(), cliqueDomain);
             treeBuilder.variableDomain(cliqueVariable, cliqueDomain);
             cliqueVariables.add(cliqueVariable);
         }
@@ -114,9 +113,10 @@ public class TreeDecomposerImpl implements TreeDecomposer {
         return Optional.of(treeBuilder.build());
     }
 
-    private @NonNull List<Set<Variable>> getMaximalCliqueBags(@NonNull ConstraintSatisfactionProblem csp) {
+    @SuppressWarnings("unchecked")
+    private @NonNull List<Set<Variable<?>>> getMaximalCliqueBags(@NonNull ConstraintSatisfactionProblem csp) {
         var workGraph = csp.toBuilder().build();
-        val bags = new ArrayList<Set<Variable>>();
+        val bags = new ArrayList<Set<Variable<?>>>();
         while (workGraph.getNumVariables() > 0) {
             // build bag = pick U neighbours (uneliminated)
             val pick = selectVertex(workGraph);
@@ -131,8 +131,8 @@ public class TreeDecomposerImpl implements TreeDecomposer {
             for (int i = 0; i < listN.size(); i++) {
                 for (int j = i + 1; j < listN.size(); j++) {
                     workGraphBuilder.constraint(BinaryTuplesConstraint.builder()
-                            .left(listN.get(i))
-                            .right(listN.get(j))
+                            .left((Variable<Object>) (Variable<?>) listN.get(i))
+                            .right((Variable<Object>) (Variable<?>) listN.get(j))
                             .build());
                 }
             }
@@ -145,13 +145,13 @@ public class TreeDecomposerImpl implements TreeDecomposer {
         log.info("Bags = {}", bags);
 
         // Extract unique inclusion-maximal cliques from recorded bags
-        Set<Set<Variable>> cliques = new HashSet<>(bags);
+        Set<Set<Variable<?>>> cliques = new HashSet<>(bags);
         log.info("cliques = {}", cliques);
 
         // remove those that are subset of another
-        List<Set<Variable>> maximal = new ArrayList<>(cliques);
+        List<Set<Variable<?>>> maximal = new ArrayList<>(cliques);
         maximal.removeIf(c -> {
-            for (Set<Variable> d : cliques) {
+            for (Set<Variable<?>> d : cliques) {
                 if (d != c && d.containsAll(c)) {
                     return true;
                 }
@@ -169,16 +169,16 @@ public class TreeDecomposerImpl implements TreeDecomposer {
                 .orElseThrow();
     }
 
-    private static @NonNull List<CliqueEdge> getCliqueEdges(List<Set<Variable>> maximal) {
+    private static @NonNull List<CliqueEdge> getCliqueEdges(List<Set<Variable<?>>> maximal) {
         // Build clique graph edges weighted by intersection size
         int m = maximal.size();
         List<CliqueEdge> edges = new ArrayList<>();
         for (int i = 0; i < m; i++) {
             for (int j = i + 1; j < m; j++) {
-                Set<Variable> a = maximal.get(i);
-                Set<Variable> b = maximal.get(j);
+                Set<Variable<?>> a = maximal.get(i);
+                Set<Variable<?>> b = maximal.get(j);
                 int inter = 0;
-                for (Variable x : a) {
+                for (Variable<?> x : a) {
                     if (b.contains(x)) {
                         inter++;
                     }
@@ -192,7 +192,7 @@ public class TreeDecomposerImpl implements TreeDecomposer {
         return edges;
     }
 
-    private static @NonNull Map<Integer, Set<Integer>> getMaximumSpanningTree(List<Set<Variable>> maximal, List<CliqueEdge> edges) {
+    private static @NonNull Map<Integer, Set<Integer>> getMaximumSpanningTree(List<Set<Variable<?>>> maximal, List<CliqueEdge> edges) {
         // Kruskal maximum spanning tree — edges sorted descending, maximises separator sizes
         int m = maximal.size();
         UnionFind uf = new UnionFind(m);

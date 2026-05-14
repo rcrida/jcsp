@@ -52,7 +52,7 @@ import java.util.stream.Collectors;
 @NonFinal
 @AllArgsConstructor(access = AccessLevel.NONE)
 public class ConstraintSatisfactionProblem {
-    Map<Variable, Domain<?>> variableDomains;
+    Map<Variable<?>, Domain<?>> variableDomains;
     @Getter(AccessLevel.NONE) @EqualsAndHashCode.Exclude ConstraintGraph constraintGraph;
 
     /**
@@ -66,7 +66,7 @@ public class ConstraintSatisfactionProblem {
      * @param constraintGraph pre-computed constraint graph to reuse, or {@code null} to compute fresh
      */
     @Builder
-    ConstraintSatisfactionProblem(@Singular Map<Variable, Domain<?>> variableDomains, @Singular Set<Constraint> constraints, @Nullable ConstraintGraph constraintGraph) {
+    ConstraintSatisfactionProblem(@Singular("variableDomainEntry") Map<Variable<?>, Domain<?>> variableDomains, @Singular Set<Constraint> constraints, @Nullable ConstraintGraph constraintGraph) {
         this.variableDomains = variableDomains;
         if (constraintGraph != null && constraintGraph.getConstraints().equals(constraints)) {
             this.constraintGraph = constraintGraph;
@@ -88,7 +88,7 @@ public class ConstraintSatisfactionProblem {
                 .constraintGraph(constraintGraph);
     }
 
-    private static void validateConstraints(Map<Variable, Domain<?>> variableDomains, Set<Constraint> constraints) {
+    private static void validateConstraints(Map<Variable<?>, Domain<?>> variableDomains, Set<Constraint> constraints) {
         val unknownVariables = constraints.stream()
                 .flatMap(c -> c.getVariables().stream())
                 .filter(Predicate.not(variableDomains::containsKey))
@@ -131,7 +131,7 @@ public class ConstraintSatisfactionProblem {
     /**
      * A map containing each variable in the problem that has at least one neighbour, along with its neighbours.
      */
-    public Map<Variable, Set<Variable>> getNeighbours() {
+    public Map<Variable<?>, Set<Variable<?>>> getNeighbours() {
         return constraintGraph.getNeighbours();
     }
 
@@ -158,8 +158,9 @@ public class ConstraintSatisfactionProblem {
      * @param variable whose domain we are interested in
      * @return the domain of the specified variable, or empty, if the problem does not contain the variable
      */
-    public Optional<Domain<?>> findDomain(@NonNull Variable variable) {
-        return Optional.ofNullable(variableDomains.get(variable));
+    @SuppressWarnings("unchecked")
+    public <T> Optional<Domain<T>> findDomain(@NonNull Variable<T> variable) {
+        return Optional.ofNullable((Domain<T>) variableDomains.get(variable));
     }
 
     /**
@@ -167,8 +168,9 @@ public class ConstraintSatisfactionProblem {
      * @return the domain of the specified variable
      * @throws java.util.NoSuchElementException if the problem does not contain the variable
      */
-    public Domain<?> getDomain(@NonNull Variable variable) {
-        return Optional.ofNullable(variableDomains.get(variable)).orElseThrow();
+    @SuppressWarnings("unchecked")
+    public <T> Domain<T> getDomain(@NonNull Variable<T> variable) {
+        return (Domain<T>) Optional.ofNullable(variableDomains.get(variable)).orElseThrow();
     }
 
     /**
@@ -178,7 +180,7 @@ public class ConstraintSatisfactionProblem {
      * @param value is this value allowed for the variable?
      * @return true if the problem contains the variable and the domain of the variable contains the value
      */
-    public boolean isAllowedValue(@NonNull Variable variable, @NonNull Object value) {
+    public boolean isAllowedValue(@NonNull Variable<?> variable, @NonNull Object value) {
         return findDomain(variable)
                 .map(domain -> domain.contains(value))
                 .orElse(false);
@@ -202,7 +204,7 @@ public class ConstraintSatisfactionProblem {
      * cutset conditioning.
      */
     @NonNull
-    public Set<Variable> getUnsplittableVariables() {
+    public Set<Variable<?>> getUnsplittableVariables() {
         return getConstraints().stream()
                 .filter(c -> c instanceof NaryConstraint)
                 .map(c -> (NaryConstraint) c)
@@ -224,12 +226,12 @@ public class ConstraintSatisfactionProblem {
         val subproblems = new HashSet<ConstraintSatisfactionProblem>();
         while (!unassignedVariables.isEmpty()) {
             val subCsp = ConstraintSatisfactionProblem.builder();
-            val queue = new ArrayDeque<Variable>();
+            val queue = new ArrayDeque<Variable<?>>();
             addUnassignedVariable(queue, unassignedVariables.iterator().next(), unassignedVariables);
             while (!queue.isEmpty()) {
                 val variable = queue.poll();
                 val domain = getDomain(variable);
-                subCsp.variableDomain(variable, domain);
+                subCsp.variableDomainEntry(variable, domain);
                 subCsp.constraints(getConstraints().stream()
                         .filter(c -> c.getVariables().contains(variable))
                         .collect(Collectors.toSet()));
@@ -242,7 +244,7 @@ public class ConstraintSatisfactionProblem {
         return subproblems;
     }
 
-    private void addUnassignedVariable(@NonNull Queue<Variable> queue, @NonNull Variable variable, @NonNull Set<Variable> unassignedVariables) {
+    private void addUnassignedVariable(@NonNull Queue<Variable<?>> queue, @NonNull Variable<?> variable, @NonNull Set<Variable<?>> unassignedVariables) {
         queue.add(variable);
         unassignedVariables.remove(variable);
     }
@@ -255,7 +257,7 @@ public class ConstraintSatisfactionProblem {
      * @param variablePredicate determines which variables to include in the sub-problem
      * @return a sub-problem with a reduced set of variables
      */
-    public ConstraintSatisfactionProblem withVariableSubset(@NonNull Predicate<Variable> variablePredicate) {
+    public ConstraintSatisfactionProblem withVariableSubset(@NonNull Predicate<Variable<?>> variablePredicate) {
         val variableDomainSubset = getVariableDomains().entrySet().stream()
                 .filter(e -> variablePredicate.test(e.getKey()))
                 .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
@@ -278,13 +280,14 @@ public class ConstraintSatisfactionProblem {
     public static class ConstraintSatisfactionProblemBuilder {
         private final Variable.Factory variableFactory = Variable.Factory.INSTANCE;
 
-        public Variable createVariable(String name, Domain<?> domain) {
-            final var variable = variableFactory.create(name);
+        public <T> Variable<T> createVariable(String name, Domain<T> domain) {
+            final var variable = variableFactory.<T>create(name);
             variableDomain(variable, domain);
             return variable;
         }
 
-        public Variable[] create1dVariableArray(@NonNull String[] labels, @NonNull String namePrefix, @NonNull Domain<?> domain) {
+        @SuppressWarnings("unchecked")
+        public <T> Variable<T>[] create1dVariableArray(@NonNull String[] labels, @NonNull String namePrefix, @NonNull Domain<T> domain) {
             final var variables = new Variable[labels.length];
             for (int i = 0; i < labels.length; i++) {
                 variables[i] = createVariable(String.format("%s%s", namePrefix, labels[i]), domain);
@@ -292,7 +295,8 @@ public class ConstraintSatisfactionProblem {
             return variables;
         }
 
-        public Variable[][] create2dVariableArray(@NonNull String[] rows, @NonNull String[] columns, @NonNull String namePrefix, @NonNull Domain<?> domain) {
+        @SuppressWarnings("unchecked")
+        public <T> Variable<T>[][] create2dVariableArray(@NonNull String[] rows, @NonNull String[] columns, @NonNull String namePrefix, @NonNull Domain<T> domain) {
             final var variables = new Variable[rows.length][columns.length];
             for (int i = 0; i < rows.length; i++) {
                 for (int j = 0; j < columns.length; j++) {
@@ -302,7 +306,18 @@ public class ConstraintSatisfactionProblem {
             return variables;
         }
 
-        public ConstraintSatisfactionProblemBuilder deleteVariable(@NonNull Variable variable) {
+        /**
+         * Register a variable with its domain, enforcing that the domain value type matches the variable type.
+         *
+         * @param variable the variable to register
+         * @param domain the domain of allowed values for the variable
+         * @return the builder
+         */
+        public <T> ConstraintSatisfactionProblemBuilder variableDomain(@NonNull Variable<T> variable, @NonNull Domain<T> domain) {
+            return this.variableDomainEntry(variable, domain);
+        }
+
+        public ConstraintSatisfactionProblemBuilder deleteVariable(@NonNull Variable<?> variable) {
             val index = this.variableDomains$key.indexOf(variable);
             this.variableDomains$key.remove(index);
             this.variableDomains$value.remove(index);
@@ -322,7 +337,7 @@ public class ConstraintSatisfactionProblem {
          * @param value the value the variable must take
          * @return the builder
          */
-        public <T> ConstraintSatisfactionProblemBuilder equalsConstraint(@NonNull Variable variable, @NonNull T value) {
+        public <T> ConstraintSatisfactionProblemBuilder equalsConstraint(@NonNull Variable<T> variable, @NonNull T value) {
             return this.constraint(UnaryValueConstraint.<T>builder().variable(variable).value(value).build());
         }
 
@@ -333,8 +348,8 @@ public class ConstraintSatisfactionProblem {
          * @param right second variable of the pair
          * @return the builder
          */
-        public ConstraintSatisfactionProblemBuilder equalsConstraint(@NonNull Variable left, @NonNull Variable right) {
-            return this.constraint(BinaryEqualsConstraint.builder().left(left).right(right).build());
+        public <T> ConstraintSatisfactionProblemBuilder equalsConstraint(@NonNull Variable<T> left, @NonNull Variable<T> right) {
+            return this.constraint(BinaryEqualsConstraint.<T>builder().left(left).right(right).build());
         }
 
         /**
@@ -344,7 +359,7 @@ public class ConstraintSatisfactionProblem {
          * @param value the value the variable must not take
          * @return the builder
          */
-        public <T> ConstraintSatisfactionProblemBuilder notEqualsConstraint(@NonNull Variable variable, @NonNull T value) {
+        public <T> ConstraintSatisfactionProblemBuilder notEqualsConstraint(@NonNull Variable<T> variable, @NonNull T value) {
             return this.constraint(UnaryNotEqualsConstraint.<T>builder().variable(variable).value(value).build());
         }
 
@@ -355,29 +370,29 @@ public class ConstraintSatisfactionProblem {
          * @param predicate determines whether the variable's value satisfies the constraint
          * @return the builder
          */
-        public <T> ConstraintSatisfactionProblemBuilder predicateConstraint(@NonNull Variable variable, @NonNull Predicate<T> predicate) {
+        public <T> ConstraintSatisfactionProblemBuilder predicateConstraint(@NonNull Variable<T> variable, @NonNull Predicate<T> predicate) {
             return this.constraint(UnaryPredicateConstraint.<T>builder().variable(variable).predicate(predicate).build());
         }
 
         /**
-         * Create an AllDiff constraint on the specified set of variables.
+         * Create an AllDiff constraint on the specified set of variables, all sharing the same value type.
          *
          * @param variables to be constrained
          * @return the builder
          */
-        public ConstraintSatisfactionProblemBuilder allDiffConstraint(@NonNull Set<Variable> variables) {
-            return this.constraint(AllDiffConstraint.builder().variables(variables).build());
+        public <T> ConstraintSatisfactionProblemBuilder allDiffConstraint(@NonNull Set<Variable<T>> variables) {
+            return this.constraint(AllDiffConstraint.<T>builder().variables(variables).build());
         }
 
         /**
-         * Constrain a list of boolean variables so that at most one is {@code true}.
+         * Constrain a set of boolean variables so that at most one is {@code true}.
          * Implemented as pairwise binary constraints — each pair cannot both be {@code true}.
          * Suitable for use with {@link io.github.rcrida.jcsp.domains.BooleanDomain}.
          *
          * @param variables the boolean variables to constrain
          * @return the builder
          */
-        public ConstraintSatisfactionProblemBuilder atMostOneConstraint(@NonNull Set<Variable> variables) {
+        public ConstraintSatisfactionProblemBuilder atMostOneConstraint(@NonNull Set<Variable<Boolean>> variables) {
             return this.constraint(AtMostOneConstraint.builder().variables(variables).build());
         }
 
@@ -388,8 +403,8 @@ public class ConstraintSatisfactionProblem {
          * @param right second variable of the pair
          * @return the builder
          */
-        public ConstraintSatisfactionProblemBuilder notEqualsConstraint(@NonNull Variable left, @NonNull Variable right) {
-            return this.constraint(BinaryNotEqualsConstraint.builder().left(left).right(right).build());
+        public <T> ConstraintSatisfactionProblemBuilder notEqualsConstraint(@NonNull Variable<T> left, @NonNull Variable<T> right) {
+            return this.constraint(BinaryNotEqualsConstraint.<T>builder().left(left).right(right).build());
         }
 
         /**
@@ -399,13 +414,13 @@ public class ConstraintSatisfactionProblem {
          * @param variables a list of variables, neighbours in the list cannot have the same value
          * @return the builder
          */
-        public ConstraintSatisfactionProblemBuilder notEqualsChainConstraint(@NonNull List<Variable> variables) {
+        public <T> ConstraintSatisfactionProblemBuilder notEqualsChainConstraint(@NonNull List<Variable<T>> variables) {
             assert variables.size() > 1;
             val firstIter = variables.iterator();
             val secondIter = variables.iterator();
             secondIter.next();
             while (secondIter.hasNext()) {
-                this.constraint(BinaryNotEqualsConstraint.builder().left(firstIter.next()).right(secondIter.next()).build());
+                this.constraint(BinaryNotEqualsConstraint.<T>builder().left(firstIter.next()).right(secondIter.next()).build());
             }
             return this;
         }
@@ -415,13 +430,13 @@ public class ConstraintSatisfactionProblem {
          * is compared using the specified operator to the value of the second variable.
          *
          * @param left the first variable
-         * @param offset numerical offset, should have same type as variable domain, can be positive or negative, will be added
+         * @param offset numerical offset, same type as variable domain, can be positive or negative, will be added
          * @param operator the type of comparison to perform, eg ==, !=, &lt;, &lt;=, &gt;=, &gt;
          * @param right the second variable
          * @return the builder
          */
-        public ConstraintSatisfactionProblemBuilder offsetConstraint(@NonNull Variable left, @NonNull Number offset, @NonNull Operator operator, @NonNull Variable right) {
-            return this.constraint(BinaryOffsetConstraint.builder().left(left).offset(offset).operator(operator).right(right).build());
+        public <N extends Number> ConstraintSatisfactionProblemBuilder offsetConstraint(@NonNull Variable<N> left, @NonNull N offset, @NonNull Operator operator, @NonNull Variable<N> right) {
+            return this.constraint(BinaryOffsetConstraint.<N>builder().left(left).offset(offset).operator(operator).right(right).build());
         }
 
         /**
@@ -432,7 +447,7 @@ public class ConstraintSatisfactionProblem {
          * @param biPredicate determines whether the specified values of the first and second variables are consistent
          * @return the builder
          */
-        public <L, R> ConstraintSatisfactionProblemBuilder biPredicateConstraint(@NonNull Variable left, @NonNull Variable right, @NonNull BiPredicate<L, R> biPredicate) {
+        public <L, R> ConstraintSatisfactionProblemBuilder biPredicateConstraint(@NonNull Variable<L> left, @NonNull Variable<R> right, @NonNull BiPredicate<L, R> biPredicate) {
             return this.constraint(BinaryPredicateConstraint.<L, R>builder().left(left).right(right).biPredicate(biPredicate).build());
         }
 
@@ -444,7 +459,7 @@ public class ConstraintSatisfactionProblem {
          * @param predicate determines whether the specified assignment is consistent
          * @return the builder
          */
-        public ConstraintSatisfactionProblemBuilder predicateConstraint(@NonNull Set<Variable> variables, @NonNull Predicate<Assignment> predicate) {
+        public ConstraintSatisfactionProblemBuilder predicateConstraint(@NonNull Set<? extends Variable<?>> variables, @NonNull Predicate<Assignment> predicate) {
             return this.constraint(PredicateConstraint.builder().variables(variables).predicate(predicate).build());
         }
     }

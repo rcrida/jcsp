@@ -19,15 +19,15 @@ import static org.mockito.Mockito.when;
 @ExtendWith(MockitoExtension.class)
 public class AssignmentTest {
     @Mock
-    Variable variable;
+    Variable<Object> variable;
     @Mock
     Object value;
     @Mock
-    Variable anotherVariable;
+    Variable<Object> anotherVariable;
     @Mock
     Object anotherValue;
     @Mock
-    Domain domain;
+    Domain<Object> domain;
 
     @Test
     void empty() {

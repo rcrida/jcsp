@@ -1,6 +1,7 @@
 package io.github.rcrida.jcsp.solver.tree.decomposition.decomposer;
 
 import lombok.val;
+import io.github.rcrida.jcsp.assignments.Assignment;
 import io.github.rcrida.jcsp.ConstraintSatisfactionProblem;
 import io.github.rcrida.jcsp.domains.Domain;
 import io.github.rcrida.jcsp.domains.IntRangeDomain;
@@ -14,13 +15,13 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 public class TreeDecomposerImplTest {
     static final Variable.Factory VARIABLE_FACTORY = Variable.Factory.INSTANCE;
-    static Domain DOMAIN = IntRangeDomain.of(1, 3);
-    static final Variable V0 = VARIABLE_FACTORY.create("V0");
-    static final Variable V1 = VARIABLE_FACTORY.create("V1");
-    static final Variable V2 = VARIABLE_FACTORY.create("V2");
-    static final Variable V3 = VARIABLE_FACTORY.create("V3");
-    static final Variable V4 = VARIABLE_FACTORY.create("V4");
-    static final Variable V5 = VARIABLE_FACTORY.create("V5");
+    static Domain<Integer> DOMAIN = IntRangeDomain.of(1, 3);
+    static final Variable<Integer> V0 = VARIABLE_FACTORY.create("V0");
+    static final Variable<Integer> V1 = VARIABLE_FACTORY.create("V1");
+    static final Variable<Integer> V2 = VARIABLE_FACTORY.create("V2");
+    static final Variable<Integer> V3 = VARIABLE_FACTORY.create("V3");
+    static final Variable<Integer> V4 = VARIABLE_FACTORY.create("V4");
+    static final Variable<Integer> V5 = VARIABLE_FACTORY.create("V5");
     TreeDecomposerImpl treeDecomposer;
 
     @BeforeEach
@@ -50,10 +51,10 @@ public class TreeDecomposerImplTest {
         val treeDecomposition = treeDecomposer.decompose(csp, 1024).get();
         // Minimum degree eliminates V0 and V5 first (both degree 2), producing the same
         // optimal width-2 decomposition as arbitrary on this symmetric graph
-        val treeVariable1 = VARIABLE_FACTORY.create("[V0, V1, V2]");
-        val treeVariable2 = VARIABLE_FACTORY.create("[V1, V2, V3]");
-        val treeVariable3 = VARIABLE_FACTORY.create("[V2, V3, V4]");
-        val treeVariable4 = VARIABLE_FACTORY.create("[V3, V4, V5]");
+        Variable<Assignment> treeVariable1 = VARIABLE_FACTORY.create("[V0, V1, V2]");
+        Variable<Assignment> treeVariable2 = VARIABLE_FACTORY.create("[V1, V2, V3]");
+        Variable<Assignment> treeVariable3 = VARIABLE_FACTORY.create("[V2, V3, V4]");
+        Variable<Assignment> treeVariable4 = VARIABLE_FACTORY.create("[V3, V4, V5]");
         assertThat(treeDecomposition.getVariableDomains()).containsOnlyKeys(treeVariable1, treeVariable2, treeVariable3, treeVariable4);
     }
 
@@ -76,10 +77,10 @@ public class TreeDecomposerImplTest {
                 .notEqualsConstraint(V4, V5)
                 .build();
         val treeDecomposition = treeDecomposer.decompose(csp, 1024).get();
-        val treeVariable1 = VARIABLE_FACTORY.create("[V0, V1, V2]");
-        val treeVariable2 = VARIABLE_FACTORY.create("[V1, V2, V3]");
-        val treeVariable3 = VARIABLE_FACTORY.create("[V2, V3, V4]");
-        val treeVariable4 = VARIABLE_FACTORY.create("[V3, V4, V5]");
+        Variable<Assignment> treeVariable1 = VARIABLE_FACTORY.create("[V0, V1, V2]");
+        Variable<Assignment> treeVariable2 = VARIABLE_FACTORY.create("[V1, V2, V3]");
+        Variable<Assignment> treeVariable3 = VARIABLE_FACTORY.create("[V2, V3, V4]");
+        Variable<Assignment> treeVariable4 = VARIABLE_FACTORY.create("[V3, V4, V5]");
         assertThat(treeDecomposition.getVariableDomains()).containsOnlyKeys(treeVariable1, treeVariable2, treeVariable3, treeVariable4);
         assertThat(treeDecomposition.getConstraints()).containsOnly(
                 AssignmentVariableConsistencyConstraint.builder().left(treeVariable1).right(treeVariable2).cliqueVariable(V1).build(),

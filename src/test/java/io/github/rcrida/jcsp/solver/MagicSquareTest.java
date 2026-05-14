@@ -32,14 +32,14 @@ public class MagicSquareTest {
     static final int MAGIC = N * (N * N + 1) / 2; // 15
     static final String[] INDICES = {"1", "2", "3"};
 
-    record MagicSquareProblem(ConstraintSatisfactionProblem csp, Variable[][] cells) {}
+    record MagicSquareProblem(ConstraintSatisfactionProblem csp, Variable<Integer>[][] cells) {}
 
     static MagicSquareProblem square() {
         val builder = ConstraintSatisfactionProblem.builder();
-        val cells = builder.create2dVariableArray(INDICES, INDICES, "c", IntRangeDomain.of(1, N * N));
+        Variable<Integer>[][] cells = builder.create2dVariableArray(INDICES, INDICES, "c", IntRangeDomain.of(1, N * N));
 
         // All cells must be distinct
-        val allCells = new HashSet<Variable>();
+        val allCells = new HashSet<Variable<Integer>>();
         for (var row : cells)
             allCells.addAll(List.of(row));
         builder.allDiffConstraint(allCells);
@@ -69,10 +69,10 @@ public class MagicSquareTest {
         return new MagicSquareProblem(builder.build(), cells);
     }
 
-    static int sum(Assignment a, Variable v0, Variable v1, Variable v2) {
-        return (int) a.getValue(v0).orElseThrow()
-             + (int) a.getValue(v1).orElseThrow()
-             + (int) a.getValue(v2).orElseThrow();
+    static int sum(Assignment a, Variable<Integer> v0, Variable<Integer> v1, Variable<Integer> v2) {
+        return a.getValue(v0).orElseThrow()
+             + a.getValue(v1).orElseThrow()
+             + a.getValue(v2).orElseThrow();
     }
 
     @Test
@@ -94,7 +94,7 @@ public class MagicSquareTest {
         assertThat(solutions).hasSize(8);
     }
 
-    static void printSquare(Assignment assignment, Variable[][] cells) {
+    static void printSquare(Assignment assignment, Variable<Integer>[][] cells) {
         for (var row : cells) {
             val line = new StringBuilder();
             for (var cell : row) {

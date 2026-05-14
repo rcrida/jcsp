@@ -20,9 +20,9 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 public class TopologicalUnassignedVariableSelectorTest {
     static final Variable.Factory FACTORY = Variable.Factory.INSTANCE;
-    static final Domain DOMAIN = DomainObjectSet.builder().value(1).value(2).value(3).build();
-    static final Variable A = FACTORY.create("A");
-    static final Variable B = FACTORY.create("B");
+    static final Domain<Integer> DOMAIN = DomainObjectSet.<Integer>builder().value(1).value(2).value(3).build();
+    static final Variable<Integer> A = FACTORY.create("A");
+    static final Variable<Integer> B = FACTORY.create("B");
     static final List<Arc> ARCS = List.of(Arc.of(A, B));
     static final ConstraintSatisfactionProblem TCSP = ConstraintSatisfactionProblem.builder()
             .variableDomain(A, DOMAIN)
@@ -40,7 +40,7 @@ public class TopologicalUnassignedVariableSelectorTest {
 
     @ParameterizedTest
     @MethodSource
-    void select(Assignment assignment, Variable expected) {
+    void select(Assignment assignment, Variable<?> expected) {
         assertThat(selector.select(TCSP, assignment)).isEqualTo(expected);
     }
 

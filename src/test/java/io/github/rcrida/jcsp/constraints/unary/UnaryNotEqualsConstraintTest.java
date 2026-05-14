@@ -21,12 +21,12 @@ public class UnaryNotEqualsConstraintTest {
     static final Domain DOMAIN = IntRangeDomain.of(0, 100);
     static final Variable.Factory VARIABLE_FACTORY = Variable.Factory.INSTANCE;
 
-    Variable variable = VARIABLE_FACTORY.create("variable");
-    UnaryNotEqualsConstraint constraint;
+    Variable<Object> variable = VARIABLE_FACTORY.create("variable");
+    UnaryNotEqualsConstraint<Object> constraint;
 
     @BeforeEach
     void setUp() {
-        constraint = UnaryNotEqualsConstraint.builder().variable(variable).value(VALUE).build();
+        constraint = UnaryNotEqualsConstraint.<Object>builder().variable(variable).value(VALUE).build();
     }
 
     @Test

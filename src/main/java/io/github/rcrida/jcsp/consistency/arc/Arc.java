@@ -10,14 +10,14 @@ import org.jspecify.annotations.NonNull;
  */
 @Value
 public class Arc {
-    Variable from;
-    Variable to;
+    Variable<?> from;
+    Variable<?> to;
 
-    public static Arc of(@NonNull Variable from, @NonNull Variable to) {
+    public static Arc of(@NonNull Variable<?> from, @NonNull Variable<?> to) {
         return new Arc(from, to);
     }
 
-    public Arc(@NonNull Variable from, @NonNull Variable to) {
+    public Arc(@NonNull Variable<?> from, @NonNull Variable<?> to) {
         assert from != to;
         this.from = from;
         this.to = to;

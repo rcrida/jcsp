@@ -147,7 +147,7 @@ public class TimetableSchedulingBinaryAssignmentTest {
             .toList();
 
     /** z[lesson][teacherSlot]: true if lesson is taught by teacher in slot. Set by {@link #timetabling()}. */
-    static Map<Lesson, Map<TeacherSlot, Variable>> Z;
+    static Map<Lesson, Map<TeacherSlot, Variable<Boolean>>> Z;
 
     static List<TeacherSlot> eligibleTeacherSlots(Lesson lesson) {
         val requiredType = REQUIRED_ROOM_TYPE.get(lesson.subject());
@@ -165,7 +165,7 @@ public class TimetableSchedulingBinaryAssignmentTest {
 
         Z = new LinkedHashMap<>();
         for (Lesson lesson : LESSONS) {
-            val tsVars = new LinkedHashMap<TeacherSlot, Variable>();
+            val tsVars = new LinkedHashMap<TeacherSlot, Variable<Boolean>>();
             for (TeacherSlot ts : eligibleTeacherSlots(lesson)) {
                 tsVars.put(ts, csp.createVariable(lesson + "@" + ts, BooleanDomain.INSTANCE));
             }

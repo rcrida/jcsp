@@ -10,7 +10,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 public class UnaryPredicateConstraintTest {
     static final Variable.Factory FACTORY = Variable.Factory.INSTANCE;
-    static final Variable variable = FACTORY.create("variable");
+    static final Variable<Integer> variable = FACTORY.create("variable");
 
     UnaryPredicateConstraint<Integer> constraint =
             UnaryPredicateConstraint.<Integer>builder()

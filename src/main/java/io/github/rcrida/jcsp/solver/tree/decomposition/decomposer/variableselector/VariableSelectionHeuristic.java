@@ -6,7 +6,7 @@ import org.jspecify.annotations.NonNull;
 
 import java.util.Comparator;
 
-public interface VariableSelectionHeuristic extends Comparator<Variable> {
+public interface VariableSelectionHeuristic extends Comparator<Variable<?>> {
 
     interface Factory {
         VariableSelectionHeuristic create(@NonNull ConstraintSatisfactionProblem csp);

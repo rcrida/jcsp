@@ -25,21 +25,22 @@ public class Assignment {
     }
 
     @Singular
-    Map<Variable, Object> values;
+    Map<Variable<?>, Object> values;
 
     @EqualsAndHashCode.Exclude
     @Builder.Default
     Statistics statistics = new Statistics();
 
-    public static Assignment of(Map<Variable, Object> values) {
+    public static Assignment of(Map<? extends Variable<?>, ?> values) {
         return Assignment.builder().values(values).build();
     }
 
-    public Optional<Object> getValue(@NonNull Variable variable) {
-        return Optional.ofNullable(values.get(variable));
+    @SuppressWarnings("unchecked")
+    public <T> Optional<T> getValue(@NonNull Variable<T> variable) {
+        return Optional.ofNullable((T) values.get(variable));
     }
 
-    public Assignment extractPartialAssignment(@NonNull Set<Variable> variables) {
+    public Assignment extractPartialAssignment(@NonNull Set<? extends Variable<?>> variables) {
         return Assignment.builder()
                 .values(values.entrySet().stream()
                         .filter(a -> variables.contains(a.getKey()))
@@ -47,7 +48,7 @@ public class Assignment {
                 .build();
     }
 
-    public Assignment withValue(@NonNull Variable variable, @NonNull Object value) {
+    public Assignment withValue(@NonNull Variable<?> variable, @NonNull Object value) {
         val next = toBuilder().value(variable, value).build();
         next.statistics.incrementNodesExplored();
         return next;
@@ -81,7 +82,7 @@ public class Assignment {
     }
 
     private void validateAssignment(ConstraintSatisfactionProblem csp) {
-        for (Map.Entry<Variable, Object> entry : values.entrySet()) {
+        for (Map.Entry<Variable<?>, Object> entry : values.entrySet()) {
             assert csp.isAllowedValue(entry.getKey(), entry.getValue()) : String.format("Invalid assigned value for variable '%s': %s", entry.getKey(), entry.getValue());
         }
     }

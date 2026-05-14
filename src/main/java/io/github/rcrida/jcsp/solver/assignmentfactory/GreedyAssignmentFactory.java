@@ -33,14 +33,14 @@ public class GreedyAssignmentFactory implements InitialAssignmentFactory {
     @Override
     public Assignment getAssignment(@NonNull ConstraintSatisfactionProblem csp) {
         var current = Assignment.empty();
-        for (Variable variable : csp.getVariableDomains().keySet()) {
+        for (Variable<?> variable : csp.getVariableDomains().keySet()) {
             val value = leastConflictingValue(variable, current, csp);
             current = Assignment.of(addEntry(current, variable, value));
         }
         return current;
     }
 
-    private Object leastConflictingValue(Variable variable, Assignment current, ConstraintSatisfactionProblem csp) {
+    private Object leastConflictingValue(Variable<?> variable, Assignment current, ConstraintSatisfactionProblem csp) {
         val constraintsOnVariable = csp.getConstraints().stream()
                 .filter(c -> c.getVariables().contains(variable))
                 .toList();
@@ -64,7 +64,7 @@ public class GreedyAssignmentFactory implements InitialAssignmentFactory {
         return bestValues.get(ThreadLocalRandom.current().nextInt(bestValues.size()));
     }
 
-    private static Map<Variable, Object> addEntry(Assignment current, Variable variable, Object value) {
+    private static Map<Variable<?>, Object> addEntry(Assignment current, Variable<?> variable, Object value) {
         val map = new HashMap<>(current.getValues());
         map.put(variable, value);
         return map;

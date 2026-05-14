@@ -10,13 +10,13 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 public class MinimumDegreeVariableSelectorTest {
     static final Variable.Factory F = Variable.Factory.INSTANCE;
-    static final Variable LOW  = F.create("LOW");   // 1 neighbour
-    static final Variable MID  = F.create("MID");   // 2 neighbours
-    static final Variable HIGH = F.create("HIGH");  // 3 neighbours
+    static final Variable<Integer> LOW  = F.create("LOW");   // 1 neighbour
+    static final Variable<Integer> MID  = F.create("MID");   // 2 neighbours
+    static final Variable<Integer> HIGH = F.create("HIGH");  // 3 neighbours
 
     // LOW-MID-HIGH-? forms a path: LOW-MID, MID-HIGH, HIGH-LOW (triangle + extra)
     // Simpler: just a path LOW -- MID -- HIGH -- extra
-    static final Variable EXTRA = F.create("EXTRA");
+    static final Variable<Integer> EXTRA = F.create("EXTRA");
 
     static final ConstraintSatisfactionProblem CSP = ConstraintSatisfactionProblem.builder()
             .variableDomain(LOW,   IntRangeDomain.of(1, 3))

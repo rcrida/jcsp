@@ -20,15 +20,15 @@ public class AustraliaMapColouringTest {
         RED, GREEN, BLUE
     }
 
-    public static Domain DOMAIN = EnumDomain.allOf(Colour.class);
+    public static Domain<Colour> DOMAIN = EnumDomain.allOf(Colour.class);
     static Variable.Factory VARIABLE_FACTORY = Variable.Factory.INSTANCE;
-    public static Variable WA = VARIABLE_FACTORY.create("WA");
-    public static Variable NT = VARIABLE_FACTORY.create("NT");
-    public static Variable Q = VARIABLE_FACTORY.create("Q");
-    public static Variable NSW = VARIABLE_FACTORY.create("NSW");
-    public static Variable V = VARIABLE_FACTORY.create("V");
-    public static Variable SA = VARIABLE_FACTORY.create("SA");
-    public static Variable T = VARIABLE_FACTORY.create("T");
+    public static Variable<Colour> WA = VARIABLE_FACTORY.create("WA");
+    public static Variable<Colour> NT = VARIABLE_FACTORY.create("NT");
+    public static Variable<Colour> Q = VARIABLE_FACTORY.create("Q");
+    public static Variable<Colour> NSW = VARIABLE_FACTORY.create("NSW");
+    public static Variable<Colour> V = VARIABLE_FACTORY.create("V");
+    public static Variable<Colour> SA = VARIABLE_FACTORY.create("SA");
+    public static Variable<Colour> T = VARIABLE_FACTORY.create("T");
 
     public static ConstraintSatisfactionProblem problem() {
         return ConstraintSatisfactionProblem.builder()

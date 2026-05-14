@@ -17,11 +17,11 @@ import static org.assertj.core.api.Assertions.assertThat;
 @ExtendWith(MockitoExtension.class)
 public class AllDiffConstraintTest {
     @Mock
-    Variable variable1;
+    Variable<Object> variable1;
     @Mock
-    Variable variable2;
+    Variable<Object> variable2;
     @Mock
-    Variable variable3;
+    Variable<Object> variable3;
     @Mock
     Object value1;
     @Mock

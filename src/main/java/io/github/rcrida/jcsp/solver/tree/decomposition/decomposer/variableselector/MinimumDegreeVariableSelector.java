@@ -22,11 +22,11 @@ import java.util.Set;
 public class MinimumDegreeVariableSelector implements VariableSelectionHeuristic {
     @NonNull
     @Getter(AccessLevel.NONE)
-    Map<Variable, Set<Variable>> neighbours;
+    Map<Variable<?>, Set<Variable<?>>> neighbours;
 
     @Override
-    public int compare(Variable o1, Variable o2) {
-        return Comparator.comparingInt((Variable v) -> neighbours.getOrDefault(v, Set.of()).size())
+    public int compare(Variable<?> o1, Variable<?> o2) {
+        return Comparator.comparingInt((Variable<?> v) -> neighbours.getOrDefault(v, Set.of()).size())
                 .compare(o1, o2);
     }
 

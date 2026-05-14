@@ -18,10 +18,10 @@ import static org.assertj.core.api.Assertions.as;
 import static org.assertj.core.api.Assertions.assertThat;
 
 public class SudokuTest {
-    static Domain DOMAIN = IntRangeDomain.of(1, 9);
+    static Domain<Integer> DOMAIN = IntRangeDomain.of(1, 9);
     static String[] ROWS = {"A", "B", "C", "D", "E", "F", "G", "H", "I"};
     static String[] COLUMNS = {"1", "2", "3", "4", "5", "6", "7", "8", "9"};
-    static Variable[][] VARIABLES;
+    static Variable<Integer>[][] VARIABLES;
 
     public static ConstraintSatisfactionProblem sudoku() {
         val cspBuilder = ConstraintSatisfactionProblem.builder();
@@ -45,7 +45,7 @@ public class SudokuTest {
         // square constraints
         for (int i = 0; i < ROWS.length; i += 3) {
             for (int j = 0; j < COLUMNS.length; j += 3) {
-                val square = new HashSet<Variable>();
+                val square = new HashSet<Variable<Integer>>();
                 for (int r = 0; r < 3; r++) {
                     for (int c = 0; c < 3; c++) {
                         square.add(VARIABLES[i+r][j+c]);

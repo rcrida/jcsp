@@ -5,12 +5,14 @@ import org.jspecify.annotations.NonNull;
 
 /**
  * Represents a variable in a constraint satisfaction problem.
+ * The type parameter {@code T} is a phantom type that carries the value type at compile time,
+ * enabling type-safe domain and constraint registration at the builder level.
  */
-public interface Variable {
+public interface Variable<T> {
     String getName();
 
     @Value
-    class Impl implements Variable {
+    class Impl<T> implements Variable<T> {
         @NonNull String name;
 
         @Override
@@ -22,8 +24,8 @@ public interface Variable {
     interface Factory {
         Factory INSTANCE = new Factory() {};
 
-        default Variable create(String name) {
-            return new Impl(name);
+        default <T> Variable<T> create(String name) {
+            return new Impl<>(name);
         }
     }
 }

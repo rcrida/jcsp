@@ -21,7 +21,7 @@ public class UnaryValueConstraintTest {
     static final Domain DOMAIN = IntRangeDomain.of(0, 100);
     static final Variable.Factory VARIABLE_FACTORY = Variable.Factory.INSTANCE;
 
-    Variable variable = VARIABLE_FACTORY.create("variable");
+    Variable<Object> variable = VARIABLE_FACTORY.create("variable");
     UnaryValueConstraint constraint;
 
     @BeforeEach

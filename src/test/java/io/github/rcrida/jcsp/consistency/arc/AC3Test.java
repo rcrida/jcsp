@@ -8,6 +8,7 @@ import io.github.rcrida.jcsp.domains.EnumDomain;
 import io.github.rcrida.jcsp.domains.IntRangeDomain;
 import io.github.rcrida.jcsp.constraints.binary.BinaryTuple;
 import io.github.rcrida.jcsp.solver.AustraliaMapColouringTest;
+import io.github.rcrida.jcsp.variables.Variable;
 import org.junit.jupiter.api.Test;
 
 import java.util.EnumSet;
@@ -30,8 +31,10 @@ public class AC3Test {
                 BinaryTuple.of(3, 9)
         );
         val builder = ConstraintSatisfactionProblem.builder();
-        val left = builder.createVariable("left", domain);
-        val right = builder.createVariable("right", domain);
+        Variable<Object> left = Variable.Factory.INSTANCE.create("left");
+        Variable<Object> right = Variable.Factory.INSTANCE.create("right");
+        builder.variableDomainEntry(left, domain);
+        builder.variableDomainEntry(right, domain);
         builder.constraint(BinaryTuplesConstraint.builder()
                 .left(left)
                 .right(right)
@@ -79,8 +82,8 @@ public class AC3Test {
 
     @Test
     void reviseArc_revisedDomain() {
-        val twoColours = new EnumDomain(EnumSet.of(RED, GREEN));
-        val redOnly = new EnumDomain(EnumSet.of(RED));
+        val twoColours = new EnumDomain<>(EnumSet.of(RED, GREEN));
+        val redOnly = new EnumDomain<>(EnumSet.of(RED));
         val problem = ConstraintSatisfactionProblem.builder()
                 .variableDomain(WA, twoColours)
                 .variableDomain(NT, redOnly)
@@ -92,7 +95,7 @@ public class AC3Test {
 
     @Test
     void reviseArc_noRevisionNeeded() {
-        val twoColours = new EnumDomain(EnumSet.of(RED, GREEN));
+        val twoColours = new EnumDomain<>(EnumSet.of(RED, GREEN));
         val problem = ConstraintSatisfactionProblem.builder()
                 .variableDomain(WA, twoColours)
                 .variableDomain(NT, twoColours)
@@ -104,7 +107,7 @@ public class AC3Test {
 
     @Test
     void reviseArc_emptyDomain() {
-        val redOnly = new EnumDomain(EnumSet.of(RED));
+        val redOnly = new EnumDomain<>(EnumSet.of(RED));
         val problem = ConstraintSatisfactionProblem.builder()
                 .variableDomain(WA, redOnly)
                 .variableDomain(NT, redOnly)
@@ -120,8 +123,10 @@ public class AC3Test {
                 BinaryTuple.of(0, 11)
         );
         val builder = ConstraintSatisfactionProblem.builder();
-        val left = builder.createVariable("left", domain);
-        val right = builder.createVariable("right", domain);
+        Variable<Object> left = Variable.Factory.INSTANCE.create("left");
+        Variable<Object> right = Variable.Factory.INSTANCE.create("right");
+        builder.variableDomainEntry(left, domain);
+        builder.variableDomainEntry(right, domain);
         builder.constraint(BinaryTuplesConstraint.builder()
                 .left(left)
                 .right(right)

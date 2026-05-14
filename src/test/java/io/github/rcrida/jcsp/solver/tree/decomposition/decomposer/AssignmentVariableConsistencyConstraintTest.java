@@ -19,11 +19,11 @@ import static org.assertj.core.api.Assertions.assertThat;
 @ExtendWith(MockitoExtension.class)
 public class AssignmentVariableConsistencyConstraintTest {
     static final Variable.Factory VARIABLE_FACTORY = Variable.Factory.INSTANCE;
-    static final Variable V1 = VARIABLE_FACTORY.create("V1");
-    static final Variable V2 = VARIABLE_FACTORY.create("V2");
-    static final Variable V3 = VARIABLE_FACTORY.create("V3");
-    static final Variable CLIQUE_VARIABLE = VARIABLE_FACTORY.create("CV1");
-    static final Variable ANOTHER_CLIQUE_VARIABLE = VARIABLE_FACTORY.create("CV2");
+    static final Variable<Assignment> V1 = VARIABLE_FACTORY.create("V1");
+    static final Variable<Assignment> V2 = VARIABLE_FACTORY.create("V2");
+    static final Variable<Assignment> V3 = VARIABLE_FACTORY.create("V3");
+    static final Variable<Object> CLIQUE_VARIABLE = VARIABLE_FACTORY.create("CV1");
+    static final Variable<Object> ANOTHER_CLIQUE_VARIABLE = VARIABLE_FACTORY.create("CV2");
     static final Object VALUE_1 = 1;
     static final Object VALUE_2 = 2;
     static final AssignmentVariableConsistencyConstraint CONSTRAINT = AssignmentVariableConsistencyConstraint.builder().left(V1).right(V2).cliqueVariable(CLIQUE_VARIABLE).build();

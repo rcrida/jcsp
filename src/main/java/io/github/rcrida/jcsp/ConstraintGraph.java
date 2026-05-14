@@ -31,18 +31,18 @@ class ConstraintGraph {
     /**
      * A map containing each variable in the problem that has at least one neighbour, along with its neighbours.
      */
-    @EqualsAndHashCode.Exclude Map<Variable, Set<Variable>> neighbours;
+    @EqualsAndHashCode.Exclude Map<Variable<?>, Set<Variable<?>>> neighbours;
     /**
      * A set of all binary constraints applicable to this problem. Where possible casts n-ary constrains
      * as additional binary constraints. Ignores n-ary constraints that aren't decomposable.
      */
     @EqualsAndHashCode.Exclude Set<BinaryConstraint<?, ?>> allBinaryConstraints;
 
-    ConstraintGraph(@NonNull Set<Constraint> constraints, @NonNull Set<Variable> variables) {
+    ConstraintGraph(@NonNull Set<Constraint> constraints, @NonNull Set<Variable<?>> variables) {
         this.constraints = constraints;
         this.neighbours = computeNeighbours(constraints, variables);
         this.allBinaryConstraints = computeAllBinaryConstraints(constraints);
-        val visited = new HashSet<Variable>();
+        val visited = new HashSet<Variable<?>>();
         if (this.neighbours.isEmpty()) {
             this.isCyclic = false;
             this.isFullyConnected = false;
@@ -60,9 +60,9 @@ class ConstraintGraph {
         return !isCyclic && isFullyConnected;
     }
 
-    private static boolean isCyclicFrom(Variable src, Variable parent, Map<Variable, Set<Variable>> neighbours, Set<Variable> visited) {
+    private static boolean isCyclicFrom(Variable<?> src, Variable<?> parent, Map<Variable<?>, Set<Variable<?>>> neighbours, Set<Variable<?>> visited) {
         visited.add(src);
-        for (Variable neighbour : neighbours.get(src)) {
+        for (Variable<?> neighbour : neighbours.get(src)) {
             if (!visited.contains(neighbour)) {
                 if (isCyclicFrom(neighbour, src, neighbours, visited)) {
                     return true;
@@ -74,19 +74,19 @@ class ConstraintGraph {
         return false;
     }
 
-    private static Map<Variable, Set<Variable>> computeNeighbours(Set<Constraint> constraints, Set<Variable> variables) {
-        val neighbours = new HashMap<Variable, Set<Variable>>();
-        for (Variable variable : variables) {
+    private static Map<Variable<?>, Set<Variable<?>>> computeNeighbours(Set<Constraint> constraints, Set<Variable<?>> variables) {
+        val neighbours = new HashMap<Variable<?>, Set<Variable<?>>>();
+        for (Variable<?> variable : variables) {
             neighbours.put(variable, new HashSet<>());
         }
         for (Constraint constraint : constraints) {
             val constraintVariables = constraint.getVariables();
-            for (Variable variable : constraintVariables) {
+            for (Variable<?> variable : constraintVariables) {
                 neighbours.get(variable).addAll(constraintVariables);
             }
         }
-        val result = new HashMap<Variable, Set<Variable>>();
-        for (Map.Entry<Variable, Set<Variable>> entry : neighbours.entrySet()) {
+        val result = new HashMap<Variable<?>, Set<Variable<?>>>();
+        for (Map.Entry<Variable<?>, Set<Variable<?>>> entry : neighbours.entrySet()) {
             entry.getValue().remove(entry.getKey());
             result.put(entry.getKey(), Set.copyOf(entry.getValue()));
         }

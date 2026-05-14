@@ -4,6 +4,7 @@ import lombok.experimental.SuperBuilder;
 import lombok.val;
 import io.github.rcrida.jcsp.constraints.binary.BinaryConstraint;
 import io.github.rcrida.jcsp.constraints.binary.BinaryNotEqualsConstraint;
+import io.github.rcrida.jcsp.variables.Variable;
 import org.jspecify.annotations.NonNull;
 
 import java.util.*;
@@ -44,14 +45,15 @@ public class AllDiffConstraint<T> extends UniformNaryConstraint<T> {
     }
 
     @Override
+    @SuppressWarnings({"unchecked", "rawtypes"})
     public Optional<Set<BinaryConstraint<?, ?>>> getAsBinaryConstraints() {
         val variables = new ArrayList<>(getVariables());
         val binaryConstraints = new HashSet<BinaryConstraint<?, ?>>();
         for (int i = 0; i < variables.size(); i++) {
             for (int j = i + 1; j < variables.size(); j++) {
                 binaryConstraints.add(BinaryNotEqualsConstraint.builder()
-                        .left(variables.get(i))
-                        .right(variables.get(j))
+                        .left((Variable) variables.get(i))
+                        .right((Variable) variables.get(j))
                         .build());
             }
         }

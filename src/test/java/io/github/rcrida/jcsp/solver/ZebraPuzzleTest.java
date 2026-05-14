@@ -4,6 +4,7 @@ import lombok.val;
 import io.github.rcrida.jcsp.ConstraintSatisfactionProblem;
 import io.github.rcrida.jcsp.assignments.Assignment;
 import io.github.rcrida.jcsp.constraints.binary.Operator;
+import io.github.rcrida.jcsp.domains.Domain;
 import io.github.rcrida.jcsp.domains.IntRangeDomain;
 import io.github.rcrida.jcsp.variables.Variable;
 import org.junit.jupiter.api.Test;
@@ -33,46 +34,46 @@ import static org.assertj.core.api.Assertions.assertThat;
  * </pre>
  */
 public class ZebraPuzzleTest {
-    static final IntRangeDomain HOUSES = IntRangeDomain.of(1, 5);
+    static final Domain<Integer> HOUSES = IntRangeDomain.of(1, 5);
     static final Variable.Factory F = Variable.Factory.INSTANCE;
 
     // Nationalities
-    static final Variable BRIT      = F.create("BRIT");
-    static final Variable SWEDE     = F.create("SWEDE");
-    static final Variable DANE      = F.create("DANE");
-    static final Variable NORWEGIAN = F.create("NORWEGIAN");
-    static final Variable GERMAN    = F.create("GERMAN");
+    static final Variable<Integer> BRIT      = F.create("BRIT");
+    static final Variable<Integer> SWEDE     = F.create("SWEDE");
+    static final Variable<Integer> DANE      = F.create("DANE");
+    static final Variable<Integer> NORWEGIAN = F.create("NORWEGIAN");
+    static final Variable<Integer> GERMAN    = F.create("GERMAN");
 
     // House colours
-    static final Variable RED    = F.create("RED");
-    static final Variable GREEN  = F.create("GREEN");
-    static final Variable WHITE  = F.create("WHITE");
-    static final Variable YELLOW = F.create("YELLOW");
-    static final Variable BLUE   = F.create("BLUE");
+    static final Variable<Integer> RED    = F.create("RED");
+    static final Variable<Integer> GREEN  = F.create("GREEN");
+    static final Variable<Integer> WHITE  = F.create("WHITE");
+    static final Variable<Integer> YELLOW = F.create("YELLOW");
+    static final Variable<Integer> BLUE   = F.create("BLUE");
 
     // Drinks
-    static final Variable TEA    = F.create("TEA");
-    static final Variable COFFEE = F.create("COFFEE");
-    static final Variable MILK   = F.create("MILK");
-    static final Variable BEER   = F.create("BEER");
-    static final Variable WATER  = F.create("WATER");
+    static final Variable<Integer> TEA    = F.create("TEA");
+    static final Variable<Integer> COFFEE = F.create("COFFEE");
+    static final Variable<Integer> MILK   = F.create("MILK");
+    static final Variable<Integer> BEER   = F.create("BEER");
+    static final Variable<Integer> WATER  = F.create("WATER");
 
     // Pets
-    static final Variable DOG   = F.create("DOG");
-    static final Variable BIRD  = F.create("BIRD");
-    static final Variable CAT   = F.create("CAT");
-    static final Variable HORSE = F.create("HORSE");
-    static final Variable FISH  = F.create("FISH");
+    static final Variable<Integer> DOG   = F.create("DOG");
+    static final Variable<Integer> BIRD  = F.create("BIRD");
+    static final Variable<Integer> CAT   = F.create("CAT");
+    static final Variable<Integer> HORSE = F.create("HORSE");
+    static final Variable<Integer> FISH  = F.create("FISH");
 
     // Cigarettes
-    static final Variable PALL_MALL   = F.create("PALL_MALL");
-    static final Variable DUNHILL     = F.create("DUNHILL");
-    static final Variable BLENDS      = F.create("BLENDS");
-    static final Variable BLUE_MASTER = F.create("BLUE_MASTER");
-    static final Variable PRINCE      = F.create("PRINCE");
+    static final Variable<Integer> PALL_MALL   = F.create("PALL_MALL");
+    static final Variable<Integer> DUNHILL     = F.create("DUNHILL");
+    static final Variable<Integer> BLENDS      = F.create("BLENDS");
+    static final Variable<Integer> BLUE_MASTER = F.create("BLUE_MASTER");
+    static final Variable<Integer> PRINCE      = F.create("PRINCE");
 
-    static final BiPredicate<Object, Object> NEXT_TO =
-            (a, b) -> Math.abs((int) a - (int) b) == 1;
+    static final BiPredicate<Integer, Integer> NEXT_TO =
+            (a, b) -> Math.abs(a - b) == 1;
 
     static ConstraintSatisfactionProblem puzzle() {
         return ConstraintSatisfactionProblem.builder()

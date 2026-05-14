@@ -13,13 +13,13 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 public class BinaryEqualsConstraintTest {
     static final Variable.Factory VARIABLE_FACTORY = Variable.Factory.INSTANCE;
 
-    Variable left = VARIABLE_FACTORY.create("left");
-    Variable right = VARIABLE_FACTORY.create("right");
-    BinaryEqualsConstraint constraint;
+    Variable<Integer> left = VARIABLE_FACTORY.create("left");
+    Variable<Integer> right = VARIABLE_FACTORY.create("right");
+    BinaryEqualsConstraint<Integer> constraint;
 
     @BeforeEach
     void setUp() {
-        constraint = BinaryEqualsConstraint.builder()
+        constraint = BinaryEqualsConstraint.<Integer>builder()
                 .left(left)
                 .right(right)
                 .build();

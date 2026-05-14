@@ -29,11 +29,11 @@ public class CutsetConditioningSolverTest {
     static final Domain DOMAIN = IntRangeDomain.of(1, 9);
     static final Domain CONSTRAINED_DOMAIN = IntRangeDomain.of(2, 9);
     static final Assignment ASSIGNMENT = Assignment.empty();
-    static final Variable T1 = VARIABLE_FACTORY.create("T1"); // t variables form a tree
-    static final Variable T2 = VARIABLE_FACTORY.create("T2");
-    static final Variable T3 = VARIABLE_FACTORY.create("T3");
-    static final Variable T4 = VARIABLE_FACTORY.create("T4");
-    static final Variable C = VARIABLE_FACTORY.create("C"); // c variable should be cutset
+    static final Variable<Integer> T1 = VARIABLE_FACTORY.create("T1"); // t variables form a tree
+    static final Variable<Integer> T2 = VARIABLE_FACTORY.create("T2");
+    static final Variable<Integer> T3 = VARIABLE_FACTORY.create("T3");
+    static final Variable<Integer> T4 = VARIABLE_FACTORY.create("T4");
+    static final Variable<Integer> C = VARIABLE_FACTORY.create("C"); // c variable should be cutset
     static final ConstraintSatisfactionProblem CUTSET_CONDITIONING_PROBLEM = ConstraintSatisfactionProblem.builder()
             .variableDomain(T1, DOMAIN)
             .variableDomain(T2, DOMAIN)
@@ -76,9 +76,9 @@ public class CutsetConditioningSolverTest {
 
     @Test
     void getSolutions_noComplexityImprovement() {
-        val a = VARIABLE_FACTORY.create("A");
-        val b = VARIABLE_FACTORY.create("B");
-        val c = VARIABLE_FACTORY.create("C");
+        Variable<Integer> a = VARIABLE_FACTORY.create("A");
+        Variable<Integer> b = VARIABLE_FACTORY.create("B");
+        Variable<Integer> c = VARIABLE_FACTORY.create("C");
         val csp = ConstraintSatisfactionProblem.builder()
                 .variableDomain(a, DOMAIN)
                 .variableDomain(b, DOMAIN)
@@ -127,10 +127,10 @@ public class CutsetConditioningSolverTest {
 
     @Test
     void getSolutions_noTreeAtAll() {
-        val a = VARIABLE_FACTORY.create("A");
-        val b = VARIABLE_FACTORY.create("B");
-        val c = VARIABLE_FACTORY.create("C");
-        val d = VARIABLE_FACTORY.create("D");
+        Variable<Integer> a = VARIABLE_FACTORY.create("A");
+        Variable<Integer> b = VARIABLE_FACTORY.create("B");
+        Variable<Integer> c = VARIABLE_FACTORY.create("C");
+        Variable<Integer> d = VARIABLE_FACTORY.create("D");
         val csp = ConstraintSatisfactionProblem.builder()
                 .variableDomain(a, DOMAIN)
                 .variableDomain(b, DOMAIN)

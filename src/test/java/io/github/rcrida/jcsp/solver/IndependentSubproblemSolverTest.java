@@ -12,10 +12,10 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 public class IndependentSubproblemSolverTest {
     static Variable.Factory FACTORY = Variable.Factory.INSTANCE;
-    static Variable V1 = FACTORY.create("V1");
-    static Variable V2 = FACTORY.create("V2");
-    static Variable V3 = FACTORY.create("V3");
-    static Variable V4 = FACTORY.create("V4");
+    static Variable<Integer> V1 = FACTORY.create("V1");
+    static Variable<Integer> V2 = FACTORY.create("V2");
+    static Variable<Integer> V3 = FACTORY.create("V3");
+    static Variable<Integer> V4 = FACTORY.create("V4");
 
     // Two independent subproblems: {V1 != V2} over {1,2,3} and {V3 != V4} over {1,2}
     static ConstraintSatisfactionProblem TWO_SUBPROBLEM_CSP = ConstraintSatisfactionProblem.builder()

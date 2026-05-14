@@ -26,8 +26,8 @@ public class BinaryTuplesConstraintTest {
     static final Domain DOMAIN = IntRangeDomain.of(0, 10);
     static final Variable.Factory VARIABLE_FACTORY = Variable.Factory.INSTANCE;
 
-    Variable left = VARIABLE_FACTORY.create("left");
-    Variable right = VARIABLE_FACTORY.create("right");
+    Variable<Object> left = VARIABLE_FACTORY.create("left");
+    Variable<Object> right = VARIABLE_FACTORY.create("right");
     BinaryTuplesConstraint relation;
 
     @BeforeEach

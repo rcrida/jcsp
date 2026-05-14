@@ -19,7 +19,7 @@ import java.util.List;
  */
 @FunctionalInterface
 public interface TreeUnassignedVariableSelector {
-    Variable select(@NonNull ConstraintSatisfactionProblem csp, @NonNull Assignment assignment);
+    Variable<?> select(@NonNull ConstraintSatisfactionProblem csp, @NonNull Assignment assignment);
 
     interface Factory {
         Factory INSTANCE = TopologicalUnassignedVariableSelector::new;

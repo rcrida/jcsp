@@ -16,8 +16,8 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 public class BinaryOffsetConstraintTest {
     static final Variable.Factory VARIABLE_FACTORY = Variable.Factory.INSTANCE;
-    static final Variable LEFT = VARIABLE_FACTORY.create("left");
-    static final Variable RIGHT = VARIABLE_FACTORY.create("right");
+    static final Variable<Number> LEFT = VARIABLE_FACTORY.create("left");
+    static final Variable<Number> RIGHT = VARIABLE_FACTORY.create("right");
 
     static Stream<Arguments> isSatisfiedBy() {
         return Stream.of(
@@ -82,7 +82,7 @@ public class BinaryOffsetConstraintTest {
     @ParameterizedTest
     @MethodSource
     void testToString(Number offset, String expected) {
-        assertThat(BinaryOffsetConstraint.builder().left(LEFT).right(RIGHT).offset(offset).operator(Operator.EQ).build()).asString().isEqualTo(expected);
+        assertThat(BinaryOffsetConstraint.<Number>builder().left(LEFT).right(RIGHT).offset(offset).operator(Operator.EQ).build()).asString().isEqualTo(expected);
     }
 
     @Test

@@ -32,10 +32,11 @@ public class LeastConstrainingValueOrderer implements DomainValuesOrderer {
     private LeastConstrainingValueOrderer() {}
 
     @Override
-    public Stream<?> order(@NonNull ConstraintSatisfactionProblem csp, @NonNull Variable variable, @NonNull Assignment assignment) {
-        val binaryConstraints = csp.getConstraints().stream()
+    public Stream<?> order(@NonNull ConstraintSatisfactionProblem csp, @NonNull Variable<?> variable, @NonNull Assignment assignment) {
+        @SuppressWarnings("unchecked")
+        val binaryConstraints = (java.util.List<BinaryConstraint<?, ?>>) (java.util.List<?>) csp.getConstraints().stream()
                 .filter(BinaryConstraint.class::isInstance)
-                .map(BinaryConstraint.class::cast)
+                .map(c -> (BinaryConstraint<?, ?>) c)
                 .filter(constraint -> constraint.getLeft().equals(variable) || constraint.getRight().equals(variable))
                 .toList();
 
@@ -47,13 +48,13 @@ public class LeastConstrainingValueOrderer implements DomainValuesOrderer {
     private long countEliminatedValues(
             @NonNull ConstraintSatisfactionProblem csp,
             @NonNull Assignment assignment,
-            @NonNull Variable variable,
+            @NonNull Variable<?> variable,
             @NonNull Object value,
-            @NonNull Iterable<BinaryConstraint> constraints
+            @NonNull Iterable<BinaryConstraint<?, ?>> constraints
     ) {
         long eliminated = 0;
 
-        for (BinaryConstraint constraint : constraints) {
+        for (BinaryConstraint<?, ?> constraint : constraints) {
             val neighbourVariable = constraint.getNeighbour(variable);
 
             if (assignment.getValue(neighbourVariable).isPresent()) {

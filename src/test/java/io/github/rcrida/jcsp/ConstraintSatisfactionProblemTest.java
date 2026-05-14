@@ -4,6 +4,7 @@ import lombok.val;
 import io.github.rcrida.jcsp.constraints.binary.BinaryOffsetConstraint;
 import io.github.rcrida.jcsp.constraints.binary.Operator;
 import io.github.rcrida.jcsp.domains.Domain;
+import io.github.rcrida.jcsp.domains.IntRangeDomain;
 import io.github.rcrida.jcsp.solver.AustraliaMapColouringTest;
 import io.github.rcrida.jcsp.variables.Variable;
 import org.junit.jupiter.api.Test;
@@ -30,12 +31,12 @@ import static io.github.rcrida.jcsp.solver.AustraliaMapColouringTest.DOMAIN;
 public class ConstraintSatisfactionProblemTest {
     static final Variable.Factory VARIABLE_FACTORY = Variable.Factory.INSTANCE;
     @Mock
-    Domain domain;
+    Domain<Integer> domain;
 
     @Test
     void validateConstraints() {
-        Variable a = VARIABLE_FACTORY.create("A");
-        Variable b = VARIABLE_FACTORY.create("B");
+        Variable<Integer> a = VARIABLE_FACTORY.create("A");
+        Variable<Integer> b = VARIABLE_FACTORY.create("B");
         assertThatThrownBy(() -> ConstraintSatisfactionProblem.builder()
                 .variableDomain(a, domain)
                 .notEqualsConstraint(a, b)
@@ -90,9 +91,9 @@ public class ConstraintSatisfactionProblemTest {
 
     @Test
     void isCyclic() {
-        Variable a = VARIABLE_FACTORY.create("A");
-        Variable b = VARIABLE_FACTORY.create("B");
-        Variable c = VARIABLE_FACTORY.create("C");
+        Variable<Integer> a = VARIABLE_FACTORY.create("A");
+        Variable<Integer> b = VARIABLE_FACTORY.create("B");
+        Variable<Integer> c = VARIABLE_FACTORY.create("C");
         val csp = ConstraintSatisfactionProblem.builder()
                 .variableDomain(a, domain)
                 .variableDomain(b, domain)
@@ -105,8 +106,8 @@ public class ConstraintSatisfactionProblemTest {
 
     @Test
     void isFullyConnected() {
-        Variable a = VARIABLE_FACTORY.create("A");
-        Variable b = VARIABLE_FACTORY.create("B");
+        Variable<Integer> a = VARIABLE_FACTORY.create("A");
+        Variable<Integer> b = VARIABLE_FACTORY.create("B");
         val csp = ConstraintSatisfactionProblem.builder()
                 .variableDomain(a, domain)
                 .variableDomain(b, domain)
@@ -117,7 +118,7 @@ public class ConstraintSatisfactionProblemTest {
 
     @Test
     void isTree_singleVariable() {
-        Variable a = VARIABLE_FACTORY.create("A");
+        Variable<Integer> a = VARIABLE_FACTORY.create("A");
         val csp = ConstraintSatisfactionProblem.builder()
                 .variableDomain(a, domain)
                 .build();
@@ -126,9 +127,9 @@ public class ConstraintSatisfactionProblemTest {
 
     @Test
     void isTree_singleConstraint() {
-        Variable a = VARIABLE_FACTORY.create("A");
-        Variable b = VARIABLE_FACTORY.create("B");
-        Variable c = VARIABLE_FACTORY.create("C");
+        Variable<Integer> a = VARIABLE_FACTORY.create("A");
+        Variable<Integer> b = VARIABLE_FACTORY.create("B");
+        Variable<Integer> c = VARIABLE_FACTORY.create("C");
         val csp = ConstraintSatisfactionProblem.builder()
                 .variableDomain(a, domain)
                 .variableDomain(b, domain)
@@ -141,29 +142,29 @@ public class ConstraintSatisfactionProblemTest {
 
     @Test
     void valid_multipleConstraintsBetweenVariables() {
-        Variable a = VARIABLE_FACTORY.create("A");
-        Variable b = VARIABLE_FACTORY.create("B");
+        Variable<Integer> a = VARIABLE_FACTORY.create("A");
+        Variable<Integer> b = VARIABLE_FACTORY.create("B");
         val csp = ConstraintSatisfactionProblem.builder()
-                .variableDomain(a, domain)
-                .variableDomain(b, domain)
+                .variableDomain(a, IntRangeDomain.of(0, 100))
+                .variableDomain(b, IntRangeDomain.of(0, 100))
                 .notEqualsConstraint(a, b)
-                .constraint(BinaryOffsetConstraint.builder().left(a).right(b).offset(0).operator(Operator.NEQ).build())
+                .constraint(BinaryOffsetConstraint.<Integer>builder().left(a).right(b).offset(0).operator(Operator.NEQ).build())
                 .build();
         assertThat(csp.isTree()).isTrue();
     }
 
     @Test
     void builder_notEqualsChainConstraint_asserts() {
-        Variable a = VARIABLE_FACTORY.create("A");
+        Variable<Integer> a = VARIABLE_FACTORY.create("A");
         assertThatThrownBy(() -> ConstraintSatisfactionProblem.builder().notEqualsChainConstraint(List.of(a)))
                 .isInstanceOf(AssertionError.class);
     }
 
     @Test
     void builder_predicateConstraint() {
-        Variable a = VARIABLE_FACTORY.create("A");
+        Variable<Integer> a = VARIABLE_FACTORY.create("A");
         val csp = ConstraintSatisfactionProblem.builder()
-                .variableDomain(a, domain)
+                .variableDomain(a, IntRangeDomain.of(0, 100))
                 .predicateConstraint(a, (Integer v) -> v > 3)
                 .build();
         assertThat(csp.getConstraints()).hasSize(1);

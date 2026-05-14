@@ -45,7 +45,7 @@ public class NodeConsistency {
                     log.warn("Domain of variable {} is empty after Node consistency", variable);
                     return Optional.empty();
                 }
-                builder.variableDomain(variable, revisedDomain);
+                builder.variableDomainEntry(variable, revisedDomain);
                 variableDomains.put(variable, revisedDomain);
             }
         }
