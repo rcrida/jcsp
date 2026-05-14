@@ -29,12 +29,22 @@ import static org.assertj.core.api.Assertions.assertThat;
  * This formulation models teacher assignment explicitly: the solution directly assigns each lesson
  * to a (teacher, room, timeslot) combination from the lesson's eligible (teacher, slot) pairs.
  *
- * <p>Nine lessons (3 groups × 3 subjects) across 4 timeslots and 3 rooms yields 12 room-slots.
+ * <p>Nine lessons (3 groups × 3 subjects) across 4 timeslots and 4 rooms (2 classrooms, 1 lab,
+ * 1 computer lab). Each subject requires a specific room type, so only eligible (teacher, slot)
+ * combinations are included in each lesson's variable domain.
  */
 public class TimetableSchedulingBinaryAssignmentTest {
 
-    enum Timeslot { SLOT_1, SLOT_2, SLOT_3, SLOT_4 }
-    enum Room     { ROOM_A, ROOM_B, ROOM_C }
+    enum Timeslot  { SLOT_1, SLOT_2, SLOT_3, SLOT_4 }
+    enum RoomType  { CLASSROOM, LAB, COMPUTER_LAB }
+    enum Room {
+        ROOM_A(RoomType.CLASSROOM),
+        ROOM_B(RoomType.CLASSROOM),
+        ROOM_C(RoomType.LAB),
+        ROOM_D(RoomType.COMPUTER_LAB);
+        final RoomType type;
+        Room(RoomType type) { this.type = type; }
+    }
     enum Teacher  { DR_SMITH, DR_JONES, DR_BROWN }
     enum Subject  { MATH, PHYSICS, CHEMISTRY, BIOLOGY, ENGLISH, HISTORY, COMPUTER_SCIENCE }
     enum Group    { SCIENCE, TECHNOLOGY, HUMANITIES }
@@ -50,6 +60,16 @@ public class TimetableSchedulingBinaryAssignmentTest {
     record Lesson(Group group, Subject subject) {
         @Override public String toString() { return group + "/" + subject; }
     }
+
+    static final Map<Subject, RoomType> REQUIRED_ROOM_TYPE = Map.of(
+            Subject.MATH,             RoomType.CLASSROOM,
+            Subject.PHYSICS,          RoomType.LAB,
+            Subject.CHEMISTRY,        RoomType.LAB,
+            Subject.BIOLOGY,          RoomType.LAB,
+            Subject.ENGLISH,          RoomType.CLASSROOM,
+            Subject.HISTORY,          RoomType.CLASSROOM,
+            Subject.COMPUTER_SCIENCE, RoomType.COMPUTER_LAB
+    );
 
     static final Map<Subject, Set<Teacher>> ELIGIBLE_TEACHERS = Map.of(
             Subject.MATH,             Set.of(Teacher.DR_SMITH),
@@ -79,8 +99,12 @@ public class TimetableSchedulingBinaryAssignmentTest {
     static Map<Lesson, Map<TeacherSlot, Variable>> Z;
 
     static List<TeacherSlot> eligibleTeacherSlots(Lesson lesson) {
+        val requiredType = REQUIRED_ROOM_TYPE.get(lesson.subject());
         return ELIGIBLE_TEACHERS.get(lesson.subject()).stream()
-                .flatMap(t -> SLOTS.stream().map(s -> new TeacherSlot(t, s)))
+                .flatMap(t -> Arrays.stream(Timeslot.values())
+                        .flatMap(ts -> Arrays.stream(Room.values())
+                                .filter(r -> r.type == requiredType)
+                                .map(r -> new TeacherSlot(t, new Slot(ts, r)))))
                 .toList();
     }
 
