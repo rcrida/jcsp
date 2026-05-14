@@ -13,11 +13,11 @@ import java.util.function.BiPredicate;
  */
 @SuperBuilder
 @EqualsAndHashCode(callSuper = true)
-public class BinaryPredicateConstraint extends BinaryConstraint {
-    @NonNull BiPredicate<Object, Object> biPredicate;
+public class BinaryPredicateConstraint<L, R> extends BinaryConstraint<L, R> {
+    @NonNull BiPredicate<L, R> biPredicate;
 
     @Override
-    public boolean isSatisfiedBy(@NonNull Object leftValue, @NonNull Object rightValue) {
+    public boolean isSatisfiedBy(@NonNull L leftValue, @NonNull R rightValue) {
         return biPredicate.test(leftValue, rightValue);
     }
 

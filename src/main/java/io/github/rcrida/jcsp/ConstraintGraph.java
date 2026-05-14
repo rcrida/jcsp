@@ -36,7 +36,7 @@ class ConstraintGraph {
      * A set of all binary constraints applicable to this problem. Where possible casts n-ary constrains
      * as additional binary constraints. Ignores n-ary constraints that aren't decomposable.
      */
-    @EqualsAndHashCode.Exclude Set<BinaryConstraint> allBinaryConstraints;
+    @EqualsAndHashCode.Exclude Set<BinaryConstraint<?, ?>> allBinaryConstraints;
 
     ConstraintGraph(@NonNull Set<Constraint> constraints, @NonNull Set<Variable> variables) {
         this.constraints = constraints;
@@ -93,10 +93,11 @@ class ConstraintGraph {
         return Map.copyOf(result);
     }
 
-    private static Set<BinaryConstraint> computeAllBinaryConstraints(Set<Constraint> constraints) {
+    @SuppressWarnings("unchecked")
+    private static Set<BinaryConstraint<?, ?>> computeAllBinaryConstraints(Set<Constraint> constraints) {
         val binaryConstraints = constraints.stream()
                 .filter(c -> c instanceof BinaryConstraint)
-                .map(c -> (BinaryConstraint) c)
+                .map(c -> (BinaryConstraint<?, ?>) c)
                 .toList();
         val inferredBinaryConstraints = constraints.stream()
                 .filter(c -> c instanceof NaryConstraint)

@@ -18,14 +18,14 @@ import org.jspecify.annotations.NonNull;
  */
 @SuperBuilder
 @EqualsAndHashCode(callSuper = true)
-public class BinaryOffsetConstraint  extends BinaryConstraint {
+public class BinaryOffsetConstraint<N extends Number> extends BinaryConstraint<N, N> {
     @NonNull
     Number offset;
     @NonNull
     Operator operator;
 
     @Override
-    public boolean isSatisfiedBy(@NonNull Object left, @NonNull Object right) {
+    public boolean isSatisfiedBy(@NonNull N left, @NonNull N right) {
         return operator.compare(offsetValue(left), right);
     }
 
@@ -60,7 +60,7 @@ public class BinaryOffsetConstraint  extends BinaryConstraint {
         };
     }
 
-    private Number offsetValue(@NonNull Object value) {
+    private Number offsetValue(@NonNull N value) {
         return switch (value) {
             case Byte b -> (byte) (b + offset.byteValue());
             case Short s -> (short) (s + offset.shortValue());

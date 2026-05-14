@@ -49,11 +49,17 @@ public class BinaryOffsetConstraintTest {
     }
 
     @Test
-    void isSatisfiedBy_unsupportedValue() {
-        val constraint = BinaryOffsetConstraint.builder().left(LEFT).right(RIGHT).offset(5).operator(Operator.EQ).build();
-        assertThatThrownBy(() -> constraint.isSatisfiedBy("zero", 5))
+    void isSatisfiedBy_unsupportedNumberSubtype() {
+        val constraint = BinaryOffsetConstraint.<Number>builder().left(LEFT).right(RIGHT).offset(5).operator(Operator.EQ).build();
+        Number unknown = new Number() {
+            @Override public int intValue() { return 0; }
+            @Override public long longValue() { return 0; }
+            @Override public float floatValue() { return 0; }
+            @Override public double doubleValue() { return 0; }
+        };
+        assertThatThrownBy(() -> constraint.isSatisfiedBy(unknown, 5))
                 .isInstanceOf(IllegalStateException.class)
-                .hasMessage("Unsupported value type: class java.lang.String");
+                .hasMessage("Unsupported value type: " + unknown.getClass());
     }
 
     static Stream<Arguments> testToString() {

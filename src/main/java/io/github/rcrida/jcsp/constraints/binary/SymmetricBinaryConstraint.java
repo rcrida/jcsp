@@ -7,7 +7,7 @@ import lombok.experimental.SuperBuilder;
  * A symmetric binary constraint allows the left and right variables to be swapped.
  */
 @SuperBuilder
-public abstract class SymmetricBinaryConstraint extends BinaryConstraint {
+public abstract class SymmetricBinaryConstraint<T> extends BinaryConstraint<T, T> {
 
     @Generated
     @Override
@@ -41,5 +41,4 @@ public abstract class SymmetricBinaryConstraint extends BinaryConstraint {
     public int hashCode() {
         return 59 + this.getVariables().hashCode();
     }
-
 }

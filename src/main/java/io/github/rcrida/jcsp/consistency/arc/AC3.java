@@ -46,7 +46,7 @@ public class AC3 implements ArcConsistency {
             val arc = queue.poll();
             val X_i = arc.getFrom();
             val X_j = arc.getTo();
-            for (BinaryConstraint binaryConstraint : arcConstraints.get(arc)) {
+            for (BinaryConstraint<?, ?> binaryConstraint : arcConstraints.get(arc)) {
                 val optionalRevisedD_i = revise(problem, arc, binaryConstraint);
                 if (optionalRevisedD_i.isPresent()) {
                     val revisedD_i = optionalRevisedD_i.get();
@@ -70,7 +70,7 @@ public class AC3 implements ArcConsistency {
                 .filter(bc -> bc.getArcs().anyMatch(arc::equals))
                 .toList();
         val variableDomains = new HashMap<>(problem.getVariableDomains());
-        for (BinaryConstraint binaryConstraint : arcConstraints) {
+        for (BinaryConstraint<?, ?> binaryConstraint : arcConstraints) {
             val optionalRevisedD = revise(problem, arc, binaryConstraint);
             if (optionalRevisedD.isPresent()) {
                 val revisedD = optionalRevisedD.get();
@@ -84,7 +84,7 @@ public class AC3 implements ArcConsistency {
         return Optional.of(problem.toBuilder().variableDomains(variableDomains).build());
     }
 
-    public Optional<Domain> revise(ConstraintSatisfactionProblem problem, Arc arc, BinaryConstraint constraint) {
+    public Optional<Domain<?>> revise(ConstraintSatisfactionProblem problem, Arc arc, BinaryConstraint<?, ?> constraint) {
         val D_i = problem.getVariableDomains().get(arc.getFrom());
         val D_j = problem.getVariableDomains().get(arc.getTo());
         val valuesToDelete = D_i.stream()

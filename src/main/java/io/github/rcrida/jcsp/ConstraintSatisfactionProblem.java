@@ -138,7 +138,7 @@ public class ConstraintSatisfactionProblem {
      * A set of all binary constraints applicable to this problem. Where possible casts n-ary constrains
      * as additional binary constraints. Ignores n-ary constraints that aren't decomposable.
      */
-    public Set<BinaryConstraint> getAllBinaryConstraints() {
+    public Set<BinaryConstraint<?, ?>> getAllBinaryConstraints() {
         return constraintGraph.getAllBinaryConstraints();
     }
 
@@ -413,15 +413,15 @@ public class ConstraintSatisfactionProblem {
         }
 
         /**
-         * Create an arbitrary binary constraint using a {@link BiPredicate<Object, Object>}.
+         * Create an arbitrary binary constraint using a {@link BiPredicate}.
          *
          * @param left the first variable
          * @param right the second variable
          * @param biPredicate determines whether the specified values of the first and second variables are consistent
          * @return the builder
          */
-        public ConstraintSatisfactionProblemBuilder biPredicateConstraint(@NonNull Variable left, @NonNull Variable right, @NonNull BiPredicate<Object, Object> biPredicate) {
-            return this.constraint(BinaryPredicateConstraint.builder().left(left).right(right).biPredicate(biPredicate).build());
+        public <L, R> ConstraintSatisfactionProblemBuilder biPredicateConstraint(@NonNull Variable left, @NonNull Variable right, @NonNull BiPredicate<L, R> biPredicate) {
+            return this.constraint(BinaryPredicateConstraint.<L, R>builder().left(left).right(right).biPredicate(biPredicate).build());
         }
 
         /**

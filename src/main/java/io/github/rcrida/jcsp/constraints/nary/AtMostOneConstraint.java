@@ -21,7 +21,7 @@ import java.util.function.BiPredicate;
 @SuperBuilder
 public class AtMostOneConstraint extends UniformNaryConstraint<Boolean> {
 
-    public static final @NonNull BiPredicate<Object, Object> AT_MOST_ONE_TRUE = (a, b) -> !(a.equals(true) && b.equals(true));
+    public static final @NonNull BiPredicate<Boolean, Boolean> AT_MOST_ONE_TRUE = (a, b) -> !(a && b);
 
     @Override
     protected boolean isSatisfiedByValues(@NonNull Collection<Boolean> values) {
@@ -34,12 +34,12 @@ public class AtMostOneConstraint extends UniformNaryConstraint<Boolean> {
     }
 
     @Override
-    public Optional<Set<BinaryConstraint>> getAsBinaryConstraints() {
+    public Optional<Set<BinaryConstraint<?, ?>>> getAsBinaryConstraints() {
         val variables = new ArrayList<>(getVariables());
-        val binaryConstraints = new HashSet<BinaryConstraint>();
+        val binaryConstraints = new HashSet<BinaryConstraint<?, ?>>();
         for (int i = 0; i < variables.size(); i++) {
             for (int j = i + 1; j < variables.size(); j++) {
-                binaryConstraints.add(BinaryPredicateConstraint.builder()
+                binaryConstraints.add(BinaryPredicateConstraint.<Boolean, Boolean>builder()
                         .left(variables.get(i))
                         .right(variables.get(j))
                         .biPredicate(AT_MOST_ONE_TRUE)

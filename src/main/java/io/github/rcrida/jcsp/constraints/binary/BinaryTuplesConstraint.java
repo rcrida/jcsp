@@ -16,7 +16,7 @@ import java.util.stream.Collectors;
  */
 @SuperBuilder
 @EqualsAndHashCode(callSuper = true)
-public class BinaryTuplesConstraint extends BinaryConstraint {
+public class BinaryTuplesConstraint extends BinaryConstraint<Object, Object> {
     @Singular
     Set<BinaryTuple> binaryTuples;
 

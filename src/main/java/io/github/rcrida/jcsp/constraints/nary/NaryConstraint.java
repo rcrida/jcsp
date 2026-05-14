@@ -25,7 +25,7 @@ public abstract class NaryConstraint implements Constraint {
 
     public abstract String getRelation();
 
-    public Optional<Set<BinaryConstraint>> getAsBinaryConstraints() {
+    public Optional<Set<BinaryConstraint<?, ?>>> getAsBinaryConstraints() {
         return Optional.empty();
     }
 

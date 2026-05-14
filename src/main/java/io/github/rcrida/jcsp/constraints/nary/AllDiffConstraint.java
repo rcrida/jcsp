@@ -44,9 +44,9 @@ public class AllDiffConstraint<T> extends UniformNaryConstraint<T> {
     }
 
     @Override
-    public Optional<Set<BinaryConstraint>> getAsBinaryConstraints() {
+    public Optional<Set<BinaryConstraint<?, ?>>> getAsBinaryConstraints() {
         val variables = new ArrayList<>(getVariables());
-        val binaryConstraints = new HashSet<BinaryConstraint>();
+        val binaryConstraints = new HashSet<BinaryConstraint<?, ?>>();
         for (int i = 0; i < variables.size(); i++) {
             for (int j = i + 1; j < variables.size(); j++) {
                 binaryConstraints.add(BinaryNotEqualsConstraint.builder()

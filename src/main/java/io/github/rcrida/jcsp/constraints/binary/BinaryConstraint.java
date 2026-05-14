@@ -21,15 +21,16 @@ import java.util.stream.Stream;
 @Value
 @NonFinal
 @SuperBuilder
-public abstract class BinaryConstraint implements Constraint {
+public abstract class BinaryConstraint<L, R> implements Constraint {
     @NonNull Variable left;
     @NonNull Variable right;
 
     @Override
-    public boolean isSatisfiedBy(@NonNull Assignment assignment) {
+    @SuppressWarnings("unchecked")
+    public final boolean isSatisfiedBy(@NonNull Assignment assignment) {
         return assignment.getValue(left)
                 .flatMap(leftValue -> assignment.getValue(right)
-                        .map(rightValue -> isSatisfiedBy(leftValue, rightValue)))
+                        .map(rightValue -> isSatisfiedBy((L) leftValue, (R) rightValue)))
                 .orElse(true);
     }
 
@@ -38,7 +39,7 @@ public abstract class BinaryConstraint implements Constraint {
         return variable == left ? right : left;
     }
 
-    public abstract boolean isSatisfiedBy(@NonNull Object leftValue, @NonNull Object rightValue);
+    public abstract boolean isSatisfiedBy(@NonNull L leftValue, @NonNull R rightValue);
 
     @Override
     public Set<Variable> getVariables() {
