@@ -26,17 +26,18 @@ import static org.assertj.core.api.Assertions.assertThat;
  * using the same teachers, subjects and groups as {@link TimetableSchedulingViaColouringTest}.
  *
  * <p>Each variable z[lesson][teacherSlot] represents "is lesson L taught by teacher T in slot S?".
- * This formulation models teacher assignment explicitly: the solution directly assigns each lesson
- * to a (teacher, room, timeslot) combination from the lesson's eligible (teacher, slot) pairs.
+ * This formulation models teacher assignment, room specialisation, and teacher unavailability
+ * explicitly. Unavailability is encoded directly in each lesson's variable domain via
+ * {@link #wholeDay}, {@link #everyDay}, and {@link #periodsOn} — no additional constraints needed.
  *
- * <p>Nine lessons (3 groups × 3 subjects) across 4 timeslots and 4 rooms (2 classrooms, 1 lab,
- * 1 computer lab). Each subject requires a specific room type, so only eligible (teacher, slot)
- * combinations are included in each lesson's variable domain.
+ * <p>Nine lessons (3 groups × 3 subjects) across 3 days × 2 periods and 4 rooms
+ * (2 classrooms, 1 lab, 1 computer lab).
  */
 public class TimetableSchedulingBinaryAssignmentTest {
 
-    enum Timeslot  { SLOT_1, SLOT_2, SLOT_3, SLOT_4, SLOT_5 }
-    enum RoomType  { CLASSROOM, LAB, COMPUTER_LAB }
+    enum Day     { MON, TUE, WED }
+    enum Period  { MORNING, AFTERNOON }
+    enum RoomType { CLASSROOM, LAB, COMPUTER_LAB }
     enum Room {
         ROOM_A(RoomType.CLASSROOM),
         ROOM_B(RoomType.CLASSROOM),
@@ -45,9 +46,13 @@ public class TimetableSchedulingBinaryAssignmentTest {
         final RoomType type;
         Room(RoomType type) { this.type = type; }
     }
-    enum Teacher  { DR_SMITH, DR_JONES, DR_BROWN }
-    enum Subject  { MATH, PHYSICS, CHEMISTRY, BIOLOGY, ENGLISH, HISTORY, COMPUTER_SCIENCE }
-    enum Group    { SCIENCE, TECHNOLOGY, HUMANITIES }
+    enum Teacher { DR_SMITH, DR_JONES, DR_BROWN }
+    enum Subject { MATH, PHYSICS, CHEMISTRY, BIOLOGY, ENGLISH, HISTORY, COMPUTER_SCIENCE }
+    enum Group   { SCIENCE, TECHNOLOGY, HUMANITIES }
+
+    record Timeslot(Day day, Period period) {
+        @Override public String toString() { return day + "_" + period; }
+    }
 
     record Slot(Timeslot timeslot, Room room) {
         @Override public String toString() { return timeslot + "@" + room; }
@@ -61,6 +66,31 @@ public class TimetableSchedulingBinaryAssignmentTest {
         @Override public String toString() { return group + "/" + subject; }
     }
 
+    // --- Unavailability helpers ---
+
+    /** Teacher unavailable for all periods on a given day. */
+    static Set<Timeslot> wholeDay(Day day) {
+        return Arrays.stream(Period.values()).map(p -> new Timeslot(day, p)).collect(Collectors.toSet());
+    }
+
+    /** Teacher unavailable during a given period on every day. */
+    static Set<Timeslot> everyDay(Period period) {
+        return Arrays.stream(Day.values()).map(d -> new Timeslot(d, period)).collect(Collectors.toSet());
+    }
+
+    /** Teacher unavailable during specific periods on a given day. */
+    static Set<Timeslot> periodsOn(Day day, Period... periods) {
+        return Arrays.stream(periods).map(p -> new Timeslot(day, p)).collect(Collectors.toSet());
+    }
+
+    // --- Problem data ---
+
+    static final Map<Teacher, Set<Timeslot>> UNAVAILABLE = Map.of(
+            Teacher.DR_SMITH, wholeDay(Day.MON),                          // departmental meeting
+            Teacher.DR_JONES, everyDay(Period.AFTERNOON),                  // teaches at another school in afternoons
+            Teacher.DR_BROWN, periodsOn(Day.WED, Period.MORNING) // unavailable Wednesday morning
+    );
+
     static final Map<Subject, RoomType> REQUIRED_ROOM_TYPE = Map.of(
             Subject.MATH,             RoomType.CLASSROOM,
             Subject.PHYSICS,          RoomType.LAB,
@@ -69,12 +99,6 @@ public class TimetableSchedulingBinaryAssignmentTest {
             Subject.ENGLISH,          RoomType.CLASSROOM,
             Subject.HISTORY,          RoomType.CLASSROOM,
             Subject.COMPUTER_SCIENCE, RoomType.COMPUTER_LAB
-    );
-
-    static final Map<Teacher, Set<Timeslot>> UNAVAILABLE = Map.of(
-            Teacher.DR_SMITH, Set.of(Timeslot.SLOT_1),   // departmental meeting
-            Teacher.DR_JONES, Set.of(Timeslot.SLOT_5),   // teaches at another school
-            Teacher.DR_BROWN, Set.of(Timeslot.SLOT_2)    // part-time commitment
     );
 
     static final Map<Subject, Set<Teacher>> ELIGIBLE_TEACHERS = Map.of(
@@ -93,11 +117,15 @@ public class TimetableSchedulingBinaryAssignmentTest {
             Group.HUMANITIES, List.of(Subject.ENGLISH, Subject.HISTORY, Subject.CHEMISTRY)
     ));
 
+    static final List<Timeslot> TIMESLOTS = Arrays.stream(Day.values())
+            .flatMap(d -> Arrays.stream(Period.values()).map(p -> new Timeslot(d, p)))
+            .toList();
+
     static final List<Lesson> LESSONS = CURRICULUM.entrySet().stream()
             .flatMap(e -> e.getValue().stream().map(s -> new Lesson(e.getKey(), s)))
             .toList();
 
-    static final List<Slot> SLOTS = Arrays.stream(Timeslot.values())
+    static final List<Slot> SLOTS = TIMESLOTS.stream()
             .flatMap(t -> Arrays.stream(Room.values()).map(r -> new Slot(t, r)))
             .toList();
 
@@ -107,7 +135,7 @@ public class TimetableSchedulingBinaryAssignmentTest {
     static List<TeacherSlot> eligibleTeacherSlots(Lesson lesson) {
         val requiredType = REQUIRED_ROOM_TYPE.get(lesson.subject());
         return ELIGIBLE_TEACHERS.get(lesson.subject()).stream()
-                .flatMap(t -> Arrays.stream(Timeslot.values())
+                .flatMap(t -> TIMESLOTS.stream()
                         .filter(ts -> !UNAVAILABLE.getOrDefault(t, Set.of()).contains(ts))
                         .flatMap(ts -> Arrays.stream(Room.values())
                                 .filter(r -> r.type == requiredType)
@@ -150,11 +178,11 @@ public class TimetableSchedulingBinaryAssignmentTest {
 
         // No teacher can teach two lessons at the same time
         for (Teacher teacher : Teacher.values()) {
-            for (Timeslot timeslot : Timeslot.values()) {
+            for (Timeslot timeslot : TIMESLOTS) {
                 val vars = LESSONS.stream()
                         .flatMap(l -> Z.get(l).entrySet().stream()
                                 .filter(e -> e.getKey().teacher() == teacher
-                                        && e.getKey().slot().timeslot() == timeslot)
+                                        && e.getKey().slot().timeslot().equals(timeslot))
                                 .map(Map.Entry::getValue))
                         .collect(Collectors.toSet());
                 if (vars.size() > 1) csp.atMostOneConstraint(vars);
@@ -163,11 +191,11 @@ public class TimetableSchedulingBinaryAssignmentTest {
 
         // Within-group: no student group can attend two lessons at the same time
         for (Group group : Group.values()) {
-            for (Timeslot timeslot : Timeslot.values()) {
+            for (Timeslot timeslot : TIMESLOTS) {
                 csp.atMostOneConstraint(LESSONS.stream()
                         .filter(l -> l.group() == group)
                         .flatMap(l -> Z.get(l).entrySet().stream()
-                                .filter(e -> e.getKey().slot().timeslot() == timeslot)
+                                .filter(e -> e.getKey().slot().timeslot().equals(timeslot))
                                 .map(Map.Entry::getValue))
                         .collect(Collectors.toSet()));
             }
@@ -195,7 +223,7 @@ public class TimetableSchedulingBinaryAssignmentTest {
 
     static void printTimetable(Assignment solution) {
         val lookup = new HashMap<Timeslot, Map<Group, String>>();
-        for (Timeslot ts : Timeslot.values()) lookup.put(ts, new HashMap<>());
+        for (Timeslot ts : TIMESLOTS) lookup.put(ts, new HashMap<>());
         for (Lesson lesson : LESSONS) {
             Z.get(lesson).entrySet().stream()
                     .filter(e -> solution.getValue(e.getValue()).equals(Optional.of(true)))
@@ -205,14 +233,14 @@ public class TimetableSchedulingBinaryAssignmentTest {
         }
 
         int col = 36;
-        String sep = "-".repeat(10 + (col + 2) * Group.values().length + 1);
+        String sep = "-".repeat(14 + (col + 2) * Group.values().length + 1);
         System.out.println("\n--- Timetable ---");
-        System.out.printf("%-10s", "");
+        System.out.printf("%-14s", "");
         for (Group g : Group.values()) System.out.printf("| %-" + col + "s", g);
         System.out.println("|");
         System.out.println(sep);
-        for (Timeslot ts : Timeslot.values()) {
-            System.out.printf("%-10s", ts);
+        for (Timeslot ts : TIMESLOTS) {
+            System.out.printf("%-14s", ts);
             for (Group g : Group.values()) System.out.printf("| %-" + col + "s", lookup.get(ts).getOrDefault(g, ""));
             System.out.println("|");
         }
