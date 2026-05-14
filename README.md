@@ -18,15 +18,15 @@ A Java library implementing classic AI algorithms for solving Constraint Satisfa
 
 ```java
 Variable.Factory F = Variable.Factory.INSTANCE;
-Variable v1 = F.create("v1");
-Variable v2 = F.create("v2");
-Variable v3 = F.create("v3");
+Variable<Integer> v1 = F.create("v1");
+Variable<Integer> v2 = F.create("v2");
+Variable<Integer> v3 = F.create("v3");
 
 ConstraintSatisfactionProblem csp = ConstraintSatisfactionProblem.builder()
     .variableDomain(v1, IntRangeDomain.of(1, 3))
     .variableDomain(v2, IntRangeDomain.of(1, 3))
     .variableDomain(v3, IntRangeDomain.of(1, 3))
-    .allDiffConstraint(v1, v2, v3)
+    .allDiffConstraint(Set.of(v1, v2, v3))
     .build();
 
 Solver.Factory.INSTANCE.createSolver().getSolutions(csp).forEach(System.out::println);
@@ -62,7 +62,7 @@ Tree decomposition uses a domain-aware clique size limit (`d^targetTreewidth`, c
 <dependency>
     <groupId>io.github.rcrida</groupId>
     <artifactId>jcsp</artifactId>
-    <version>2.3.0</version>
+    <version>2.4.0</version>
 </dependency>
 ```
 
