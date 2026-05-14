@@ -8,7 +8,6 @@ import org.junit.jupiter.api.Test;
 
 import java.util.List;
 import java.util.Map;
-import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -36,7 +35,7 @@ public class AssignmentDomainTest {
 
     @Test
     void stream() {
-        assertThat((Stream<Assignment>) assignmentDomain.stream()).containsOnly(
+        assertThat(assignmentDomain.stream()).containsOnly(
                 Assignment.of(Map.of(variable1, 1, variable2, "a", variable3, false)),
                 Assignment.of(Map.of(variable1, 2, variable2, "a", variable3, false)),
                 Assignment.of(Map.of(variable1, 2, variable2, "b", variable3, true)),

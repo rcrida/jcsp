@@ -2,6 +2,8 @@ package io.github.rcrida.jcsp.domains;
 
 import org.junit.jupiter.api.Test;
 
+import java.util.List;
+
 import static org.assertj.core.api.Assertions.assertThat;
 
 public class BooleanDomainTest {
@@ -35,5 +37,15 @@ public class BooleanDomainTest {
     @Test
     void isNotEmpty() {
         assertThat(BooleanDomain.INSTANCE.isEmpty()).isFalse();
+    }
+
+    @Test
+    void streamContainsBothValues() {
+        assertThat(BooleanDomain.INSTANCE.stream()).containsExactlyInAnyOrder(true, false);
+    }
+
+    @Test
+    void toListContainsBothValues() {
+        assertThat(BooleanDomain.INSTANCE.toList()).containsExactlyInAnyOrder(true, false);
     }
 }

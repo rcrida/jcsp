@@ -9,7 +9,7 @@ import java.util.Set;
  * solution search when a variable has been assigned a value to indicate that it cannot take other
  * values, thus limiting the remaining search space.
  */
-public class AssignedDomain extends DomainObjectSet {
+public class AssignedDomain extends DomainObjectSet<Object> {
     public AssignedDomain(@NonNull Object value) {
         super(Set.of(value));
     }

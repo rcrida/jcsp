@@ -112,7 +112,7 @@ public class MinConflictsSolver implements LocalSolver {
                 .filter(constraint -> constraint.getVariables().contains(variable))
                 .toList();
         val domain = csp.getVariableDomains().get(variable);
-        val valueWeights = domain.stream()
+        Map<Object, Double> valueWeights = domain.stream()
                 .collect(Collectors.toMap(v -> v, v -> weighConflicts(variable, v, current, variableConstraints, constraintWeights)));
         log.debug("Value weights: {}", valueWeights);
         val minWeight = valueWeights.values().stream().min(Comparator.naturalOrder()).orElseThrow();

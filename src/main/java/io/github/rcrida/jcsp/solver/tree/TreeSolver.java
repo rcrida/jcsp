@@ -42,7 +42,7 @@ public class TreeSolver implements Solver {
         log.info("Domain {}", domain);
         val start = Assignment.empty();
         return domain.stream()
-                .map(value -> start.withValue(root, value))
+                .<Assignment>map(value -> start.withValue(root, value))
                 .flatMap(rootAssignment -> populateAssignment(finalTcsp, rootAssignment, unassignedVariableSelector));
     }
 

@@ -51,7 +51,7 @@ import java.util.stream.Collectors;
 @NonFinal
 @AllArgsConstructor(access = AccessLevel.NONE)
 public class ConstraintSatisfactionProblem {
-    Map<Variable, Domain> variableDomains;
+    Map<Variable, Domain<?>> variableDomains;
     @Getter(AccessLevel.NONE) @EqualsAndHashCode.Exclude ConstraintGraph constraintGraph;
 
     /**
@@ -65,7 +65,7 @@ public class ConstraintSatisfactionProblem {
      * @param constraintGraph pre-computed constraint graph to reuse, or {@code null} to compute fresh
      */
     @Builder
-    ConstraintSatisfactionProblem(@Singular Map<Variable, Domain> variableDomains, @Singular Set<Constraint> constraints, @Nullable ConstraintGraph constraintGraph) {
+    ConstraintSatisfactionProblem(@Singular Map<Variable, Domain<?>> variableDomains, @Singular Set<Constraint> constraints, @Nullable ConstraintGraph constraintGraph) {
         this.variableDomains = variableDomains;
         if (constraintGraph != null && constraintGraph.getConstraints().equals(constraints)) {
             this.constraintGraph = constraintGraph;
@@ -87,7 +87,7 @@ public class ConstraintSatisfactionProblem {
                 .constraintGraph(constraintGraph);
     }
 
-    private static void validateConstraints(Map<Variable, Domain> variableDomains, Set<Constraint> constraints) {
+    private static void validateConstraints(Map<Variable, Domain<?>> variableDomains, Set<Constraint> constraints) {
         val unknownVariables = constraints.stream()
                 .flatMap(c -> c.getVariables().stream())
                 .filter(Predicate.not(variableDomains::containsKey))
@@ -157,7 +157,7 @@ public class ConstraintSatisfactionProblem {
      * @param variable whose domain we are interested in
      * @return the domain of the specified variable, or empty, if the problem does not contain the variable
      */
-    public Optional<Domain> findDomain(@NonNull Variable variable) {
+    public Optional<Domain<?>> findDomain(@NonNull Variable variable) {
         return Optional.ofNullable(variableDomains.get(variable));
     }
 
@@ -166,7 +166,7 @@ public class ConstraintSatisfactionProblem {
      * @return the domain of the specified variable
      * @throws java.util.NoSuchElementException if the problem does not contain the variable
      */
-    public Domain getDomain(@NonNull Variable variable) {
+    public Domain<?> getDomain(@NonNull Variable variable) {
         return Optional.ofNullable(variableDomains.get(variable)).orElseThrow();
     }
 
@@ -277,13 +277,13 @@ public class ConstraintSatisfactionProblem {
     public static class ConstraintSatisfactionProblemBuilder {
         private final Variable.Factory variableFactory = Variable.Factory.INSTANCE;
 
-        public Variable createVariable(String name, Domain domain) {
+        public Variable createVariable(String name, Domain<?> domain) {
             final var variable = variableFactory.create(name);
             variableDomain(variable, domain);
             return variable;
         }
 
-        public Variable[] create1dVariableArray(@NonNull String[] labels, @NonNull String namePrefix, @NonNull Domain domain) {
+        public Variable[] create1dVariableArray(@NonNull String[] labels, @NonNull String namePrefix, @NonNull Domain<?> domain) {
             final var variables = new Variable[labels.length];
             for (int i = 0; i < labels.length; i++) {
                 variables[i] = createVariable(String.format("%s%s", namePrefix, labels[i]), domain);
@@ -291,7 +291,7 @@ public class ConstraintSatisfactionProblem {
             return variables;
         }
 
-        public Variable[][] create2dVariableArray(@NonNull String[] rows, @NonNull String[] columns, @NonNull String namePrefix, @NonNull Domain domain) {
+        public Variable[][] create2dVariableArray(@NonNull String[] rows, @NonNull String[] columns, @NonNull String namePrefix, @NonNull Domain<?> domain) {
             final var variables = new Variable[rows.length][columns.length];
             for (int i = 0; i < rows.length; i++) {
                 for (int j = 0; j < columns.length; j++) {

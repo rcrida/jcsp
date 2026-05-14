@@ -16,9 +16,9 @@ import java.util.stream.Stream;
 @Value
 @NonFinal
 @Builder(toBuilder = true)
-public class DomainObjectSet implements Domain {
+public class DomainObjectSet<T> implements Domain<T> {
     @Singular
-    Set<?> values;
+    Set<T> values;
 
     @Override
     public boolean contains(@Nullable Object value) {
@@ -36,12 +36,12 @@ public class DomainObjectSet implements Domain {
     }
 
     @Override
-    public Stream<?> stream() {
+    public Stream<T> stream() {
         return values.stream();
     }
 
     @Override
-    public List<?> toList() {
+    public List<T> toList() {
         return List.copyOf(values);
     }
 
@@ -52,11 +52,11 @@ public class DomainObjectSet implements Domain {
                 '}';
     }
 
-    public static class DomainObjectSetBuilder implements Domain.Builder {
+    public static class DomainObjectSetBuilder<T> implements Domain.Builder<T> {
         @Override
-        public Builder delete(@NonNull Object value) {
+        public Domain.Builder<T> delete(@NonNull Object value) {
             this.values.remove(value);
-            return null;
+            return this;
         }
     }
 }

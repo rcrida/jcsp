@@ -9,12 +9,12 @@ import java.util.EnumSet;
  * to a specified enumeration. This class is immutable and uses an {@link EnumSet} to store
  * the allowed values, ensuring efficient storage and lookup operations.
  */
-public class EnumDomain extends DomainObjectSet {
-    public static <E extends Enum<E>> EnumDomain allOf(@NonNull Class<E> elementType) {
-        return new EnumDomain(EnumSet.allOf(elementType));
+public class EnumDomain<E extends Enum<E>> extends DomainObjectSet<E> {
+    public static <E extends Enum<E>> EnumDomain<E> allOf(@NonNull Class<E> elementType) {
+        return new EnumDomain<>(EnumSet.allOf(elementType));
     }
 
-    public EnumDomain(@NonNull EnumSet<?> values) {
+    public EnumDomain(@NonNull EnumSet<E> values) {
         super(values);
     }
 }

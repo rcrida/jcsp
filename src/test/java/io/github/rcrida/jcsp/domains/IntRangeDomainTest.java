@@ -2,7 +2,6 @@ package io.github.rcrida.jcsp.domains;
 
 import org.junit.jupiter.api.Test;
 
-import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -40,6 +39,6 @@ public class IntRangeDomainTest {
     @Test
     void stream() {
         IntRangeDomain domain = IntRangeDomain.of(5, 10);
-        assertThat((Stream<Integer>) domain.stream()).containsOnly(5, 6, 7, 8, 9, 10);
+        assertThat(domain.stream()).containsOnly(5, 6, 7, 8, 9, 10);
     }
 }

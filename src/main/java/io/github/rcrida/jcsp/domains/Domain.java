@@ -9,18 +9,18 @@ import java.util.stream.Stream;
 /**
  * Represents a collection of elements that defines the domain of values that a variable can take.
  */
-public interface Domain {
+public interface Domain<T> {
     boolean contains(@Nullable Object value);
     boolean isEmpty();
     int size();
-    Stream<?> stream();
-    default List<?> toList() {
+    Stream<T> stream();
+    default List<T> toList() {
         return stream().toList();
     }
-    Builder toBuilder();
+    Builder<T> toBuilder();
 
-    interface Builder {
-        Builder delete(@NonNull Object value);
-        Domain build();
+    interface Builder<T> {
+        Builder<T> delete(@NonNull Object value);
+        Domain<T> build();
     }
 }

@@ -19,7 +19,7 @@ import java.util.stream.Stream;
  * decomposition. The domain consists of all the possible consistent combinations of values of the domains of each of the clique
  * variables.
  */
-public class AssignmentDomain extends DomainObjectSet {
+public class AssignmentDomain extends DomainObjectSet<Assignment> {
     /**
      * Create the domain by iterating over all combinations of the clique variable domains, to create assignments and then
      * filter out any that are not consistent with the constraints of the original problem.
@@ -27,11 +27,11 @@ public class AssignmentDomain extends DomainObjectSet {
      * @param variableDomains the set of clique variables and their associated domains
      * @param csp the original problem, used for determining which of the combinations of domain values are consistent
      */
-    public AssignmentDomain(@NonNull Map<Variable, Domain> variableDomains, @NonNull ConstraintSatisfactionProblem csp) {
+    public AssignmentDomain(@NonNull Map<Variable, Domain<?>> variableDomains, @NonNull ConstraintSatisfactionProblem csp) {
         super(populateCombinations(variableDomains, csp));
     }
 
-    private static Set<Object> populateCombinations(@NonNull Map<Variable, Domain> variableDomains, @NonNull ConstraintSatisfactionProblem csp) {
+    private static Set<Assignment> populateCombinations(@NonNull Map<Variable, Domain<?>> variableDomains, @NonNull ConstraintSatisfactionProblem csp) {
         // create a list of single variable assignments for each value of the domain of each variable
         val variableAssignments = variableDomains.entrySet().stream()
                 .collect(Collectors.toMap(

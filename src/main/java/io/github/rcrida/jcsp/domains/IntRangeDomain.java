@@ -8,7 +8,7 @@ import java.util.Set;
  * of {@link DomainObjectSet} that generates a set of integer values between the specified
  * minimum and maximum bounds.
  */
-public class IntRangeDomain extends DomainObjectSet {
+public class IntRangeDomain extends DomainObjectSet<Integer> {
     public static IntRangeDomain of(int minInclusive, int maxInclusive) {
         return new IntRangeDomain(minInclusive, maxInclusive);
     }
