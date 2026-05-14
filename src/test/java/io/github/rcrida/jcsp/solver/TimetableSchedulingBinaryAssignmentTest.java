@@ -18,6 +18,7 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.stream.Collectors;
+import java.util.stream.IntStream;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -26,17 +27,17 @@ import static org.assertj.core.api.Assertions.assertThat;
  * using the same teachers, subjects and groups as {@link TimetableSchedulingViaColouringTest}.
  *
  * <p>Each variable z[lesson][teacherSlot] represents "is lesson L taught by teacher T in slot S?".
- * This formulation models teacher assignment, room specialisation, and teacher unavailability
- * explicitly. Unavailability is encoded directly in each lesson's variable domain via
- * {@link #wholeDay}, {@link #everyDay}, and {@link #periodsOn} — no additional constraints needed.
+ * This formulation models teacher assignment, room specialisation, teacher unavailability, and
+ * per-subject session frequency. Unavailability and domain restrictions are encoded directly
+ * in each lesson's variable domain — no additional constraints needed for these.
  *
- * <p>Nine lessons (3 groups × 3 subjects) across 3 days × 2 periods and 4 rooms
- * (2 classrooms, 1 lab, 1 computer lab).
+ * <p>Nine lesson types (3 groups × 3 subjects) expanded by {@link #SESSIONS_PER_WEEK} across
+ * 4 days × 2 periods and 4 rooms (2 classrooms, 1 lab, 1 computer lab).
  */
 public class TimetableSchedulingBinaryAssignmentTest {
 
-    enum Day     { MON, TUE, WED }
-    enum Period  { MORNING, AFTERNOON }
+    enum Day      { MON, TUE, WED, THU }
+    enum Period   { MORNING, AFTERNOON }
     enum RoomType { CLASSROOM, LAB, COMPUTER_LAB }
     enum Room {
         ROOM_A(RoomType.CLASSROOM),
@@ -62,8 +63,11 @@ public class TimetableSchedulingBinaryAssignmentTest {
         @Override public String toString() { return teacher + "@" + slot; }
     }
 
-    record Lesson(Group group, Subject subject) {
-        @Override public String toString() { return group + "/" + subject; }
+    /** A single scheduled lesson; session distinguishes multiple occurrences of the same subject. */
+    record Lesson(Group group, Subject subject, int session) {
+        @Override public String toString() {
+            return group + "/" + subject + " [" + (session + 1) + "]";
+        }
     }
 
     // --- Unavailability helpers ---
@@ -85,10 +89,21 @@ public class TimetableSchedulingBinaryAssignmentTest {
 
     // --- Problem data ---
 
+    /** How many times per week each subject must be taught. */
+    static final Map<Subject, Integer> SESSIONS_PER_WEEK = Map.of(
+            Subject.MATH,             2,
+            Subject.PHYSICS,          1,
+            Subject.CHEMISTRY,        1,
+            Subject.BIOLOGY,          1,
+            Subject.ENGLISH,          2,
+            Subject.HISTORY,          1,
+            Subject.COMPUTER_SCIENCE, 1
+    );
+
     static final Map<Teacher, Set<Timeslot>> UNAVAILABLE = Map.of(
-            Teacher.DR_SMITH, wholeDay(Day.MON),                          // departmental meeting
-            Teacher.DR_JONES, everyDay(Period.AFTERNOON),                  // teaches at another school in afternoons
-            Teacher.DR_BROWN, periodsOn(Day.WED, Period.MORNING) // unavailable Wednesday morning
+            Teacher.DR_SMITH, periodsOn(Day.MON, Period.MORNING),          // Monday morning meeting
+            Teacher.DR_JONES, everyDay(Period.AFTERNOON),                   // teaches at another school in afternoons
+            Teacher.DR_BROWN, periodsOn(Day.WED, Period.MORNING)           // Wednesday morning commitment
     );
 
     static final Map<Subject, RoomType> REQUIRED_ROOM_TYPE = Map.of(
@@ -122,7 +137,9 @@ public class TimetableSchedulingBinaryAssignmentTest {
             .toList();
 
     static final List<Lesson> LESSONS = CURRICULUM.entrySet().stream()
-            .flatMap(e -> e.getValue().stream().map(s -> new Lesson(e.getKey(), s)))
+            .flatMap(e -> e.getValue().stream()
+                    .flatMap(s -> IntStream.range(0, SESSIONS_PER_WEEK.get(s))
+                            .mapToObj(i -> new Lesson(e.getKey(), s, i))))
             .toList();
 
     static final List<Slot> SLOTS = TIMESLOTS.stream()
@@ -229,10 +246,11 @@ public class TimetableSchedulingBinaryAssignmentTest {
                     .filter(e -> solution.getValue(e.getValue()).equals(Optional.of(true)))
                     .findFirst()
                     .ifPresent(e -> lookup.get(e.getKey().slot().timeslot()).put(lesson.group(),
-                            lesson.subject() + " (" + e.getKey().teacher() + ", " + e.getKey().slot().room() + ")"));
+                            lesson.subject() + " [" + (lesson.session() + 1) + "]"
+                                    + " (" + e.getKey().teacher() + ", " + e.getKey().slot().room() + ")"));
         }
 
-        int col = 36;
+        int col = 38;
         String sep = "-".repeat(14 + (col + 2) * Group.values().length + 1);
         System.out.println("\n--- Timetable ---");
         System.out.printf("%-14s", "");
