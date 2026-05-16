@@ -1,11 +1,13 @@
 package io.github.rcrida.jcsp.solver.tree.decomposition;
 
-import lombok.Value;
+import lombok.EqualsAndHashCode;
+import lombok.experimental.SuperBuilder;
 import lombok.extern.slf4j.Slf4j;
 import io.github.rcrida.jcsp.ConstraintSatisfactionProblem;
 import io.github.rcrida.jcsp.assignments.Assignment;
 import io.github.rcrida.jcsp.domains.Domain;
 import io.github.rcrida.jcsp.solver.Solver;
+import io.github.rcrida.jcsp.solver.SolverDecorator;
 import io.github.rcrida.jcsp.solver.tree.decomposition.decomposer.TreeDecomposer;
 import org.jspecify.annotations.NonNull;
 
@@ -20,15 +22,18 @@ import java.util.stream.Stream;
  * {@value #MAX_DOMAIN_SIZE_CAP}), where {@code d} is the largest variable domain in the problem.
  * This makes the bound domain-aware: binary problems tolerate higher effective treewidth than
  * large-domain ones within the same memory budget.
+ *
+ * <p>{@code inner} is the fallback solver used when tree decomposition is not applicable or not
+ * worth applying. It also receives the problem directly for optimization calls.
  */
 @Slf4j
-@Value
-public class TreeDecompositionSolver implements Solver {
+@SuperBuilder
+@EqualsAndHashCode(callSuper = true)
+public class TreeDecompositionSolver extends SolverDecorator {
     static final int MAX_DOMAIN_SIZE_CAP = 1_000_000;
 
     @NonNull TreeDecomposer treeDecomposer;
     @NonNull Solver treeSolver;
-    @NonNull Solver defaultSolver;
     int targetTreewidth;
 
     @Override
@@ -42,7 +47,7 @@ public class TreeDecompositionSolver implements Solver {
         return treeDecomposer.decompose(csp, maxDomainSize)
                 .filter(treeCsp -> shouldApplyDecomposition(treeCsp, csp))
                 .map(treeCsp -> treeSolver.getSolutions(treeCsp).map(this::recomposeAssignment))
-                .orElseGet(() -> defaultSolver.getSolutions(csp));
+                .orElseGet(() -> getInner().getSolutions(csp));
     }
 
     /**

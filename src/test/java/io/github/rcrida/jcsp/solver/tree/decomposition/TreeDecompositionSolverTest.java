@@ -74,7 +74,7 @@ public class TreeDecompositionSolverTest {
 
     @BeforeEach
     void setUp() {
-        solver = new TreeDecompositionSolver(treeDecomposer, treeSolver, defaultSolver, 7);
+        solver = TreeDecompositionSolver.builder().inner(defaultSolver).treeDecomposer(treeDecomposer).treeSolver(treeSolver).targetTreewidth(7).build();
     }
 
     @Test

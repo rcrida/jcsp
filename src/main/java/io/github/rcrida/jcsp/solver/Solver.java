@@ -18,6 +18,7 @@ import io.github.rcrida.jcsp.solver.tree.sorter.BFSTopologicalSorter;
 import org.jspecify.annotations.NonNull;
 
 import java.util.Optional;
+import java.util.function.ToDoubleFunction;
 import java.util.stream.Stream;
 
 /**
@@ -29,23 +30,62 @@ import java.util.stream.Stream;
  * either as a single solution or as a stream of solutions.
  */
 public interface Solver {
+    Stream<Assignment> getSolutions(@NonNull ConstraintSatisfactionProblem csp);
+
     default Optional<Assignment> getSolution(@NonNull ConstraintSatisfactionProblem csp) {
         return getSolutions(csp).findFirst();
     }
-    Stream<Assignment> getSolutions(@NonNull ConstraintSatisfactionProblem csp);
+
+    /**
+     * Returns a stream of complete assignments in the order they are discovered, each strictly
+     * better (lower objective) than the previous. The last element is the global optimum.
+     * <p>
+     * The default implementation filters the full solution stream — no pruning occurs.
+     * Implementations may override this method with branch-and-bound pruning for efficiency.
+     * <p>
+     * The {@code objective} must satisfy the lower-bound property for partial assignments:
+     * {@code objective(partial) ≤ objective(completion)} for any completion. This holds for
+     * any additive cost function.
+     */
+    default Stream<Assignment> getSolutions(@NonNull ConstraintSatisfactionProblem csp,
+                                             @NonNull ToDoubleFunction<Assignment> objective) {
+        double[] incumbent = {Double.MAX_VALUE};
+        return getSolutions(csp).filter(candidate -> {
+            double cost = objective.applyAsDouble(candidate);
+            if (cost < incumbent[0]) {
+                incumbent[0] = cost;
+                return true;
+            }
+            return false;
+        });
+    }
+
+    /**
+     * Returns the assignment with the minimum objective value, exhausting the search space.
+     */
+    default Optional<Assignment> getSolution(@NonNull ConstraintSatisfactionProblem csp,
+                                              @NonNull ToDoubleFunction<Assignment> objective) {
+        return getSolutions(csp, objective).reduce((a, b) -> b);
+    }
 
     interface Factory {
         Factory INSTANCE = () -> {
             val backtrackingSearch = new BacktrackingSearch(MinimumRemainingValuesSelector.INSTANCE, LeastConstrainingValueOrderer.INSTANCE, MAC.INSTANCE);
+            val branchAndBound = BranchAndBoundSolver.builder().inner(backtrackingSearch).build();
             val treeSolver = new TreeSolver(BFSTopologicalSorter.INSTANCE, DefaultValueOrderer.INSTANCE, TreeUnassignedVariableSelector.Factory.INSTANCE);
-            val cutsetConditioningSolver = new CutsetConditioningSolver(
-                    backtrackingSearch,
-                    treeSolver);
-            val treeDecompositionSolver = new TreeDecompositionSolver(new TreeDecomposerImpl(MinimumDegreeVariableSelector.Factory.INSTANCE), treeSolver, cutsetConditioningSolver, 7);
-            val independentSubproblemSolver = new IndependentSubproblemSolver(treeDecompositionSolver);
-            val arcConsistentSolver = new ArcConsistentSolver(independentSubproblemSolver);
-            val nodeConsistentSolver = new NodeConsistentSolver(arcConsistentSolver);
-            return nodeConsistentSolver;
+            val cutsetConditioningSolver = CutsetConditioningSolver.builder()
+                    .inner(branchAndBound)
+                    .treeSolver(treeSolver)
+                    .build();
+            val treeDecompositionSolver = TreeDecompositionSolver.builder()
+                    .inner(cutsetConditioningSolver)
+                    .treeDecomposer(new TreeDecomposerImpl(MinimumDegreeVariableSelector.Factory.INSTANCE))
+                    .treeSolver(treeSolver)
+                    .targetTreewidth(7)
+                    .build();
+            val independentSubproblemSolver = IndependentSubproblemSolver.builder().inner(treeDecompositionSolver).build();
+            val arcConsistentSolver = ArcConsistentSolver.builder().inner(independentSubproblemSolver).build();
+            return NodeConsistentSolver.builder().inner(arcConsistentSolver).build();
         };
 
         Solver createSolver();

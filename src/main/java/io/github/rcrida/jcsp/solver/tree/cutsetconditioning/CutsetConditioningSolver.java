@@ -1,6 +1,7 @@
 package io.github.rcrida.jcsp.solver.tree.cutsetconditioning;
 
-import lombok.Value;
+import lombok.EqualsAndHashCode;
+import lombok.experimental.SuperBuilder;
 import lombok.extern.slf4j.Slf4j;
 import lombok.val;
 import io.github.rcrida.jcsp.ConstraintSatisfactionProblem;
@@ -8,6 +9,7 @@ import io.github.rcrida.jcsp.assignments.Assignment;
 import io.github.rcrida.jcsp.constraints.Constraint;
 import io.github.rcrida.jcsp.domains.Domain;
 import io.github.rcrida.jcsp.solver.Solver;
+import io.github.rcrida.jcsp.solver.SolverDecorator;
 import io.github.rcrida.jcsp.variables.Variable;
 import org.jspecify.annotations.NonNull;
 
@@ -15,7 +17,6 @@ import java.util.ArrayDeque;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
-import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
@@ -26,14 +27,15 @@ import java.util.stream.Stream;
  * Splits a problem into a single tree and remaining cutset (which could contain additional trees). Recursively decomposes remaining
  * cutset until no further trees can be found. It then applies cutset conditioning where for each solution for the cutset, it
  * conditions the domains of the tree and finds solutions for them.
+ *
+ * <p>{@code inner} is the fallback solver for the cycle cutset (typically {@link io.github.rcrida.jcsp.solver.BranchAndBoundSolver})
+ * and also the optimization target for {@code getSolutions(csp, objective)}.
  */
 @Slf4j
-@Value
-public class CutsetConditioningSolver implements Solver {
-    @NonNull
-    Solver cycleCutsetSolver;
-    @NonNull
-    Solver treeSolver;
+@SuperBuilder
+@EqualsAndHashCode(callSuper = true)
+public class CutsetConditioningSolver extends SolverDecorator {
+    @NonNull Solver treeSolver;
 
     /**
      * Represents the decomposition of a CSP into a cycle cutset and tree for the purpose of solving using cutset conditioning.
@@ -93,7 +95,7 @@ public class CutsetConditioningSolver implements Solver {
                         .flatMap(cutsetAssignment -> decomposition.constrainTree(cutsetAssignment).stream()
                                 .flatMap(treeSolver::getSolutions)
                                 .map(cutsetAssignment::merge)))
-                .orElseGet(() -> cycleCutsetSolver.getSolutions(csp));
+                .orElseGet(() -> getInner().getSolutions(csp));
     }
 
     /**

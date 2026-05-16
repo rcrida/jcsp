@@ -57,7 +57,7 @@ public class CutsetConditioningSolverTest {
 
     @BeforeEach
     void setUp() {
-        cutsetConditioningSolver = new CutsetConditioningSolver(cycleCutsetSolver, treeSolver);
+        cutsetConditioningSolver = CutsetConditioningSolver.builder().inner(cycleCutsetSolver).treeSolver(treeSolver).build();
     }
 
     @Test

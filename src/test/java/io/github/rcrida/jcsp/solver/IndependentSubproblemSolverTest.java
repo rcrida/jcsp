@@ -28,7 +28,7 @@ public class IndependentSubproblemSolverTest {
             .build();
 
     Solver inner = Solver.Factory.INSTANCE.createSolver();
-    IndependentSubproblemSolver solver = new IndependentSubproblemSolver(inner);
+    IndependentSubproblemSolver solver = IndependentSubproblemSolver.builder().inner(inner).build();
 
     @Test
     void getSolutions_independentSubproblems() {
@@ -48,10 +48,10 @@ public class IndependentSubproblemSolverTest {
     @Test
     void getSolutions_eachSubproblemSolvedOnce() {
         val callCount = new AtomicInteger();
-        val counting = new IndependentSubproblemSolver(csp -> {
+        val counting = IndependentSubproblemSolver.builder().inner(csp -> {
             callCount.incrementAndGet();
             return inner.getSolutions(csp);
-        });
+        }).build();
 
         counting.getSolutions(TWO_SUBPROBLEM_CSP).toList();
 
@@ -61,8 +61,9 @@ public class IndependentSubproblemSolverTest {
     @Test
     void getSolutions_innerSubproblemSolutionsCachedAcrossIterations() {
         val elementCount = new AtomicInteger();
-        val counting = new IndependentSubproblemSolver(
-                csp -> inner.getSolutions(csp).peek(a -> elementCount.incrementAndGet()));
+        val counting = IndependentSubproblemSolver.builder()
+                .inner(csp -> inner.getSolutions(csp).peek(a -> elementCount.incrementAndGet()))
+                .build();
 
         counting.getSolutions(TWO_SUBPROBLEM_CSP).limit(3).toList();
 
