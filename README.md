@@ -7,6 +7,7 @@ A Java library implementing classic AI algorithms for solving Constraint Satisfa
 ## Features
 
 - **Multiple solving strategies**: backtracking search, tree solver, cutset conditioning, tree decomposition, and independent subproblem decomposition
+- **Optimization**: branch-and-bound search via `getSolution(csp, objective)` and `getSolutions(csp, objective)` — returns the optimal assignment or an improving stream of assignments
 - **Consistency preprocessing**: AC3 arc consistency and node consistency for domain pruning
 - **Flexible constraint types**: unary, binary (equals, not-equals, offset, predicate, tuples), and n-ary (AllDiff, AtMostOne, predicate)
 - **Boolean domain**: `BooleanDomain` for modelling binary assignment problems (e.g. timetabling as a 0-1 matrix)
@@ -32,6 +33,21 @@ ConstraintSatisfactionProblem csp = ConstraintSatisfactionProblem.builder()
 Solver.Factory.INSTANCE.createSolver().getSolutions(csp).forEach(System.out::println);
 ```
 
+### Optimization
+
+Pass a `ToDoubleFunction<Assignment>` as the objective to minimise. The objective is called on partial assignments during branch-and-bound pruning, so unassigned variables must be handled gracefully (e.g. with `orElse`):
+
+```java
+Solver solver = Solver.Factory.INSTANCE.createSolver();
+
+// Returns the assignment with the minimum cost
+Optional<Assignment> best = solver.getSolution(csp, assignment ->
+    assignment.getValue(x).orElse(0) + assignment.getValue(y).orElse(0));
+
+// Returns a stream of improving assignments; the last element is the global optimum
+solver.getSolutions(csp, objective).forEach(System.out::println);
+```
+
 ### Constraint builder methods
 
 ```java
@@ -51,7 +67,7 @@ The default solver applies strategies in order, each preprocessing the problem b
 
 ```
 NodeConsistency → ArcConsistency (AC3) → IndependentSubproblems
-    → TreeDecomposition → CutsetConditioning → TreeSolver / BacktrackingSearch
+    → TreeDecomposition → CutsetConditioning → TreeSolver / BranchAndBound(BacktrackingSearch)
 ```
 
 Tree decomposition uses a domain-aware clique size limit (`d^targetTreewidth`, capped at 1,000,000) and only applies when the estimated tree complexity is less than the original search space. Cutset conditioning applies a practical three-tier complexity guard before conditioning.
@@ -62,7 +78,7 @@ Tree decomposition uses a domain-aware clique size limit (`d^targetTreewidth`, c
 <dependency>
     <groupId>io.github.rcrida</groupId>
     <artifactId>jcsp</artifactId>
-    <version>2.4.0</version>
+    <version>2.5.0</version>
 </dependency>
 ```
 
