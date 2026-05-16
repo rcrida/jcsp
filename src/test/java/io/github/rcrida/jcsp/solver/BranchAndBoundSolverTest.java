@@ -83,8 +83,8 @@ public class BranchAndBoundSolverTest {
 
     @Test
     void defaultSolver_getSolutions_withObjective_returnsImprovingStream() {
-        // Exercises the default getSolutions(csp, objective) on a non-overriding Solver
-        Solver solver = Solver.Factory.INSTANCE.createSolver();
+        // Exercises the default getSolutions(csp, objective) on a plain Solver that does not override it
+        Solver solver = csp -> BACKTRACKING.getSolutions(csp);
         val improving = solver.getSolutions(CSP, a -> sum(a)).toList();
         assertThat(improving).isNotEmpty();
         for (int i = 1; i < improving.size(); i++) {

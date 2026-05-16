@@ -43,9 +43,11 @@ public interface Solver {
      * The default implementation filters the full solution stream — no pruning occurs.
      * Implementations may override this method with branch-and-bound pruning for efficiency.
      * <p>
-     * The {@code objective} must satisfy the lower-bound property for partial assignments:
-     * {@code objective(partial) ≤ objective(completion)} for any completion. This holds for
-     * any additive cost function.
+     * The {@code objective} is called on <em>partial</em> assignments during search, so it must
+     * return a lower bound on the cost of any completion. For additive cost functions, use
+     * {@code assignment.getValue(v).orElse(neutralValue)} so unassigned variables contribute
+     * their neutral value (e.g. 0 for a sum). The lower-bound property
+     * {@code objective(partial) ≤ objective(completion)} must hold for all completions.
      */
     default Stream<Assignment> getSolutions(@NonNull ConstraintSatisfactionProblem csp,
                                              @NonNull ToDoubleFunction<Assignment> objective) {
