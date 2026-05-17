@@ -7,44 +7,43 @@ import io.github.rcrida.jcsp.domains.IntRangeDomain;
 import io.github.rcrida.jcsp.variables.Variable;
 import org.junit.jupiter.api.Test;
 
+import java.util.Comparator;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
+import java.util.stream.IntStream;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.offset;
 
 /**
- * 4-city TSP: cities at the corners of a 2×2 square.
- * The optimal tour visits them in order around the perimeter — total distance 8.0.
- * Any tour that crosses a diagonal costs 4 + 4√2 ≈ 9.66.
- *
- * <pre>
- *   D(0,2) --- C(2,2)
- *     |           |
- *   A(0,0) --- B(2,0)
- * </pre>
- *
- * Variables pos0..pos3 represent which city is visited at each step.
- * allDiff ensures each city appears exactly once (a valid permutation).
+ * N-city TSP with cities placed equidistantly on a unit circle (regular N-gon).
+ * The optimal tour visits them in order around the perimeter — total distance N × 2sin(π/N).
+ * For N=6 (regular hexagon) each edge has length 1, so the optimal tour cost is 6.0.
  */
 public class TravelingSalesmanTest {
     static final Solver SOLVER = Solver.Factory.INSTANCE.createSolver();
     static final Variable.Factory F = Variable.Factory.INSTANCE;
+    static final int N = 6;
 
-    static final double[][] CITIES = {{0, 0}, {2, 0}, {2, 2}, {0, 2}};  // A, B, C, D
+    static final double[][] CITIES = IntStream.range(0, N)
+            .mapToObj(i -> new double[]{Math.cos(2 * Math.PI * i / N), Math.sin(2 * Math.PI * i / N)})
+            .toArray(double[][]::new);
 
-    static final Variable<Integer> POS0 = F.create("pos0");
-    static final Variable<Integer> POS1 = F.create("pos1");
-    static final Variable<Integer> POS2 = F.create("pos2");
-    static final Variable<Integer> POS3 = F.create("pos3");
+    static final List<Variable<Integer>> POSITIONS = IntStream.range(0, N)
+            .mapToObj(i -> F.<Integer>create("pos" + i))
+            .toList();
 
-    static final ConstraintSatisfactionProblem TSP = ConstraintSatisfactionProblem.builder()
-            .variableDomain(POS0, IntRangeDomain.of(0, 3))
-            .variableDomain(POS1, IntRangeDomain.of(0, 3))
-            .variableDomain(POS2, IntRangeDomain.of(0, 3))
-            .variableDomain(POS3, IntRangeDomain.of(0, 3))
-            .allDiffConstraint(Set.of(POS0, POS1, POS2, POS3))
-            .build();
+    static final double OPTIMAL_TOUR_LENGTH = N * 2 * Math.sin(Math.PI / N);
+
+    static final ConstraintSatisfactionProblem TSP = buildTsp();
+
+    static ConstraintSatisfactionProblem buildTsp() {
+        var builder = ConstraintSatisfactionProblem.builder();
+        POSITIONS.forEach(pos -> builder.variableDomain(pos, IntRangeDomain.of(0, N - 1)));
+        builder.allDiffConstraint(Set.copyOf(POSITIONS));
+        return builder.build();
+    }
 
     static double dist(int a, int b) {
         double dx = CITIES[a][0] - CITIES[b][0];
@@ -52,22 +51,16 @@ public class TravelingSalesmanTest {
         return Math.sqrt(dx * dx + dy * dy);
     }
 
-    static final List<Variable<Integer>> POSITIONS = List.of(POS0, POS1, POS2, POS3);
-
-    // Sums only edges whose both endpoints are assigned — always a valid lower bound
-    // since unaccounted edges have non-negative cost. The return edge is included only
-    // when all positions are filled (complete tour).
+    // Only sums edges where both adjacent tour positions are assigned — a valid lower bound
+    // for any non-negative distance function, regardless of the order variables are assigned.
     static double tourLength(Assignment a) {
-        List<Integer> tour = POSITIONS.stream()
-                .map(v -> a.getValue(v))
-                .filter(Optional::isPresent)
-                .map(Optional::get)
-                .toList();
         double cost = 0;
-        for (int i = 1; i < tour.size(); i++)
-            cost += dist(tour.get(i - 1), tour.get(i));
-        if (tour.size() == POSITIONS.size())
-            cost += dist(tour.getLast(), tour.getFirst());
+        for (int i = 0; i < N; i++) {
+            Optional<Integer> from = a.getValue(POSITIONS.get(i));
+            Optional<Integer> to = a.getValue(POSITIONS.get((i + 1) % N));
+            if (from.isPresent() && to.isPresent())
+                cost += dist(from.get(), to.get());
+        }
         return cost;
     }
 
@@ -75,7 +68,7 @@ public class TravelingSalesmanTest {
     void optimize_findsShortestTour() {
         val result = SOLVER.getSolution(TSP, TravelingSalesmanTest::tourLength);
         assertThat(result).isPresent();
-        assertThat(tourLength(result.get())).isEqualTo(8.0);
+        assertThat(tourLength(result.get())).isCloseTo(OPTIMAL_TOUR_LENGTH, offset(1e-9));
     }
 
     @Test
@@ -85,6 +78,6 @@ public class TravelingSalesmanTest {
         for (int i = 1; i < improving.size(); i++) {
             assertThat(tourLength(improving.get(i))).isLessThan(tourLength(improving.get(i - 1)));
         }
-        assertThat(tourLength(improving.getLast())).isEqualTo(8.0);
+        assertThat(tourLength(improving.getLast())).isCloseTo(OPTIMAL_TOUR_LENGTH, offset(1e-9));
     }
 }
