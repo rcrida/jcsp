@@ -24,7 +24,7 @@ import static org.assertj.core.api.Assertions.offset;
 public class TravelingSalesmanTest {
     static final Solver SOLVER = Solver.Factory.INSTANCE.createSolver();
     static final Variable.Factory F = Variable.Factory.INSTANCE;
-    static final int N = 6;
+    static final int N = 12;
 
     static final double[][] CITIES = IntStream.range(0, N)
             .mapToObj(i -> new double[]{Math.cos(2 * Math.PI * i / N), Math.sin(2 * Math.PI * i / N)})
@@ -51,17 +51,54 @@ public class TravelingSalesmanTest {
         return Math.sqrt(dx * dx + dy * dy);
     }
 
-    // Only sums edges where both adjacent tour positions are assigned — a valid lower bound
-    // for any non-negative distance function, regardless of the order variables are assigned.
+    // Reduced cost matrix lower bound:
+    // decided edges contribute their exact cost; for the remaining freedom, each city must
+    // still leave via exactly one outgoing edge (row minimum) and be entered via exactly one
+    // incoming edge (column minimum after row reduction). The sum is always ≤ any completion.
     static double tourLength(Assignment a) {
-        double cost = 0;
+        double INF = Double.MAX_VALUE / 2;
+        double[][] cost = new double[N][N];
+        for (int i = 0; i < N; i++)
+            for (int j = 0; j < N; j++)
+                cost[i][j] = i == j ? INF : dist(i, j);
+
+        boolean[] outFixed = new boolean[N];
+        boolean[] inFixed = new boolean[N];
+        double lb = 0;
+
         for (int i = 0; i < N; i++) {
             Optional<Integer> from = a.getValue(POSITIONS.get(i));
             Optional<Integer> to = a.getValue(POSITIONS.get((i + 1) % N));
-            if (from.isPresent() && to.isPresent())
-                cost += dist(from.get(), to.get());
+            if (from.isPresent() && to.isPresent()) {
+                int f = from.get(), t = to.get();
+                lb += dist(f, t);
+                outFixed[f] = true;
+                inFixed[t] = true;
+                for (int k = 0; k < N; k++) {
+                    cost[f][k] = k == t ? 0 : INF;
+                    if (k != f) cost[k][t] = INF;
+                }
+            }
         }
-        return cost;
+
+        for (int i = 0; i < N; i++) {
+            if (outFixed[i]) continue;
+            double min = INF;
+            for (int j = 0; j < N; j++) min = Math.min(min, cost[i][j]);
+            if (min < INF) {
+                lb += min;
+                for (int j = 0; j < N; j++) if (cost[i][j] < INF) cost[i][j] -= min;
+            }
+        }
+
+        for (int j = 0; j < N; j++) {
+            if (inFixed[j]) continue;
+            double min = INF;
+            for (int i = 0; i < N; i++) min = Math.min(min, cost[i][j]);
+            if (min < INF) lb += min;
+        }
+
+        return lb;
     }
 
     @Test
