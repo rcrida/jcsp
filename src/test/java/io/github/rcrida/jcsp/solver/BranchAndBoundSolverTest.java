@@ -39,7 +39,7 @@ public class BranchAndBoundSolverTest {
 
     @Test
     void optimize_findsMinimumSum() {
-        val solver = BranchAndBoundSolver.builder().inner(BACKTRACKING).build();
+        val solver = BranchAndBoundSolver.builder().inner(BACKTRACKING).unassignedVariableSelector(MinimumRemainingValuesSelector.INSTANCE).domainValuesOrderer(DefaultValueOrderer.INSTANCE).inference((problem, variable, assignment) -> Optional.of(problem)).build();
         val result = solver.getSolution(CSP, a -> sum(a));
         assertThat(result).isPresent();
         assertThat(sum(result.get())).isEqualTo(6);
@@ -47,7 +47,7 @@ public class BranchAndBoundSolverTest {
 
     @Test
     void getSolutions_returnsImprovingStream() {
-        val solver = BranchAndBoundSolver.builder().inner(BACKTRACKING).build();
+        val solver = BranchAndBoundSolver.builder().inner(BACKTRACKING).unassignedVariableSelector(MinimumRemainingValuesSelector.INSTANCE).domainValuesOrderer(DefaultValueOrderer.INSTANCE).inference((problem, variable, assignment) -> Optional.of(problem)).build();
         val improving = solver.getSolutions(CSP, a -> sum(a)).toList();
         assertThat(improving).isNotEmpty();
         // Each solution is strictly better than the previous
@@ -60,7 +60,7 @@ public class BranchAndBoundSolverTest {
 
     @Test
     void defaultSolverInterface_alsoGetsOptimization() {
-        Solver solver = BranchAndBoundSolver.builder().inner(BACKTRACKING).build();
+        Solver solver = BranchAndBoundSolver.builder().inner(BACKTRACKING).unassignedVariableSelector(MinimumRemainingValuesSelector.INSTANCE).domainValuesOrderer(DefaultValueOrderer.INSTANCE).inference((problem, variable, assignment) -> Optional.of(problem)).build();
         val result = solver.getSolution(CSP, a -> sum(a));
         assertThat(result).isPresent();
         assertThat(sum(result.get())).isEqualTo(6);
@@ -68,14 +68,14 @@ public class BranchAndBoundSolverTest {
 
     @Test
     void getSolutions_noObjective_delegatesToFallback() {
-        val solver = BranchAndBoundSolver.builder().inner(BACKTRACKING).build();
+        val solver = BranchAndBoundSolver.builder().inner(BACKTRACKING).unassignedVariableSelector(MinimumRemainingValuesSelector.INSTANCE).domainValuesOrderer(DefaultValueOrderer.INSTANCE).inference((problem, variable, assignment) -> Optional.of(problem)).build();
         // Without objective: all 60 allDiff assignments of {1..5} choose 3
         assertThat(solver.getSolutions(CSP)).hasSize(60);
     }
 
     @Test
     void earlyTermination_returnsApproximateSolution() {
-        val solver = BranchAndBoundSolver.builder().inner(BACKTRACKING).build();
+        val solver = BranchAndBoundSolver.builder().inner(BACKTRACKING).unassignedVariableSelector(MinimumRemainingValuesSelector.INSTANCE).domainValuesOrderer(DefaultValueOrderer.INSTANCE).inference((problem, variable, assignment) -> Optional.of(problem)).build();
         val first = solver.getSolutions(CSP, a -> sum(a)).findFirst();
         assertThat(first).isPresent();
         assertThat(sum(first.get())).isLessThanOrEqualTo(12); // anything valid, not necessarily optimal

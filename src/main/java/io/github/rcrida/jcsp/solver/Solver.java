@@ -73,7 +73,7 @@ public interface Solver {
     interface Factory {
         Factory INSTANCE = () -> {
             val backtrackingSearch = new BacktrackingSearch(MinimumRemainingValuesSelector.INSTANCE, LeastConstrainingValueOrderer.INSTANCE, MAC.INSTANCE);
-            val branchAndBound = BranchAndBoundSolver.builder().inner(backtrackingSearch).build();
+            val branchAndBound = BranchAndBoundSolver.builder().inner(backtrackingSearch).unassignedVariableSelector(MinimumRemainingValuesSelector.INSTANCE).domainValuesOrderer(LeastConstrainingValueOrderer.INSTANCE).inference(MAC.INSTANCE).build();
             val treeSolver = new TreeSolver(BFSTopologicalSorter.INSTANCE, DefaultValueOrderer.INSTANCE, TreeUnassignedVariableSelector.Factory.INSTANCE);
             val cutsetConditioningSolver = CutsetConditioningSolver.builder()
                     .inner(branchAndBound)
