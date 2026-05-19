@@ -18,7 +18,10 @@ import io.github.rcrida.jcsp.constraints.binary.BinaryEqualsConstraint;
 import io.github.rcrida.jcsp.constraints.binary.BinaryNotEqualsConstraint;
 import io.github.rcrida.jcsp.constraints.binary.Operator;
 import io.github.rcrida.jcsp.constraints.nary.AllDiffConstraint;
+import io.github.rcrida.jcsp.constraints.nary.AtLeastNConstraint;
+import io.github.rcrida.jcsp.constraints.nary.AtMostNConstraint;
 import io.github.rcrida.jcsp.constraints.nary.AtMostOneConstraint;
+import io.github.rcrida.jcsp.constraints.nary.ExactlyOneConstraint;
 import io.github.rcrida.jcsp.constraints.nary.PredicateConstraint;
 import io.github.rcrida.jcsp.constraints.nary.NaryConstraint;
 import io.github.rcrida.jcsp.constraints.unary.UnaryNotEqualsConstraint;
@@ -394,6 +397,46 @@ public class ConstraintSatisfactionProblem {
          */
         public ConstraintSatisfactionProblemBuilder atMostOneConstraint(@NonNull Set<Variable<Boolean>> variables) {
             return this.constraint(AtMostOneConstraint.builder().variables(variables).build());
+        }
+
+        /**
+         * Constrain a set of boolean variables so that at most {@code n} are {@code true}.
+         * For N=1, prefer {@link #atMostOneConstraint(Set)}, which provides an AC3-compatible
+         * binary decomposition. Suitable for use with {@link io.github.rcrida.jcsp.domains.BooleanDomain}.
+         *
+         * @param variables the boolean variables to constrain
+         * @param n         the maximum number of variables that may be {@code true}
+         * @return the builder
+         */
+        public ConstraintSatisfactionProblemBuilder atMostNConstraint(@NonNull Set<Variable<Boolean>> variables, int n) {
+            return this.constraint(AtMostNConstraint.builder().variables(variables).n(n).build());
+        }
+
+        /**
+         * Constrain a set of boolean variables so that at least {@code n} are {@code true}.
+         * For partial assignments the constraint is satisfied as long as reaching {@code n} true
+         * values is still possible; it only fails when all variables are assigned and fewer than
+         * {@code n} are {@code true}. Suitable for use with {@link io.github.rcrida.jcsp.domains.BooleanDomain}.
+         *
+         * @param variables the boolean variables to constrain
+         * @param n         the minimum number of variables that must be {@code true}
+         * @return the builder
+         */
+        public ConstraintSatisfactionProblemBuilder atLeastNConstraint(@NonNull Set<Variable<Boolean>> variables, int n) {
+            return this.constraint(AtLeastNConstraint.builder().variables(variables).n(n).build());
+        }
+
+        /**
+         * Constrain a set of boolean variables so that exactly one is {@code true}.
+         * Implemented as pairwise binary constraints — each pair cannot both be {@code true},
+         * and an overall constraint when all variables are assigned that exactly one is {@code true}.
+         * Suitable for use with {@link io.github.rcrida.jcsp.domains.BooleanDomain}.
+         *
+         * @param variables the boolean variables to constrain
+         * @return the builder
+         */
+        public ConstraintSatisfactionProblemBuilder exactlyOneConstraint(@NonNull Set<Variable<Boolean>> variables) {
+            return this.constraint(ExactlyOneConstraint.builder().variables(variables).build());
         }
 
         /**

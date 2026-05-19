@@ -175,8 +175,7 @@ public class TimetableSchedulingBinaryAssignmentTest {
         // Each lesson must be assigned to exactly one (teacher, slot) (n-ary: sum == 1)
         for (Lesson lesson : LESSONS) {
             val lessonVars = Set.copyOf(Z.get(lesson).values());
-            csp.predicateConstraint(lessonVars, assignment ->
-                    lessonVars.stream().mapToInt(v -> (Boolean) assignment.getValue(v).orElse(false) ? 1 : 0).sum() == 1);
+            csp.exactlyOneConstraint(lessonVars);
         }
 
         // At most one (teacher, slot) per lesson (binary decomposition for min-conflicts guidance)
@@ -270,7 +269,7 @@ public class TimetableSchedulingBinaryAssignmentTest {
         // The binary formulation requires two variable changes per lesson move (old teacherSlot → false,
         // new teacherSlot → true), so the solver can cycle in the invalid intermediate state where a lesson
         // has no assignment. Restarting with a new random initial assignment escapes these cycles.
-        val solver = new MinConflictsSolver(2000);
+        val solver = MinConflictsSolver.of(2000);
         Optional<Assignment> solution = Optional.empty();
         for (int attempt = 0; attempt < 20 && solution.isEmpty(); attempt++) {
             solution = solver.getLocalSolution(problem, TimetableSchedulingBinaryAssignmentTest::initialAssignment);

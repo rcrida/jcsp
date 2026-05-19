@@ -76,7 +76,7 @@ public class NQueensTest {
     @Test
     void localSolution() {
         val csp = nQueens();
-        val solver = new MinConflictsSolver(500);
+        val solver = MinConflictsSolver.of(500);
         val optionalSolution = solver.getLocalSolution(csp, GreedyAssignmentFactory.INSTANCE);
         printAssignment(optionalSolution.orElseThrow());
     }

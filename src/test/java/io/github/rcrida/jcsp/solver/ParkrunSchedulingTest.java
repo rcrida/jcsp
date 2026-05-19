@@ -9,6 +9,7 @@ import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 
 import java.util.*;
+import java.util.concurrent.ThreadLocalRandom;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
@@ -58,8 +59,9 @@ public class ParkrunSchedulingTest {
         new Person("Dave",  Set.of(Role.VC),            Set.of(7,8,9,10,11,12,13),   Set.of(2, 5)),
         new Person("Grace", Set.of(Role.VC),            Set.of(6,7,8,9,10,11,12,13), Set.of(3, 4)),
         // Dual-role
-        new Person("Eve",   Set.of(Role.RD, Role.VC),  ALL_WEEKS,                    Set.of(7, 8)),
-        new Person("Henry", Set.of(Role.RD, Role.VC),  Set.of(5,6,7,8,9,10,11),     Set.of(7, 12, 13))
+        new Person("Eve",   Set.of(Role.RD, Role.VC),   ALL_WEEKS,                    Set.of(7, 8)),
+        new Person("Mark",  Set.of(Role.RD, Role.VC),   Set.of(1,2,3,4,5,6,7),       Set.of(9, 12)),
+        new Person("Henry", Set.of(Role.RD, Role.VC),   Set.of(5,6,7,8,9,10,11),     Set.of(3, 8, 9))
     );
 
     // Per-role slot bounds: average = WEEKS / eligible_count.
@@ -70,6 +72,35 @@ public class ParkrunSchedulingTest {
     static final int RD_MAX = (int) Math.floor(2.0 * WEEKS    / RD_ELIGIBLE_COUNT);
     static final int VC_MIN = (int) Math.ceil((double)  WEEKS / (2 * VC_ELIGIBLE_COUNT));
     static final int VC_MAX = (int) Math.floor(2.0 * WEEKS    / VC_ELIGIBLE_COUNT);
+
+    // Precomputed minimum achievable max-minus-min of total slots per person across both roles.
+    // Enumerated by trying all ways to distribute the per-role extra slots.
+    static final double MINIMUM_DIFFERENCE = computeMinimumDifference();
+
+    private static double computeMinimumDifference() {
+        var rdEligible = PEOPLE.stream().filter(p -> p.canDo(Role.RD)).toList();
+        var vcEligible = PEOPLE.stream().filter(p -> p.canDo(Role.VC)).toList();
+        int rdBase = WEEKS / rdEligible.size(), rdExtras = WEEKS % rdEligible.size();
+        int vcBase = WEEKS / vcEligible.size(), vcExtras = WEEKS % vcEligible.size();
+        double minDiff = Double.MAX_VALUE;
+        for (int rdMask = 0; rdMask < (1 << rdEligible.size()); rdMask++) {
+            if (Integer.bitCount(rdMask) != rdExtras) continue;
+            for (int vcMask = 0; vcMask < (1 << vcEligible.size()); vcMask++) {
+                if (Integer.bitCount(vcMask) != vcExtras) continue;
+                final int rm = rdMask, vm = vcMask;
+                double[] totals = IntStream.range(0, PEOPLE.size()).mapToDouble(i -> {
+                    Person p = PEOPLE.get(i);
+                    int rdIdx = rdEligible.indexOf(p);
+                    int vcIdx = vcEligible.indexOf(p);
+                    return (rdIdx >= 0 ? rdBase + ((rm >> rdIdx) & 1) : 0)
+                         + (vcIdx >= 0 ? vcBase + ((vm >> vcIdx) & 1) : 0);
+                }).toArray();
+                double diff = Arrays.stream(totals).max().orElse(0) - Arrays.stream(totals).min().orElse(0);
+                minDiff = Math.min(minDiff, diff);
+            }
+        }
+        return minDiff;
+    }
 
     /** z[person][role][week]: true iff that person fills that role that week. */
     static Map<Person, Map<Role, Map<Integer, Variable<Boolean>>>> Z;
@@ -96,11 +127,7 @@ public class ParkrunSchedulingTest {
         // Each (role, week) slot must be filled by exactly one person
         for (Role r : Role.values()) {
             for (int w = 1; w <= WEEKS; w++) {
-                final int week = w;
-                var slotVars = slotVars(r, week);
-                csp.atMostOneConstraint(slotVars);
-                csp.predicateConstraint(slotVars, a ->
-                    slotVars.stream().mapToInt(v -> isTrue(a, v) ? 1 : 0).sum() == 1);
+                csp.exactlyOneConstraint(slotVars(r, w));
             }
         }
 
@@ -119,13 +146,11 @@ public class ParkrunSchedulingTest {
         for (Person p : PEOPLE) {
             for (Role r : Role.values()) {
                 if (!p.canDo(r)) continue;
-                var personRoleVars = List.copyOf(Z.get(p).get(r).values());
+                var personRoleVars = Set.copyOf(Z.get(p).get(r).values());
                 int min = r == Role.RD ? RD_MIN : VC_MIN;
+                csp.atLeastNConstraint(personRoleVars, min);
                 int max = r == Role.RD ? RD_MAX : VC_MAX;
-                csp.predicateConstraint(Set.copyOf(personRoleVars), a -> {
-                    long n = personRoleVars.stream().filter(v -> isTrue(a, v)).count();
-                    return n >= min && n <= max;
-                });
+                csp.atMostNConstraint(personRoleVars, max);
             }
         }
 
@@ -141,36 +166,60 @@ public class ParkrunSchedulingTest {
     }
 
     static boolean isTrue(Assignment a, Variable<Boolean> v) {
-        return Boolean.TRUE.equals(a.getValue(v).orElse(false));
+        return a.getValue(v).orElse(false);
     }
 
-    // off-preference: count true variables assigned to non-preferred weeks.
-    // Admissible for B&B — unassigned variables default to false (cost 0).
+    // Tight lower bound on off-preference cost.
+    // For each slot, contributes the minimum possible off-preference:
+    //   - already filled by a preferred person → 0
+    //   - already filled by a non-preferred person → 1
+    //   - unfilled, but at least one preferred candidate's variable is still unassigned → 0 (optimistic)
+    //   - unfilled, no preferred candidate can still be chosen → 1 (unavoidable)
     static double offPreferenceCost(Assignment a) {
-        return Z.entrySet().stream().mapToDouble(pe -> {
-            Person p = pe.getKey();
-            return pe.getValue().values().stream().mapToDouble(weekMap ->
-                weekMap.entrySet().stream()
-                    .filter(we -> isTrue(a, we.getValue()) && !p.prefers(we.getKey()))
-                    .count()
-            ).sum();
-        }).sum();
+        double cost = 0;
+        for (Role r : Role.values()) {
+            for (int w = 1; w <= WEEKS; w++) {
+                final int week = w;
+                cost += slotCost(a, r, week);
+            }
+        }
+        return cost;
+    }
+
+    private static double slotCost(Assignment a, Role role, int week) {
+        for (Person p : PEOPLE) {
+            if (!p.canDo(role)) continue;
+            var v = Z.get(p).get(role).get(week);
+            if (v != null && isTrue(a, v)) return p.prefers(week) ? 0 : 1; // slot filled
+        }
+        // Slot unfilled: 0 if any preferred candidate's variable is still unassigned, else 1
+        boolean anyPreferredPossible = PEOPLE.stream()
+            .filter(p -> p.canDo(role) && p.prefers(week))
+            .anyMatch(p -> {
+                var v = Z.get(p).get(role).get(week);
+                return v != null && a.getValue(v).isEmpty();
+            });
+        return anyPreferredPossible ? 0 : 1;
+    }
+
+    // Max-minus-min of total slots (RD + VC) per person across all people.
+    static double differenceCost(Assignment a) {
+        double[] totals = personTotals(a);
+        return Arrays.stream(totals).max().orElse(0) - Arrays.stream(totals).min().orElse(0);
+    }
+
+    private static double[] personTotals(Assignment a) {
+        return PEOPLE.stream().mapToDouble(p ->
+            Z.get(p).values().stream()
+                .flatMap(weekMap -> weekMap.values().stream())
+                .filter(v -> isTrue(a, v))
+                .count()
+        ).toArray();
     }
 
     static double cost(Assignment a) {
-        return offPreferenceCost(a);
-    }
-
-    @Test
-    void print_threeBestRosters() {
-        var improving = SOLVER.getSolutions(ROSTER, ParkrunSchedulingTest::cost).toList();
-        var top3 = improving.subList(Math.max(0, improving.size() - 3), improving.size());
-
-        System.out.printf("=== Three best rosters ===%n%n");
-        for (int i = 0; i < top3.size(); i++) {
-            System.out.printf("Roster %d%n", i + 1);
-            printRoster(top3.get(i));
-        }
+        if (a.isComplete(ROSTER)) return offPreferenceCost(a) + differenceCost(a);
+        return offPreferenceCost(a) + MINIMUM_DIFFERENCE;
     }
 
     private static void printRoster(Assignment a) {
@@ -193,7 +242,8 @@ public class ParkrunSchedulingTest {
         var counts = PEOPLE.stream().collect(Collectors.toMap(p -> p, p -> 0L));
         Z.forEach((p, roleMap) -> roleMap.forEach((r, weekMap) ->
             weekMap.values().forEach(v -> { if (isTrue(a, v)) counts.merge(p, 1L, Long::sum); })));
-        System.out.printf("  Off-preference count: %d%n", (int) offPreferenceCost(a));
+        System.out.printf("  Off-preference: %d  Max-diff: %.0f%n",
+            (int) offPreferenceCost(a), differenceCost(a));
         counts.entrySet().stream()
             .sorted(Map.Entry.<Person, Long>comparingByValue().reversed())
             .forEach(e -> System.out.printf("    %-8s %d%n", e.getKey().name(), e.getValue()));
@@ -202,17 +252,48 @@ public class ParkrunSchedulingTest {
     }
 
     @Test
-    void optimize_minimizesOffPreferenceAssignments() {
-        val result = SOLVER.getSolution(ROSTER, ParkrunSchedulingTest::cost);
-        assertThat(result).isPresent();
+    void getLocalSolution() {
+        val solver = MinConflictsSolver.of(4000);
+        Optional<Assignment>  solution = Optional.empty();
+        for (int attempt = 0; attempt < 20 && solution.isEmpty(); attempt++) {
+            solution = solver.getLocalSolution(ROSTER, ParkrunSchedulingTest::initialAssignment, ParkrunSchedulingTest::cost);
+        }
+        assertThat(solution).isPresent();
+        printRoster(solution.get());
     }
 
-    @Test
-    void getSolutions_returnsImprovingRosters() {
-        val improving = SOLVER.getSolutions(ROSTER, ParkrunSchedulingTest::cost).toList();
-        assertThat(improving).isNotEmpty();
-        for (int i = 1; i < improving.size(); i++) {
-            assertThat(cost(improving.get(i))).isLessThan(cost(improving.get(i - 1)));
+    // Slot-centric greedy initialisation: fill every (role, week) slot with exactly one person,
+    // satisfying exactlyOneConstraint from the start. Among eligible candidates for each slot,
+    // prefer those who want that week; break ties by least total load so far. This produces
+    // far fewer constraint violations than the person-centric random approach, giving
+    // MinConflictsSolver a much better starting point.
+    static Assignment initialAssignment(ConstraintSatisfactionProblem csp) {
+        val builder = Assignment.builder();
+        // Default all variables to false
+        Z.forEach((p, roleMap) -> roleMap.forEach((r, weekMap) ->
+            weekMap.values().forEach(v -> builder.value(v, false))));
+        // Track running load per person to balance assignments
+        Map<Person, Integer> load = new HashMap<>();
+        PEOPLE.forEach(p -> load.put(p, 0));
+        for (Role r : Role.values()) {
+            // Shuffle week order to avoid systematic bias
+            val weeks = new ArrayList<>(IntStream.rangeClosed(1, WEEKS).boxed().toList());
+            Collections.shuffle(weeks, new Random(ThreadLocalRandom.current().nextLong()));
+            for (int w : weeks) {
+                var candidates = PEOPLE.stream()
+                    .filter(p -> p.canDo(r) && Z.get(p).get(r).containsKey(w))
+                    .toList();
+                if (candidates.isEmpty()) continue;
+                // Prefer preferred+least-loaded; fall back to least-loaded
+                var chosen = candidates.stream()
+                    .filter(p -> p.prefers(w))
+                    .min(Comparator.comparingInt(load::get))
+                    .or(() -> candidates.stream().min(Comparator.comparingInt(load::get)))
+                    .orElseThrow();
+                builder.value(Z.get(chosen).get(r).get(w), true);
+                load.merge(chosen, 1, Integer::sum);
+            }
         }
+        return builder.build();
     }
 }

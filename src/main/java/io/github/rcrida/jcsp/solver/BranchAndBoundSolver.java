@@ -1,7 +1,6 @@
 package io.github.rcrida.jcsp.solver;
 
 import lombok.EqualsAndHashCode;
-import lombok.NonNull;
 import lombok.experimental.SuperBuilder;
 import lombok.extern.slf4j.Slf4j;
 import lombok.val;
@@ -11,6 +10,7 @@ import io.github.rcrida.jcsp.consistency.Inference;
 import io.github.rcrida.jcsp.solver.backtrackingsearch.order.DomainValuesOrderer;
 import io.github.rcrida.jcsp.solver.backtrackingsearch.selector.UnassignedVariableSelector;
 import io.github.rcrida.jcsp.variables.Variable;
+import org.jspecify.annotations.NonNull;
 
 import java.util.function.ToDoubleFunction;
 import java.util.stream.Stream;

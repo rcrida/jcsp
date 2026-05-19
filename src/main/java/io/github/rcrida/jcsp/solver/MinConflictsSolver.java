@@ -1,5 +1,6 @@
 package io.github.rcrida.jcsp.solver;
 
+import lombok.Builder;
 import lombok.Value;
 import lombok.extern.slf4j.Slf4j;
 import lombok.val;
@@ -8,6 +9,9 @@ import io.github.rcrida.jcsp.assignments.Assignment;
 import io.github.rcrida.jcsp.constraints.Constraint;
 import io.github.rcrida.jcsp.constraints.unary.UnaryConstraint;
 import io.github.rcrida.jcsp.solver.assignmentfactory.InitialAssignmentFactory;
+import io.github.rcrida.jcsp.solver.backtrackingsearch.selector.ConflictedVariableSelector;
+import io.github.rcrida.jcsp.solver.backtrackingsearch.selector.RandomVariableSelector;
+import io.github.rcrida.jcsp.solver.backtrackingsearch.selector.UnassignedVariableSelector;
 import io.github.rcrida.jcsp.variables.Variable;
 import org.jspecify.annotations.NonNull;
 
@@ -18,6 +22,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.function.Predicate;
+import java.util.function.ToDoubleFunction;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -45,19 +50,26 @@ import java.util.stream.Stream;
  */
 @Slf4j
 @Value
+@Builder
 public class MinConflictsSolver implements LocalSolver {
     int maxSteps;
+    @Builder.Default UnassignedVariableSelector conflictedVariableSelector = ConflictedVariableSelector.INSTANCE;
+    @Builder.Default UnassignedVariableSelector feasibleVariableSelector   = RandomVariableSelector.INSTANCE;
+
+    /** Convenience factory preserving the original single-argument constructor. */
+    public static MinConflictsSolver of(int maxSteps) {
+        return builder().maxSteps(maxSteps).build();
+    }
 
     @Override
     public Optional<Assignment> getLocalSolution(@NonNull ConstraintSatisfactionProblem csp, @NonNull InitialAssignmentFactory factory) {
         var current = factory.getAssignment(csp);
         val constraintWeights = new HashMap<Constraint, Double>();
         for (int i = 0; i < maxSteps; i++) {
-            log.info("Current assignment: {} -> {}", i, current);
             if (current.isSolution(csp)) {
                 return Optional.of(current);
             }
-            val variable = selectConflictedVariable(csp, current);
+            val variable = conflictedVariableSelector.select(csp, current);
             val value = minimizeConflicts(csp, variable, current, constraintWeights);
             log.info("{} -> {}", variable, value);
             current = current.toBuilder().value(variable, value).build();
@@ -66,14 +78,78 @@ public class MinConflictsSolver implements LocalSolver {
         return Optional.empty();
     }
 
+    @Override
+    public Optional<Assignment> getLocalSolution(@NonNull ConstraintSatisfactionProblem csp,
+                                                 @NonNull InitialAssignmentFactory factory,
+                                                 @NonNull ToDoubleFunction<Assignment> objective) {
+        var current = factory.getAssignment(csp);
+        val constraintWeights = new HashMap<Constraint, Double>();
+        Optional<Assignment> best = Optional.empty();
+        double bestCost = Double.MAX_VALUE;
+        for (int i = 0; i < maxSteps; i++) {
+            boolean feasible = current.isSolution(csp);
+            if (feasible) {
+                double cost = objective.applyAsDouble(current);
+                if (cost < bestCost) {
+                    bestCost = cost;
+                    best = Optional.of(current);
+                    log.info("Improving solution at step {} with cost {}: {}", i, cost, current);
+                }
+            }
+            val variable = feasible
+                ? feasibleVariableSelector.select(csp, current)
+                : conflictedVariableSelector.select(csp, current);
+            val value = minimizeConflictsAndObjective(csp, variable, current, constraintWeights, objective);
+            log.debug("{} -> {}", variable, value);
+            current = current.toBuilder().value(variable, value).build();
+            // Only update weights during constraint repair — updating them during objective-guided
+            // exploration from a feasible state would inflate weights for temporary violations and
+            // bias subsequent conflict resolution once the search returns to the repair phase.
+            if (!feasible) {
+                updateWeights(csp, constraintWeights, current);
+            }
+        }
+        return best;
+    }
+
+    private @NonNull Object minimizeConflictsAndObjective(@NonNull ConstraintSatisfactionProblem csp,
+                                                          @NonNull Variable variable,
+                                                          @NonNull Assignment current,
+                                                          @NonNull Map<Constraint, Double> constraintWeights,
+                                                          @NonNull ToDoubleFunction<Assignment> objective) {
+        record ValueCost(Object value, double violations, double objective) {}
+
+        val variableConstraints = conflictConstraints(csp)
+                .filter(c -> c.getVariables().contains(variable))
+                .toList();
+        val domain = csp.getVariableDomains().get(variable);
+        val costs = domain.stream()
+                .map(v -> {
+                    val candidate = current.withValue(variable, v);
+                    return new ValueCost(v,
+                            weighConflicts(variable, v, current, variableConstraints, constraintWeights),
+                            objective.applyAsDouble(candidate));
+                })
+                .toList();
+
+        // Lexicographic: minimise violations first (constraint repair always takes priority),
+        // then use the objective as a tie-breaker — no scaling constant needed.
+        double minViolations = costs.stream().mapToDouble(ValueCost::violations).min().orElseThrow();
+        double minObjective  = costs.stream().filter(c -> c.violations() == minViolations)
+                .mapToDouble(ValueCost::objective).min().orElseThrow();
+        val best = costs.stream()
+                .filter(c -> c.violations() == minViolations && c.objective() == minObjective)
+                .map(ValueCost::value)
+                .toList();
+        return best.get(ThreadLocalRandom.current().nextInt(best.size()));
+    }
+
     /**
      * Selects a conflicted variable from the current assignment in the context of the given
      * constraint satisfaction problem. A variable is considered conflicted if it violates
      * one or more constraints in the current assignment.
      *
      * @param csp The constraint satisfaction problem containing the set of variables and constraints.
-     * @param current The current assignment of variable values, used to determine which variables
-     *                are in conflict.
      * @return A variable that is in conflict based on the current assignment. If multiple
      *         variables are in conflict, a randomly selected one is returned.
      */
@@ -84,15 +160,6 @@ public class MinConflictsSolver implements LocalSolver {
         return Stream.concat(
                 csp.getAllBinaryConstraints().stream(),
                 csp.getConstraints().stream().filter(c -> c instanceof UnaryConstraint));
-    }
-
-    private @NonNull Variable selectConflictedVariable(@NonNull ConstraintSatisfactionProblem csp, @NonNull Assignment current) {
-        val conflictedVariables = csp.getConstraints().stream()
-                .filter(Predicate.not(constraint -> constraint.isSatisfiedBy(current)))
-                .flatMap(constraint -> constraint.getVariables().stream())
-                .distinct()
-                .toList();
-        return conflictedVariables.get(ThreadLocalRandom.current().nextInt(conflictedVariables.size()));
     }
 
     /**

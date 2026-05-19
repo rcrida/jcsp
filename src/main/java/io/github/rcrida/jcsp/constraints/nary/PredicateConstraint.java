@@ -20,7 +20,7 @@ import java.util.function.Predicate;
  */
 @SuperBuilder
 public class PredicateConstraint extends NaryConstraint {
-    @NonNull Predicate<Assignment> predicate;
+    @NonNull private final Predicate<Assignment> predicate;
 
     @Override
     public boolean isSatisfiedBy(@NonNull Assignment assignment) {

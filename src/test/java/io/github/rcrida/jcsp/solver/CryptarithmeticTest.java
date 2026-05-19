@@ -107,7 +107,7 @@ public class CryptarithmeticTest {
     @Test
     void localSolution() {
         val csp = twoPlusTwoEqualsFour();
-        val solver = new MinConflictsSolver(500);
+        val solver = MinConflictsSolver.of(500);
         val optionalSolution = solver.getLocalSolution(csp, RandomAssignmentFactory.INSTANCE);
         // don't reliably find a solution because ths search space is sparse and we don't model all of the constraints as binary constraints
         System.out.println(optionalSolution);

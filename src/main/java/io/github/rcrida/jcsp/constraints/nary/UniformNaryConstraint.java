@@ -20,8 +20,7 @@ public abstract class UniformNaryConstraint<T> extends NaryConstraint {
     @Override
     @SuppressWarnings("unchecked")
     public final boolean isSatisfiedBy(@NonNull Assignment assignment) {
-        Collection<T> values = (Collection<T>) (Collection<?>)
-                assignment.extractPartialAssignment(getVariables()).getValues().values();
+        Collection<T> values = (Collection<T>) assignment.extractPartialAssignment(getVariables()).getValues().values();
         return isSatisfiedByValues(values);
     }
 
