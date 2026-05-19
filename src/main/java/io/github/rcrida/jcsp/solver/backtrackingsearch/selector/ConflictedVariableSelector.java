@@ -17,9 +17,6 @@ public class ConflictedVariableSelector implements UnassignedVariableSelector {
 
     private ConflictedVariableSelector() {}
 
-    // Binary constraints expanded from n-ary constraints give better conflict granularity than
-    // treating an n-ary constraint as a single violation. Unary constraints are added separately
-    // as they have no binary representation.
     @Override
     public Variable<?> select(@NonNull ConstraintSatisfactionProblem csp, @NonNull Assignment assignment) {
         var conflicted = csp.getConstraints().stream()
