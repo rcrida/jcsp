@@ -16,20 +16,20 @@ import java.util.stream.IntStream;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * One quarter (13 Saturdays) of parkrun scheduling with two roles per week:
+ * Eight weeks of parkrun scheduling with two roles per week:
  * Run Director (RD) and Volunteer Coordinator (VC).
  *
  * <p>Uses a binary-assignment formulation: one {@code Variable<Boolean>} per
  * (person, role, week) combination. Exactly-one constraints per slot, at-most-one
- * constraints for dual-role people within a week, and predicate cardinality
- * constraints enforce a fair load. The off-preference objective counts {@code true}
- * assignments in non-preferred weeks and is naturally admissible for B&B because
- * unassigned variables default to {@code false} (contributing 0).
+ * constraints for dual-role people within a week, and cardinality constraints enforce
+ * a fair load. The off-preference objective counts {@code true} assignments in
+ * non-preferred weeks and is naturally admissible for B&B because unassigned variables
+ * default to {@code false} (contributing 0).
  *
- * <p>Eight people cover all 13 weeks — three RD-only, three VC-only, and two
- * dual-role. Week 7 remains a bottleneck: every RD-eligible person except Tom is
- * unavailable that day, and Tom prefers even weeks, so week 7 is the sole
- * unavoidable off-preference assignment. Minimum off-preference count = 1.
+ * <p>Nine people cover 8 weeks — three RD-only (Sarah, Tom, Frank), three VC-only
+ * (Carol, Dave, Grace), and three dual-role (Eve, Mark, Henry). Each eligible person
+ * volunteers between {@code RD_MIN}/{@code VC_MIN} and {@code RD_MAX}/{@code VC_MAX}
+ * times per role, computed from the average slots per eligible person.
  */
 public class ParkrunSchedulingTest {
     enum Role { RD, VC }
