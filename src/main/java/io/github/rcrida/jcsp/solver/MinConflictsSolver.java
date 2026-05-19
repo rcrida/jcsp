@@ -70,9 +70,7 @@ public class MinConflictsSolver implements LocalSolver {
                 return Optional.of(current);
             }
             val variable = conflictedVariableSelector.select(csp, current);
-            val value = minimizeConflicts(csp, variable, current, constraintWeights);
-            log.info("{} -> {}", variable, value);
-            current = current.toBuilder().value(variable, value).build();
+            current = applyMinConflicts(csp, variable, current, constraintWeights);
             updateWeights(csp, constraintWeights, current);
         }
         return Optional.empty();
@@ -99,9 +97,7 @@ public class MinConflictsSolver implements LocalSolver {
             val variable = feasible
                 ? feasibleVariableSelector.select(csp, current)
                 : conflictedVariableSelector.select(csp, current);
-            val value = minimizeConflictsAndObjective(csp, variable, current, constraintWeights, objective);
-            log.debug("{} -> {}", variable, value);
-            current = current.toBuilder().value(variable, value).build();
+            current = applyMinConflictsAndObjective(csp, variable, current, constraintWeights, objective);
             // Only update weights during constraint repair — updating them during objective-guided
             // exploration from a feasible state would inflate weights for temporary violations and
             // bias subsequent conflict resolution once the search returns to the repair phase.
@@ -112,24 +108,28 @@ public class MinConflictsSolver implements LocalSolver {
         return best;
     }
 
-    private @NonNull Object minimizeConflictsAndObjective(@NonNull ConstraintSatisfactionProblem csp,
-                                                          @NonNull Variable variable,
-                                                          @NonNull Assignment current,
-                                                          @NonNull Map<Constraint, Double> constraintWeights,
-                                                          @NonNull ToDoubleFunction<Assignment> objective) {
-        record ValueCost(Object value, double violations, double objective) {}
+    private @NonNull Assignment applyMinConflictsAndObjective(@NonNull ConstraintSatisfactionProblem csp,
+                                                               @NonNull Variable<?> variable,
+                                                               @NonNull Assignment current,
+                                                               @NonNull Map<Constraint, Double> constraintWeights,
+                                                               @NonNull ToDoubleFunction<Assignment> objective) {
+        return applyMinConflictsAndObjectiveTyped(csp, variable, current, constraintWeights, objective);
+    }
+
+    private <T> @NonNull Assignment applyMinConflictsAndObjectiveTyped(@NonNull ConstraintSatisfactionProblem csp,
+                                                                        @NonNull Variable<T> variable,
+                                                                        @NonNull Assignment current,
+                                                                        @NonNull Map<Constraint, Double> constraintWeights,
+                                                                        @NonNull ToDoubleFunction<Assignment> objective) {
+        record ValueCost<V>(V value, double violations, double objective) {}
 
         val variableConstraints = conflictConstraints(csp)
                 .filter(c -> c.getVariables().contains(variable))
                 .toList();
-        val domain = csp.getVariableDomains().get(variable);
-        val costs = domain.stream()
-                .map(v -> {
-                    val candidate = current.withValue(variable, v);
-                    return new ValueCost(v,
-                            weighConflicts(variable, v, current, variableConstraints, constraintWeights),
-                            objective.applyAsDouble(candidate));
-                })
+        val costs = csp.getDomain(variable).stream()
+                .map(v -> new ValueCost<>(v,
+                        weighConflicts(variable, v, current, variableConstraints, constraintWeights),
+                        objective.applyAsDouble(current.withValue(variable, v))))
                 .toList();
 
         // Lexicographic: minimise violations first (constraint repair always takes priority),
@@ -137,11 +137,13 @@ public class MinConflictsSolver implements LocalSolver {
         double minViolations = costs.stream().mapToDouble(ValueCost::violations).min().orElseThrow();
         double minObjective  = costs.stream().filter(c -> c.violations() == minViolations)
                 .mapToDouble(ValueCost::objective).min().orElseThrow();
-        val best = costs.stream()
+        val candidates = costs.stream()
                 .filter(c -> c.violations() == minViolations && c.objective() == minObjective)
                 .map(ValueCost::value)
                 .toList();
-        return best.get(ThreadLocalRandom.current().nextInt(best.size()));
+        T value = candidates.get(ThreadLocalRandom.current().nextInt(candidates.size()));
+        log.debug("{} -> {}", variable, value);
+        return current.toBuilder().value(variable, value).build();
     }
 
     /**
@@ -174,20 +176,31 @@ public class MinConflictsSolver implements LocalSolver {
      * @param constraintWeights A map assigning weights to constraints, representing their relative importance.
      * @return The value from the variable's domain that minimizes the total weight of violated constraints.
      */
-    private @NonNull Object minimizeConflicts(@NonNull ConstraintSatisfactionProblem csp, @NonNull Variable variable, @NonNull Assignment current, @NonNull Map<Constraint, Double> constraintWeights) {
+    private @NonNull Assignment applyMinConflicts(@NonNull ConstraintSatisfactionProblem csp,
+                                                   @NonNull Variable<?> variable,
+                                                   @NonNull Assignment current,
+                                                   @NonNull Map<Constraint, Double> constraintWeights) {
+        return applyMinConflictsTyped(csp, variable, current, constraintWeights);
+    }
+
+    private <T> @NonNull Assignment applyMinConflictsTyped(@NonNull ConstraintSatisfactionProblem csp,
+                                                            @NonNull Variable<T> variable,
+                                                            @NonNull Assignment current,
+                                                            @NonNull Map<Constraint, Double> constraintWeights) {
         val variableConstraints = conflictConstraints(csp)
                 .filter(constraint -> constraint.getVariables().contains(variable))
                 .toList();
-        val domain = csp.getVariableDomains().get(variable);
-        Map<Object, Double> valueWeights = domain.stream()
+        Map<T, Double> valueWeights = csp.getDomain(variable).stream()
                 .collect(Collectors.toMap(v -> v, v -> weighConflicts(variable, v, current, variableConstraints, constraintWeights)));
         log.debug("Value weights: {}", valueWeights);
         val minWeight = valueWeights.values().stream().min(Comparator.naturalOrder()).orElseThrow();
-        val leastConflictedValues = valueWeights.entrySet().stream()
+        val candidates = valueWeights.entrySet().stream()
                 .filter(e -> e.getValue().equals(minWeight))
                 .map(Map.Entry::getKey)
                 .toList();
-        return leastConflictedValues.get(ThreadLocalRandom.current().nextInt(leastConflictedValues.size()));
+        T value = candidates.get(ThreadLocalRandom.current().nextInt(candidates.size()));
+        log.info("{} -> {}", variable, value);
+        return current.toBuilder().value(variable, value).build();
     }
 
     /**
@@ -206,7 +219,7 @@ public class MinConflictsSolver implements LocalSolver {
      *                          is not explicitly present in the map.
      * @return The total weight of constraints that are violated when the variable is assigned the given value.
      */
-    private double weighConflicts(@NonNull Variable variable, @NonNull Object value, @NonNull Assignment current, @NonNull List<? extends Constraint> variableConstraints, @NonNull Map<Constraint, Double> constraintWeights) {
+    private <T> double weighConflicts(@NonNull Variable<T> variable, @NonNull T value, @NonNull Assignment current, @NonNull List<? extends Constraint> variableConstraints, @NonNull Map<Constraint, Double> constraintWeights) {
         val candidate = current.withValue(variable, value);
         return variableConstraints.stream()
                 .filter(Predicate.not(constraint -> constraint.isSatisfiedBy(candidate)))
