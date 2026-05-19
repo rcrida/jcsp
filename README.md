@@ -9,11 +9,11 @@ A Java library implementing classic AI algorithms for solving Constraint Satisfa
 - **Multiple solving strategies**: backtracking search, tree solver, cutset conditioning, tree decomposition, and independent subproblem decomposition
 - **Optimization**: branch-and-bound search via `getSolution(csp, objective)` and `getSolutions(csp, objective)` — returns the optimal assignment or an improving stream of assignments
 - **Consistency preprocessing**: AC3 arc consistency and node consistency for domain pruning
-- **Flexible constraint types**: unary, binary (equals, not-equals, offset, predicate, tuples), and n-ary (AllDiff, AtMostOne, predicate)
+- **Flexible constraint types**: unary, binary (equals, not-equals, offset, predicate, tuples), and n-ary (AllDiff, AtMostOne, AtLeastN, AtMostN, ExactlyOne, predicate)
 - **Boolean domain**: `BooleanDomain` for modelling binary assignment problems (e.g. timetabling as a 0-1 matrix)
 - **Functional style**: immutable value objects, composable solver decorators, and a lazy `Stream<Assignment>` API throughout
 - **Heuristics**: MRV variable selection, LCV value ordering, and Minimum Degree variable elimination for tree decomposition
-- **Local search initialisation**: `RandomAssignmentFactory` and `GreedyAssignmentFactory` (least-conflicting value) for seeding `MinConflictsSolver`
+- **Local search**: `MinConflictsSolver` supports both satisfaction and optimization (`getLocalSolution(csp, factory, objective)`) using weighted min-conflicts with lexicographic value selection; seeded by `RandomAssignmentFactory` or `GreedyAssignmentFactory`
 
 ## Usage
 
@@ -55,7 +55,10 @@ builder.equalsConstraint(v1, v2)                       // v1 == v2
 builder.notEqualsConstraint(v1, v2)                    // v1 != v2
 builder.notEqualsChainConstraint(v1, v2, v3)           // AllDiff over a chain
 builder.allDiffConstraint(v1, v2, v3)                  // all different
-builder.atMostOneConstraint(Set.of(v1, v2, v3))        // at most one boolean variable is true
+builder.atMostOneConstraint(Set.of(v1, v2, v3))        // at most one boolean variable is true (AC3 decomposition)
+builder.atLeastNConstraint(Set.of(v1, v2, v3), n)      // at least n boolean variables are true
+builder.atMostNConstraint(Set.of(v1, v2, v3), n)       // at most n boolean variables are true
+builder.exactlyOneConstraint(Set.of(v1, v2, v3))       // exactly one boolean variable is true
 builder.offsetConstraint(v1, v2, offset)               // v1 == v2 + offset
 builder.biPredicateConstraint(v1, v2, predicate)       // custom binary predicate
 builder.predicateConstraint(predicate, v1, v2, v3)     // custom n-ary predicate
@@ -78,7 +81,7 @@ Tree decomposition uses a domain-aware clique size limit (`d^targetTreewidth`, c
 <dependency>
     <groupId>io.github.rcrida</groupId>
     <artifactId>jcsp</artifactId>
-    <version>2.5.0</version>
+    <version>2.6.0</version>
 </dependency>
 ```
 
