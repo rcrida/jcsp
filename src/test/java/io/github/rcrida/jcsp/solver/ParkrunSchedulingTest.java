@@ -5,7 +5,6 @@ import io.github.rcrida.jcsp.ConstraintSatisfactionProblem;
 import io.github.rcrida.jcsp.assignments.Assignment;
 import io.github.rcrida.jcsp.domains.BooleanDomain;
 import io.github.rcrida.jcsp.variables.Variable;
-import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 
 import java.util.*;
@@ -34,7 +33,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 public class ParkrunSchedulingTest {
     enum Role { RD, VC }
 
-    record Person(String name, Set<Role> roles, Set<Integer> preferredWeeks, Set<Integer> unavailableWeeks) {
+    record Person(String name, Set<Role> roles, Set<Integer> preferredWeeks, Set<Integer> unavailableWeeks, int carryOver) {
         boolean canDo(Role role)      { return roles.contains(role); }
         boolean isAvailable(int week) { return !unavailableWeeks.contains(week); }
         boolean prefers(int week)     { return preferredWeeks.contains(week); }
@@ -42,7 +41,6 @@ public class ParkrunSchedulingTest {
         @Override public String toString() { return name; }
     }
 
-    static final Solver SOLVER = Solver.Factory.INSTANCE.createSolver();
     static final int WEEKS = 8;
 
     static final Set<Integer> ODD_WEEKS  = IntStream.rangeClosed(1, WEEKS).filter(w -> w % 2 != 0).boxed().collect(Collectors.toSet());
@@ -50,18 +48,19 @@ public class ParkrunSchedulingTest {
     static final Set<Integer> ALL_WEEKS  = IntStream.rangeClosed(1, WEEKS).boxed().collect(Collectors.toSet());
 
     static final List<Person> PEOPLE = List.of(
+        //                                                                                       carryOver
         // Run Directors
-        new Person("Sarah", Set.of(Role.RD),            ODD_WEEKS,                    Set.of(7, 10)),
-        new Person("Tom",   Set.of(Role.RD),            EVEN_WEEKS,                   Set.of(3, 13)),
-        new Person("Frank", Set.of(Role.RD),            Set.of(1,2,3,4,5,6,7),       Set.of(7, 12, 13)),
+        new Person("Sarah", Set.of(Role.RD),            ODD_WEEKS,                    Set.of(7, 10),        1),
+        new Person("Tom",   Set.of(Role.RD),            EVEN_WEEKS,                   Set.of(3, 13),        0),
+        new Person("Frank", Set.of(Role.RD),            Set.of(1,2,3,4,5,6,7),       Set.of(7, 12, 13),    1),
         // Volunteer Coordinators
-        new Person("Carol", Set.of(Role.VC),            Set.of(1,2,3,4,5,6,7),       Set.of(9, 12)),
-        new Person("Dave",  Set.of(Role.VC),            Set.of(7,8,9,10,11,12,13),   Set.of(2, 5)),
-        new Person("Grace", Set.of(Role.VC),            Set.of(6,7,8,9,10,11,12,13), Set.of(3, 4)),
+        new Person("Carol", Set.of(Role.VC),            Set.of(1,2,3,4,5,6,7),       Set.of(9, 12),        0),
+        new Person("Dave",  Set.of(Role.VC),            Set.of(7,8,9,10,11,12,13),   Set.of(2, 5),         1),
+        new Person("Grace", Set.of(Role.VC),            Set.of(6,7,8,9,10,11,12,13), Set.of(3, 4),         0),
         // Dual-role
-        new Person("Eve",   Set.of(Role.RD, Role.VC),   ALL_WEEKS,                    Set.of(7, 8)),
-        new Person("Mark",  Set.of(Role.RD, Role.VC),   Set.of(1,2,3,4,5,6,7),       Set.of(9, 12)),
-        new Person("Henry", Set.of(Role.RD, Role.VC),   Set.of(5,6,7,8,9,10,11),     Set.of(3, 8, 9))
+        new Person("Eve",   Set.of(Role.RD, Role.VC),   ALL_WEEKS,                    Set.of(7, 8),         0),
+        new Person("Mark",  Set.of(Role.RD, Role.VC),   Set.of(1,2,3,4,5,6,7),       Set.of(9, 12),        2),
+        new Person("Henry", Set.of(Role.RD, Role.VC),   Set.of(5,6,7,8,9,10,11),     Set.of(3, 8, 9),      0)
     );
 
     // Per-role slot bounds: average = WEEKS / eligible_count.
@@ -88,12 +87,12 @@ public class ParkrunSchedulingTest {
             for (int vcMask = 0; vcMask < (1 << vcEligible.size()); vcMask++) {
                 if (Integer.bitCount(vcMask) != vcExtras) continue;
                 final int rm = rdMask, vm = vcMask;
-                double[] totals = IntStream.range(0, PEOPLE.size()).mapToDouble(i -> {
-                    Person p = PEOPLE.get(i);
-                    int rdIdx = rdEligible.indexOf(p);
-                    int vcIdx = vcEligible.indexOf(p);
-                    return (rdIdx >= 0 ? rdBase + ((rm >> rdIdx) & 1) : 0)
-                         + (vcIdx >= 0 ? vcBase + ((vm >> vcIdx) & 1) : 0);
+                double[] totals = PEOPLE.stream().mapToDouble(person -> {
+                    int rdIdx = rdEligible.indexOf(person);
+                    int vcIdx = vcEligible.indexOf(person);
+                    return person.carryOver()
+                            + (rdIdx >= 0 ? rdBase + ((rm >> rdIdx) & 1) : 0)
+                            + (vcIdx >= 0 ? vcBase + ((vm >> vcIdx) & 1) : 0);
                 }).toArray();
                 double diff = Arrays.stream(totals).max().orElse(0) - Arrays.stream(totals).min().orElse(0);
                 minDiff = Math.min(minDiff, diff);
@@ -210,7 +209,7 @@ public class ParkrunSchedulingTest {
 
     private static double[] personTotals(Assignment a) {
         return PEOPLE.stream().mapToDouble(p ->
-            Z.get(p).values().stream()
+            p.carryOver() + Z.get(p).values().stream()
                 .flatMap(weekMap -> weekMap.values().stream())
                 .filter(v -> isTrue(a, v))
                 .count()
@@ -239,14 +238,22 @@ public class ParkrunSchedulingTest {
                 vc == null ? "?" : vc.name() + (vc.prefers(w) ? "" : " *"));
         }
 
-        var counts = PEOPLE.stream().collect(Collectors.toMap(p -> p, p -> 0L));
-        Z.forEach((p, roleMap) -> roleMap.forEach((r, weekMap) ->
-            weekMap.values().forEach(v -> { if (isTrue(a, v)) counts.merge(p, 1L, Long::sum); })));
-        System.out.printf("  Off-preference: %d  Max-diff: %.0f%n",
-            (int) offPreferenceCost(a), differenceCost(a));
-        counts.entrySet().stream()
+        var rosterCounts = PEOPLE.stream().collect(Collectors.toMap(p -> p, p -> 0L));
+        Z.forEach((p, roleMap) ->
+                roleMap.forEach((r, weekMap) ->
+                        weekMap.values().forEach(v -> {
+                            if (isTrue(a, v)) rosterCounts.merge(p, 1L, Long::sum);
+                        })));
+        System.out.printf("  Off-preference: %d  Max-diff: %.0f%n", (int) offPreferenceCost(a), differenceCost(a));
+        long minTotal = PEOPLE.stream().mapToLong(p -> p.carryOver() + rosterCounts.get(p)).min().orElse(0);
+        rosterCounts.entrySet().stream()
             .sorted(Map.Entry.<Person, Long>comparingByValue().reversed())
-            .forEach(e -> System.out.printf("    %-8s %d%n", e.getKey().name(), e.getValue()));
+            .forEach(e -> {
+                Person p = e.getKey();
+                long total = p.carryOver() + e.getValue();
+                System.out.printf("    %-8s this=%d  carry=%d  total=%d  nextCarry=%d%n",
+                    p.name(), e.getValue(), p.carryOver(), total, total - minTotal);
+            });
         System.out.printf("  Statistics: %s%n", a.getStatistics());
         System.out.println();
     }
@@ -272,7 +279,9 @@ public class ParkrunSchedulingTest {
         // Default all variables to false
         Z.forEach((p, roleMap) -> roleMap.forEach((r, weekMap) ->
             weekMap.values().forEach(v -> builder.value(v, false))));
-        // Track running load per person to balance assignments
+        // Track running load per person to balance assignments within this roster.
+        // Carry-over is not used here: the greedy balances current-roster slots only.
+        // The objective (differenceCost) accounts for history when selecting values.
         Map<Person, Integer> load = new HashMap<>();
         PEOPLE.forEach(p -> load.put(p, 0));
         for (Role r : Role.values()) {
