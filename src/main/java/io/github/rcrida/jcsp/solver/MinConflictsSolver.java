@@ -52,25 +52,28 @@ import java.util.stream.Stream;
 @Builder
 public class MinConflictsSolver implements LocalSolver {
     int maxSteps;
+    int maxRestarts;
     @NonNull InitialAssignmentFactory initialAssignmentFactory;
     @Builder.Default UnassignedVariableSelector conflictedVariableSelector = ConflictedVariableSelector.INSTANCE;
 
-    /** Convenience factory method for the common case of maxSteps only. */
-    public static MinConflictsSolver of(int maxSteps, @NonNull InitialAssignmentFactory factory) {
-        return builder().maxSteps(maxSteps).initialAssignmentFactory(factory).build();
+    public static MinConflictsSolver of(int maxSteps, int maxRestarts, @NonNull InitialAssignmentFactory factory) {
+        return builder().maxSteps(maxSteps).maxRestarts(maxRestarts).initialAssignmentFactory(factory).build();
     }
 
     @Override
     public Optional<Assignment> getLocalSolution(@NonNull ConstraintSatisfactionProblem csp) {
-        var current = initialAssignmentFactory.getAssignment(csp);
         val constraintWeights = new HashMap<Constraint, Double>();
-        for (int i = 0; i < maxSteps; i++) {
-            if (current.isSolution(csp)) {
-                return Optional.of(current);
+        for (int attempt = 0; attempt <= maxRestarts; attempt++) {
+            var current = initialAssignmentFactory.getAssignment(csp);
+            constraintWeights.clear();
+            for (int step = 0; step < maxSteps; step++) {
+                if (current.isSolution(csp)) {
+                    return Optional.of(current);
+                }
+                val variable = conflictedVariableSelector.select(csp, current);
+                current = applyMinConflicts(csp, variable, current, constraintWeights);
+                updateWeights(csp, constraintWeights, current);
             }
-            val variable = conflictedVariableSelector.select(csp, current);
-            current = applyMinConflicts(csp, variable, current, constraintWeights);
-            updateWeights(csp, constraintWeights, current);
         }
         return Optional.empty();
     }
@@ -78,27 +81,26 @@ public class MinConflictsSolver implements LocalSolver {
     @Override
     public Optional<Assignment> getLocalSolution(@NonNull ConstraintSatisfactionProblem csp,
                                                  @NonNull ToDoubleFunction<Assignment> objective) {
-        val constraintWeights = new HashMap<Constraint, Double>();
         Optional<Assignment> best = Optional.empty();
         double bestCost = Double.MAX_VALUE;
-        var current = initialAssignmentFactory.getAssignment(csp);
-        for (int i = 0; i < maxSteps; i++) {
-            if (current.isSolution(csp)) {
-                double cost = objective.applyAsDouble(current);
-                if (cost < bestCost) {
-                    bestCost = cost;
-                    best = Optional.of(current);
-                    log.info("Improving solution at step {} with cost {}: {}", i, cost, current);
+        val constraintWeights = new HashMap<Constraint, Double>();
+        for (int attempt = 0; attempt <= maxRestarts; attempt++) {
+            var current = initialAssignmentFactory.getAssignment(csp);
+            constraintWeights.clear();
+            for (int step = 0; step < maxSteps; step++) {
+                if (current.isSolution(csp)) {
+                    double cost = objective.applyAsDouble(current);
+                    if (cost < bestCost) {
+                        bestCost = cost;
+                        best = Optional.of(current);
+                        log.info("Improving solution at attempt {} step {} with cost {}", attempt, step, cost);
+                    }
+                    break;
                 }
-                // Restart from a new initial assignment — perturbing a feasible local optimum
-                // always reassigns the selected variable to its current value, making no progress.
-                constraintWeights.clear();
-                current = initialAssignmentFactory.getAssignment(csp);
-                continue;
+                val variable = conflictedVariableSelector.select(csp, current);
+                current = applyMinConflictsAndObjective(csp, variable, current, constraintWeights, objective);
+                updateWeights(csp, constraintWeights, current);
             }
-            val variable = conflictedVariableSelector.select(csp, current);
-            current = applyMinConflictsAndObjective(csp, variable, current, constraintWeights, objective);
-            updateWeights(csp, constraintWeights, current);
         }
         return best;
     }
