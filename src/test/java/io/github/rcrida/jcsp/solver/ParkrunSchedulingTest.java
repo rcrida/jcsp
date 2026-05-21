@@ -260,7 +260,7 @@ public class ParkrunSchedulingTest {
 
     @Test
     void getLocalSolution() {
-        val solver = MinConflictsSolver.of(4000, 19, ParkrunSchedulingTest::initialAssignment);
+        val solver = MinConflictsSolver.of(4000, 20, ParkrunSchedulingTest::initialAssignment);
         val solution = solver.getLocalSolution(ROSTER, ParkrunSchedulingTest::cost);
         assertThat(solution).isPresent();
         printRoster(solution.get());

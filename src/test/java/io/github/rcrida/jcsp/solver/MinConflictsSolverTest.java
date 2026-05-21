@@ -30,19 +30,19 @@ public class MinConflictsSolverTest {
 
     @Test
     void getLocalSolution_findsSolution() {
-        val solver = MinConflictsSolver.of(500, 0, csp -> infeasible());
+        val solver = MinConflictsSolver.of(500, 1, csp -> infeasible());
         assertThat(solver.getLocalSolution(CSP)).isPresent();
     }
 
     @Test
     void getLocalSolution_returnsEmptyWhenMaxStepsExhausted() {
-        val solver = MinConflictsSolver.of(0, 0, csp -> infeasible());
+        val solver = MinConflictsSolver.of(0, 1, csp -> infeasible());
         assertThat(solver.getLocalSolution(CSP)).isEmpty();
     }
 
     @Test
     void getLocalSolution_withObjective_returnsEmptyWhenMaxStepsExhausted() {
-        val solver = MinConflictsSolver.of(0, 0, csp -> infeasible());
+        val solver = MinConflictsSolver.of(0, 1, csp -> infeasible());
         assertThat(solver.getLocalSolution(CSP, a -> 0.0)).isEmpty();
     }
 
@@ -51,7 +51,7 @@ public class MinConflictsSolverTest {
         // Objective is X value — optimal solution has X=1.
         // With maxRestarts=29 (30 attempts), the probability of never selecting the optimal
         // repair path (which occurs ~50% of the time per attempt) is (0.5)^30 ≈ 10^-9.
-        val solver = MinConflictsSolver.of(50, 29, csp -> infeasible());
+        val solver = MinConflictsSolver.of(50, 30, csp -> infeasible());
         Optional<Assignment> result = solver.getLocalSolution(CSP,
                 a -> a.getValue(X).orElse(Integer.MAX_VALUE).doubleValue());
         assertThat(result).isPresent();
@@ -62,7 +62,7 @@ public class MinConflictsSolverTest {
     void getLocalSolution_withObjective_doesNotUpdateBestWhenCostNotImproving() {
         // Constant objective means every feasible solution has the same cost.
         // After the first restart records best, subsequent restarts hit the cost >= bestCost branch.
-        val solver = MinConflictsSolver.of(500, 0, csp -> infeasible());
+        val solver = MinConflictsSolver.of(500, 1, csp -> infeasible());
         Optional<Assignment> result = solver.getLocalSolution(CSP, a -> 1.0);
         assertThat(result).isPresent();
     }

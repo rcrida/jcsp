@@ -19,10 +19,10 @@ public interface LocalSolver {
     Optional<Assignment> getLocalSolution(@NonNull ConstraintSatisfactionProblem csp);
 
     /**
-     * Returns the feasible assignment with the lowest objective value found within {@code maxSteps}.
-     * The objective is incorporated into value selection: when feasible, violations are zero so the
-     * objective alone drives the choice; when infeasible, violation cost dominates and constraint
-     * repair takes priority. The default ignores the objective and delegates to the satisfaction search.
+     * Returns the feasible assignment with the lowest objective value found across all attempts.
+     * Each attempt runs a repair search for up to {@code maxSteps} steps; on finding a feasible
+     * assignment the objective is evaluated and the attempt ends. The default ignores the objective
+     * and delegates to the satisfaction search.
      */
     default Optional<Assignment> getLocalSolution(@NonNull ConstraintSatisfactionProblem csp,
                                                    @NonNull ToDoubleFunction<Assignment> objective) {

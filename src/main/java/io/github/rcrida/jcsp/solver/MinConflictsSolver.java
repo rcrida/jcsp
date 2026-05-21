@@ -52,22 +52,22 @@ import java.util.stream.Stream;
 @Builder
 public class MinConflictsSolver implements LocalSolver {
     int maxSteps;
-    int maxRestarts;
+    int maxAttempts;
     @NonNull InitialAssignmentFactory initialAssignmentFactory;
     @Builder.Default UnassignedVariableSelector conflictedVariableSelector = ConflictedVariableSelector.INSTANCE;
 
-    public static MinConflictsSolver of(int maxSteps, int maxRestarts, @NonNull InitialAssignmentFactory factory) {
-        return builder().maxSteps(maxSteps).maxRestarts(maxRestarts).initialAssignmentFactory(factory).build();
+    public static MinConflictsSolver of(int maxSteps, int maxAttempts, @NonNull InitialAssignmentFactory factory) {
+        return builder().maxSteps(maxSteps).maxAttempts(maxAttempts).initialAssignmentFactory(factory).build();
     }
 
     @Override
     public Optional<Assignment> getLocalSolution(@NonNull ConstraintSatisfactionProblem csp) {
-        val constraintWeights = new HashMap<Constraint, Double>();
-        for (int attempt = 0; attempt <= maxRestarts; attempt++) {
+        for (int attempt = 0; attempt < maxAttempts; attempt++) {
             var current = initialAssignmentFactory.getAssignment(csp);
-            constraintWeights.clear();
+            val constraintWeights = new HashMap<Constraint, Double>();
             for (int step = 0; step < maxSteps; step++) {
                 if (current.isSolution(csp)) {
+                    log.info("Solution at attempt {} step {}", attempt, step);
                     return Optional.of(current);
                 }
                 val variable = conflictedVariableSelector.select(csp, current);
@@ -83,10 +83,9 @@ public class MinConflictsSolver implements LocalSolver {
                                                  @NonNull ToDoubleFunction<Assignment> objective) {
         Optional<Assignment> best = Optional.empty();
         double bestCost = Double.MAX_VALUE;
-        val constraintWeights = new HashMap<Constraint, Double>();
-        for (int attempt = 0; attempt <= maxRestarts; attempt++) {
+        for (int attempt = 0; attempt < maxAttempts; attempt++) {
             var current = initialAssignmentFactory.getAssignment(csp);
-            constraintWeights.clear();
+            val constraintWeights = new HashMap<Constraint, Double>();
             for (int step = 0; step < maxSteps; step++) {
                 if (current.isSolution(csp)) {
                     double cost = objective.applyAsDouble(current);
