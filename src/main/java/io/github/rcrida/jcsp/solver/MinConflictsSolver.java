@@ -10,7 +10,6 @@ import io.github.rcrida.jcsp.constraints.Constraint;
 import io.github.rcrida.jcsp.constraints.unary.UnaryConstraint;
 import io.github.rcrida.jcsp.solver.assignmentfactory.InitialAssignmentFactory;
 import io.github.rcrida.jcsp.solver.backtrackingsearch.selector.ConflictedVariableSelector;
-import io.github.rcrida.jcsp.solver.backtrackingsearch.selector.RandomVariableSelector;
 import io.github.rcrida.jcsp.solver.backtrackingsearch.selector.UnassignedVariableSelector;
 import io.github.rcrida.jcsp.variables.Variable;
 import org.jspecify.annotations.NonNull;
@@ -54,7 +53,6 @@ import java.util.stream.Stream;
 public class MinConflictsSolver implements LocalSolver {
     int maxSteps;
     @Builder.Default UnassignedVariableSelector conflictedVariableSelector = ConflictedVariableSelector.INSTANCE;
-    @Builder.Default UnassignedVariableSelector feasibleVariableSelector   = RandomVariableSelector.INSTANCE;
 
     /** Convenience factory preserving the original single-argument constructor. */
     public static MinConflictsSolver of(int maxSteps) {
@@ -80,30 +78,27 @@ public class MinConflictsSolver implements LocalSolver {
     public Optional<Assignment> getLocalSolution(@NonNull ConstraintSatisfactionProblem csp,
                                                  @NonNull InitialAssignmentFactory factory,
                                                  @NonNull ToDoubleFunction<Assignment> objective) {
-        var current = factory.getAssignment(csp);
         val constraintWeights = new HashMap<Constraint, Double>();
         Optional<Assignment> best = Optional.empty();
         double bestCost = Double.MAX_VALUE;
+        var current = factory.getAssignment(csp);
         for (int i = 0; i < maxSteps; i++) {
-            boolean feasible = current.isSolution(csp);
-            if (feasible) {
+            if (current.isSolution(csp)) {
                 double cost = objective.applyAsDouble(current);
                 if (cost < bestCost) {
                     bestCost = cost;
                     best = Optional.of(current);
                     log.info("Improving solution at step {} with cost {}: {}", i, cost, current);
                 }
+                // Restart from a new initial assignment — perturbing a feasible local optimum
+                // always reassigns the selected variable to its current value, making no progress.
+                constraintWeights.clear();
+                current = factory.getAssignment(csp);
+                continue;
             }
-            val variable = feasible
-                ? feasibleVariableSelector.select(csp, current)
-                : conflictedVariableSelector.select(csp, current);
+            val variable = conflictedVariableSelector.select(csp, current);
             current = applyMinConflictsAndObjective(csp, variable, current, constraintWeights, objective);
-            // Only update weights during constraint repair — updating them during objective-guided
-            // exploration from a feasible state would inflate weights for temporary violations and
-            // bias subsequent conflict resolution once the search returns to the repair phase.
-            if (!feasible) {
-                updateWeights(csp, constraintWeights, current);
-            }
+            updateWeights(csp, constraintWeights, current);
         }
         return best;
     }
