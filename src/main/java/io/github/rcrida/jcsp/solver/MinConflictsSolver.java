@@ -51,13 +51,13 @@ import java.util.stream.Stream;
 @Value
 @Builder
 public class MinConflictsSolver implements LocalSolver {
-    int maxSteps;
     int maxAttempts;
+    int maxSteps;
     @NonNull InitialAssignmentFactory initialAssignmentFactory;
     @Builder.Default UnassignedVariableSelector conflictedVariableSelector = ConflictedVariableSelector.INSTANCE;
 
-    public static MinConflictsSolver of(int maxSteps, int maxAttempts, @NonNull InitialAssignmentFactory factory) {
-        return builder().maxSteps(maxSteps).maxAttempts(maxAttempts).initialAssignmentFactory(factory).build();
+    public static MinConflictsSolver of(int maxAttempts, int maxSteps, @NonNull InitialAssignmentFactory factory) {
+        return builder().maxAttempts(maxAttempts).maxSteps(maxSteps).initialAssignmentFactory(factory).build();
     }
 
     @Override

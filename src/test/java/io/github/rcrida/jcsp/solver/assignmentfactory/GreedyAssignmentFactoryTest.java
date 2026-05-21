@@ -35,7 +35,7 @@ public class GreedyAssignmentFactoryTest {
     @Test
     void greedyAssignmentCanSeedLocalSearch() {
         val csp = NQueensTest.nQueens();
-        val solver = MinConflictsSolver.of(500, 1, GreedyAssignmentFactory.INSTANCE);
+        val solver = MinConflictsSolver.of(1, 500, GreedyAssignmentFactory.INSTANCE);
         val solution = solver.getLocalSolution(csp);
         assertThat(solution).isPresent();
         assertThat(solution.get().isSolution(csp)).isTrue();
