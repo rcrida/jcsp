@@ -83,8 +83,8 @@ public class AustraliaMapColouringTest {
     @Test
     void localSolution() {
         val csp = problem();
-        val solver = MinConflictsSolver.of(500);
-        val optionalSolution = solver.getLocalSolution(csp, RandomAssignmentFactory.INSTANCE);
+        val solver = MinConflictsSolver.of(500, RandomAssignmentFactory.INSTANCE);
+        val optionalSolution = solver.getLocalSolution(csp);
         System.out.println(optionalSolution);
     }
 }

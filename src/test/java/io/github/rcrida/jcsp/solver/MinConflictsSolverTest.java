@@ -30,27 +30,27 @@ public class MinConflictsSolverTest {
 
     @Test
     void getLocalSolution_findsSolution() {
-        val solver = MinConflictsSolver.of(500);
-        assertThat(solver.getLocalSolution(CSP, csp -> infeasible())).isPresent();
+        val solver = MinConflictsSolver.of(500, csp -> infeasible());
+        assertThat(solver.getLocalSolution(CSP)).isPresent();
     }
 
     @Test
     void getLocalSolution_returnsEmptyWhenMaxStepsExhausted() {
-        val solver = MinConflictsSolver.of(0);
-        assertThat(solver.getLocalSolution(CSP, csp -> infeasible())).isEmpty();
+        val solver = MinConflictsSolver.of(0, csp -> infeasible());
+        assertThat(solver.getLocalSolution(CSP)).isEmpty();
     }
 
     @Test
     void getLocalSolution_withObjective_returnsEmptyWhenMaxStepsExhausted() {
-        val solver = MinConflictsSolver.of(0);
-        assertThat(solver.getLocalSolution(CSP, csp -> infeasible(), a -> 0.0)).isEmpty();
+        val solver = MinConflictsSolver.of(0, csp -> infeasible());
+        assertThat(solver.getLocalSolution(CSP, a -> 0.0)).isEmpty();
     }
 
     @Test
     void getLocalSolution_withObjective_returnsLowestCostSolution() {
-        val solver = MinConflictsSolver.of(500);
+        val solver = MinConflictsSolver.of(500, csp -> infeasible());
         // Objective is X value — optimal solution has X=1
-        Optional<Assignment> result = solver.getLocalSolution(CSP, csp -> infeasible(),
+        Optional<Assignment> result = solver.getLocalSolution(CSP,
                 a -> a.getValue(X).orElse(Integer.MAX_VALUE).doubleValue());
         assertThat(result).isPresent();
         assertThat(result.get().getValue(X)).hasValue(1);
@@ -60,8 +60,8 @@ public class MinConflictsSolverTest {
     void getLocalSolution_withObjective_doesNotUpdateBestWhenCostNotImproving() {
         // Constant objective means every feasible solution has the same cost.
         // After the first restart records best, subsequent restarts hit the cost >= bestCost branch.
-        val solver = MinConflictsSolver.of(500);
-        Optional<Assignment> result = solver.getLocalSolution(CSP, csp -> infeasible(), a -> 1.0);
+        val solver = MinConflictsSolver.of(500, csp -> infeasible());
+        Optional<Assignment> result = solver.getLocalSolution(CSP, a -> 1.0);
         assertThat(result).isPresent();
     }
 }

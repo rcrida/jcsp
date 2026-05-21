@@ -25,14 +25,14 @@ public class LocalSolverTest {
     @Test
     void defaultGetLocalSolution_withObjective_delegatesToSatisfactionSearch() {
         // A LocalSolver that does not override the objective overload: the default must
-        // delegate to getLocalSolution(csp, factory) and ignore the objective.
-        LocalSolver solver = (csp, factory) -> Optional.of(factory.getAssignment(csp));
-
-        val result = solver.getLocalSolution(CSP, csp -> {
+        // delegate to getLocalSolution(csp) and ignore the objective.
+        LocalSolver solver = csp -> {
             val builder = io.github.rcrida.jcsp.assignments.Assignment.builder();
             builder.value(X, 1).value(Y, 2);
-            return builder.build();
-        }, a -> a.getValue(X).orElse(0) + a.getValue(Y).orElse(0));
+            return Optional.of(builder.build());
+        };
+
+        val result = solver.getLocalSolution(CSP, a -> a.getValue(X).orElse(0) + a.getValue(Y).orElse(0));
 
         assertThat(result).isPresent();
     }

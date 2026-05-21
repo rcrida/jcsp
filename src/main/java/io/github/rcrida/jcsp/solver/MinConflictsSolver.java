@@ -52,16 +52,17 @@ import java.util.stream.Stream;
 @Builder
 public class MinConflictsSolver implements LocalSolver {
     int maxSteps;
+    @NonNull InitialAssignmentFactory initialAssignmentFactory;
     @Builder.Default UnassignedVariableSelector conflictedVariableSelector = ConflictedVariableSelector.INSTANCE;
 
-    /** Convenience factory preserving the original single-argument constructor. */
-    public static MinConflictsSolver of(int maxSteps) {
-        return builder().maxSteps(maxSteps).build();
+    /** Convenience factory method for the common case of maxSteps only. */
+    public static MinConflictsSolver of(int maxSteps, @NonNull InitialAssignmentFactory factory) {
+        return builder().maxSteps(maxSteps).initialAssignmentFactory(factory).build();
     }
 
     @Override
-    public Optional<Assignment> getLocalSolution(@NonNull ConstraintSatisfactionProblem csp, @NonNull InitialAssignmentFactory factory) {
-        var current = factory.getAssignment(csp);
+    public Optional<Assignment> getLocalSolution(@NonNull ConstraintSatisfactionProblem csp) {
+        var current = initialAssignmentFactory.getAssignment(csp);
         val constraintWeights = new HashMap<Constraint, Double>();
         for (int i = 0; i < maxSteps; i++) {
             if (current.isSolution(csp)) {
@@ -76,12 +77,11 @@ public class MinConflictsSolver implements LocalSolver {
 
     @Override
     public Optional<Assignment> getLocalSolution(@NonNull ConstraintSatisfactionProblem csp,
-                                                 @NonNull InitialAssignmentFactory factory,
                                                  @NonNull ToDoubleFunction<Assignment> objective) {
         val constraintWeights = new HashMap<Constraint, Double>();
         Optional<Assignment> best = Optional.empty();
         double bestCost = Double.MAX_VALUE;
-        var current = factory.getAssignment(csp);
+        var current = initialAssignmentFactory.getAssignment(csp);
         for (int i = 0; i < maxSteps; i++) {
             if (current.isSolution(csp)) {
                 double cost = objective.applyAsDouble(current);
@@ -93,7 +93,7 @@ public class MinConflictsSolver implements LocalSolver {
                 // Restart from a new initial assignment — perturbing a feasible local optimum
                 // always reassigns the selected variable to its current value, making no progress.
                 constraintWeights.clear();
-                current = factory.getAssignment(csp);
+                current = initialAssignmentFactory.getAssignment(csp);
                 continue;
             }
             val variable = conflictedVariableSelector.select(csp, current);
