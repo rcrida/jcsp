@@ -48,8 +48,10 @@ public class MinConflictsSolverTest {
 
     @Test
     void getLocalSolution_withObjective_returnsLowestCostSolution() {
-        val solver = MinConflictsSolver.of(500, 0, csp -> infeasible());
-        // Objective is X value — optimal solution has X=1
+        // Objective is X value — optimal solution has X=1.
+        // With maxRestarts=29 (30 attempts), the probability of never selecting the optimal
+        // repair path (which occurs ~50% of the time per attempt) is (0.5)^30 ≈ 10^-9.
+        val solver = MinConflictsSolver.of(50, 29, csp -> infeasible());
         Optional<Assignment> result = solver.getLocalSolution(CSP,
                 a -> a.getValue(X).orElse(Integer.MAX_VALUE).doubleValue());
         assertThat(result).isPresent();
