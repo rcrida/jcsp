@@ -436,6 +436,10 @@ public class ConstraintSatisfactionProblem {
          * @return the builder
          */
         public ConstraintSatisfactionProblemBuilder exactlyOneConstraint(@NonNull Set<Variable<Boolean>> variables) {
+            if (variables.size() == 1) {
+                return this.constraint(UnaryValueConstraint.<Boolean>builder()
+                        .variable(variables.iterator().next()).value(true).build());
+            }
             return this.constraint(ExactlyOneConstraint.builder().variables(variables).build());
         }
 

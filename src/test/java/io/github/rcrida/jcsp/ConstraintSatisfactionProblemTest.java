@@ -154,6 +154,18 @@ public class ConstraintSatisfactionProblemTest {
     }
 
     @Test
+    void exactlyOneConstraint_singleVariable_emitsUnaryValueConstraint() {
+        Variable<Boolean> a = VARIABLE_FACTORY.create("A");
+        val csp = ConstraintSatisfactionProblem.builder()
+                .variableDomain(a, io.github.rcrida.jcsp.domains.BooleanDomain.INSTANCE)
+                .exactlyOneConstraint(Set.of(a))
+                .build();
+        assertThat(csp.getConstraints()).hasSize(1);
+        assertThat(csp.getConstraints().iterator().next())
+                .isInstanceOf(io.github.rcrida.jcsp.constraints.unary.UnaryValueConstraint.class);
+    }
+
+    @Test
     void builder_notEqualsChainConstraint_asserts() {
         Variable<Integer> a = VARIABLE_FACTORY.create("A");
         assertThatThrownBy(() -> ConstraintSatisfactionProblem.builder().notEqualsChainConstraint(List.of(a)))
