@@ -2,6 +2,8 @@ package io.github.rcrida.jcsp.solver;
 
 import io.github.rcrida.jcsp.ConstraintSatisfactionProblem;
 import io.github.rcrida.jcsp.assignments.Assignment;
+import io.github.rcrida.jcsp.solver.assignmentfactory.InitialAssignmentFactory;
+import lombok.val;
 import org.jspecify.annotations.NonNull;
 
 import java.util.Optional;
@@ -27,5 +29,14 @@ public interface LocalSolver {
     default Optional<Assignment> getLocalSolution(@NonNull ConstraintSatisfactionProblem csp,
                                                    @NonNull ToDoubleFunction<Assignment> objective) {
         return getLocalSolution(csp);
+    }
+
+    interface Factory {
+        Factory INSTANCE = (maxAttempts, maxSteps, initialAssignmentFactory) -> {
+            val minConflicts = MinConflictsSolver.of(maxAttempts, maxSteps, initialAssignmentFactory);
+            return IndependentSubproblemLocalSolver.builder().delegate(minConflicts).build();
+        };
+
+        LocalSolver createLocalSolver(int maxAttempts, int maxSteps, @NonNull InitialAssignmentFactory initialAssignmentFactory);
     }
 }

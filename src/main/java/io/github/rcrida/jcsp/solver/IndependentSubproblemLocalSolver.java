@@ -35,13 +35,12 @@ public class IndependentSubproblemLocalSolver implements LocalSolver {
     }
 
     private Optional<Assignment> solve(@NonNull Set<ConstraintSatisfactionProblem> subproblems,
-                                       @NonNull Function<ConstraintSatisfactionProblem, Optional<Assignment>> solve) {
+                                       @NonNull Function<ConstraintSatisfactionProblem, Optional<Assignment>> solveSubproblem) {
         if (subproblems.size() > 1) {
             log.info("Solving {} independent subproblems", subproblems.size());
         }
         return subproblems.stream()
-                .peek(csp -> log.info("Solving {}", csp))
-                .map(solve)
+                .map(solveSubproblem)
                 .reduce((a1, a2) -> a1.flatMap(r1 -> a2.map(r1::merge)))
                 .orElse(Optional.empty());
     }

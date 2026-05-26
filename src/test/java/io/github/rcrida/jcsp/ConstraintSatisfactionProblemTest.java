@@ -3,6 +3,8 @@ package io.github.rcrida.jcsp;
 import lombok.val;
 import io.github.rcrida.jcsp.constraints.binary.BinaryOffsetConstraint;
 import io.github.rcrida.jcsp.constraints.binary.Operator;
+import io.github.rcrida.jcsp.constraints.unary.UnaryValueConstraint;
+import io.github.rcrida.jcsp.domains.BooleanDomain;
 import io.github.rcrida.jcsp.domains.Domain;
 import io.github.rcrida.jcsp.domains.IntRangeDomain;
 import io.github.rcrida.jcsp.solver.AustraliaMapColouringTest;
@@ -157,12 +159,12 @@ public class ConstraintSatisfactionProblemTest {
     void exactlyOneConstraint_singleVariable_emitsUnaryValueConstraint() {
         Variable<Boolean> a = VARIABLE_FACTORY.create("A");
         val csp = ConstraintSatisfactionProblem.builder()
-                .variableDomain(a, io.github.rcrida.jcsp.domains.BooleanDomain.INSTANCE)
+                .variableDomain(a, BooleanDomain.INSTANCE)
                 .exactlyOneConstraint(Set.of(a))
                 .build();
         assertThat(csp.getConstraints()).hasSize(1);
         assertThat(csp.getConstraints().iterator().next())
-                .isInstanceOf(io.github.rcrida.jcsp.constraints.unary.UnaryValueConstraint.class);
+                .isInstanceOf(UnaryValueConstraint.class);
     }
 
     @Test

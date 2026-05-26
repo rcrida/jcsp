@@ -93,8 +93,6 @@ public class MinConflictsSolver implements LocalSolver {
                         bestCost = cost;
                         best = Optional.of(current);
                         log.info("Improving solution at attempt {} step {} with cost {}", attempt, step, cost);
-                    } else {
-                        log.info("Non-improving solution at attempt {} step {} with cost {}", attempt, step, cost);
                     }
                     break;
                 }
@@ -103,7 +101,6 @@ public class MinConflictsSolver implements LocalSolver {
                 updateWeights(csp, constraintWeights, current);
             }
         }
-        log.warn("Abandoning");
         return best;
     }
 
