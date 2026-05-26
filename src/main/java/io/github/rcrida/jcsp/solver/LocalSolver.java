@@ -2,6 +2,8 @@ package io.github.rcrida.jcsp.solver;
 
 import io.github.rcrida.jcsp.ConstraintSatisfactionProblem;
 import io.github.rcrida.jcsp.assignments.Assignment;
+import io.github.rcrida.jcsp.consistency.arc.AC3;
+import io.github.rcrida.jcsp.consistency.node.NodeConsistency;
 import io.github.rcrida.jcsp.solver.assignmentfactory.InitialAssignmentFactory;
 import lombok.val;
 import org.jspecify.annotations.NonNull;
@@ -33,8 +35,25 @@ public interface LocalSolver {
 
     interface Factory {
         Factory INSTANCE = (maxAttempts, maxSteps, initialAssignmentFactory) -> {
-            val minConflicts = MinConflictsSolver.of(maxAttempts, maxSteps, initialAssignmentFactory);
-            return IndependentSubproblemLocalSolver.builder().delegate(minConflicts).build();
+            val inner = IndependentSubproblemLocalSolver.builder()
+                    .delegate(MinConflictsSolver.of(maxAttempts, maxSteps, initialAssignmentFactory))
+                    .build();
+            return new LocalSolver() {
+                @Override
+                public Optional<Assignment> getLocalSolution(@NonNull ConstraintSatisfactionProblem csp) {
+                    return NodeConsistency.INSTANCE.apply(csp)
+                            .flatMap(AC3.INSTANCE::apply)
+                            .flatMap(inner::getLocalSolution);
+                }
+
+                @Override
+                public Optional<Assignment> getLocalSolution(@NonNull ConstraintSatisfactionProblem csp,
+                                                             @NonNull ToDoubleFunction<Assignment> objective) {
+                    return NodeConsistency.INSTANCE.apply(csp)
+                            .flatMap(AC3.INSTANCE::apply)
+                            .flatMap(reduced -> inner.getLocalSolution(reduced, objective));
+                }
+            };
         };
 
         LocalSolver createLocalSolver(int maxAttempts, int maxSteps, @NonNull InitialAssignmentFactory initialAssignmentFactory);
