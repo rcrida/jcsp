@@ -25,23 +25,27 @@ public class IndependentSubproblemLocalSolver implements LocalSolver {
 
     @Override
     public Optional<Assignment> getLocalSolution(@NonNull ConstraintSatisfactionProblem csp) {
-        return solve(csp.decomposeSubproblems(), sub -> delegate.getLocalSolution(sub));
+        return solve(csp, csp.decomposeSubproblems(), delegate::getLocalSolution);
     }
 
     @Override
     public Optional<Assignment> getLocalSolution(@NonNull ConstraintSatisfactionProblem csp,
-                                                  @NonNull ToDoubleFunction<Assignment> objective) {
-        return solve(csp.decomposeSubproblems(), sub -> delegate.getLocalSolution(sub, objective));
+                                                 @NonNull ToDoubleFunction<Assignment> objective) {
+        return solve(csp, csp.decomposeSubproblems(), sub -> delegate.getLocalSolution(sub, objective));
     }
 
-    private Optional<Assignment> solve(@NonNull Set<ConstraintSatisfactionProblem> subproblems,
-                                       @NonNull Function<ConstraintSatisfactionProblem, Optional<Assignment>> solveSubproblem) {
+    private Optional<Assignment> solve(@NonNull ConstraintSatisfactionProblem csp,
+                                       @NonNull Set<ConstraintSatisfactionProblem> subproblems,
+                                       @NonNull Function<ConstraintSatisfactionProblem, Optional<Assignment>> solver) {
         if (subproblems.size() > 1) {
             log.info("Solving {} independent subproblems", subproblems.size());
+            return subproblems.stream()
+                    .peek(subProblem -> log.info("Solving subproblem {}", subProblem))
+                    .map(solver)
+                    .reduce((a1, a2) -> a1.flatMap(r1 -> a2.map(r1::merge)))
+                    .orElse(Optional.empty());
+        } else {
+            return solver.apply(csp);
         }
-        return subproblems.stream()
-                .map(solveSubproblem)
-                .reduce((a1, a2) -> a1.flatMap(r1 -> a2.map(r1::merge)))
-                .orElse(Optional.empty());
     }
 }
