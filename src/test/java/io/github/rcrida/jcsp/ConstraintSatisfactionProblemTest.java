@@ -87,8 +87,8 @@ public class ConstraintSatisfactionProblemTest {
                         .variableDomain(T, DOMAIN)
                         .build()
         );
-        assertThat(csp.decomposeSubproblems()).isEqualTo(expected);
-        assertThat(csp.decomposeSubproblems()).isEqualTo(expected);
+        assertThat(csp.decomposeSubproblems()).hasValue(expected);
+        assertThat(csp.decomposeSubproblems()).hasValue(expected);
     }
 
     @Test

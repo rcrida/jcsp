@@ -24,19 +24,18 @@ import java.util.stream.Stream;
 public class IndependentSubproblemSolver extends SolverDecorator {
     @Override
     public Stream<Assignment> getSolutions(@NonNull ConstraintSatisfactionProblem csp) {
-        val subproblems = csp.decomposeSubproblems();
-        if (subproblems.size() > 1) {
-            log.info("Solving {} independent subproblems", subproblems.size());
-            return subproblems.stream()
-                    // solve the bigger problems first so that the smaller problems are the ones cached and replayed
-                    .sorted(Comparator.comparing(ConstraintSatisfactionProblem::getSearchSpace).reversed())
-                    .peek(subProblem -> log.info("Solving subproblem {}", subProblem))
-                    .map(s -> new LazyList<>(getInner().getSolutions(s)))
-                    .reduce((ll1, ll2) -> new LazyList<>(ll1.stream().flatMap(a1 -> ll2.stream().map(a1::merge))))
-                    .map(LazyList::stream)
-                    .orElse(Stream.empty());
-        } else {
-            return getInner().getSolutions(csp);
-        }
+        return csp.decomposeSubproblems()
+                .map(subproblems -> {
+                    log.info("Solving {} independent subproblems", subproblems.size());
+                    return subproblems.stream()
+                            // solve the bigger problems first so that the smaller problems are the ones cached and replayed
+                            .sorted(Comparator.comparing(ConstraintSatisfactionProblem::getSearchSpace).reversed())
+                            .peek(sub -> log.info("Solving subproblem {}", sub))
+                            .map(s -> new LazyList<>(getInner().getSolutions(s)))
+                            .reduce((ll1, ll2) -> new LazyList<>(ll1.stream().flatMap(a1 -> ll2.stream().map(a1::merge))))
+                            .map(LazyList::stream)
+                            .orElse(Stream.empty());
+                })
+                .orElseGet(() -> getInner().getSolutions(csp));
     }
 }

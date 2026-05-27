@@ -8,7 +8,6 @@ import io.github.rcrida.jcsp.assignments.Assignment;
 import org.jspecify.annotations.NonNull;
 
 import java.util.Optional;
-import java.util.Set;
 import java.util.function.Function;
 import java.util.function.ToDoubleFunction;
 
@@ -25,27 +24,26 @@ public class IndependentSubproblemLocalSolver implements LocalSolver {
 
     @Override
     public Optional<Assignment> getLocalSolution(@NonNull ConstraintSatisfactionProblem csp) {
-        return solve(csp, csp.decomposeSubproblems(), delegate::getLocalSolution);
+        return solve(csp, delegate::getLocalSolution);
     }
 
     @Override
     public Optional<Assignment> getLocalSolution(@NonNull ConstraintSatisfactionProblem csp,
                                                  @NonNull ToDoubleFunction<Assignment> objective) {
-        return solve(csp, csp.decomposeSubproblems(), sub -> delegate.getLocalSolution(sub, objective));
+        return solve(csp, sub -> delegate.getLocalSolution(sub, objective));
     }
 
     private Optional<Assignment> solve(@NonNull ConstraintSatisfactionProblem csp,
-                                       @NonNull Set<ConstraintSatisfactionProblem> subproblems,
                                        @NonNull Function<ConstraintSatisfactionProblem, Optional<Assignment>> solver) {
-        if (subproblems.size() > 1) {
-            log.info("Solving {} independent subproblems", subproblems.size());
-            return subproblems.stream()
-                    .peek(subProblem -> log.info("Solving subproblem {}", subProblem))
-                    .map(solver)
-                    .reduce((a1, a2) -> a1.flatMap(r1 -> a2.map(r1::merge)))
-                    .orElse(Optional.empty());
-        } else {
-            return solver.apply(csp);
-        }
+        return csp.decomposeSubproblems()
+                .map(subproblems -> {
+                    log.info("Solving {} independent subproblems", subproblems.size());
+                    return subproblems.stream()
+                            .peek(sub -> log.info("Solving subproblem {}", sub))
+                            .map(solver)
+                            .reduce((a1, a2) -> a1.flatMap(r1 -> a2.map(r1::merge)))
+                            .orElse(Optional.empty());
+                })
+                .orElseGet(() -> solver.apply(csp));
     }
 }

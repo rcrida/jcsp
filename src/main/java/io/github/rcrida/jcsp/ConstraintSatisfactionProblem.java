@@ -217,15 +217,35 @@ public class ConstraintSatisfactionProblem {
     }
 
     /**
-     * Decomposes the current problem into a set of disconnected problems that can be solved
-     * independently.
+     * Decomposes the current problem into independent sub-problems if it has more than one
+     * connected component. Returns {@link Optional#empty()} when the problem is fully connected,
+     * avoiding the cost of reconstructing a CSP that is equivalent to this one.
      *
-     * @return set of disconnected problems
+     * @return the set of independent sub-problems, or empty if the problem cannot be decomposed
      */
     @NonNull
-    public Set<ConstraintSatisfactionProblem> decomposeSubproblems() {
+    public Optional<Set<ConstraintSatisfactionProblem>> decomposeSubproblems() {
         val neighbours = getNeighbours();
-        val unassignedVariables = new HashSet<>(neighbours.keySet());
+        val allVariables = neighbours.keySet();
+        if (allVariables.isEmpty()) return Optional.empty();
+
+        // First pass: cheap BFS to detect whether more than one component exists.
+        // Avoids the expensive constraint-filtering reconstruction for single-component problems.
+        val visited = new HashSet<Variable<?>>();
+        val checkQueue = new ArrayDeque<Variable<?>>();
+        val first = allVariables.iterator().next();
+        checkQueue.add(first);
+        visited.add(first);
+        while (!checkQueue.isEmpty()) {
+            val v = checkQueue.poll();
+            for (val neighbour : neighbours.get(v)) {
+                if (visited.add(neighbour)) checkQueue.add(neighbour);
+            }
+        }
+        if (visited.size() == allVariables.size()) return Optional.empty();
+
+        // Second pass: build sub-CSPs for each component.
+        val unassignedVariables = new HashSet<>(allVariables);
         val subproblems = new HashSet<ConstraintSatisfactionProblem>();
         while (!unassignedVariables.isEmpty()) {
             val subCsp = ConstraintSatisfactionProblem.builder();
@@ -233,8 +253,7 @@ public class ConstraintSatisfactionProblem {
             addUnassignedVariable(queue, unassignedVariables.iterator().next(), unassignedVariables);
             while (!queue.isEmpty()) {
                 val variable = queue.poll();
-                val domain = getDomain(variable);
-                subCsp.variableDomainEntry(variable, domain);
+                subCsp.variableDomainEntry(variable, getDomain(variable));
                 subCsp.constraints(getConstraints().stream()
                         .filter(c -> c.getVariables().contains(variable))
                         .collect(Collectors.toSet()));
@@ -244,7 +263,7 @@ public class ConstraintSatisfactionProblem {
             }
             subproblems.add(subCsp.build());
         }
-        return subproblems;
+        return Optional.of(subproblems);
     }
 
     private void addUnassignedVariable(@NonNull Queue<Variable<?>> queue, @NonNull Variable<?> variable, @NonNull Set<Variable<?>> unassignedVariables) {
