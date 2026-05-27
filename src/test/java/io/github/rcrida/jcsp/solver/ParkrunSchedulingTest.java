@@ -2,6 +2,8 @@ package io.github.rcrida.jcsp.solver;
 
 import lombok.val;
 import io.github.rcrida.jcsp.ConstraintSatisfactionProblem;
+import io.github.rcrida.jcsp.solver.assignmentfactory.FallbackAssignmentFactory;
+import io.github.rcrida.jcsp.solver.assignmentfactory.RandomAssignmentFactory;
 import io.github.rcrida.jcsp.assignments.Assignment;
 import io.github.rcrida.jcsp.domains.BooleanDomain;
 import io.github.rcrida.jcsp.variables.Variable;
@@ -260,7 +262,10 @@ public class ParkrunSchedulingTest {
 
     @Test
     void getLocalSolution() {
-        val solver = MinConflictsSolver.of(20, 4000, ParkrunSchedulingTest::initialAssignment);
+        val factory = FallbackAssignmentFactory.builder()
+                .primary(ParkrunSchedulingTest::initialAssignment).primaryCount(2)
+                .fallback(RandomAssignmentFactory.INSTANCE).build();
+        val solver = MinConflictsSolver.of(5, 4000, factory);
         val solution = solver.getLocalSolution(ROSTER, ParkrunSchedulingTest::cost);
         assertThat(solution).isPresent();
         printRoster(solution.get());
