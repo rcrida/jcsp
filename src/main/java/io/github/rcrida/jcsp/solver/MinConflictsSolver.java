@@ -7,6 +7,7 @@ import lombok.val;
 import io.github.rcrida.jcsp.ConstraintSatisfactionProblem;
 import io.github.rcrida.jcsp.assignments.Assignment;
 import io.github.rcrida.jcsp.constraints.Constraint;
+import io.github.rcrida.jcsp.constraints.nary.NaryConstraint;
 import io.github.rcrida.jcsp.constraints.unary.UnaryConstraint;
 import io.github.rcrida.jcsp.solver.assignmentfactory.InitialAssignmentFactory;
 import io.github.rcrida.jcsp.solver.backtrackingsearch.selector.ConflictedVariableSelector;
@@ -151,13 +152,17 @@ public class MinConflictsSolver implements LocalSolver {
      * @return A variable that is in conflict based on the current assignment. If multiple
      *         variables are in conflict, a randomly selected one is returned.
      */
-    // Binary constraints expanded from n-ary constraints give better conflict granularity than
-    // treating an n-ary constraint as a single violation. Unary constraints are added separately
-    // as they have no binary representation.
+    // Use binary decompositions where available (preserves per-pair granularity for AllDiff,
+    // ExactlyOne, etc.) and fall through to the original n-ary constraint where no binary
+    // decomposition exists (e.g. AtLeastN, AtMostN) so they are never silently dropped.
+    // Unary constraints have no binary form and are included directly.
     private Stream<Constraint> conflictConstraints(@NonNull ConstraintSatisfactionProblem csp) {
-        return Stream.concat(
+        Stream<Constraint> binaryAndUnary = Stream.concat(
                 csp.getAllBinaryConstraints().stream(),
                 csp.getConstraints().stream().filter(c -> c instanceof UnaryConstraint));
+        Stream<Constraint> nonDecomposableNary = csp.getConstraints().stream()
+                .filter(c -> c instanceof NaryConstraint nc && nc.getAsBinaryConstraints().isEmpty());
+        return Stream.concat(binaryAndUnary, nonDecomposableNary);
     }
 
     /**

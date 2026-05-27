@@ -262,10 +262,7 @@ public class ParkrunSchedulingTest {
 
     @Test
     void getLocalSolution() {
-        val factory = FallbackAssignmentFactory.builder()
-                .primary(ParkrunSchedulingTest::initialAssignment).primaryCount(2)
-                .fallback(RandomAssignmentFactory.INSTANCE).build();
-        val solver = MinConflictsSolver.of(5, 4000, factory);
+        val solver = MinConflictsSolver.of(20, 4000, ParkrunSchedulingTest::initialAssignment);
         val solution = solver.getLocalSolution(ROSTER, ParkrunSchedulingTest::cost);
         assertThat(solution).isPresent();
         printRoster(solution.get());
@@ -281,12 +278,13 @@ public class ParkrunSchedulingTest {
         // Default all variables to false
         Z.forEach((p, roleMap) -> roleMap.forEach((r, weekMap) ->
             weekMap.values().forEach(v -> builder.value(v, false))));
-        // Track running load per person to balance assignments within this roster.
-        // Carry-over is not used here: the greedy balances current-roster slots only.
-        // The objective (differenceCost) accounts for history when selecting values.
-        Map<Person, Integer> load = new HashMap<>();
-        PEOPLE.forEach(p -> load.put(p, 0));
         for (Role r : Role.values()) {
+            // Per-role load ensures dual-role people compete fairly within each role pool.
+            // A shared load would penalise them for RD slots when competing for VC slots
+            // (and vice versa), causing role-only people to crowd them out and leaving
+            // atLeastN constraints unmet from the start.
+            Map<Person, Integer> roleLoad = new HashMap<>();
+            PEOPLE.forEach(p -> roleLoad.put(p, 0));
             // Shuffle week order to avoid systematic bias
             val weeks = new ArrayList<>(IntStream.rangeClosed(1, WEEKS).boxed().toList());
             Collections.shuffle(weeks, new Random(ThreadLocalRandom.current().nextLong()));
@@ -298,11 +296,11 @@ public class ParkrunSchedulingTest {
                 // Prefer preferred+least-loaded; fall back to least-loaded
                 var chosen = candidates.stream()
                     .filter(p -> p.prefers(w))
-                    .min(Comparator.comparingInt(load::get))
-                    .or(() -> candidates.stream().min(Comparator.comparingInt(load::get)))
+                    .min(Comparator.comparingInt(roleLoad::get))
+                    .or(() -> candidates.stream().min(Comparator.comparingInt(roleLoad::get)))
                     .orElseThrow();
                 builder.value(Z.get(chosen).get(r).get(w), true);
-                load.merge(chosen, 1, Integer::sum);
+                roleLoad.merge(chosen, 1, Integer::sum);
             }
         }
         return builder.build();
