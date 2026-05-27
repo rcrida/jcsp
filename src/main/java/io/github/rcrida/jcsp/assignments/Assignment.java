@@ -3,7 +3,6 @@ package io.github.rcrida.jcsp.assignments;
 import lombok.Builder;
 import lombok.EqualsAndHashCode;
 import lombok.Singular;
-import lombok.ToString;
 import lombok.Value;
 import lombok.extern.slf4j.Slf4j;
 import lombok.val;
@@ -78,7 +77,7 @@ public class Assignment {
     }
 
     public boolean isSolution(ConstraintSatisfactionProblem csp) {
-        return isConsistent(csp) && isComplete(csp);
+        return isComplete(csp) && isConsistent(csp);
     }
 
     private void validateAssignment(ConstraintSatisfactionProblem csp) {
