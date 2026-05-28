@@ -444,6 +444,12 @@ public class ConstraintSatisfactionProblem {
          * values is still possible; it only fails when all variables are assigned and fewer than
          * {@code n} are {@code true}. Suitable for use with {@link io.github.rcrida.jcsp.domains.BooleanDomain}.
          *
+         * <p><b>Solver recommendation:</b> preferred for local search via {@link io.github.rcrida.jcsp.solver.LocalSolver}, where
+         * it participates directly in conflict detection and value weighting without the overhead of
+         * auxiliary variables. For backtracking search via {@link io.github.rcrida.jcsp.solver.Solver.Factory},
+         * consider {@link #atLeastNConstraintWithCounting(Set, int)} to enable AC3 and node consistency
+         * propagation through a carry-chain.
+         *
          * @param variables the boolean variables to constrain
          * @param n         the minimum number of variables that must be {@code true}
          * @return the builder
@@ -570,6 +576,12 @@ public class ConstraintSatisfactionProblem {
          *   <li>for each {@code v_i}: {@code v_i -> c[i] = c[i-1] + 1} and {@code !v_i -> c[i] = c[i-1]}</li>
          *   <li>{@code c[k] >= n}</li>
          * </ul>
+         *
+         * <p><b>Solver recommendation:</b> use with {@link io.github.rcrida.jcsp.solver.Solver.Factory}
+         * (backtracking search), where node consistency and AC3 propagate through the chain and prune
+         * the search space. For local search via {@link io.github.rcrida.jcsp.solver.LocalSolver}, prefer the plain
+         * {@link #atLeastNConstraint(Set, int)} — the extra chain variables increase repair cost
+         * without providing propagation benefit.
          *
          * @param vars the boolean variables to count
          * @param n    minimum number that must be {@code true}
