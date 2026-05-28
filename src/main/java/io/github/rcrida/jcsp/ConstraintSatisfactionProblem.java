@@ -22,8 +22,10 @@ import io.github.rcrida.jcsp.constraints.nary.AtLeastNConstraint;
 import io.github.rcrida.jcsp.constraints.nary.AtMostNConstraint;
 import io.github.rcrida.jcsp.constraints.nary.AtMostOneConstraint;
 import io.github.rcrida.jcsp.constraints.nary.ExactlyOneConstraint;
-import io.github.rcrida.jcsp.constraints.nary.PredicateConstraint;
+import io.github.rcrida.jcsp.constraints.nary.ImplicationConstraint;
 import io.github.rcrida.jcsp.constraints.nary.NaryConstraint;
+import io.github.rcrida.jcsp.constraints.nary.PredicateConstraint;
+import io.github.rcrida.jcsp.constraints.nary.ReifiedConstraint;
 import io.github.rcrida.jcsp.constraints.unary.UnaryNotEqualsConstraint;
 import io.github.rcrida.jcsp.constraints.unary.UnaryPredicateConstraint;
 import io.github.rcrida.jcsp.constraints.unary.UnaryValueConstraint;
@@ -527,6 +529,32 @@ public class ConstraintSatisfactionProblem {
          */
         public ConstraintSatisfactionProblemBuilder predicateConstraint(@NonNull Set<? extends Variable<?>> variables, @NonNull Predicate<Assignment> predicate) {
             return this.constraint(PredicateConstraint.builder().variables(variables).predicate(predicate).build());
+        }
+
+        /**
+         * Create a fully reified constraint: {@code indicator <-> body}.
+         * The indicator is {@code true} exactly when the body constraint is satisfied.
+         *
+         * @param indicator boolean variable that captures the body's satisfaction state
+         * @param body      the constraint being reified
+         * @return the builder
+         */
+        public ConstraintSatisfactionProblemBuilder reifyConstraint(@NonNull Variable<Boolean> indicator,
+                                                                      @NonNull Constraint body) {
+            return this.constraint(ReifiedConstraint.of(indicator, body));
+        }
+
+        /**
+         * Create a half-reified (implication) constraint: {@code indicator -> body}.
+         * When the indicator is {@code true} the body must be satisfied; {@code false} is unconstrained.
+         *
+         * @param indicator boolean variable that activates the body constraint
+         * @param body      the constraint activated by the indicator
+         * @return the builder
+         */
+        public ConstraintSatisfactionProblemBuilder impliesConstraint(@NonNull Variable<Boolean> indicator,
+                                                                       @NonNull Constraint body) {
+            return this.constraint(ImplicationConstraint.of(indicator, body));
         }
     }
 }
