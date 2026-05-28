@@ -10,8 +10,10 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
 
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -32,11 +34,7 @@ public class BinaryTuplesConstraintTest {
 
     @BeforeEach
     void setUp() {
-        relation = BinaryTuplesConstraint.builder()
-                .left(left)
-                .right(right)
-                .binaryTuples(TUPLES)
-                .build();
+        relation = BinaryTuplesConstraint.of(left, right, new LinkedHashSet<>(TUPLES));
     }
 
     static Stream<Arguments> isSatisfiedBy_true() {
@@ -75,5 +73,10 @@ public class BinaryTuplesConstraintTest {
     @Test
     void testToString() {
         assertThat(relation.toString()).isEqualTo("<(left, right), {(0, 0), (1, 1), (2, 4), (3, 9)}>");
+    }
+
+    @Test
+    void of_createsEquivalentConstraint() {
+        assertThat(BinaryTuplesConstraint.of(left, right, Set.copyOf(TUPLES))).isEqualTo(relation);
     }
 }

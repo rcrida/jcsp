@@ -1,5 +1,6 @@
 package io.github.rcrida.jcsp.constraints.binary;
 
+import io.github.rcrida.jcsp.variables.Variable;
 import lombok.EqualsAndHashCode;
 import lombok.experimental.SuperBuilder;
 import org.jspecify.annotations.NonNull;
@@ -12,6 +13,10 @@ import org.jspecify.annotations.NonNull;
 @SuperBuilder
 @EqualsAndHashCode(callSuper = true)
 public class BinaryAtMostOneConstraint extends SymmetricBinaryConstraint<Boolean> {
+
+    public static BinaryAtMostOneConstraint of(@NonNull Variable<Boolean> left, @NonNull Variable<Boolean> right) {
+        return BinaryAtMostOneConstraint.builder().left(left).right(right).build();
+    }
 
     @Override
     public boolean isSatisfiedBy(@NonNull Boolean left, @NonNull Boolean right) {

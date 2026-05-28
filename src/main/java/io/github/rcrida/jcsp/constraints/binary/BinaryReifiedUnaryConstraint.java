@@ -1,8 +1,9 @@
 package io.github.rcrida.jcsp.constraints.binary;
 
+import io.github.rcrida.jcsp.constraints.unary.UnaryConstraint;
+import io.github.rcrida.jcsp.variables.Variable;
 import lombok.EqualsAndHashCode;
 import lombok.experimental.SuperBuilder;
-import io.github.rcrida.jcsp.constraints.unary.UnaryConstraint;
 import org.jspecify.annotations.NonNull;
 
 /**
@@ -15,6 +16,10 @@ import org.jspecify.annotations.NonNull;
 @EqualsAndHashCode(callSuper = true)
 public class BinaryReifiedUnaryConstraint<T> extends BinaryConstraint<Boolean, T> {
     @NonNull UnaryConstraint<T> body;
+
+    public static <T> BinaryReifiedUnaryConstraint<T> of(@NonNull Variable<Boolean> indicator, @NonNull UnaryConstraint<T> body) {
+        return BinaryReifiedUnaryConstraint.<T>builder().left(indicator).right(body.getVariable()).body(body).build();
+    }
 
     @Override
     public boolean isSatisfiedBy(@NonNull Boolean indicator, @NonNull T value) {

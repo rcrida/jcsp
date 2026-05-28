@@ -18,7 +18,7 @@ public class BinaryAtMostOneConstraintTest {
 
     @BeforeEach
     void setUp() {
-        constraint = BinaryAtMostOneConstraint.builder().left(left).right(right).build();
+        constraint = BinaryAtMostOneConstraint.of(left, right);
     }
 
     @Test
@@ -49,12 +49,17 @@ public class BinaryAtMostOneConstraintTest {
 
     @Test
     void symmetric_equalWithSwappedVariables() {
-        var swapped = BinaryAtMostOneConstraint.builder().left(right).right(left).build();
+        var swapped = BinaryAtMostOneConstraint.of(right, left);
         assertThat(constraint).isEqualTo(swapped);
     }
 
     @Test
     void testToString() {
         assertThat(constraint.toString()).isEqualTo("<(left, right), AtMostOne>");
+    }
+
+    @Test
+    void of_createsEquivalentConstraint() {
+        assertThat(BinaryAtMostOneConstraint.of(left, right)).isEqualTo(constraint);
     }
 }

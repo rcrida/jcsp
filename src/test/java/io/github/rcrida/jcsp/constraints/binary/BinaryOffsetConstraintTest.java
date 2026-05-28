@@ -38,7 +38,7 @@ public class BinaryOffsetConstraintTest {
     @ParameterizedTest
     @MethodSource
     void isSatisfiedBy(Number offset, Operator operator, Object left, Object right, boolean expected) {
-        val constraint = BinaryOffsetConstraint.builder().left(LEFT).right(RIGHT).offset(offset).operator(operator).build();
+        val constraint = BinaryOffsetConstraint.of(LEFT, offset, operator, RIGHT);
         val assignmentBuilder = Assignment.builder();
         if (left != null) {
             assignmentBuilder.value(LEFT, left);
@@ -83,7 +83,7 @@ public class BinaryOffsetConstraintTest {
     @ParameterizedTest
     @MethodSource
     void testToString(Number offset, String expected) {
-        assertThat(BinaryOffsetConstraint.<Number>builder().left(LEFT).right(RIGHT).offset(offset).operator(Operator.EQ).build()).asString().isEqualTo(expected);
+        assertThat(BinaryOffsetConstraint.of(LEFT, offset, Operator.EQ, RIGHT)).asString().isEqualTo(expected);
     }
 
     @Test
@@ -100,5 +100,11 @@ public class BinaryOffsetConstraintTest {
         assertThatThrownBy(() -> constraint.negatedOffset())
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessage("Unsupported offset type: class java.util.concurrent.atomic.AtomicInteger");
+    }
+
+    @Test
+    void of_createsEquivalentConstraint() {
+        val expected = BinaryOffsetConstraint.<Number>builder().left(LEFT).right(RIGHT).offset(5).operator(Operator.EQ).build();
+        assertThat(BinaryOffsetConstraint.of(LEFT, (Number) 5, Operator.EQ, RIGHT)).isEqualTo(expected);
     }
 }

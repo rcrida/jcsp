@@ -35,7 +35,7 @@ public class BinaryPredicateConstraintTest {
 
     @BeforeEach
     void setUp() {
-        binaryPredicateConstraint = BinaryPredicateConstraint.builder().left(variable1).right(variable2).biPredicate(biPredicate).build();
+        binaryPredicateConstraint = BinaryPredicateConstraint.of(variable1, variable2, biPredicate);
     }
 
     @ParameterizedTest
@@ -59,9 +59,14 @@ public class BinaryPredicateConstraintTest {
 
     @Test
     void equals() {
-        val anotherBinaryExpressionConstraint = BinaryPredicateConstraint.builder().left(variable1).right(variable2).biPredicate(anotherBiPredicate).build();
+        val anotherBinaryExpressionConstraint = BinaryPredicateConstraint.of(variable1, variable2, anotherBiPredicate);
         assertThat(binaryPredicateConstraint).isNotEqualTo(anotherBinaryExpressionConstraint);
-        val sameBinaryExpressionConstraint = BinaryPredicateConstraint.builder().left(variable1).right(variable2).biPredicate(biPredicate).build();
+        val sameBinaryExpressionConstraint = BinaryPredicateConstraint.of(variable1, variable2, biPredicate);
         assertThat(binaryPredicateConstraint).isEqualTo(sameBinaryExpressionConstraint);
+    }
+
+    @Test
+    void of_createsEquivalentConstraint() {
+        assertThat(BinaryPredicateConstraint.of(variable1, variable2, biPredicate)).isEqualTo(binaryPredicateConstraint);
     }
 }

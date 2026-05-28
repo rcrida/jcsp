@@ -58,4 +58,9 @@ public class BinaryEqualsConstraintTest {
     void testToString() {
         assertThat(constraint.toString()).isEqualTo("<(left, right), left == right>");
     }
+
+    @Test
+    void of_createsEquivalentConstraint() {
+        assertThat(BinaryEqualsConstraint.of(left, right)).isEqualTo(constraint);
+    }
 }

@@ -1,6 +1,7 @@
 package io.github.rcrida.jcsp.constraints.binary;
 
 import io.github.rcrida.jcsp.constraints.Operator;
+import io.github.rcrida.jcsp.variables.Variable;
 import lombok.EqualsAndHashCode;
 import lombok.experimental.SuperBuilder;
 import org.jspecify.annotations.NonNull;
@@ -20,10 +21,13 @@ import org.jspecify.annotations.NonNull;
 @SuperBuilder
 @EqualsAndHashCode(callSuper = true)
 public class BinaryOffsetConstraint<N extends Number> extends BinaryConstraint<N, N> {
-    @NonNull
-    Number offset;
-    @NonNull
-    Operator operator;
+    @NonNull Number offset;
+    @NonNull Operator operator;
+
+    public static <N extends Number> BinaryOffsetConstraint<N> of(@NonNull Variable<N> left, @NonNull N offset,
+                                                                  @NonNull Operator operator, @NonNull Variable<N> right) {
+        return BinaryOffsetConstraint.<N>builder().left(left).right(right).operator(operator).offset(offset).build();
+    }
 
     @Override
     public boolean isSatisfiedBy(@NonNull N left, @NonNull N right) {

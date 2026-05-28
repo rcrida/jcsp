@@ -378,7 +378,7 @@ public class ConstraintSatisfactionProblem {
          * @return the builder
          */
         public <T> ConstraintSatisfactionProblemBuilder equalsConstraint(@NonNull Variable<T> left, @NonNull Variable<T> right) {
-            return this.constraint(BinaryEqualsConstraint.<T>builder().left(left).right(right).build());
+            return this.constraint(BinaryEqualsConstraint.of(left, right));
         }
 
         /**
@@ -496,7 +496,7 @@ public class ConstraintSatisfactionProblem {
          * @return the builder
          */
         public <T> ConstraintSatisfactionProblemBuilder notEqualsConstraint(@NonNull Variable<T> left, @NonNull Variable<T> right) {
-            return this.constraint(BinaryNotEqualsConstraint.<T>builder().left(left).right(right).build());
+            return this.constraint(BinaryNotEqualsConstraint.of(left, right));
         }
 
         /**
@@ -512,7 +512,7 @@ public class ConstraintSatisfactionProblem {
             val secondIter = variables.iterator();
             secondIter.next();
             while (secondIter.hasNext()) {
-                this.constraint(BinaryNotEqualsConstraint.<T>builder().left(firstIter.next()).right(secondIter.next()).build());
+                this.constraint(BinaryNotEqualsConstraint.of(firstIter.next(), secondIter.next()));
             }
             return this;
         }
@@ -528,7 +528,7 @@ public class ConstraintSatisfactionProblem {
          * @return the builder
          */
         public <N extends Number> ConstraintSatisfactionProblemBuilder offsetConstraint(@NonNull Variable<N> left, @NonNull N offset, @NonNull Operator operator, @NonNull Variable<N> right) {
-            return this.constraint(BinaryOffsetConstraint.<N>builder().left(left).offset(offset).operator(operator).right(right).build());
+            return this.constraint(BinaryOffsetConstraint.of(left, offset, operator, right));
         }
 
         /**
@@ -540,7 +540,7 @@ public class ConstraintSatisfactionProblem {
          * @return the builder
          */
         public <L, R> ConstraintSatisfactionProblemBuilder biPredicateConstraint(@NonNull Variable<L> left, @NonNull Variable<R> right, @NonNull BiPredicate<L, R> biPredicate) {
-            return this.constraint(BinaryPredicateConstraint.<L, R>builder().left(left).right(right).biPredicate(biPredicate).build());
+            return this.constraint(BinaryPredicateConstraint.of(left, right, biPredicate));
         }
 
         /**
@@ -621,10 +621,8 @@ public class ConstraintSatisfactionProblem {
 
                 reifyConstraint(neg, UnaryNotEqualsConstraint.of(v, true));
 
-                impliesConstraint(v, BinaryOffsetConstraint.<Integer>builder()
-                        .left(prev).right(curr).offset(1).operator(Operator.EQ).build());
-                impliesConstraint(neg, BinaryEqualsConstraint.<Integer>builder()
-                        .left(curr).right(prev).build());
+                impliesConstraint(v, BinaryOffsetConstraint.of(prev, 1, Operator.EQ, curr));
+                impliesConstraint(neg, BinaryEqualsConstraint.of(curr, prev));
             }
 
             return comparatorConstraint(counters[k], Operator.GEQ, n);

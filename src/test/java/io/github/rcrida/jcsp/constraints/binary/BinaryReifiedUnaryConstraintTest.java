@@ -15,8 +15,7 @@ public class BinaryReifiedUnaryConstraintTest {
             UnaryValueConstraint.of(X, 3);
 
     static final BinaryReifiedUnaryConstraint<Integer> CONSTRAINT =
-            BinaryReifiedUnaryConstraint.<Integer>builder()
-                    .left(B).right(X).body(BODY).build();
+            BinaryReifiedUnaryConstraint.of(B, BODY);
 
     @Test
     void indicatorTrueAndValueMatchesBody_satisfied() {
@@ -41,5 +40,10 @@ public class BinaryReifiedUnaryConstraintTest {
     @Test
     void getRelationDescribesEquivalence() {
         assertThat(CONSTRAINT.getRelation()).contains("<->");
+    }
+
+    @Test
+    void of_createsEquivalentConstraint() {
+        assertThat(BinaryReifiedUnaryConstraint.of(B, BODY)).isEqualTo(CONSTRAINT);
     }
 }

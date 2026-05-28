@@ -130,10 +130,7 @@ public class TreeDecomposerImpl implements TreeDecomposer {
             val listN = new ArrayList<>(N);
             for (int i = 0; i < listN.size(); i++) {
                 for (int j = i + 1; j < listN.size(); j++) {
-                    workGraphBuilder.constraint(BinaryTuplesConstraint.builder()
-                            .left((Variable<Object>) (Variable<?>) listN.get(i))
-                            .right((Variable<Object>) (Variable<?>) listN.get(j))
-                            .build());
+                    workGraphBuilder.constraint(BinaryTuplesConstraint.of(listN.get(i), listN.get(j), Set.of()));
                 }
             }
 

@@ -45,10 +45,9 @@ public class ExactlyOneConstraint extends UniformNaryConstraint<Boolean> {
         val binaryConstraints = new HashSet<BinaryConstraint<?, ?>>();
         for (int i = 0; i < variables.size(); i++) {
             for (int j = i + 1; j < variables.size(); j++) {
-                binaryConstraints.add(BinaryAtMostOneConstraint.builder()
-                        .left((Variable<Boolean>) variables.get(i))
-                        .right((Variable<Boolean>) variables.get(j))
-                        .build());
+                binaryConstraints.add(BinaryAtMostOneConstraint.of(
+                        (Variable<Boolean>) variables.get(i),
+                        (Variable<Boolean>) variables.get(j)));
             }
         }
         return Optional.of(binaryConstraints);

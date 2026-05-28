@@ -1,5 +1,6 @@
 package io.github.rcrida.jcsp.constraints.binary;
 
+import io.github.rcrida.jcsp.variables.Variable;
 import lombok.EqualsAndHashCode;
 import lombok.experimental.SuperBuilder;
 import org.jspecify.annotations.NonNull;
@@ -15,6 +16,11 @@ import java.util.function.BiPredicate;
 @EqualsAndHashCode(callSuper = true)
 public class BinaryPredicateConstraint<L, R> extends BinaryConstraint<L, R> {
     @NonNull BiPredicate<L, R> biPredicate;
+
+    public static <L, R> BinaryPredicateConstraint<L, R> of(@NonNull Variable<L> left, @NonNull Variable<R> right,
+                                                            @NonNull BiPredicate<L, R> predicate) {
+        return BinaryPredicateConstraint.<L, R>builder().left(left).right(right).biPredicate(predicate).build();
+    }
 
     @Override
     public boolean isSatisfiedBy(@NonNull L leftValue, @NonNull R rightValue) {

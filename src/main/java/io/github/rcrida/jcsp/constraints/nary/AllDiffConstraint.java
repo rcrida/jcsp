@@ -51,10 +51,9 @@ public class AllDiffConstraint<T> extends UniformNaryConstraint<T> {
         val binaryConstraints = new HashSet<BinaryConstraint<?, ?>>();
         for (int i = 0; i < variables.size(); i++) {
             for (int j = i + 1; j < variables.size(); j++) {
-                binaryConstraints.add(BinaryNotEqualsConstraint.builder()
-                        .left((Variable) variables.get(i))
-                        .right((Variable) variables.get(j))
-                        .build());
+                binaryConstraints.add(BinaryNotEqualsConstraint.of(
+                        (Variable) variables.get(i),
+                        (Variable) variables.get(j)));
             }
         }
         return Optional.of(binaryConstraints);

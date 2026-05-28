@@ -13,6 +13,7 @@ import org.junit.jupiter.api.Test;
 
 import java.util.EnumSet;
 import java.util.List;
+import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static io.github.rcrida.jcsp.solver.AustraliaMapColouringTest.Colour.GREEN;
@@ -35,11 +36,7 @@ public class AC3Test {
         Variable<Object> right = Variable.Factory.INSTANCE.create("right");
         builder.variableDomainEntry(left, domain);
         builder.variableDomainEntry(right, domain);
-        builder.constraint(BinaryTuplesConstraint.builder()
-                .left(left)
-                .right(right)
-                .binaryTuples(tuples)
-                .build());
+        builder.constraint(BinaryTuplesConstraint.of(left, right, Set.copyOf(tuples)));
         val problem = builder.build();
         System.out.println(problem);
         val arcConstrainedProblem = AC3.INSTANCE.apply(problem).get();
@@ -127,11 +124,7 @@ public class AC3Test {
         Variable<Object> right = Variable.Factory.INSTANCE.create("right");
         builder.variableDomainEntry(left, domain);
         builder.variableDomainEntry(right, domain);
-        builder.constraint(BinaryTuplesConstraint.builder()
-                .left(left)
-                .right(right)
-                .binaryTuples(tuples)
-                .build());
+        builder.constraint(BinaryTuplesConstraint.of(left, right, Set.copyOf(tuples)));
         val problem = builder.build();
         System.out.println(problem);
         assertThat(AC3.INSTANCE.apply(problem)).isEmpty();
