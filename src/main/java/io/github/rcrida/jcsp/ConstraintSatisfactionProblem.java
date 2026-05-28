@@ -29,13 +29,16 @@ import io.github.rcrida.jcsp.constraints.nary.ReifiedConstraint;
 import io.github.rcrida.jcsp.constraints.unary.UnaryNotEqualsConstraint;
 import io.github.rcrida.jcsp.constraints.unary.UnaryPredicateConstraint;
 import io.github.rcrida.jcsp.constraints.unary.UnaryValueConstraint;
+import io.github.rcrida.jcsp.domains.BooleanDomain;
 import io.github.rcrida.jcsp.domains.Domain;
+import io.github.rcrida.jcsp.domains.IntRangeDomain;
 import io.github.rcrida.jcsp.variables.Variable;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 
 import java.math.BigInteger;
 import java.util.ArrayDeque;
+import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -45,6 +48,7 @@ import java.util.Set;
 import java.util.function.BiPredicate;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
+import java.util.stream.IntStream;
 
 /**
  * Represents a constraint satisfaction problem (CSP), which consists of a set of variables,
@@ -303,6 +307,7 @@ public class ConstraintSatisfactionProblem {
 
     public static class ConstraintSatisfactionProblemBuilder {
         private final Variable.Factory variableFactory = Variable.Factory.INSTANCE;
+        private int atLeastNChainCount = 0;
 
         public <T> Variable<T> createVariable(String name, Domain<T> domain) {
             final var variable = variableFactory.<T>create(name);
@@ -538,8 +543,7 @@ public class ConstraintSatisfactionProblem {
          * @param body      the constraint being reified
          * @return the builder
          */
-        public ConstraintSatisfactionProblemBuilder reifyConstraint(@NonNull Variable<Boolean> indicator,
-                                                                      @NonNull Constraint body) {
+        public ConstraintSatisfactionProblemBuilder reifyConstraint(@NonNull Variable<Boolean> indicator, @NonNull Constraint body) {
             return this.constraint(ReifiedConstraint.of(indicator, body));
         }
 
@@ -551,9 +555,53 @@ public class ConstraintSatisfactionProblem {
          * @param body      the constraint activated by the indicator
          * @return the builder
          */
-        public ConstraintSatisfactionProblemBuilder impliesConstraint(@NonNull Variable<Boolean> indicator,
-                                                                       @NonNull Constraint body) {
+        public ConstraintSatisfactionProblemBuilder impliesConstraint(@NonNull Variable<Boolean> indicator, @NonNull Constraint body) {
             return this.constraint(ImplicationConstraint.of(indicator, body));
+        }
+
+        /**
+         * Encodes {@code atLeastN(vars, n)} as a carry-chain over auxiliary integer counting
+         * variables, enabling richer propagation than the plain {@link AtLeastNConstraint}.
+         *
+         * <p>Introduces {@code k+1} integer variables {@code c[0]..c[k]} with domain {@code {0..k}}
+         * and {@code k} boolean negation indicators. Constraints:
+         * <ul>
+         *   <li>{@code c[0] = 0}</li>
+         *   <li>for each {@code v_i}: {@code v_i -> c[i] = c[i-1] + 1} and {@code !v_i -> c[i] = c[i-1]}</li>
+         *   <li>{@code c[k] >= n}</li>
+         * </ul>
+         *
+         * @param vars the boolean variables to count
+         * @param n    minimum number that must be {@code true}
+         * @return the builder
+         */
+        public ConstraintSatisfactionProblemBuilder atLeastNConstraintWithCounting(@NonNull Set<Variable<Boolean>> vars, int n) {
+            val varList = List.copyOf(vars);
+            int k = varList.size();
+            int id = atLeastNChainCount++;
+
+            val counterLabels = IntStream.rangeClosed(0, k).mapToObj(i -> "[" + i + "]").toArray(String[]::new);
+            val counters = create1dVariableArray(counterLabels, "$c_" + id + "_", IntRangeDomain.of(0, k));
+            equalsConstraint(counters[0], 0);
+
+            val negLabels = IntStream.range(0, k).mapToObj(i -> "[" + i + "]").toArray(String[]::new);
+            val negations = create1dVariableArray(negLabels, "$neg_" + id + "_", BooleanDomain.INSTANCE);
+
+            for (int i = 0; i < k; i++) {
+                val v    = varList.get(i);
+                val prev = counters[i];
+                val curr = counters[i + 1];
+                val neg  = negations[i];
+
+                reifyConstraint(neg, UnaryNotEqualsConstraint.of(v, true));
+
+                impliesConstraint(v, BinaryOffsetConstraint.<Integer>builder()
+                        .left(prev).right(curr).offset(1).operator(Operator.EQ).build());
+                impliesConstraint(neg, BinaryEqualsConstraint.<Integer>builder()
+                        .left(curr).right(prev).build());
+            }
+
+            return constraint(UnaryPredicateConstraint.of(counters[k], v -> v >= n));
         }
     }
 }
