@@ -1,5 +1,6 @@
 package io.github.rcrida.jcsp.constraints.unary;
 
+import io.github.rcrida.jcsp.variables.Variable;
 import lombok.EqualsAndHashCode;
 import lombok.experimental.SuperBuilder;
 import org.jspecify.annotations.NonNull;
@@ -10,6 +11,10 @@ import java.util.Objects;
 @EqualsAndHashCode(callSuper = true)
 public class UnaryValueConstraint<T> extends UnaryConstraint<T> {
     @NonNull T value;
+
+    public static <T> UnaryValueConstraint<T> of(@NonNull Variable<T> variable, @NonNull T value) {
+        return UnaryValueConstraint.<T>builder().variable(variable).value(value).build();
+    }
 
     @Override
     protected boolean checkValue(@NonNull T value) {

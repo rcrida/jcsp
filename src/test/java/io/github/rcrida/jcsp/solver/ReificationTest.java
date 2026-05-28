@@ -45,9 +45,9 @@ public class ReificationTest {
             .notEqualsConstraint(A, B)
             .notEqualsConstraint(B, C)
             // Reify preferences
-            .reifyConstraint(R1, UnaryValueConstraint.<Colour>builder().variable(A).value(Colour.RED).build())
-            .reifyConstraint(R2, UnaryValueConstraint.<Colour>builder().variable(B).value(Colour.GREEN).build())
-            .reifyConstraint(R3, UnaryValueConstraint.<Colour>builder().variable(C).value(Colour.BLUE).build())
+            .reifyConstraint(R1, UnaryValueConstraint.of(A, Colour.RED))
+            .reifyConstraint(R2, UnaryValueConstraint.of(B, Colour.GREEN))
+            .reifyConstraint(R3, UnaryValueConstraint.of(C, Colour.BLUE))
             // At least 2 of the 3 preferences must be satisfied
             .atLeastNConstraint(Set.of(R1, R2, R3), 2)
             .build();

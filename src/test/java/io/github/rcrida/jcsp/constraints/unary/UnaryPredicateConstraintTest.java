@@ -42,4 +42,10 @@ public class UnaryPredicateConstraintTest {
     void getRelationReturnsPrediacteToString() {
         assertThat(constraint.getRelation()).isNotEmpty();
     }
+
+    @Test
+    void of_createsEquivalentConstraint() {
+        assertThat(UnaryPredicateConstraint.of(variable, v -> v > 3).isSatisfiedBy(Assignment.of(Map.of(variable, 5)))).isTrue();
+        assertThat(UnaryPredicateConstraint.of(variable, v -> v > 3).isSatisfiedBy(Assignment.of(Map.of(variable, 2)))).isFalse();
+    }
 }

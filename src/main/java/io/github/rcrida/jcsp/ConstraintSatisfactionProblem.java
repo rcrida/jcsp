@@ -362,7 +362,7 @@ public class ConstraintSatisfactionProblem {
          * @return the builder
          */
         public <T> ConstraintSatisfactionProblemBuilder equalsConstraint(@NonNull Variable<T> variable, @NonNull T value) {
-            return this.constraint(UnaryValueConstraint.<T>builder().variable(variable).value(value).build());
+            return this.constraint(UnaryValueConstraint.of(variable, value));
         }
 
         /**
@@ -384,7 +384,7 @@ public class ConstraintSatisfactionProblem {
          * @return the builder
          */
         public <T> ConstraintSatisfactionProblemBuilder notEqualsConstraint(@NonNull Variable<T> variable, @NonNull T value) {
-            return this.constraint(UnaryNotEqualsConstraint.<T>builder().variable(variable).value(value).build());
+            return this.constraint(UnaryNotEqualsConstraint.of(variable, value));
         }
 
         /**
@@ -395,7 +395,7 @@ public class ConstraintSatisfactionProblem {
          * @return the builder
          */
         public <T> ConstraintSatisfactionProblemBuilder predicateConstraint(@NonNull Variable<T> variable, @NonNull Predicate<T> predicate) {
-            return this.constraint(UnaryPredicateConstraint.<T>builder().variable(variable).predicate(predicate).build());
+            return this.constraint(UnaryPredicateConstraint.of(variable, predicate));
         }
 
         /**
@@ -458,8 +458,7 @@ public class ConstraintSatisfactionProblem {
          */
         public ConstraintSatisfactionProblemBuilder exactlyOneConstraint(@NonNull Set<Variable<Boolean>> variables) {
             if (variables.size() == 1) {
-                return this.constraint(UnaryValueConstraint.<Boolean>builder()
-                        .variable(variables.iterator().next()).value(true).build());
+                return this.constraint(UnaryValueConstraint.of(variables.iterator().next(), true));
             }
             return this.constraint(ExactlyOneConstraint.builder().variables(variables).build());
         }

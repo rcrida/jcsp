@@ -18,7 +18,7 @@ public class ImplicationConstraintTest {
     static final Variable<Integer> X = F.create("x");
 
     static final UnaryValueConstraint<Integer> BODY =
-            UnaryValueConstraint.<Integer>builder().variable(X).value(3).build();
+            UnaryValueConstraint.of(X, 3);
 
     static Assignment a(boolean b, int x) {
         return Assignment.builder().value(B, b).value(X, x).build();
