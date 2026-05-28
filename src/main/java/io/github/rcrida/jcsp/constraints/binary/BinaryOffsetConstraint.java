@@ -1,5 +1,6 @@
 package io.github.rcrida.jcsp.constraints.binary;
 
+import io.github.rcrida.jcsp.constraints.Operator;
 import lombok.EqualsAndHashCode;
 import lombok.experimental.SuperBuilder;
 import org.jspecify.annotations.NonNull;

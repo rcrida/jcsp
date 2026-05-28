@@ -1,4 +1,4 @@
-package io.github.rcrida.jcsp.constraints.binary;
+package io.github.rcrida.jcsp.constraints;
 
 /**
  * This enum represents a set of binary operators that can be used for comparison.
@@ -56,13 +56,13 @@ public enum Operator {
         }
     };
 
-    final String symbol;
+    public final String symbol;
 
     Operator(String symbol) {
         this.symbol = symbol;
     }
 
-    Operator reversed() {
+    public Operator reversed() {
         return switch (this) {
             case EQ -> EQ;
             case NEQ -> NEQ;

@@ -1,4 +1,4 @@
-package io.github.rcrida.jcsp.constraints.binary;
+package io.github.rcrida.jcsp.constraints;
 
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;

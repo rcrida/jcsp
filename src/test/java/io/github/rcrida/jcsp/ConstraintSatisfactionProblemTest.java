@@ -2,7 +2,7 @@ package io.github.rcrida.jcsp;
 
 import lombok.val;
 import io.github.rcrida.jcsp.constraints.binary.BinaryOffsetConstraint;
-import io.github.rcrida.jcsp.constraints.binary.Operator;
+import io.github.rcrida.jcsp.constraints.Operator;
 import io.github.rcrida.jcsp.constraints.unary.UnaryValueConstraint;
 import io.github.rcrida.jcsp.domains.BooleanDomain;
 import io.github.rcrida.jcsp.domains.Domain;

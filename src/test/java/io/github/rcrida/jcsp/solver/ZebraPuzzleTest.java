@@ -3,7 +3,7 @@ package io.github.rcrida.jcsp.solver;
 import lombok.val;
 import io.github.rcrida.jcsp.ConstraintSatisfactionProblem;
 import io.github.rcrida.jcsp.assignments.Assignment;
-import io.github.rcrida.jcsp.constraints.binary.Operator;
+import io.github.rcrida.jcsp.constraints.Operator;
 import io.github.rcrida.jcsp.domains.Domain;
 import io.github.rcrida.jcsp.domains.IntRangeDomain;
 import io.github.rcrida.jcsp.variables.Variable;

@@ -1,5 +1,6 @@
 package io.github.rcrida.jcsp.constraints.binary;
 
+import io.github.rcrida.jcsp.constraints.Operator;
 import lombok.val;
 import io.github.rcrida.jcsp.assignments.Assignment;
 import io.github.rcrida.jcsp.variables.Variable;

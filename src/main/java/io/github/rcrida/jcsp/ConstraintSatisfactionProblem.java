@@ -16,7 +16,7 @@ import io.github.rcrida.jcsp.constraints.binary.BinaryOffsetConstraint;
 import io.github.rcrida.jcsp.constraints.binary.BinaryPredicateConstraint;
 import io.github.rcrida.jcsp.constraints.binary.BinaryEqualsConstraint;
 import io.github.rcrida.jcsp.constraints.binary.BinaryNotEqualsConstraint;
-import io.github.rcrida.jcsp.constraints.binary.Operator;
+import io.github.rcrida.jcsp.constraints.Operator;
 import io.github.rcrida.jcsp.constraints.nary.AllDiffConstraint;
 import io.github.rcrida.jcsp.constraints.nary.AtLeastNConstraint;
 import io.github.rcrida.jcsp.constraints.nary.AtMostNConstraint;
@@ -26,6 +26,7 @@ import io.github.rcrida.jcsp.constraints.nary.ImplicationConstraint;
 import io.github.rcrida.jcsp.constraints.nary.NaryConstraint;
 import io.github.rcrida.jcsp.constraints.nary.PredicateConstraint;
 import io.github.rcrida.jcsp.constraints.nary.ReifiedConstraint;
+import io.github.rcrida.jcsp.constraints.unary.UnaryComparatorConstraint;
 import io.github.rcrida.jcsp.constraints.unary.UnaryNotEqualsConstraint;
 import io.github.rcrida.jcsp.constraints.unary.UnaryPredicateConstraint;
 import io.github.rcrida.jcsp.constraints.unary.UnaryValueConstraint;
@@ -38,7 +39,6 @@ import org.jspecify.annotations.Nullable;
 
 import java.math.BigInteger;
 import java.util.ArrayDeque;
-import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -404,6 +404,20 @@ public class ConstraintSatisfactionProblem {
         }
 
         /**
+         * Create a unary comparator constraint: {@code variable <op> value}.
+         * Works with any {@link Number} type that implements {@link Comparable}.
+         *
+         * @param variable the number variable to constrain
+         * @param operator the comparison operator (e.g. {@link Operator#GEQ}, {@link Operator#LT})
+         * @param value    the fixed value to compare against
+         * @return the builder
+         */
+        public <N extends Number & Comparable<N>> ConstraintSatisfactionProblemBuilder comparatorConstraint(
+                @NonNull Variable<N> variable, @NonNull Operator operator, @NonNull N value) {
+            return this.constraint(UnaryComparatorConstraint.of(variable, operator, value));
+        }
+
+        /**
          * Create an AllDiff constraint on the specified set of variables, all sharing the same value type.
          *
          * @param variables to be constrained
@@ -613,7 +627,7 @@ public class ConstraintSatisfactionProblem {
                         .left(curr).right(prev).build());
             }
 
-            return constraint(UnaryPredicateConstraint.of(counters[k], v -> v >= n));
+            return comparatorConstraint(counters[k], Operator.GEQ, n);
         }
     }
 }
