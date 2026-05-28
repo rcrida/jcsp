@@ -52,18 +52,38 @@ solver.getSolutions(csp, objective).forEach(System.out::println);
 
 ### Constraint builder methods
 
+**Unary**
 ```java
-builder.equalsConstraint(v1, v2)                       // v1 == v2
-builder.notEqualsConstraint(v1, v2)                    // v1 != v2
-builder.notEqualsChainConstraint(v1, v2, v3)           // AllDiff over a chain
-builder.allDiffConstraint(v1, v2, v3)                  // all different
-builder.atMostOneConstraint(Set.of(v1, v2, v3))        // at most one boolean variable is true (AC3 decomposition)
-builder.atLeastNConstraint(Set.of(v1, v2, v3), n)      // at least n boolean variables are true
-builder.atMostNConstraint(Set.of(v1, v2, v3), n)       // at most n boolean variables are true
-builder.exactlyOneConstraint(Set.of(v1, v2, v3))       // exactly one boolean variable is true
-builder.offsetConstraint(v1, v2, offset)               // v1 == v2 + offset
-builder.biPredicateConstraint(v1, v2, predicate)       // custom binary predicate
-builder.predicateConstraint(predicate, v1, v2, v3)     // custom n-ary predicate
+builder.equalsConstraint(v, value)                          // v == value
+builder.notEqualsConstraint(v, value)                       // v != value
+builder.predicateConstraint(v, predicate)                   // predicate.test(v)
+builder.comparatorConstraint(v, Operator.GEQ, value)        // v >= value  (Number types; also LT, GT, LEQ, EQ, NEQ)
+```
+
+**Binary**
+```java
+builder.equalsConstraint(v1, v2)                            // v1 == v2
+builder.notEqualsConstraint(v1, v2)                         // v1 != v2
+builder.notEqualsChainConstraint(List.of(v1, v2, v3))       // v1 != v2, v2 != v3 (consecutive pairs)
+builder.offsetConstraint(v1, offset, Operator.EQ, v2)       // v1 + offset == v2  (also LT, GT, LEQ, GEQ, NEQ)
+builder.biPredicateConstraint(v1, v2, biPredicate)          // biPredicate.test(v1, v2)
+```
+
+**N-ary**
+```java
+builder.allDiffConstraint(Set.of(v1, v2, v3))               // all different
+builder.atMostOneConstraint(Set.of(b1, b2, b3))             // at most one boolean is true  (AC3 decomposition)
+builder.atMostNConstraint(Set.of(b1, b2, b3), n)            // at most n booleans are true
+builder.atLeastNConstraint(Set.of(b1, b2, b3), n)           // at least n booleans are true  (prefer for local search)
+builder.atLeastNConstraintWithCounting(Set.of(b1, b2, b3), n) // at least n booleans are true via carry-chain  (prefer for backtracking)
+builder.exactlyOneConstraint(Set.of(b1, b2, b3))            // exactly one boolean is true
+builder.predicateConstraint(Set.of(v1, v2, v3), predicate)  // predicate.test(assignment) over a set of variables
+```
+
+**Reification**
+```java
+builder.reifyConstraint(b, constraint)                      // b <-> constraint  (b is true iff constraint is satisfied)
+builder.impliesConstraint(b, constraint)                    // b -> constraint   (when b is true, constraint must hold)
 ```
 
 ## Solver Chain
