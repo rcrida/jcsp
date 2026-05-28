@@ -88,7 +88,7 @@ builder.impliesConstraint(b, constraint)                    // b -> constraint  
 
 ## Solver Chain
 
-The default solver applies strategies in order, each preprocessing the problem before delegating:
+The default solver (`Solver.Factory.INSTANCE.createSolver()`) applies strategies in order, each preprocessing the problem before delegating:
 
 ```
 NodeConsistency → ArcConsistency (AC3) → IndependentSubproblems
@@ -96,6 +96,44 @@ NodeConsistency → ArcConsistency (AC3) → IndependentSubproblems
 ```
 
 Tree decomposition uses a domain-aware clique size limit (`d^targetTreewidth`, capped at 1,000,000) and only applies when the estimated tree complexity is less than the original search space. Cutset conditioning applies a practical three-tier complexity guard before conditioning.
+
+## Local Search
+
+`LocalSolver.Factory.INSTANCE` wires the local search pipeline:
+
+```
+NodeConsistency → ArcConsistency (AC3) → IndependentSubproblems → MinConflicts
+```
+
+Create a local solver and call `getLocalSolution` for satisfaction, or pass an objective for optimization:
+
+```java
+LocalSolver solver = LocalSolver.Factory.INSTANCE.createLocalSolver(
+    10,                                  // maxAttempts: restarts from a fresh initial assignment
+    1000,                                // maxSteps: min-conflicts steps per attempt
+    RandomAssignmentFactory.INSTANCE     // or GreedyAssignmentFactory.INSTANCE
+);
+
+// Satisfaction
+Optional<Assignment> solution = solver.getLocalSolution(csp);
+
+// Optimization — returns the best assignment found across all attempts
+Optional<Assignment> best = solver.getLocalSolution(csp, assignment ->
+    assignment.getValue(cost).orElse(0.0));
+```
+
+**Initial assignment factories:**
+- `RandomAssignmentFactory.INSTANCE` — assigns random values; good for diverse restarts
+- `GreedyAssignmentFactory.INSTANCE` — minimises constraint violations greedily; good for a warm first attempt
+- `FallbackAssignmentFactory` — uses a primary factory for the first N calls, then falls back to a secondary (e.g. greedy first attempt, random restarts thereafter)
+
+```java
+InitialAssignmentFactory factory = FallbackAssignmentFactory.builder()
+    .primary(GreedyAssignmentFactory.INSTANCE)
+    .primaryCount(1)
+    .fallback(RandomAssignmentFactory.INSTANCE)
+    .build();
+```
 
 ## Installation
 
