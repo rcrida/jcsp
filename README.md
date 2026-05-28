@@ -15,6 +15,7 @@ A Java library implementing classic AI algorithms for solving Constraint Satisfa
 - **Heuristics**: MRV variable selection, LCV value ordering, and Minimum Degree variable elimination for tree decomposition
 - **Local search**: `MinConflictsSolver` supports both satisfaction and optimization using weighted min-conflicts with lexicographic value selection and iterated restarts; constructed via `MinConflictsSolver.of(maxAttempts, maxSteps, factory)` and seeded by `RandomAssignmentFactory` or `GreedyAssignmentFactory`. `LocalSolver.Factory.INSTANCE` wires the full pipeline: NC + AC3 preprocessing → independent subproblem decomposition → min-conflicts search
 - **Independent subproblem local solver**: `IndependentSubproblemLocalSolver` decomposes a CSP into independent subproblems and solves each with a delegate `LocalSolver`, mirroring `IndependentSubproblemSolver` for the local search path
+- **Reification**: `ReifiedConstraint` (`b <-> body`) and `ImplicationConstraint` (`b -> body`) introduce boolean indicator variables that capture constraint satisfaction — enables soft constraints, counting satisfaction, and conditional constraints via `csp.reifyConstraint(b, constraint)` and `csp.impliesConstraint(b, constraint)`
 
 ## Usage
 
@@ -82,7 +83,7 @@ Tree decomposition uses a domain-aware clique size limit (`d^targetTreewidth`, c
 <dependency>
     <groupId>io.github.rcrida</groupId>
     <artifactId>jcsp</artifactId>
-    <version>2.9.0</version>
+    <version>2.10.0</version>
 </dependency>
 ```
 
