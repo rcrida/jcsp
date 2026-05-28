@@ -70,8 +70,13 @@ public class AtLeastNConstraintTest {
     }
 
     @Test
-    void testGetRelation() {
+    void getRelation() {
         assertThat(constraint2.getRelation()).isEqualTo("AtLeast2");
         assertThat(constraint3.getRelation()).isEqualTo("AtLeast3");
+    }
+
+    @Test
+    void testToString() {
+        assertThat(constraint2.toString()).isEqualTo("<(v1, v2, v3, v4), AtLeast2>");
     }
 }

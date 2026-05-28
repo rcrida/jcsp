@@ -46,4 +46,9 @@ public class BinaryReifiedUnaryConstraintTest {
     void of_createsEquivalentConstraint() {
         assertThat(BinaryReifiedUnaryConstraint.of(B, BODY)).isEqualTo(CONSTRAINT);
     }
+
+    @Test
+    void testToString() {
+        assertThat(CONSTRAINT.toString()).isEqualTo("<(b, x), b <-> (x == 3)>");
+    }
 }

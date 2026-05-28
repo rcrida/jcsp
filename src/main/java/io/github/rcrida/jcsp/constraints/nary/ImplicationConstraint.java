@@ -18,7 +18,6 @@ import java.util.Set;
  *
  * <p>Useful for soft constraints, activation patterns, and conditional constraints.
  */
-@Value
 @SuperBuilder
 @EqualsAndHashCode(callSuper = true)
 public class ImplicationConstraint extends NaryConstraint {
@@ -40,6 +39,6 @@ public class ImplicationConstraint extends NaryConstraint {
 
     @Override
     public String getRelation() {
-        return indicator + " -> (" + body + ")";
+        return indicator + " -> (" + body.getRelation() + ")";
     }
 }

@@ -53,6 +53,6 @@ public class UnaryValueConstraintTest {
 
     @Test
     void testToString() {
-        assertThat(constraint.toString()).isEqualTo("<(variable), {(5)}>");
+        assertThat(constraint.toString()).isEqualTo("<(variable), variable == 5>");
     }
 }

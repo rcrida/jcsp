@@ -64,8 +64,13 @@ public class AtMostNConstraintTest {
     }
 
     @Test
-    void testToString() {
+    void getRelation() {
         assertThat(constraint2.getRelation()).isEqualTo("AtMost2");
         assertThat(constraint3.getRelation()).isEqualTo("AtMost3");
+    }
+
+    @Test
+    void testToString() {
+        assertThat(constraint2.toString()).isEqualTo("<(v1, v2, v3, v4), AtMost2>");
     }
 }

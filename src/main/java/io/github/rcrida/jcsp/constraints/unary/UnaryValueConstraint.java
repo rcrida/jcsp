@@ -23,6 +23,6 @@ public class UnaryValueConstraint<T> extends UnaryConstraint<T> {
 
     @Override
     public String getRelation() {
-        return "{(" + value + ")}";
+        return getVariable() + " == " + value;
     }
 }

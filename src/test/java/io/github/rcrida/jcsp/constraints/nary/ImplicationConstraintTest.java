@@ -81,4 +81,9 @@ public class ImplicationConstraintTest {
         val solutions = Solver.Factory.INSTANCE.createSolver().getSolutions(csp).toList();
         assertThat(solutions).hasSize(5);
     }
+
+    @Test
+    void testToString() {
+        assertThat(ImplicationConstraint.of(B, BODY).toString()).isEqualTo("<(b, x), b -> (x == 3)>");
+    }
 }

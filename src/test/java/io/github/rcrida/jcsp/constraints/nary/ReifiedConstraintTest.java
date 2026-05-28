@@ -83,4 +83,9 @@ public class ReifiedConstraintTest {
         assertThat(solutions).hasSize(1);
         assertThat(solutions.get(0).getValue(X)).hasValue(3);
     }
+
+    @Test
+    void testToString() {
+        assertThat(ReifiedConstraint.of(B, BODY).toString()).isEqualTo("<(b, x), b <-> (x == 3)>");
+    }
 }

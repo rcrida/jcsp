@@ -28,6 +28,6 @@ public class BinaryReifiedUnaryConstraint<T> extends BinaryConstraint<Boolean, T
 
     @Override
     public String getRelation() {
-        return getLeft() + " <-> (" + body + ")";
+        return getLeft() + " <-> (" + body.getRelation() + ")";
     }
 }

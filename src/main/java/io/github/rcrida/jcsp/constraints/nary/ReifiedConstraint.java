@@ -25,7 +25,6 @@ import java.util.Set;
  * <p>When the body is a {@link UnaryConstraint}, a binary decomposition is available
  * for AC3 arc propagation between the indicator and the body's variable.
  */
-@Value
 @SuperBuilder
 @EqualsAndHashCode(callSuper = true)
 public class ReifiedConstraint extends NaryConstraint {
@@ -67,6 +66,6 @@ public class ReifiedConstraint extends NaryConstraint {
 
     @Override
     public String getRelation() {
-        return indicator + " <-> (" + body + ")";
+        return indicator + " <-> (" + body.getRelation() + ")";
     }
 }
