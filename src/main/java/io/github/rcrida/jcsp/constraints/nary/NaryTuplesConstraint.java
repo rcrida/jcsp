@@ -7,7 +7,6 @@ import lombok.experimental.SuperBuilder;
 import org.jspecify.annotations.NonNull;
 
 import java.util.Comparator;
-import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -44,16 +43,14 @@ public class NaryTuplesConstraint extends NaryConstraint {
 
     @Override
     public String getRelation() {
+        var sortedVars = getVariables().stream()
+                .sorted(Comparator.comparing(Object::toString))
+                .toList();
         return "{" + tuples.stream()
-                .map(NaryTuplesConstraint::tupleString)
+                .map(a -> sortedVars.stream()
+                        .map(v -> a.getValue(v).orElseThrow().toString())
+                        .collect(Collectors.joining(", ", "(", ")")))
                 .sorted()
                 .collect(Collectors.joining(", ")) + "}";
-    }
-
-    private static String tupleString(Assignment assignment) {
-        return assignment.getValues().entrySet().stream()
-                .sorted(Map.Entry.comparingByKey(Comparator.comparing(Object::toString)))
-                .map(e -> e.getKey() + "=" + e.getValue())
-                .collect(Collectors.joining(", ", "{", "}"));
     }
 }
