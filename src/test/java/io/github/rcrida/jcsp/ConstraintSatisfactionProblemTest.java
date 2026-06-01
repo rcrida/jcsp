@@ -195,4 +195,16 @@ public class ConstraintSatisfactionProblemTest {
                 .build();
         assertThat(csp.getConstraints()).hasSize(1);
     }
+
+    @Test
+    void builder_countConstraint() {
+        Variable<Integer> a = VARIABLE_FACTORY.create("A");
+        Variable<Integer> b = VARIABLE_FACTORY.create("B");
+        val csp = ConstraintSatisfactionProblem.builder()
+                .variableDomain(a, IntRangeDomain.of(0, 3))
+                .variableDomain(b, IntRangeDomain.of(0, 3))
+                .countConstraint(Set.of(a, b), 1, Operator.EQ, 1)
+                .build();
+        assertThat(csp.getConstraints()).hasSize(1);
+    }
 }

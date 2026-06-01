@@ -20,6 +20,7 @@ import io.github.rcrida.jcsp.constraints.Operator;
 import io.github.rcrida.jcsp.constraints.nary.AllDiffConstraint;
 import io.github.rcrida.jcsp.constraints.nary.AtLeastNConstraint;
 import io.github.rcrida.jcsp.constraints.nary.AtMostNConstraint;
+import io.github.rcrida.jcsp.constraints.nary.CountConstraint;
 import io.github.rcrida.jcsp.constraints.nary.SumConstraint;
 import io.github.rcrida.jcsp.constraints.nary.AtMostOneConstraint;
 import io.github.rcrida.jcsp.constraints.nary.ExactlyOneConstraint;
@@ -543,6 +544,20 @@ public class ConstraintSatisfactionProblem {
          */
         public <N extends Number> ConstraintSatisfactionProblemBuilder sumConstraint(@NonNull Set<Variable<N>> variables, @NonNull Operator operator, @NonNull N bound) {
             return this.constraint(SumConstraint.of(variables, operator, bound));
+        }
+
+        /**
+         * Create a constraint that counts how many variables in a set take a specific value,
+         * and compares that count to a bound: {@code count(vars, value) <op> n}.
+         *
+         * @param variables the variables to count over
+         * @param value     the value whose occurrences are counted
+         * @param operator  the comparison operator (e.g. {@link Operator#EQ}, {@link Operator#LEQ})
+         * @param n         the bound to compare the count against
+         * @return the builder
+         */
+        public <T> ConstraintSatisfactionProblemBuilder countConstraint(@NonNull Set<Variable<T>> variables, @NonNull T value, @NonNull Operator operator, int n) {
+            return this.constraint(CountConstraint.of(variables, value, operator, n));
         }
 
         /**
