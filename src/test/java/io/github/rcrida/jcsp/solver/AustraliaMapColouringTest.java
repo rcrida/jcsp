@@ -9,9 +9,12 @@ import io.github.rcrida.jcsp.solver.assignmentfactory.RandomAssignmentFactory;
 import io.github.rcrida.jcsp.variables.Variable;
 import org.junit.jupiter.api.Test;
 
+import io.github.rcrida.jcsp.constraints.Operator;
+
 import java.math.BigInteger;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -78,6 +81,23 @@ public class AustraliaMapColouringTest {
     void searchStream() {
         val csp = problem();
         assertThat(Solver.Factory.INSTANCE.createSolver().getSolutions(csp)).hasSize(18);
+    }
+
+    @Test
+    void searchStream_withColourQuota() {
+        // Of the 18 valid 3-colorings, find those where exactly 3 territories are RED.
+        // 2 mainland patterns already have 3 RED (contribute 2 solutions each via T's free choice),
+        // 2 mainland patterns have 2 RED (contribute 1 solution each with T=RED) → 6 total.
+        val csp = ConstraintSatisfactionProblem.builder()
+                .variableDomain(WA, DOMAIN).variableDomain(NT, DOMAIN).variableDomain(Q, DOMAIN)
+                .variableDomain(NSW, DOMAIN).variableDomain(V, DOMAIN).variableDomain(SA, DOMAIN)
+                .variableDomain(T, DOMAIN)
+                .notEqualsConstraint(SA, WA).notEqualsConstraint(SA, NT).notEqualsConstraint(SA, Q)
+                .notEqualsConstraint(SA, NSW).notEqualsConstraint(SA, V)
+                .notEqualsChainConstraint(List.of(WA, NT, Q, NSW, V))
+                .countConstraint(Set.of(WA, NT, Q, NSW, V, SA, T), Colour.RED, Operator.EQ, 3)
+                .build();
+        assertThat(Solver.Factory.INSTANCE.createSolver().getSolutions(csp)).hasSize(6);
     }
 
     @Test
