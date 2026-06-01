@@ -210,6 +210,34 @@ public class ConstraintSatisfactionProblemTest {
     }
 
     @Test
+    void builder_increasingConstraint() {
+        Variable<Integer> a = VARIABLE_FACTORY.create("A");
+        Variable<Integer> b = VARIABLE_FACTORY.create("B");
+        Variable<Integer> c = VARIABLE_FACTORY.create("C");
+        val csp = ConstraintSatisfactionProblem.builder()
+                .variableDomain(a, IntRangeDomain.of(1, 5))
+                .variableDomain(b, IntRangeDomain.of(1, 5))
+                .variableDomain(c, IntRangeDomain.of(1, 5))
+                .increasingConstraint(List.of(a, b, c))
+                .build();
+        assertThat(csp.getConstraints()).hasSize(1);
+    }
+
+    @Test
+    void builder_decreasingConstraint() {
+        Variable<Integer> a = VARIABLE_FACTORY.create("A");
+        Variable<Integer> b = VARIABLE_FACTORY.create("B");
+        Variable<Integer> c = VARIABLE_FACTORY.create("C");
+        val csp = ConstraintSatisfactionProblem.builder()
+                .variableDomain(a, IntRangeDomain.of(1, 5))
+                .variableDomain(b, IntRangeDomain.of(1, 5))
+                .variableDomain(c, IntRangeDomain.of(1, 5))
+                .decreasingConstraint(List.of(a, b, c))
+                .build();
+        assertThat(csp.getConstraints()).hasSize(1);
+    }
+
+    @Test
     void builder_elementConstraint() {
         Variable<Integer> idx = VARIABLE_FACTORY.create("idx");
         Variable<Integer> res = VARIABLE_FACTORY.create("res");

@@ -22,6 +22,8 @@ import io.github.rcrida.jcsp.constraints.nary.AllDiffConstraint;
 import io.github.rcrida.jcsp.constraints.nary.AtLeastNConstraint;
 import io.github.rcrida.jcsp.constraints.nary.AtMostNConstraint;
 import io.github.rcrida.jcsp.constraints.nary.CountConstraint;
+import io.github.rcrida.jcsp.constraints.nary.DecreasingConstraint;
+import io.github.rcrida.jcsp.constraints.nary.IncreasingConstraint;
 import io.github.rcrida.jcsp.constraints.nary.NaryTuplesConstraint;
 import io.github.rcrida.jcsp.constraints.nary.SumConstraint;
 import io.github.rcrida.jcsp.constraints.nary.AtMostOneConstraint;
@@ -501,6 +503,35 @@ public class ConstraintSatisfactionProblem {
          */
         public <T> ConstraintSatisfactionProblemBuilder notEqualsConstraint(@NonNull Variable<T> left, @NonNull Variable<T> right) {
             return this.constraint(BinaryNotEqualsConstraint.of(left, right));
+        }
+
+        /**
+         * Create a sequence of binary not-equals constraints to ensure that each variable in the specified list
+         * cannot take the same value as its neighbours in the list.
+         *
+         * @param variables a list of variables, neighbours in the list cannot have the same value
+         * @return the builder
+         */
+        /**
+         * Constrain a sequence of variables to be non-decreasing: {@code vars[0] <= vars[1] <= ... <= vars[n-1]}.
+         * Equivalent to MiniZinc's {@code increasing(vars)}.
+         *
+         * @param variables ordered list of variables to constrain
+         * @return the builder
+         */
+        public <T extends Comparable<T>> ConstraintSatisfactionProblemBuilder increasingConstraint(@NonNull List<Variable<T>> variables) {
+            return this.constraint(IncreasingConstraint.of(variables));
+        }
+
+        /**
+         * Constrain a sequence of variables to be non-increasing: {@code vars[0] >= vars[1] >= ... >= vars[n-1]}.
+         * Equivalent to MiniZinc's {@code decreasing(vars)}.
+         *
+         * @param variables ordered list of variables to constrain
+         * @return the builder
+         */
+        public <T extends Comparable<T>> ConstraintSatisfactionProblemBuilder decreasingConstraint(@NonNull List<Variable<T>> variables) {
+            return this.constraint(DecreasingConstraint.of(variables));
         }
 
         /**
