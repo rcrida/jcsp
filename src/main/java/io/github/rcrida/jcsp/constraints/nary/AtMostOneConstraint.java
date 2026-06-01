@@ -2,8 +2,9 @@ package io.github.rcrida.jcsp.constraints.nary;
 
 import lombok.experimental.SuperBuilder;
 import lombok.val;
-import io.github.rcrida.jcsp.constraints.binary.BinaryAtMostOneConstraint;
+import io.github.rcrida.jcsp.constraints.LogicOperator;
 import io.github.rcrida.jcsp.constraints.binary.BinaryConstraint;
+import io.github.rcrida.jcsp.constraints.binary.BinaryLogicConstraint;
 import io.github.rcrida.jcsp.variables.Variable;
 import org.jspecify.annotations.NonNull;
 
@@ -38,8 +39,9 @@ public class AtMostOneConstraint extends UniformNaryConstraint<Boolean> {
         val binaryConstraints = new HashSet<BinaryConstraint<?, ?>>();
         for (int i = 0; i < variables.size(); i++) {
             for (int j = i + 1; j < variables.size(); j++) {
-                binaryConstraints.add(BinaryAtMostOneConstraint.of(
+                binaryConstraints.add(BinaryLogicConstraint.of(
                         (Variable<Boolean>) variables.get(i),
+                        LogicOperator.NAND,
                         (Variable<Boolean>) variables.get(j)));
             }
         }
