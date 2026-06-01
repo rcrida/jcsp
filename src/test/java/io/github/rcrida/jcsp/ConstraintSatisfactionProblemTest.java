@@ -210,6 +210,18 @@ public class ConstraintSatisfactionProblemTest {
     }
 
     @Test
+    void builder_binaryComparatorConstraint() {
+        Variable<Integer> a = VARIABLE_FACTORY.create("A");
+        Variable<Integer> b = VARIABLE_FACTORY.create("B");
+        val csp = ConstraintSatisfactionProblem.builder()
+                .variableDomain(a, IntRangeDomain.of(1, 5))
+                .variableDomain(b, IntRangeDomain.of(1, 5))
+                .comparatorConstraint(a, Operator.LEQ, b)
+                .build();
+        assertThat(csp.getConstraints()).hasSize(1);
+    }
+
+    @Test
     void builder_increasingConstraint() {
         Variable<Integer> a = VARIABLE_FACTORY.create("A");
         Variable<Integer> b = VARIABLE_FACTORY.create("B");

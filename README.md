@@ -67,6 +67,7 @@ builder.notEqualsConstraint(v1, v2)                         // v1 != v2
 builder.notEqualsChainConstraint(List.of(v1, v2, v3))       // v1 != v2, v2 != v3 (consecutive pairs)
 builder.offsetConstraint(v1, offset, Operator.EQ, v2)       // v1 + offset == v2  (also LT, GT, LEQ, GEQ, NEQ)
 builder.elementConstraint(index, result, array)             // result = array[index]  (1-based; MiniZinc table element)
+builder.comparatorConstraint(v1, Operator.LEQ, v2)          // v1 <= v2  (any Comparable type; also EQ, NEQ, LT, GT, GEQ)
 builder.biPredicateConstraint(v1, v2, biPredicate)          // biPredicate.test(v1, v2)
 ```
 

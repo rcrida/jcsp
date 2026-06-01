@@ -1,12 +1,18 @@
 package io.github.rcrida.jcsp.constraints.nary;
 
 import io.github.rcrida.jcsp.assignments.Assignment;
+import io.github.rcrida.jcsp.constraints.Operator;
+import io.github.rcrida.jcsp.constraints.binary.BinaryComparatorConstraint;
+import io.github.rcrida.jcsp.constraints.binary.BinaryConstraint;
 import io.github.rcrida.jcsp.variables.Variable;
 import lombok.EqualsAndHashCode;
 import lombok.experimental.SuperBuilder;
 import org.jspecify.annotations.NonNull;
 
+import java.util.HashSet;
 import java.util.List;
+import java.util.Optional;
+import java.util.Set;
 
 /**
  * An n-ary constraint that enforces a non-increasing order on a sequence of variables:
@@ -38,6 +44,14 @@ public class DecreasingConstraint<T extends Comparable<T>> extends NaryConstrain
                 return false;
         }
         return true;
+    }
+
+    @Override
+    public Optional<Set<BinaryConstraint<?, ?>>> getAsBinaryConstraints() {
+        var binaryConstraints = new HashSet<BinaryConstraint<?, ?>>();
+        for (int i = 0; i < orderedVariables.size() - 1; i++)
+            binaryConstraints.add(BinaryComparatorConstraint.of(orderedVariables.get(i), Operator.GEQ, orderedVariables.get(i + 1)));
+        return Optional.of(binaryConstraints);
     }
 
     @Override

@@ -11,6 +11,7 @@ import lombok.experimental.NonFinal;
 import lombok.val;
 import io.github.rcrida.jcsp.assignments.Assignment;
 import io.github.rcrida.jcsp.constraints.Constraint;
+import io.github.rcrida.jcsp.constraints.binary.BinaryComparatorConstraint;
 import io.github.rcrida.jcsp.constraints.binary.BinaryConstraint;
 import io.github.rcrida.jcsp.constraints.binary.BinaryElementConstraint;
 import io.github.rcrida.jcsp.constraints.binary.BinaryOffsetConstraint;
@@ -421,6 +422,20 @@ public class ConstraintSatisfactionProblem {
         public <N extends Number & Comparable<N>> ConstraintSatisfactionProblemBuilder comparatorConstraint(
                 @NonNull Variable<N> variable, @NonNull Operator operator, @NonNull N value) {
             return this.constraint(UnaryComparatorConstraint.of(variable, operator, value));
+        }
+
+        /**
+         * Create a binary constraint that compares two variables of the same type: {@code left <op> right}.
+         * Works with any {@link Comparable} type.
+         *
+         * @param left     the left variable
+         * @param operator the comparison operator (e.g. {@link Operator#LEQ}, {@link Operator#GT})
+         * @param right    the right variable
+         * @return the builder
+         */
+        public <T extends Comparable<T>> ConstraintSatisfactionProblemBuilder comparatorConstraint(
+                @NonNull Variable<T> left, @NonNull Operator operator, @NonNull Variable<T> right) {
+            return this.constraint(BinaryComparatorConstraint.of(left, operator, right));
         }
 
         /**

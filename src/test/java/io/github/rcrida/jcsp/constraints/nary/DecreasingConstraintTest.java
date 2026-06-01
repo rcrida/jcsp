@@ -79,6 +79,13 @@ public class DecreasingConstraintTest {
     }
 
     @Test
+    void getAsBinaryConstraints_returnsGeqPairs() {
+        var binary = constraint.getAsBinaryConstraints();
+        assertThat(binary).isPresent();
+        assertThat(binary.get()).hasSize(3); // one per consecutive pair
+    }
+
+    @Test
     void solver_nonIncreasingSequences() {
         // Count non-increasing (x1 >= x2 >= x3) sequences over domain {1, 2, 3}.
         // Symmetric to increasing: C(5,3) = 10.

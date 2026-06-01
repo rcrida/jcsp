@@ -79,6 +79,13 @@ public class IncreasingConstraintTest {
     }
 
     @Test
+    void getAsBinaryConstraints_returnsLeqPairs() {
+        var binary = constraint.getAsBinaryConstraints();
+        assertThat(binary).isPresent();
+        assertThat(binary.get()).hasSize(3); // one per consecutive pair
+    }
+
+    @Test
     void solver_nonDecreasingSequences() {
         // Count non-decreasing (v1 <= v2 <= v3) sequences over domain {1, 2, 3}.
         // Equivalent to combinations with repetition: C(3+3-1, 3) = C(5,3) = 10.
