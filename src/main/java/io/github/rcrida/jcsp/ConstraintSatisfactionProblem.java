@@ -12,6 +12,7 @@ import lombok.val;
 import io.github.rcrida.jcsp.assignments.Assignment;
 import io.github.rcrida.jcsp.constraints.Constraint;
 import io.github.rcrida.jcsp.constraints.binary.BinaryConstraint;
+import io.github.rcrida.jcsp.constraints.binary.BinaryElementConstraint;
 import io.github.rcrida.jcsp.constraints.binary.BinaryOffsetConstraint;
 import io.github.rcrida.jcsp.constraints.binary.BinaryPredicateConstraint;
 import io.github.rcrida.jcsp.constraints.binary.BinaryEqualsConstraint;
@@ -532,6 +533,20 @@ public class ConstraintSatisfactionProblem {
          */
         public <N extends Number> ConstraintSatisfactionProblemBuilder offsetConstraint(@NonNull Variable<N> left, @NonNull N offset, @NonNull Operator operator, @NonNull Variable<N> right) {
             return this.constraint(BinaryOffsetConstraint.of(left, offset, operator, right));
+        }
+
+        /**
+         * Create a binary array-element constraint: {@code result = array[index]}.
+         * The index variable is 1-based. Out-of-bounds indices violate the constraint.
+         * Equivalent to MiniZinc's {@code element(index, array, result)} constraint.
+         *
+         * @param index  variable holding the 1-based array index
+         * @param result variable constrained to equal {@code array[index]}
+         * @param array  fixed array of values
+         * @return the builder
+         */
+        public <T> ConstraintSatisfactionProblemBuilder elementConstraint(@NonNull Variable<Integer> index, @NonNull Variable<T> result, @NonNull List<T> array) {
+            return this.constraint(BinaryElementConstraint.of(index, result, array));
         }
 
         /**

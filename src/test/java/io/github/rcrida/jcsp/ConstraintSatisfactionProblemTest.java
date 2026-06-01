@@ -210,6 +210,18 @@ public class ConstraintSatisfactionProblemTest {
     }
 
     @Test
+    void builder_elementConstraint() {
+        Variable<Integer> idx = VARIABLE_FACTORY.create("idx");
+        Variable<Integer> res = VARIABLE_FACTORY.create("res");
+        val csp = ConstraintSatisfactionProblem.builder()
+                .variableDomain(idx, IntRangeDomain.of(1, 3))
+                .variableDomain(res, IntRangeDomain.of(10, 30))
+                .elementConstraint(idx, res, List.of(10, 20, 30))
+                .build();
+        assertThat(csp.getConstraints()).hasSize(1);
+    }
+
+    @Test
     void builder_tuplesConstraint() {
         Variable<Integer> a = VARIABLE_FACTORY.create("A");
         Variable<Integer> b = VARIABLE_FACTORY.create("B");

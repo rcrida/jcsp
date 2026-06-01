@@ -9,7 +9,7 @@ A Java library implementing classic AI algorithms for solving Constraint Satisfa
 - **Multiple solving strategies**: backtracking search, tree solver, cutset conditioning, tree decomposition, and independent subproblem decomposition
 - **Optimization**: branch-and-bound search via `getSolution(csp, objective)` and `getSolutions(csp, objective)` — returns the optimal assignment or an improving stream of assignments
 - **Consistency preprocessing**: AC3 arc consistency and node consistency for domain pruning
-- **Flexible constraint types**: unary, binary (equals, not-equals, offset, predicate, tuples), and n-ary (AllDiff, AtMostOne, AtLeastN, AtMostN, ExactlyOne, predicate)
+- **Flexible constraint types**: unary, binary (equals, not-equals, offset, element, predicate, tuples), and n-ary (AllDiff, AtMostOne, AtLeastN, AtMostN, ExactlyOne, Sum, Count, Tuples, predicate)
 - **Boolean domain**: `BooleanDomain` for modelling binary assignment problems (e.g. timetabling as a 0-1 matrix)
 - **Functional style**: immutable value objects, composable solver decorators, and a lazy `Stream<Assignment>` API throughout
 - **Heuristics**: MRV variable selection, LCV value ordering, and Minimum Degree variable elimination for tree decomposition
@@ -66,20 +66,22 @@ builder.equalsConstraint(v1, v2)                            // v1 == v2
 builder.notEqualsConstraint(v1, v2)                         // v1 != v2
 builder.notEqualsChainConstraint(List.of(v1, v2, v3))       // v1 != v2, v2 != v3 (consecutive pairs)
 builder.offsetConstraint(v1, offset, Operator.EQ, v2)       // v1 + offset == v2  (also LT, GT, LEQ, GEQ, NEQ)
+builder.elementConstraint(index, result, array)             // result = array[index]  (1-based; MiniZinc table element)
 builder.biPredicateConstraint(v1, v2, biPredicate)          // biPredicate.test(v1, v2)
 ```
 
 **N-ary**
 ```java
-builder.sumConstraint(Set.of(v1, v2, v3), Operator.EQ, 10)         // v1 + v2 + v3 == 10  (also LEQ, GEQ, etc.)
-builder.countConstraint(Set.of(v1, v2, v3), value, Operator.EQ, 2) // count of variables == value equals 2
-builder.allDiffConstraint(Set.of(v1, v2, v3))                      // all different
-builder.atMostOneConstraint(Set.of(b1, b2, b3))             // at most one boolean is true  (AC3 decomposition)
-builder.atMostNConstraint(Set.of(b1, b2, b3), n)            // at most n booleans are true
-builder.atLeastNConstraint(Set.of(b1, b2, b3), n)           // at least n booleans are true  (prefer for local search)
-builder.atLeastNConstraintWithCounting(Set.of(b1, b2, b3), n) // at least n booleans are true via carry-chain  (prefer for backtracking)
-builder.exactlyOneConstraint(Set.of(b1, b2, b3))            // exactly one boolean is true
-builder.predicateConstraint(Set.of(v1, v2, v3), predicate)  // predicate.test(assignment) over a set of variables
+builder.sumConstraint(Set.of(v1, v2, v3), Operator.EQ, 10)          // v1 + v2 + v3 == 10  (also LEQ, GEQ, etc.)
+builder.countConstraint(Set.of(v1, v2, v3), value, Operator.EQ, 2)  // count of variables == value equals 2
+builder.tuplesConstraint(Set.of(Assignment.of(...), ...))           // (v1, v2, ...) must match one of the allowed assignments
+builder.allDiffConstraint(Set.of(v1, v2, v3))                       // all different
+builder.atMostOneConstraint(Set.of(b1, b2, b3))                     // at most one boolean is true  (AC3 decomposition)
+builder.atMostNConstraint(Set.of(b1, b2, b3), n)                    // at most n booleans are true
+builder.atLeastNConstraint(Set.of(b1, b2, b3), n)                   // at least n booleans are true  (prefer for local search)
+builder.atLeastNConstraintWithCounting(Set.of(b1, b2, b3), n)       // at least n booleans are true via carry-chain  (prefer for backtracking)
+builder.exactlyOneConstraint(Set.of(b1, b2, b3))                    // exactly one boolean is true
+builder.predicateConstraint(Set.of(v1, v2, v3), predicate)          // predicate.test(assignment) over a set of variables
 ```
 
 **Reification**
