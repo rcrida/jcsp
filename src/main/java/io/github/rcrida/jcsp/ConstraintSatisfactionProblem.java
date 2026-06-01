@@ -12,6 +12,8 @@ import lombok.val;
 import io.github.rcrida.jcsp.assignments.Assignment;
 import io.github.rcrida.jcsp.constraints.Constraint;
 import io.github.rcrida.jcsp.constraints.binary.BinaryComparatorConstraint;
+import io.github.rcrida.jcsp.constraints.binary.BinaryLogicConstraint;
+import io.github.rcrida.jcsp.constraints.LogicOperator;
 import io.github.rcrida.jcsp.constraints.binary.BinaryConstraint;
 import io.github.rcrida.jcsp.constraints.binary.BinaryElementConstraint;
 import io.github.rcrida.jcsp.constraints.binary.BinaryOffsetConstraint;
@@ -459,6 +461,22 @@ public class ConstraintSatisfactionProblem {
          */
         public ConstraintSatisfactionProblemBuilder atMostOneConstraint(@NonNull Set<Variable<Boolean>> variables) {
             return this.constraint(AtMostOneConstraint.builder().variables(variables).build());
+        }
+
+        /**
+         * Create a binary boolean connective constraint: {@code left <op> right}, where
+         * {@code op} is one of {@link LogicOperator}: AND, OR, XOR, NAND, NOR, XNOR.
+         * Suitable for use with {@link io.github.rcrida.jcsp.domains.BooleanDomain}.
+         *
+         * @param left     the left boolean variable
+         * @param operator the boolean connective to apply
+         * @param right    the right boolean variable
+         * @return the builder
+         */
+        public ConstraintSatisfactionProblemBuilder logicConstraint(@NonNull Variable<Boolean> left,
+                                                                    @NonNull LogicOperator operator,
+                                                                    @NonNull Variable<Boolean> right) {
+            return this.constraint(BinaryLogicConstraint.of(left, operator, right));
         }
 
         /**

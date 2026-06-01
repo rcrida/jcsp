@@ -222,6 +222,18 @@ public class ConstraintSatisfactionProblemTest {
     }
 
     @Test
+    void builder_logicConstraint() {
+        Variable<Boolean> a = VARIABLE_FACTORY.create("A");
+        Variable<Boolean> b = VARIABLE_FACTORY.create("B");
+        val csp = ConstraintSatisfactionProblem.builder()
+                .variableDomain(a, io.github.rcrida.jcsp.domains.BooleanDomain.INSTANCE)
+                .variableDomain(b, io.github.rcrida.jcsp.domains.BooleanDomain.INSTANCE)
+                .logicConstraint(a, io.github.rcrida.jcsp.constraints.LogicOperator.OR, b)
+                .build();
+        assertThat(csp.getConstraints()).hasSize(1);
+    }
+
+    @Test
     void builder_binaryComparatorConstraint() {
         Variable<Integer> a = VARIABLE_FACTORY.create("A");
         Variable<Integer> b = VARIABLE_FACTORY.create("B");
