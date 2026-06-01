@@ -1,6 +1,7 @@
 package io.github.rcrida.jcsp;
 
 import lombok.val;
+import io.github.rcrida.jcsp.assignments.Assignment;
 import io.github.rcrida.jcsp.constraints.binary.BinaryOffsetConstraint;
 import io.github.rcrida.jcsp.constraints.Operator;
 import io.github.rcrida.jcsp.constraints.unary.UnaryValueConstraint;
@@ -204,6 +205,20 @@ public class ConstraintSatisfactionProblemTest {
                 .variableDomain(a, IntRangeDomain.of(0, 3))
                 .variableDomain(b, IntRangeDomain.of(0, 3))
                 .countConstraint(Set.of(a, b), 1, Operator.EQ, 1)
+                .build();
+        assertThat(csp.getConstraints()).hasSize(1);
+    }
+
+    @Test
+    void builder_tuplesConstraint() {
+        Variable<Integer> a = VARIABLE_FACTORY.create("A");
+        Variable<Integer> b = VARIABLE_FACTORY.create("B");
+        val csp = ConstraintSatisfactionProblem.builder()
+                .variableDomain(a, IntRangeDomain.of(0, 3))
+                .variableDomain(b, IntRangeDomain.of(0, 3))
+                .tuplesConstraint(Set.of(
+                        Assignment.of(Map.of(a, 1, b, 2)),
+                        Assignment.of(Map.of(a, 2, b, 1))))
                 .build();
         assertThat(csp.getConstraints()).hasSize(1);
     }

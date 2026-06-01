@@ -21,6 +21,7 @@ import io.github.rcrida.jcsp.constraints.nary.AllDiffConstraint;
 import io.github.rcrida.jcsp.constraints.nary.AtLeastNConstraint;
 import io.github.rcrida.jcsp.constraints.nary.AtMostNConstraint;
 import io.github.rcrida.jcsp.constraints.nary.CountConstraint;
+import io.github.rcrida.jcsp.constraints.nary.NaryTuplesConstraint;
 import io.github.rcrida.jcsp.constraints.nary.SumConstraint;
 import io.github.rcrida.jcsp.constraints.nary.AtMostOneConstraint;
 import io.github.rcrida.jcsp.constraints.nary.ExactlyOneConstraint;
@@ -558,6 +559,19 @@ public class ConstraintSatisfactionProblem {
          */
         public <T> ConstraintSatisfactionProblemBuilder countConstraint(@NonNull Set<Variable<T>> variables, @NonNull T value, @NonNull Operator operator, int n) {
             return this.constraint(CountConstraint.of(variables, value, operator, n));
+        }
+
+        /**
+         * Create a constraint defined by a set of permitted assignments: the combined values
+         * of the constrained variables must match one of the allowed tuples.
+         * All tuples must contain exactly the same variable set.
+         * Equivalent to MiniZinc's {@code table(x, t)} constraint.
+         *
+         * @param tuples the allowed assignments; all must share the same variable set
+         * @return the builder
+         */
+        public ConstraintSatisfactionProblemBuilder tuplesConstraint(@NonNull Set<Assignment> tuples) {
+            return this.constraint(NaryTuplesConstraint.of(tuples));
         }
 
         /**
