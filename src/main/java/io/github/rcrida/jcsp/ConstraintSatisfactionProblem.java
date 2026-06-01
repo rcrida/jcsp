@@ -25,6 +25,7 @@ import io.github.rcrida.jcsp.constraints.nary.AtMostNConstraint;
 import io.github.rcrida.jcsp.constraints.nary.CountConstraint;
 import io.github.rcrida.jcsp.constraints.nary.DecreasingConstraint;
 import io.github.rcrida.jcsp.constraints.nary.IncreasingConstraint;
+import io.github.rcrida.jcsp.constraints.nary.LinearConstraint;
 import io.github.rcrida.jcsp.constraints.nary.NaryTuplesConstraint;
 import io.github.rcrida.jcsp.constraints.nary.SumConstraint;
 import io.github.rcrida.jcsp.constraints.nary.AtMostOneConstraint;
@@ -606,6 +607,20 @@ public class ConstraintSatisfactionProblem {
          */
         public <N extends Number> ConstraintSatisfactionProblemBuilder sumConstraint(@NonNull Set<Variable<N>> variables, @NonNull Operator operator, @NonNull N bound) {
             return this.constraint(SumConstraint.of(variables, operator, bound));
+        }
+
+        /**
+         * Create a weighted-sum (linear) constraint: {@code a1*v1 + a2*v2 + ... <op> bound}.
+         * Coefficients and variables are supplied as a map. Equivalent to MiniZinc's
+         * {@code linear(coefficients, variables, bound)} constraint.
+         *
+         * @param coefficients map from variable to its numeric coefficient
+         * @param operator     the comparison operator (e.g. {@link Operator#EQ}, {@link Operator#LEQ})
+         * @param bound        the value to compare the weighted sum against
+         * @return the builder
+         */
+        public <N extends Number> ConstraintSatisfactionProblemBuilder linearConstraint(@NonNull Map<Variable<N>, N> coefficients, @NonNull Operator operator, @NonNull N bound) {
+            return this.constraint(LinearConstraint.of(coefficients, operator, bound));
         }
 
         /**
