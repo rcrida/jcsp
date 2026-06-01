@@ -71,6 +71,7 @@ builder.biPredicateConstraint(v1, v2, biPredicate)          // biPredicate.test(
 
 **N-ary**
 ```java
+builder.sumConstraint(Set.of(v1, v2, v3), Operator.EQ, 10)  // v1 + v2 + v3 == 10  (also LEQ, GEQ, etc.)
 builder.allDiffConstraint(Set.of(v1, v2, v3))               // all different
 builder.atMostOneConstraint(Set.of(b1, b2, b3))             // at most one boolean is true  (AC3 decomposition)
 builder.atMostNConstraint(Set.of(b1, b2, b3), n)            // at most n booleans are true

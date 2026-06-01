@@ -20,8 +20,7 @@ import java.util.Set;
 @NonFinal
 @SuperBuilder
 public abstract class NaryConstraint implements Constraint {
-    @Singular
-    Set<Variable<?>> variables;
+    @Singular Set<Variable<?>> variables;
 
     public abstract String getRelation();
 

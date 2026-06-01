@@ -3,6 +3,7 @@ package io.github.rcrida.jcsp.solver;
 import lombok.val;
 import io.github.rcrida.jcsp.ConstraintSatisfactionProblem;
 import io.github.rcrida.jcsp.assignments.Assignment;
+import io.github.rcrida.jcsp.constraints.Operator;
 import io.github.rcrida.jcsp.domains.IntRangeDomain;
 import io.github.rcrida.jcsp.variables.Variable;
 import org.junit.jupiter.api.Test;
@@ -45,34 +46,20 @@ public class MagicSquareTest {
         builder.allDiffConstraint(allCells);
 
         // Row sums
-        for (int r = 0; r < N; r++) {
-            val r0 = cells[r][0]; val r1 = cells[r][1]; val r2 = cells[r][2];
-            builder.predicateConstraint(Set.of(r0, r1, r2),
-                    a -> sum(a, r0, r1, r2) == MAGIC);
-        }
+        for (int r = 0; r < N; r++)
+            builder.sumConstraint(Set.of(cells[r][0], cells[r][1], cells[r][2]), Operator.EQ, MAGIC);
 
         // Column sums
-        for (int c = 0; c < N; c++) {
-            val c0 = cells[0][c]; val c1 = cells[1][c]; val c2 = cells[2][c];
-            builder.predicateConstraint(Set.of(c0, c1, c2),
-                    a -> sum(a, c0, c1, c2) == MAGIC);
-        }
+        for (int c = 0; c < N; c++)
+            builder.sumConstraint(Set.of(cells[0][c], cells[1][c], cells[2][c]), Operator.EQ, MAGIC);
 
         // Main diagonal (top-left to bottom-right)
-        val d0 = cells[0][0]; val d1 = cells[1][1]; val d2 = cells[2][2];
-        builder.predicateConstraint(Set.of(d0, d1, d2), a -> sum(a, d0, d1, d2) == MAGIC);
+        builder.sumConstraint(Set.of(cells[0][0], cells[1][1], cells[2][2]), Operator.EQ, MAGIC);
 
         // Anti-diagonal (top-right to bottom-left)
-        val a0 = cells[0][2]; val a1 = cells[1][1]; val a2 = cells[2][0];
-        builder.predicateConstraint(Set.of(a0, a1, a2), a -> sum(a, a0, a1, a2) == MAGIC);
+        builder.sumConstraint(Set.of(cells[0][2], cells[1][1], cells[2][0]), Operator.EQ, MAGIC);
 
         return new MagicSquareProblem(builder.build(), cells);
-    }
-
-    static int sum(Assignment a, Variable<Integer> v0, Variable<Integer> v1, Variable<Integer> v2) {
-        return a.getValue(v0).orElseThrow()
-             + a.getValue(v1).orElseThrow()
-             + a.getValue(v2).orElseThrow();
     }
 
     @Test

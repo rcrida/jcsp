@@ -21,8 +21,8 @@ import java.util.Set;
 @SuperBuilder
 @EqualsAndHashCode(callSuper = true)
 public class ImplicationConstraint extends NaryConstraint {
-    @NonNull Variable<Boolean> indicator;
-    @NonNull Constraint body;
+    @NonNull private final Variable<Boolean> indicator;
+    @NonNull private final Constraint body;
 
     public static ImplicationConstraint of(@NonNull Variable<Boolean> indicator, @NonNull Constraint body) {
         Set<Variable<?>> vars = new HashSet<>(body.getVariables());

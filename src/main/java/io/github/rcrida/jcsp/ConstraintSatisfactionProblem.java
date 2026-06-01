@@ -20,6 +20,7 @@ import io.github.rcrida.jcsp.constraints.Operator;
 import io.github.rcrida.jcsp.constraints.nary.AllDiffConstraint;
 import io.github.rcrida.jcsp.constraints.nary.AtLeastNConstraint;
 import io.github.rcrida.jcsp.constraints.nary.AtMostNConstraint;
+import io.github.rcrida.jcsp.constraints.nary.SumConstraint;
 import io.github.rcrida.jcsp.constraints.nary.AtMostOneConstraint;
 import io.github.rcrida.jcsp.constraints.nary.ExactlyOneConstraint;
 import io.github.rcrida.jcsp.constraints.nary.ImplicationConstraint;
@@ -529,6 +530,19 @@ public class ConstraintSatisfactionProblem {
          */
         public <N extends Number> ConstraintSatisfactionProblemBuilder offsetConstraint(@NonNull Variable<N> left, @NonNull N offset, @NonNull Operator operator, @NonNull Variable<N> right) {
             return this.constraint(BinaryOffsetConstraint.of(left, offset, operator, right));
+        }
+
+        /**
+         * Create a constraint that compares the sum of a set of numeric variables to a fixed bound:
+         * {@code v1 + v2 + ... + vn <op> bound}.
+         *
+         * @param variables the numeric variables to sum
+         * @param operator  the comparison operator (e.g. {@link Operator#EQ}, {@link Operator#LEQ})
+         * @param bound     the value to compare the sum against
+         * @return the builder
+         */
+        public <N extends Number> ConstraintSatisfactionProblemBuilder sumConstraint(@NonNull Set<Variable<N>> variables, @NonNull Operator operator, @NonNull N bound) {
+            return this.constraint(SumConstraint.of(variables, operator, bound));
         }
 
         /**
