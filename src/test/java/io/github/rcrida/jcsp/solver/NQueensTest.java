@@ -12,6 +12,7 @@ import org.junit.jupiter.api.Test;
 
 import java.math.BigInteger;
 import java.util.Arrays;
+import java.util.List;
 import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -71,6 +72,27 @@ public class NQueensTest {
         val csp = nQueens();
         val solver = Solver.Factory.INSTANCE.createSolver();
         assertThat(solver.getSolutions(csp)).hasSize(92);
+    }
+
+    @Test
+    void solutions_symmetryBreaking() {
+        // The 92 solutions come in left-right mirror pairs. Requiring the first queen's column
+        // to be less than the last queen's column (Q[0] < Q[7]) eliminates exactly one solution
+        // from each mirror pair, halving the count.  Since allDiff guarantees Q[0] != Q[7],
+        // increasing(Q[0], Q[7]) is equivalent to Q[0] < Q[7].
+        val cspBuilder = ConstraintSatisfactionProblem.builder();
+        val labels = new String[N];
+        for (int i = 0; i < N; i++) labels[i] = String.valueOf(i + 1);
+        VARIABLES = cspBuilder.create1dVariableArray(labels, "Q", DOMAIN);
+        cspBuilder.allDiffConstraint(Set.of(VARIABLES));
+        for (int i = 0; i < N; i++)
+            for (int j = i + 1; j < N; j++)
+                cspBuilder.offsetConstraint(VARIABLES[i], j - i, Operator.NEQ, VARIABLES[j]);
+        for (int i = 0; i < N; i++)
+            for (int j = 0; j < i; j++)
+                cspBuilder.offsetConstraint(VARIABLES[i], i - j, Operator.NEQ, VARIABLES[j]);
+        cspBuilder.increasingConstraint(List.of(VARIABLES[0], VARIABLES[N - 1]));
+        assertThat(Solver.Factory.INSTANCE.createSolver().getSolutions(cspBuilder.build())).hasSize(46);
     }
 
     @Test
