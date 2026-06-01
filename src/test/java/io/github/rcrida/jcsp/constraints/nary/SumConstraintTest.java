@@ -8,8 +8,10 @@ import org.junit.jupiter.api.Test;
 
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 public class SumConstraintTest {
     static final Variable.Factory F = Variable.Factory.INSTANCE;
@@ -89,5 +91,59 @@ public class SumConstraintTest {
     @Test
     void of_createsEquivalentConstraint() {
         assertThat(SumConstraint.of(Set.of(v1, v2, v3), Operator.EQ, 10)).isEqualTo(eq10);
+    }
+
+    @Test
+    void sum_byte() {
+        Variable<Byte> a = F.create("a"), b = F.create("b");
+        var c = SumConstraint.of(Set.of(a, b), Operator.EQ, (byte) 3);
+        assertThat(c.isSatisfiedBy(Assignment.of(Map.of(a, (byte) 1, b, (byte) 2)))).isTrue();
+        assertThat(c.isSatisfiedBy(Assignment.of(Map.of(a, (byte) 2, b, (byte) 2)))).isFalse();
+    }
+
+    @Test
+    void sum_short() {
+        Variable<Short> a = F.create("a"), b = F.create("b");
+        var c = SumConstraint.of(Set.of(a, b), Operator.EQ, (short) 30);
+        assertThat(c.isSatisfiedBy(Assignment.of(Map.of(a, (short) 10, b, (short) 20)))).isTrue();
+        assertThat(c.isSatisfiedBy(Assignment.of(Map.of(a, (short) 10, b, (short) 10)))).isFalse();
+    }
+
+    @Test
+    void sum_long() {
+        Variable<Long> a = F.create("a"), b = F.create("b");
+        var c = SumConstraint.of(Set.of(a, b), Operator.EQ, 3L);
+        assertThat(c.isSatisfiedBy(Assignment.of(Map.of(a, 1L, b, 2L)))).isTrue();
+        assertThat(c.isSatisfiedBy(Assignment.of(Map.of(a, 2L, b, 2L)))).isFalse();
+    }
+
+    @Test
+    void sum_float() {
+        Variable<Float> a = F.create("a"), b = F.create("b");
+        var c = SumConstraint.of(Set.of(a, b), Operator.EQ, 3.0f);
+        assertThat(c.isSatisfiedBy(Assignment.of(Map.of(a, 1.5f, b, 1.5f)))).isTrue();
+        assertThat(c.isSatisfiedBy(Assignment.of(Map.of(a, 1.0f, b, 1.0f)))).isFalse();
+    }
+
+    @Test
+    void sum_double() {
+        Variable<Double> a = F.create("a"), b = F.create("b");
+        var c = SumConstraint.of(Set.of(a, b), Operator.EQ, 3.0);
+        assertThat(c.isSatisfiedBy(Assignment.of(Map.of(a, 1.5, b, 1.5)))).isTrue();
+        assertThat(c.isSatisfiedBy(Assignment.of(Map.of(a, 1.0, b, 1.0)))).isFalse();
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void sum_unsupportedBoundType() {
+        Variable<Number> a = F.create("a"), b = F.create("b");
+        var c = SumConstraint.<Number>builder()
+                .variables(Set.of(a, b))
+                .bound(new AtomicInteger(3))
+                .operator(Operator.EQ)
+                .build();
+        assertThatThrownBy(() -> c.isSatisfiedBy(Assignment.of(Map.of(a, 1, b, 2))))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("Unsupported bound type");
     }
 }

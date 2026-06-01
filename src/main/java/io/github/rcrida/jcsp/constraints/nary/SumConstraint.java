@@ -37,8 +37,24 @@ public class SumConstraint<N extends Number> extends UniformNaryConstraint<N> {
     @Override
     protected boolean isSatisfiedByValues(@NonNull Collection<N> values) {
         if (values.size() < getVariables().size()) return true;
-        double sum = values.stream().mapToDouble(Number::doubleValue).sum();
-        return operator.compare(sum, bound.doubleValue());
+        return operator.compare(sum(values), bound);
+    }
+
+    @SuppressWarnings("unchecked")
+    private N sum(Collection<N> values) {
+        return switch (bound) {
+            case Byte b    -> (N) (Number)(byte)  values.stream().mapToInt(Number::intValue).sum();
+            case Short s   -> (N) (Number)(short) values.stream().mapToInt(Number::intValue).sum();
+            case Integer i -> (N) (Number)        values.stream().mapToInt(Number::intValue).sum();
+            case Long l    -> (N) (Number)        values.stream().mapToLong(Number::longValue).sum();
+            case Float f -> {
+                float s = 0f;
+                for (N v : values) s += v.floatValue();
+                yield (N) (Number) s;
+            }
+            case Double d  -> (N) (Number)        values.stream().mapToDouble(Number::doubleValue).sum();
+            default -> throw new IllegalStateException("Unsupported bound type: " + bound.getClass());
+        };
     }
 
     @Override
