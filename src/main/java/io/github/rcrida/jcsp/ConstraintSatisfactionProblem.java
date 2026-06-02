@@ -24,6 +24,7 @@ import io.github.rcrida.jcsp.constraints.Operator;
 import io.github.rcrida.jcsp.constraints.nary.AllDiffConstraint;
 import io.github.rcrida.jcsp.constraints.nary.AtLeastNConstraint;
 import io.github.rcrida.jcsp.constraints.nary.AtMostNConstraint;
+import io.github.rcrida.jcsp.constraints.nary.CumulativeConstraint;
 import io.github.rcrida.jcsp.constraints.nary.CountConstraint;
 import io.github.rcrida.jcsp.constraints.nary.GlobalCardinalityConstraint;
 import io.github.rcrida.jcsp.constraints.nary.LexConstraint;
@@ -463,6 +464,26 @@ public class ConstraintSatisfactionProblem {
          */
         public ConstraintSatisfactionProblemBuilder atMostOneConstraint(@NonNull Set<Variable<Boolean>> variables) {
             return this.constraint(AtMostOneConstraint.builder().variables(variables).build());
+        }
+
+        /**
+         * Create a cumulative scheduling constraint: at every point in time, the sum of resources
+         * consumed by concurrently executing tasks must not exceed {@code limit}.
+         * Task {@code i} executes during {@code [starts[i], starts[i] + durations[i])}.
+         * Equivalent to MiniZinc's {@code cumulative(start, duration, resource, limit)}.
+         *
+         * @param starts    start-time variables (one per task)
+         * @param durations fixed task durations
+         * @param resources fixed resource requirements per task
+         * @param limit     maximum total resource usage at any instant
+         * @return the builder
+         */
+        public ConstraintSatisfactionProblemBuilder cumulativeConstraint(
+                @NonNull List<Variable<Integer>> starts,
+                @NonNull List<Integer> durations,
+                @NonNull List<Integer> resources,
+                int limit) {
+            return this.constraint(CumulativeConstraint.of(starts, durations, resources, limit));
         }
 
         /**

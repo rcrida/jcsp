@@ -222,6 +222,18 @@ public class ConstraintSatisfactionProblemTest {
     }
 
     @Test
+    void builder_cumulativeConstraint() {
+        Variable<Integer> s1 = VARIABLE_FACTORY.create("s1");
+        Variable<Integer> s2 = VARIABLE_FACTORY.create("s2");
+        val csp = ConstraintSatisfactionProblem.builder()
+                .variableDomain(s1, IntRangeDomain.of(0, 5))
+                .variableDomain(s2, IntRangeDomain.of(0, 5))
+                .cumulativeConstraint(List.of(s1, s2), List.of(2, 2), List.of(1, 1), 1)
+                .build();
+        assertThat(csp.getConstraints()).hasSize(1);
+    }
+
+    @Test
     void builder_lexConstraint() {
         Variable<Integer> a = VARIABLE_FACTORY.create("A");
         Variable<Integer> b = VARIABLE_FACTORY.create("B");
