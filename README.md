@@ -9,7 +9,7 @@ A Java library implementing classic AI algorithms for solving Constraint Satisfa
 - **Multiple solving strategies**: backtracking search, tree solver, cutset conditioning, tree decomposition, and independent subproblem decomposition
 - **Optimization**: branch-and-bound search via `getSolution(csp, objective)` and `getSolutions(csp, objective)` — returns the optimal assignment or an improving stream of assignments
 - **Consistency preprocessing**: AC3 arc consistency and node consistency for domain pruning
-- **Flexible constraint types**: unary, binary (equals, not-equals, offset, comparator, logic, element, predicate, tuples), and n-ary (AllDiff, AtMostOne, AtLeastN, AtMostN, ExactlyOne, Sum, Linear, Count, GlobalCardinality, Tuples, Increasing, Decreasing, predicate)
+- **Flexible constraint types**: unary, binary (equals, not-equals, offset, comparator, logic, element, predicate, tuples), and n-ary (AllDiff, AtMostOne, AtLeastN, AtMostN, ExactlyOne, Sum, Linear, Count, GlobalCardinality, Tuples, Increasing, Decreasing, Lex, predicate)
 - **Boolean domain**: `BooleanDomain` for modelling binary assignment problems (e.g. timetabling as a 0-1 matrix)
 - **Functional style**: immutable value objects, composable solver decorators, and a lazy `Stream<Assignment>` API throughout
 - **Heuristics**: MRV variable selection, LCV value ordering, and Minimum Degree variable elimination for tree decomposition
@@ -80,6 +80,7 @@ builder.globalCardinalityConstraint(Set.of(v1, v2, v3), Map.of(a, 2, b, 1))  // 
 builder.tuplesConstraint(Set.of(Assignment.of(...), ...))           // variable values must match one of the allowed assignments (order-independent)
 builder.increasingConstraint(List.of(v1, v2, v3))                   // v1 <= v2 <= v3  (MiniZinc increasing)
 builder.decreasingConstraint(List.of(v1, v2, v3))                   // v1 >= v2 >= v3  (MiniZinc decreasing)
+builder.lexConstraint(List.of(a1,a2), Operator.LEQ, List.of(b1,b2)) // [a1,a2] lex<= [b1,b2]  (MiniZinc lex_lesseq)
 builder.allDiffConstraint(Set.of(v1, v2, v3))                       // all different
 builder.atMostOneConstraint(Set.of(b1, b2, b3))                     // at most one boolean is true  (AC3 decomposition)
 builder.atMostNConstraint(Set.of(b1, b2, b3), n)                    // at most n booleans are true

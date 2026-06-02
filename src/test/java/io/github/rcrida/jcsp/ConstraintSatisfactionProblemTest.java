@@ -222,6 +222,20 @@ public class ConstraintSatisfactionProblemTest {
     }
 
     @Test
+    void builder_lexConstraint() {
+        Variable<Integer> a = VARIABLE_FACTORY.create("A");
+        Variable<Integer> b = VARIABLE_FACTORY.create("B");
+        Variable<Integer> c = VARIABLE_FACTORY.create("C");
+        Variable<Integer> d = VARIABLE_FACTORY.create("D");
+        val csp = ConstraintSatisfactionProblem.builder()
+                .variableDomain(a, IntRangeDomain.of(1, 3)).variableDomain(b, IntRangeDomain.of(1, 3))
+                .variableDomain(c, IntRangeDomain.of(1, 3)).variableDomain(d, IntRangeDomain.of(1, 3))
+                .lexConstraint(List.of(a, b), Operator.LEQ, List.of(c, d))
+                .build();
+        assertThat(csp.getConstraints()).hasSize(1);
+    }
+
+    @Test
     void builder_globalCardinalityConstraint() {
         Variable<Integer> a = VARIABLE_FACTORY.create("A");
         Variable<Integer> b = VARIABLE_FACTORY.create("B");

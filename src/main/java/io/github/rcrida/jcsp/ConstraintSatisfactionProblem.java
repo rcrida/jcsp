@@ -26,6 +26,7 @@ import io.github.rcrida.jcsp.constraints.nary.AtLeastNConstraint;
 import io.github.rcrida.jcsp.constraints.nary.AtMostNConstraint;
 import io.github.rcrida.jcsp.constraints.nary.CountConstraint;
 import io.github.rcrida.jcsp.constraints.nary.GlobalCardinalityConstraint;
+import io.github.rcrida.jcsp.constraints.nary.LexConstraint;
 import io.github.rcrida.jcsp.constraints.nary.DecreasingConstraint;
 import io.github.rcrida.jcsp.constraints.nary.IncreasingConstraint;
 import io.github.rcrida.jcsp.constraints.nary.LinearConstraint;
@@ -567,6 +568,22 @@ public class ConstraintSatisfactionProblem {
          */
         public <T extends Comparable<T>> ConstraintSatisfactionProblemBuilder decreasingConstraint(@NonNull List<Variable<T>> variables) {
             return this.constraint(DecreasingConstraint.of(variables));
+        }
+
+        /**
+         * Constrain two equal-length sequences of variables to be lexicographically ordered:
+         * {@code left <op> right}. Use {@link Operator#LT} for strict lex-less,
+         * {@link Operator#LEQ} for lex-less-or-equal. Equivalent to MiniZinc's
+         * {@code lex_less(left, right)} and {@code lex_lesseq(left, right)}.
+         *
+         * @param left     the left sequence
+         * @param operator the comparison operator (typically {@link Operator#LT} or {@link Operator#LEQ})
+         * @param right    the right sequence; must be the same length as left
+         * @return the builder
+         */
+        public <T extends Comparable<T>> ConstraintSatisfactionProblemBuilder lexConstraint(
+                @NonNull List<Variable<T>> left, @NonNull Operator operator, @NonNull List<Variable<T>> right) {
+            return this.constraint(LexConstraint.of(left, operator, right));
         }
 
         /**
