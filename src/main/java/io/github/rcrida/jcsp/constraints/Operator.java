@@ -18,6 +18,7 @@ package io.github.rcrida.jcsp.constraints;
  * using the natural ordering defined by the {@link Comparable#compareTo(Object)} method.
  * For equality-based operators (EQ and NEQ), comparisons rely on the {@link Object#equals(Object)} method.
  */
+@SuppressWarnings("unchecked")
 public enum Operator {
     EQ("==") {
         @Override
@@ -34,25 +35,25 @@ public enum Operator {
     LT("<") {
         @Override
         public boolean compare(Object left, Object right) {
-            return ((Comparable) left).compareTo(right) < 0;
+            return ((Comparable<Object>) left).compareTo(right) < 0;
         }
     },
     GT(">") {
         @Override
         public boolean compare(Object left, Object right) {
-            return ((Comparable) left).compareTo(right) > 0;
+            return ((Comparable<Object>) left).compareTo(right) > 0;
         }
     },
     LEQ("<=") {
         @Override
         public boolean compare(Object left, Object right) {
-            return ((Comparable) left).compareTo(right) <= 0;
+            return ((Comparable<Object>) left).compareTo(right) <= 0;
         }
     },
     GEQ(">=") {
         @Override
         public boolean compare(Object left, Object right) {
-            return ((Comparable) left).compareTo(right) >= 0;
+            return ((Comparable<Object>) left).compareTo(right) >= 0;
         }
     };
 

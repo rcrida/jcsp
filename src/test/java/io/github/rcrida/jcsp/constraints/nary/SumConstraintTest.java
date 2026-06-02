@@ -233,7 +233,6 @@ public class SumConstraintTest {
     }
 
     @Test
-    @SuppressWarnings("unchecked")
     void sum_unsupportedBoundType() {
         Variable<Number> a = F.create("a"), b = F.create("b");
         var c = SumConstraint.<Number>builder()

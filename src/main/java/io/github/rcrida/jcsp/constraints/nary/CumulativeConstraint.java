@@ -80,7 +80,7 @@ public class CumulativeConstraint extends NaryConstraint implements Propagatable
      *         or {@link Optional#empty()} if the constraint is infeasible
      */
     @Override
-    @SuppressWarnings({"unchecked", "rawtypes"})
+    @SuppressWarnings({"unchecked"})
     public Optional<Map<Variable<?>, Domain<?>>> propagate(
             @NonNull Map<Variable<?>, Domain<?>> domains) {
         int n = starts.size();

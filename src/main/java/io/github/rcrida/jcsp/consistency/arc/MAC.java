@@ -32,7 +32,8 @@ public class MAC implements Inference {
      *         is successful and maintains consistency; otherwise, an empty {@code Optional}.
      */
     @Override
-    public Optional<ConstraintSatisfactionProblem> apply(ConstraintSatisfactionProblem problem, Variable variable, Assignment assignment) {
+    @SuppressWarnings("unchecked")
+    public Optional<ConstraintSatisfactionProblem> apply(ConstraintSatisfactionProblem problem, Variable<?> variable, Assignment assignment) {
         val value = assignment.getValue(variable).orElseThrow();
         val variableConstraints = problem.getAllBinaryConstraints().stream()
                 .flatMap(BinaryConstraint::getArcs)
@@ -41,11 +42,11 @@ public class MAC implements Inference {
                 .collect(Collectors.toSet());
         val queue = new ArrayDeque<>(variableConstraints);
         return AC3.INSTANCE.applyQueue(
-                problem.toBuilder().variableDomain(variable, new AssignedDomain(value)).build(),
+                problem.toBuilder().variableDomain((Variable<Object>) variable, new AssignedDomain(value)).build(),
                 queue);
     }
 
-    private static boolean isBinaryConstraintToX_i(Arc arc, Variable X_i) {
+    private static boolean isBinaryConstraintToX_i(Arc arc, Variable<?> X_i) {
         return arc.getTo().equals(X_i);
     }
 

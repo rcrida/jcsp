@@ -108,7 +108,6 @@ public class LinearConstraintTest {
     }
 
     @Test
-    @SuppressWarnings("unchecked")
     void weightedSum_unsupportedBoundType() {
         Variable<Number> a = F.create("a"), b = F.create("b");
         var c = LinearConstraint.<Number>builder()

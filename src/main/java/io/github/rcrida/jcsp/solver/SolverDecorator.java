@@ -8,7 +8,6 @@ import io.github.rcrida.jcsp.assignments.Assignment;
 import lombok.val;
 import org.jspecify.annotations.NonNull;
 
-import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Optional;
 import java.util.function.ToDoubleFunction;

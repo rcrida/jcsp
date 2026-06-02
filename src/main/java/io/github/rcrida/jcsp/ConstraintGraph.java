@@ -95,7 +95,6 @@ class ConstraintGraph {
         return Map.copyOf(result);
     }
 
-    @SuppressWarnings("unchecked")
     private static Set<BinaryConstraint<?, ?>> computeAllBinaryConstraints(Set<Constraint> constraints) {
         val binaryConstraints = constraints.stream()
                 .filter(c -> c instanceof BinaryConstraint)

@@ -5,7 +5,6 @@ import io.github.rcrida.jcsp.constraints.Operator;
 import io.github.rcrida.jcsp.domains.Domain;
 import io.github.rcrida.jcsp.variables.Variable;
 import lombok.EqualsAndHashCode;
-import lombok.Getter;
 import lombok.experimental.SuperBuilder;
 import org.jspecify.annotations.NonNull;
 
@@ -76,7 +75,7 @@ public class SumConstraint<N extends Number> extends UniformNaryConstraint<N> im
      *         or {@link Optional#empty()} if the constraint is provably infeasible
      */
     @Override
-    @SuppressWarnings({"unchecked", "rawtypes"})
+    @SuppressWarnings({"unchecked"})
     public Optional<Map<Variable<?>, Domain<?>>> propagate(@NonNull Map<Variable<?>, Domain<?>> domains) {
         if (!PROPAGATING_OPERATORS.contains(operator)) {
             return Optional.of(Map.of());

@@ -18,7 +18,7 @@ import java.util.Optional;
 public final class ConsistencyFixpoint {
     private ConsistencyFixpoint() {}
 
-    @SuppressWarnings({"unchecked", "rawtypes"})
+    @SuppressWarnings({"rawtypes"})
     public static Optional<ConstraintSatisfactionProblem> apply(
             ConstraintSatisfactionProblem csp,
             List<? extends Propagatable> constraints) {
