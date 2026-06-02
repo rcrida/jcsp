@@ -91,4 +91,22 @@ public class TreeDecomposerImplTest {
                 AssignmentVariableConsistencyConstraint.builder().left(treeVariable3).right(treeVariable4).cliqueVariable(V4).build()
         );
     }
+
+    @Test
+    void decompose_emptyCsp_returnsEmpty() {
+        assertThat(treeDecomposer.decompose(ConstraintSatisfactionProblem.builder().build(), 1024)).isEmpty();
+    }
+
+    @Test
+    void decompose_treeCsp_returnsEmpty() {
+        // A chain V0-V1-V2 is a tree — tree decomposition has no benefit and returns empty.
+        val csp = ConstraintSatisfactionProblem.builder()
+                .variableDomain(V0, DOMAIN)
+                .variableDomain(V1, DOMAIN)
+                .variableDomain(V2, DOMAIN)
+                .notEqualsConstraint(V0, V1)
+                .notEqualsConstraint(V1, V2)
+                .build();
+        assertThat(treeDecomposer.decompose(csp, 1024)).isEmpty();
+    }
 }

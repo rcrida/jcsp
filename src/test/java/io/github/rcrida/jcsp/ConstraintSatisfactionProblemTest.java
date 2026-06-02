@@ -64,6 +64,11 @@ public class ConstraintSatisfactionProblemTest {
     }
 
     @Test
+    void decomposeSubproblems_noVariables_returnsEmpty() {
+        assertThat(ConstraintSatisfactionProblem.builder().build().decomposeSubproblems()).isEmpty();
+    }
+
+    @Test
     void decomposeSubproblems() {
         val csp = AustraliaMapColouringTest.problem();
         val expected = Set.of(

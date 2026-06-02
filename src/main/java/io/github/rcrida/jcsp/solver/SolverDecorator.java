@@ -5,10 +5,14 @@ import lombok.experimental.NonFinal;
 import lombok.experimental.SuperBuilder;
 import io.github.rcrida.jcsp.ConstraintSatisfactionProblem;
 import io.github.rcrida.jcsp.assignments.Assignment;
+import lombok.val;
 import org.jspecify.annotations.NonNull;
 
+import java.util.LinkedHashMap;
+import java.util.Map;
 import java.util.Optional;
 import java.util.function.ToDoubleFunction;
+import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 /**
@@ -44,7 +48,7 @@ public abstract class SolverDecorator implements Solver {
     @Override
     public Stream<Assignment> getSolutions(@NonNull ConstraintSatisfactionProblem csp) {
         return preprocess(csp)
-                .map(inner::getSolutions)
+                .map(p -> allSingleton(p) ? forcedSolution(p) : inner.getSolutions(p))
                 .orElse(Stream.empty());
     }
 
@@ -52,7 +56,24 @@ public abstract class SolverDecorator implements Solver {
     public Stream<Assignment> getSolutions(@NonNull ConstraintSatisfactionProblem csp,
                                            @NonNull ToDoubleFunction<Assignment> objective) {
         return preprocess(csp)
-                .map(preprocessed -> inner.getSolutions(preprocessed, objective))
+                .map(p -> allSingleton(p) ? forcedSolution(p) : inner.getSolutions(p, objective))
                 .orElse(Stream.empty());
+    }
+
+    /** Returns true when every domain has exactly one value — the problem is fully determined. */
+    private static boolean allSingleton(ConstraintSatisfactionProblem csp) {
+        return csp.getVariableDomains().values().stream().allMatch(d -> d.size() == 1);
+    }
+
+    /**
+     * Extracts the forced assignment from singleton domains and validates it against all constraints.
+     * Returns a singleton stream when valid, empty otherwise.
+     */
+    private static Stream<Assignment> forcedSolution(ConstraintSatisfactionProblem csp) {
+        val values = csp.getVariableDomains().entrySet().stream()
+                .collect(Collectors.toMap(Map.Entry::getKey, e -> e.getValue().stream().findFirst().orElseThrow()));
+        Assignment a = Assignment.of(values);
+        boolean valid = csp.getConstraints().stream().allMatch(c -> c.isSatisfiedBy(a));
+        return valid ? Stream.of(a) : Stream.empty();
     }
 }
