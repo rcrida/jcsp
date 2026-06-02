@@ -9,7 +9,7 @@ A Java library implementing classic AI algorithms for solving Constraint Satisfa
 - **Multiple solving strategies**: backtracking search, tree solver, cutset conditioning, tree decomposition, and independent subproblem decomposition
 - **Optimization**: branch-and-bound search via `getSolution(csp, objective)` and `getSolutions(csp, objective)` — returns the optimal assignment or an improving stream of assignments
 - **Consistency preprocessing**: AC3 arc consistency and node consistency for domain pruning
-- **Flexible constraint types**: unary, binary (equals, not-equals, offset, comparator, logic, element, predicate, tuples), and n-ary (AllDiff, AtMostOne, AtLeastN, AtMostN, ExactlyOne, Sum, Linear, Count, Tuples, Increasing, Decreasing, predicate)
+- **Flexible constraint types**: unary, binary (equals, not-equals, offset, comparator, logic, element, predicate, tuples), and n-ary (AllDiff, AtMostOne, AtLeastN, AtMostN, ExactlyOne, Sum, Linear, Count, GlobalCardinality, Tuples, Increasing, Decreasing, predicate)
 - **Boolean domain**: `BooleanDomain` for modelling binary assignment problems (e.g. timetabling as a 0-1 matrix)
 - **Functional style**: immutable value objects, composable solver decorators, and a lazy `Stream<Assignment>` API throughout
 - **Heuristics**: MRV variable selection, LCV value ordering, and Minimum Degree variable elimination for tree decomposition
@@ -75,7 +75,8 @@ builder.biPredicateConstraint(v1, v2, biPredicate)          // biPredicate.test(
 ```java
 builder.sumConstraint(Set.of(v1, v2, v3), Operator.EQ, 10)          // v1 + v2 + v3 == 10  (also LEQ, GEQ, etc.)
 builder.linearConstraint(Map.of(v1, 2, v2, 3), Operator.LEQ, 10)    // 2*v1 + 3*v2 <= 10  (weighted sum / linear)
-builder.countConstraint(Set.of(v1, v2, v3), value, Operator.EQ, 2)  // number of variables equal to value == 2  (also LEQ, GEQ, etc.)
+builder.countConstraint(Set.of(v1, v2, v3), value, Operator.EQ, 2)           // number of variables equal to value == 2  (also LEQ, GEQ, etc.)
+builder.globalCardinalityConstraint(Set.of(v1, v2, v3), Map.of(a, 2, b, 1))  // count(v, a)==2 AND count(v, b)==1  (open GCC)
 builder.tuplesConstraint(Set.of(Assignment.of(...), ...))           // variable values must match one of the allowed assignments (order-independent)
 builder.increasingConstraint(List.of(v1, v2, v3))                   // v1 <= v2 <= v3  (MiniZinc increasing)
 builder.decreasingConstraint(List.of(v1, v2, v3))                   // v1 >= v2 >= v3  (MiniZinc decreasing)

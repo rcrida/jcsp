@@ -222,6 +222,20 @@ public class ConstraintSatisfactionProblemTest {
     }
 
     @Test
+    void builder_globalCardinalityConstraint() {
+        Variable<Integer> a = VARIABLE_FACTORY.create("A");
+        Variable<Integer> b = VARIABLE_FACTORY.create("B");
+        Variable<Integer> c = VARIABLE_FACTORY.create("C");
+        val csp = ConstraintSatisfactionProblem.builder()
+                .variableDomain(a, IntRangeDomain.of(1, 3))
+                .variableDomain(b, IntRangeDomain.of(1, 3))
+                .variableDomain(c, IntRangeDomain.of(1, 3))
+                .globalCardinalityConstraint(Set.of(a, b, c), Map.of(1, 2, 2, 1))
+                .build();
+        assertThat(csp.getConstraints()).hasSize(1);
+    }
+
+    @Test
     void builder_logicConstraint() {
         Variable<Boolean> a = VARIABLE_FACTORY.create("A");
         Variable<Boolean> b = VARIABLE_FACTORY.create("B");

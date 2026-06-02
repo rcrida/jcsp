@@ -25,6 +25,7 @@ import io.github.rcrida.jcsp.constraints.nary.AllDiffConstraint;
 import io.github.rcrida.jcsp.constraints.nary.AtLeastNConstraint;
 import io.github.rcrida.jcsp.constraints.nary.AtMostNConstraint;
 import io.github.rcrida.jcsp.constraints.nary.CountConstraint;
+import io.github.rcrida.jcsp.constraints.nary.GlobalCardinalityConstraint;
 import io.github.rcrida.jcsp.constraints.nary.DecreasingConstraint;
 import io.github.rcrida.jcsp.constraints.nary.IncreasingConstraint;
 import io.github.rcrida.jcsp.constraints.nary.LinearConstraint;
@@ -653,6 +654,20 @@ public class ConstraintSatisfactionProblem {
          */
         public <T> ConstraintSatisfactionProblemBuilder countConstraint(@NonNull Set<Variable<T>> variables, @NonNull T value, @NonNull Operator operator, int n) {
             return this.constraint(CountConstraint.of(variables, value, operator, n));
+        }
+
+        /**
+         * Create a global cardinality constraint: each value in the map must appear exactly
+         * the specified number of times across the variables. Values not in the map are
+         * unconstrained (open GCC). Equivalent to MiniZinc's
+         * {@code global_cardinality(vars, values, counts)} constraint.
+         *
+         * @param variables   the variables to constrain
+         * @param cardinality map from value to required occurrence count
+         * @return the builder
+         */
+        public <T> ConstraintSatisfactionProblemBuilder globalCardinalityConstraint(@NonNull Set<Variable<T>> variables, @NonNull Map<T, Integer> cardinality) {
+            return this.constraint(GlobalCardinalityConstraint.of(variables, cardinality));
         }
 
         /**
