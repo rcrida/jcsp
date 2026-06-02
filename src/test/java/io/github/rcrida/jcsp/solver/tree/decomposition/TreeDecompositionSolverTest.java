@@ -20,6 +20,8 @@ import java.util.stream.Stream;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -130,6 +132,57 @@ public class TreeDecompositionSolverTest {
         solver.getSolutions(ternaryDomainCsp).toList();
         solver.getSolutions(largeDomainCsp).toList();
         // Mockito verifies that decompose was called with the expected maxDomainSize values
+    }
+
+    // K8: 8 fully-connected variables → each has exactly 7 neighbours = targetTreewidth
+    // Minimum-degree elimination would immediately produce a clique too large for the decomposer.
+    static final Variable<Integer> K1 = F.create("k1");
+    static final Variable<Integer> K2 = F.create("k2");
+    static final Variable<Integer> K3 = F.create("k3");
+    static final Variable<Integer> K4 = F.create("k4");
+    static final Variable<Integer> K5 = F.create("k5");
+    static final Variable<Integer> K6 = F.create("k6");
+    static final Variable<Integer> K7 = F.create("k7");
+    static final Variable<Integer> K8 = F.create("k8");
+    static final ConstraintSatisfactionProblem K8_CSP = buildK8Csp();
+    @SuppressWarnings("unchecked")
+    private static ConstraintSatisfactionProblem buildK8Csp() {
+        Variable<Integer>[] vars = new Variable[]{K1, K2, K3, K4, K5, K6, K7, K8};
+        var builder = ConstraintSatisfactionProblem.builder();
+        for (var v : vars) builder.variableDomain(v, IntRangeDomain.of(1, 3));
+        for (int i = 0; i < vars.length; i++)
+            for (int j = i + 1; j < vars.length; j++)
+                builder.notEqualsConstraint(vars[i], vars[j]);
+        return builder.build();
+    }
+
+    @Test
+    void getSolutions_highMinDegree_skipsDecomposer() {
+        // K8 → min-degree = 7 = targetTreewidth → decomposer never called
+        val fallback = Assignment.of(Map.of(K1, 1));
+        when(defaultSolver.getSolutions(K8_CSP)).thenReturn(Stream.of(fallback));
+
+        assertThat(solver.getSolutions(K8_CSP)).containsExactly(fallback);
+        verify(treeDecomposer, never()).decompose(eq(K8_CSP), anyInt());
+    }
+
+    @Test
+    void isMinDegreeTooHigh_sparseGraph_returnsFalse() {
+        // ORIGINAL_CSP has no constraints → all neighbour sets empty → min = 0 < targetTreewidth
+        assertThat(TreeDecompositionSolver.isMinDegreeTooHigh(ORIGINAL_CSP, 7)).isFalse();
+    }
+
+    @Test
+    void isMinDegreeTooHigh_singleVariable_returnsFalse() {
+        val single = ConstraintSatisfactionProblem.builder()
+                .variableDomain(V1, IntRangeDomain.of(1, 3))
+                .build();
+        assertThat(TreeDecompositionSolver.isMinDegreeTooHigh(single, 7)).isFalse();
+    }
+
+    @Test
+    void isMinDegreeTooHigh_k8_returnsTrue() {
+        assertThat(TreeDecompositionSolver.isMinDegreeTooHigh(K8_CSP, 7)).isTrue();
     }
 
     @Test

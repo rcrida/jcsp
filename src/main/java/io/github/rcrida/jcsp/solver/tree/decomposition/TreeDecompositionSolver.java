@@ -13,6 +13,7 @@ import org.jspecify.annotations.NonNull;
 
 import java.math.BigInteger;
 import java.util.Comparator;
+import java.util.Set;
 import java.util.stream.Stream;
 
 /**
@@ -38,6 +39,10 @@ public class TreeDecompositionSolver extends SolverDecorator {
 
     @Override
     public Stream<Assignment> getSolutions(@NonNull ConstraintSatisfactionProblem csp) {
+        if (isMinDegreeTooHigh(csp, targetTreewidth)) {
+            log.debug("Skipping tree decomposition: minimum degree >= targetTreewidth {}", targetTreewidth);
+            return getInner().getSolutions(csp);
+        }
         int d = csp.getVariableDomains().values().stream()
                 .mapToInt(Domain::size)
                 .max()
@@ -48,6 +53,20 @@ public class TreeDecompositionSolver extends SolverDecorator {
                 .filter(treeCsp -> shouldApplyDecomposition(treeCsp, csp))
                 .map(treeCsp -> treeSolver.getSolutions(treeCsp).map(this::recomposeAssignment))
                 .orElseGet(() -> getInner().getSolutions(csp));
+    }
+
+    /**
+     * Returns true when every constrained variable has at least {@code targetTreewidth} neighbours,
+     * guaranteeing that minimum-degree elimination will immediately produce a clique whose joint
+     * domain exceeds {@code maxDomainSize} — so the decomposer is certain to return empty.
+     * Skipping the decomposer in this case is exact, not just a heuristic.
+     */
+    static boolean isMinDegreeTooHigh(@NonNull ConstraintSatisfactionProblem csp, int targetTreewidth) {
+        return csp.getNeighbours().values().stream()
+                .filter(neighbours -> !neighbours.isEmpty())
+                .mapToInt(Set::size)
+                .min()
+                .orElse(0) >= targetTreewidth;
     }
 
     /**
