@@ -13,12 +13,12 @@ import org.jspecify.annotations.NonNull;
 import java.util.Optional;
 
 /**
- * Runs AC3 and AllDiff GAC in a combined fixpoint loop.
+ * Runs AC3, AllDiff GAC, and SumConstraint bounds propagation in a combined fixpoint loop.
  *
- * <p>The two propagators are not independent: AllDiff GAC can expose naked pairs that AC3 then
- * propagates to neighbouring constraints, which shrinks domains that AllDiff GAC can exploit
- * further. Running each once misses this feedback. This solver iterates until neither makes
- * further progress.
+ * <p>The propagators are not independent: AllDiff GAC can expose naked pairs that AC3 then
+ * propagates to neighbouring constraints; sum bounds propagation tightens domains that AC3 and
+ * AllDiff GAC can then exploit further. Running each once misses this feedback. This solver
+ * iterates until none of the three makes further progress.
  */
 @Slf4j
 @SuperBuilder
