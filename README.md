@@ -102,12 +102,12 @@ builder.impliesConstraint(b, constraint)                    // b -> constraint  
 The default solver (`Solver.Factory.INSTANCE.createSolver()`) applies strategies in order, each preprocessing the problem before delegating:
 
 ```
-NodeConsistency → PropagationFixpoint(AC3 ↔ AllDiff GAC) → CumulativeConsistency
+NodeConsistency → PropagationFixpoint(AC3 ↔ AllDiff GAC ↔ SumBounds) → CumulativeConsistency
     → IndependentSubproblems → TreeDecomposition → CutsetConditioning
-    → TreeSolver / BranchAndBound(BacktrackingSearch)
+    → TreeSolver / BranchAndBound(BacktrackingSearch + SumBounds)
 ```
 
-`PropagationFixpoint` runs AC3 and AllDiff GAC in a combined fixpoint loop: AllDiff GAC can expose naked pairs that AC3 then propagates to neighbouring constraints, and vice versa. Many highly-constrained problems (e.g. Zebra, Sudoku) are solved entirely by propagation without any backtracking.
+`PropagationFixpoint` runs AC3, AllDiff GAC, and SumConstraint bounds propagation in a combined fixpoint loop — each can expose new reductions the others exploit. Many highly-constrained problems (e.g. Zebra, Sudoku, MagicSquare) are solved entirely by propagation without any backtracking. SumConstraint bounds propagation is also applied inside the MAC inference during backtracking, detecting sum infeasibility as early as possible.
 
 Tree decomposition uses a domain-aware clique size limit (`d^targetTreewidth`, capped at 1,000,000) and is skipped when: the estimated tree complexity exceeds the search space, the constraint graph minimum degree ≥ targetTreewidth (guaranteeing the decomposer would fail), or when preprocessing fully determines the solution. When preprocessing produces all-singleton domains the solver short-circuits and returns the forced assignment directly without invoking any downstream stages. Cutset conditioning applies a practical three-tier complexity guard before conditioning.
 
@@ -155,7 +155,7 @@ InitialAssignmentFactory factory = FallbackAssignmentFactory.builder()
 <dependency>
     <groupId>io.github.rcrida</groupId>
     <artifactId>jcsp</artifactId>
-    <version>2.15.0</version>
+    <version>2.16.0</version>
 </dependency>
 ```
 
