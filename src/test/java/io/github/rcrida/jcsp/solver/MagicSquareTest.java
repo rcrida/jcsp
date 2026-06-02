@@ -81,6 +81,20 @@ public class MagicSquareTest {
         assertThat(solutions).hasSize(8);
     }
 
+    @Test
+    void allSolutions_withSymmetryBreaking() {
+        // Require the first row to be lexicographically <= the last row.
+        // This eliminates the top-bottom reflection from each mirrored pair, halving 8 → 4.
+        val p = square();
+        val cells = p.cells();
+        val row0 = List.of(cells[0][0], cells[0][1], cells[0][2]);
+        val row2 = List.of(cells[2][0], cells[2][1], cells[2][2]);
+        val csp = p.csp().toBuilder()
+                .constraint(io.github.rcrida.jcsp.constraints.nary.LexConstraint.of(row0, Operator.LEQ, row2))
+                .build();
+        assertThat(Solver.Factory.INSTANCE.createSolver().getSolutions(csp)).hasSize(4);
+    }
+
     static void printSquare(Assignment assignment, Variable<Integer>[][] cells) {
         for (var row : cells) {
             val line = new StringBuilder();
