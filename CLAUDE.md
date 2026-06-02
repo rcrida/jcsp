@@ -8,7 +8,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 <dependency>
     <groupId>io.github.rcrida</groupId>
     <artifactId>jcsp</artifactId>
-    <version>2.1.0</version>
+    <version>2.14.0</version>
 </dependency>
 ```
 
@@ -35,55 +35,113 @@ Coverage report is generated at `target/site/jacoco/index.html`. **100% instruct
 
 ## Architecture Overview
 
-This is a Constraint Satisfaction Problem (CSP) solver library implementing classic AI algorithms. The core flow is: define a `ConstraintSatisfactionProblem` (variables + domains + constraints), then call `Solver.Factory.create(csp).getSolutions()` to get a lazy `Stream` of `Assignment` solutions.
+This is a Constraint Satisfaction Problem (CSP) solver library implementing classic AI algorithms. The core flow is: define a `ConstraintSatisfactionProblem` (variables + domains + constraints), then call `Solver.Factory.INSTANCE.createSolver().getSolutions(csp)` to get a lazy `Stream` of `Assignment` solutions.
 
 ### Core Abstractions
 
 - **`Variable`** — immutable identifier; created via `Variable.Factory`
-- **`Domain`** — set of allowed values for a variable (`IntRangeDomain`, `EnumDomain`, `AssignmentDomain`, `ObjectSetDomain`)
+- **`Domain`** — set of allowed values for a variable (`IntRangeDomain`, `EnumDomain`, `BooleanDomain`, `DomainObjectSet`)
 - **`Assignment`** — immutable mapping of variables to values; validated against domains and constraints
 - **`Constraint`** / `UnaryConstraint` / `BinaryConstraint` / `NaryConstraint` — hierarchical constraint interfaces; each checks `isSatisfiedBy(Assignment)`
 - **`ConstraintSatisfactionProblem`** — aggregates variables, domains, constraints; analyzes graph structure (tree/cyclic, connected components, cutsets)
 
 ### Solver Chain (Decorator Pattern)
 
-`Solver.Factory.create()` builds a chain of solver decorators, each applied in order before delegating to the next:
+`Solver.Factory.INSTANCE.createSolver()` builds a chain of solver decorators, each applied in order before delegating to the next:
 
 1. **`NodeConsistentSolver`** — prunes domains via node consistency
 2. **`ArcConsistentSolver`** — applies AC3 arc consistency
-3. **`IndependentSubproblemSolver`** — decomposes into independent subproblems and combines solutions
-4. **`TreeDecompositionSolver`** — applies tree decomposition for near-tree problems
-5. **`CutsetConditioningSolver`** — handles cyclic graphs by conditioning on a cycle cutset
-6. **`TreeSolver`** / **`BacktrackingSearch`** — terminal solvers for tree-structured or general CSPs respectively
+3. **`CumulativeConsistentSolver`** — applies timetabling propagation for `CumulativeConstraint` instances; no-op if none present
+4. **`IndependentSubproblemSolver`** — decomposes into independent subproblems and combines solutions
+5. **`TreeDecompositionSolver`** — applies tree decomposition for near-tree problems
+6. **`CutsetConditioningSolver`** — handles cyclic graphs by conditioning on a cycle cutset
+7. **`TreeSolver`** / **`BacktrackingSearch`** — terminal solvers for tree-structured or general CSPs respectively
 
-`BacktrackingSearch` uses pluggable strategies: `UnassignedVariableSelector` (with `MinimumRemainingValuesSelector`), `DomainValuesOrderer` (with `LeastConstrainingValueOrderer`), and `Inference` (AC3 or node consistency).
+`BacktrackingSearch` uses pluggable strategies: `UnassignedVariableSelector` (with `MinimumRemainingValuesSelector`), `DomainValuesOrderer` (with `LeastConstrainingValueOrderer`), and `Inference` (MAC — maintaining arc consistency during search).
+
+### Local Search Chain
+
+`LocalSolver.Factory.INSTANCE.createLocalSolver(maxAttempts, maxSteps, factory)` builds:
+
+```
+NodeConsistency → AC3 → IndependentSubproblems → MinConflicts
+```
+
+Seeded by `RandomAssignmentFactory`, `GreedyAssignmentFactory`, or `FallbackAssignmentFactory`.
 
 ### Constraint Construction
 
-`CSP.Builder` provides fluent helper methods to avoid constructing constraint objects directly:
+`CSP.Builder` provides fluent helper methods. All binary constraint classes also have static `of()` factory methods.
 
+**Unary**
+```java
+csp.equalsConstraint(v, value)
+csp.notEqualsConstraint(v, value)
+csp.predicateConstraint(v, predicate)
+csp.comparatorConstraint(v, Operator.GEQ, value)   // v >= value (Number types)
+```
+
+**Binary**
 ```java
 csp.equalsConstraint(v1, v2)
 csp.notEqualsConstraint(v1, v2)
-csp.notEqualsChainConstraint(v1, v2, v3, ...)   // AllDiff over a chain
-csp.allDiffConstraint(v1, v2, ...)
-csp.offsetConstraint(v1, v2, offset)            // v1 = v2 + offset
+csp.notEqualsChainConstraint(List.of(v1, v2, v3))  // consecutive pairs differ
+csp.offsetConstraint(v1, offset, Operator.EQ, v2)  // v1 + offset == v2
+csp.comparatorConstraint(v1, Operator.LEQ, v2)     // v1 <= v2 (any Comparable)
+csp.logicConstraint(b1, LogicOperator.OR, b2)       // boolean connective (AND/OR/XOR/NAND/NOR/XNOR)
+csp.elementConstraint(index, result, array)         // result = array[index] (1-based)
 csp.biPredicateConstraint(v1, v2, predicate)
-csp.predicateConstraint(predicate, v1, v2, ...) // n-ary predicate
+```
+
+**N-ary**
+```java
+csp.allDiffConstraint(Set.of(v1, v2, v3))
+csp.atMostOneConstraint(Set.of(b1, b2, b3))        // AC3 decomposition into BinaryLogicConstraint(NAND)
+csp.atMostNConstraint(Set.of(b1, b2, b3), n)
+csp.atLeastNConstraint(Set.of(b1, b2, b3), n)      // prefer for local search
+csp.atLeastNConstraintWithCounting(Set.of(b1, b2, b3), n)  // prefer for backtracking (carry-chain)
+csp.exactlyOneConstraint(Set.of(b1, b2, b3))
+csp.sumConstraint(Set.of(v1, v2, v3), Operator.EQ, 10)
+csp.linearConstraint(Map.of(v1, 2, v2, 3), Operator.LEQ, 10)  // weighted sum
+csp.countConstraint(Set.of(v1, v2, v3), value, Operator.EQ, 2)
+csp.globalCardinalityConstraint(Set.of(v1, v2, v3), Map.of(a, 2, b, 1))
+csp.cumulativeConstraint(starts, durations, resources, limit)  // resource scheduling
+csp.tuplesConstraint(Set.of(Assignment.of(...), ...))          // extensional (table)
+csp.increasingConstraint(List.of(v1, v2, v3))      // v1 <= v2 <= v3; AC3 decomposition
+csp.decreasingConstraint(List.of(v1, v2, v3))      // v1 >= v2 >= v3; AC3 decomposition
+csp.lexConstraint(List.of(a1, a2), Operator.LEQ, List.of(b1, b2))
+csp.predicateConstraint(Set.of(v1, v2, v3), predicate)
+```
+
+**Reification**
+```java
+csp.reifyConstraint(b, constraint)    // b <-> constraint
+csp.impliesConstraint(b, constraint)  // b -> constraint
 ```
 
 ### Key Conventions
 
-- **Immutability**: `Assignment`, `Variable`, and constraint objects use Lombok `@Value`; `CSP` uses `@Builder`/`@Singular`. Use `@Value` for any new immutable class — it provides `@ToString`, `@EqualsAndHashCode`, `@RequiredArgsConstructor`, and final fields automatically.
+- **Immutability**: `Assignment`, `Variable`, and constraint objects use Lombok `@Value`; `CSP` uses `@Builder`/`@Singular`. Constraint subclasses use `@SuperBuilder` + `@EqualsAndHashCode(callSuper = true)`.
 - **Lombok**: `@Value`, `@Builder`, `@SuperBuilder`, `@Singular`, `@Slf4j` are used extensively — do not add manual boilerplate that Lombok already provides
+- **Static factories**: All constraint classes have a static `of()` factory method; use these instead of `.builder()...build()` in production code
 - **Null safety**: JSpecify `@NonNull`/`@Nullable` annotations throughout; `Optional` used for nullable returns
 - **Logging**: All solvers/consistency algorithms use `@Slf4j` (SLF4J) for debug/info logging
-- **Assertions**: Domain validity in `Assignment` is checked with Java `assert` statements
+- **Assertions**: Preconditions (e.g., equal list sizes) are checked with Java `assert` statements
+- **`Operator` enum** — in `constraints` package; covers EQ, NEQ, LT, GT, LEQ, GEQ
+- **`LogicOperator` enum** — in `constraints` package; covers AND, OR, XOR, NAND, NOR, XNOR
 
 ### Integration Tests
 
 Classic CSP problems serve as end-to-end integration tests:
-- `AustraliaMapColouringTest` — graph coloring
-- `NQueensTest` — N-Queens placement
+- `AustraliaMapColouringTest` — graph coloring; also demonstrates `countConstraint` and `globalCardinalityConstraint`
+- `NQueensTest` — N-Queens placement; also demonstrates `increasingConstraint` for symmetry breaking
+- `MagicSquareTest` — magic square; demonstrates `sumConstraint` and `lexConstraint` for symmetry breaking
 - `SudokuTest` — Sudoku solving
 - `CryptarithmeticTest` — alphametic puzzle solving
+- `ZebraPuzzleTest` — Einstein's Zebra puzzle
+- `TwoSumTest` — two-sum via `elementConstraint`
+- `KnapsackTest` — binary knapsack via `linearConstraint` (feasibility + optimisation)
+- `MenuCombinationTest` — extensional constraints via `tuplesConstraint`
+- `SprintSchedulingTest` — resource-constrained scheduling via `cumulativeConstraint`
+- `ReificationTest` — soft constraints via `reifyConstraint` / `impliesConstraint`
+- `ParkrunSchedulingTest` / `TimetableSchedulingBinaryAssignmentTest` — real-world scheduling
