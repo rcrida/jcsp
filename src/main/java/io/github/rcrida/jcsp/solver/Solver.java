@@ -88,9 +88,8 @@ public interface Solver {
                     .build();
             val independentSubproblemSolver = IndependentSubproblemSolver.builder().inner(treeDecompositionSolver).build();
             val cumulativeConsistentSolver = CumulativeConsistentSolver.builder().inner(independentSubproblemSolver).build();
-            val allDiffConsistentSolver = AllDiffConsistentSolver.builder().inner(cumulativeConsistentSolver).build();
-            val arcConsistentSolver = ArcConsistentSolver.builder().inner(allDiffConsistentSolver).build();
-            return NodeConsistentSolver.builder().inner(arcConsistentSolver).build();
+            val propagationFixpointSolver = PropagationFixpointSolver.builder().inner(cumulativeConsistentSolver).build();
+            return NodeConsistentSolver.builder().inner(propagationFixpointSolver).build();
         };
 
         Solver createSolver();
