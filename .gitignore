@@ -39,4 +39,4 @@ build/
 .DS_Store
 
 ### Local-only tests ###
-src/test/**/ignored/
+src/test/**/ignored/.claude/
