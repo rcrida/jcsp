@@ -46,7 +46,7 @@ public class NodeConsistencyTest {
 
     @Test
     void noRevisionsRequired() {
-        val domain = new EnumDomain(EnumSet.of(Colour.RED, Colour.GREEN));
+        val domain = new EnumDomain<>(EnumSet.of(Colour.RED, Colour.GREEN));
         val builder = ConstraintSatisfactionProblem.builder();
         val WA = builder.createVariable("WA", domain);
         builder.notEqualsConstraint(WA, Colour.BLUE);
