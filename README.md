@@ -8,7 +8,7 @@ A Java library implementing classic AI algorithms for solving Constraint Satisfa
 
 - **Multiple solving strategies**: backtracking search, tree solver, cutset conditioning, tree decomposition, and independent subproblem decomposition
 - **Optimization**: branch-and-bound search via `getSolution(csp, objective)` and `getSolutions(csp, objective)` — returns the optimal assignment or an improving stream of assignments
-- **Consistency preprocessing**: AC3 arc consistency and node consistency for domain pruning
+- **Consistency preprocessing**: AC3 arc consistency, node consistency, and AllDiff GAC (Régin 1994) for domain pruning — run in a combined fixpoint loop so each propagator benefits from the others' reductions
 - **Flexible constraint types**: unary, binary (equals, not-equals, offset, comparator, logic, element, predicate, tuples), and n-ary (AllDiff, AtMostOne, AtLeastN, AtMostN, ExactlyOne, Sum, Linear, Count, GlobalCardinality, Cumulative, Tuples, Increasing, Decreasing, Lex, predicate)
 - **Boolean domain**: `BooleanDomain` for modelling binary assignment problems (e.g. timetabling as a 0-1 matrix)
 - **Functional style**: immutable value objects, composable solver decorators, and a lazy `Stream<Assignment>` API throughout
@@ -102,11 +102,14 @@ builder.impliesConstraint(b, constraint)                    // b -> constraint  
 The default solver (`Solver.Factory.INSTANCE.createSolver()`) applies strategies in order, each preprocessing the problem before delegating:
 
 ```
-NodeConsistency → ArcConsistency (AC3) → IndependentSubproblems
-    → TreeDecomposition → CutsetConditioning → TreeSolver / BranchAndBound(BacktrackingSearch)
+NodeConsistency → PropagationFixpoint(AC3 ↔ AllDiff GAC) → CumulativeConsistency
+    → IndependentSubproblems → TreeDecomposition → CutsetConditioning
+    → TreeSolver / BranchAndBound(BacktrackingSearch)
 ```
 
-Tree decomposition uses a domain-aware clique size limit (`d^targetTreewidth`, capped at 1,000,000) and only applies when the estimated tree complexity is less than the original search space. Cutset conditioning applies a practical three-tier complexity guard before conditioning.
+`PropagationFixpoint` runs AC3 and AllDiff GAC in a combined fixpoint loop: AllDiff GAC can expose naked pairs that AC3 then propagates to neighbouring constraints, and vice versa. Many highly-constrained problems (e.g. Zebra, Sudoku) are solved entirely by propagation without any backtracking.
+
+Tree decomposition uses a domain-aware clique size limit (`d^targetTreewidth`, capped at 1,000,000) and is skipped when: the estimated tree complexity exceeds the search space, the constraint graph minimum degree ≥ targetTreewidth (guaranteeing the decomposer would fail), or when preprocessing fully determines the solution. When preprocessing produces all-singleton domains the solver short-circuits and returns the forced assignment directly without invoking any downstream stages. Cutset conditioning applies a practical three-tier complexity guard before conditioning.
 
 ## Local Search
 
@@ -152,7 +155,7 @@ InitialAssignmentFactory factory = FallbackAssignmentFactory.builder()
 <dependency>
     <groupId>io.github.rcrida</groupId>
     <artifactId>jcsp</artifactId>
-    <version>2.14.0</version>
+    <version>2.15.0</version>
 </dependency>
 ```
 
