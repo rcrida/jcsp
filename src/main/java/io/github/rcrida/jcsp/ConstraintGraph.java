@@ -1,6 +1,7 @@
 package io.github.rcrida.jcsp;
 
 import lombok.EqualsAndHashCode;
+import lombok.ToString;
 import lombok.Value;
 import lombok.val;
 import io.github.rcrida.jcsp.constraints.Constraint;
@@ -24,6 +25,7 @@ import java.util.stream.Stream;
  * avoiding redundant recomputation during solving.
  */
 @Value
+@ToString(exclude = {"neighbours", "allBinaryConstraints"})
 class ConstraintGraph {
     Set<Constraint> constraints;
     boolean isCyclic;

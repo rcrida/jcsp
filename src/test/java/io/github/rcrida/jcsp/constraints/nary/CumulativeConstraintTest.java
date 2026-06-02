@@ -72,7 +72,7 @@ public class CumulativeConstraintTest {
     }
 
     @Test
-    void timetable_tightensStartBound() {
+    void propagate_tightensStartBound() {
         // x1 ∈ [0,1], d=2, r=2 → compulsory part [lst=1, ect=0+2=2) = [1,2): P(1)=2
         // x2 ∈ [0,3], d=2, r=2, limit=2
         // x2 at start=0: runs [0,2), t=1 ex=2, 2+2=4>2 → infeasible
@@ -86,14 +86,14 @@ public class CumulativeConstraintTest {
         var domains = Map.<Variable<?>, io.github.rcrida.jcsp.domains.Domain<?>>of(
                 x1, IntRangeDomain.of(0, 1),
                 x2, IntRangeDomain.of(0, 3));
-        var result = c.timetable(domains);
+        var result = c.propagate(domains);
         assertThat(result).isPresent();
         assertThat(result.get()).containsKey(x2);
         assertThat(result.get().get(x2)).isEqualTo(IntRangeDomain.of(2, 3));
     }
 
     @Test
-    void timetable_tightensLatestStart() {
+    void propagate_tightensLatestStart() {
         // x1 ∈ [2,3], d=2, r=2 → compulsory part [lst=3, ect=4) = [3,4): P(3)=2
         // x2 ∈ [0,3], d=2, r=2, limit=2
         // x2 newLst scan: start=3 → t=3: 2+2=4>2 → newLst--; start=2 → t=3 still blocked → newLst--;
@@ -105,14 +105,14 @@ public class CumulativeConstraintTest {
         var domains = Map.<Variable<?>, io.github.rcrida.jcsp.domains.Domain<?>>of(
                 x1, IntRangeDomain.of(2, 3),
                 x2, IntRangeDomain.of(0, 3));
-        var result = c.timetable(domains);
+        var result = c.propagate(domains);
         assertThat(result).isPresent();
         assertThat(result.get()).containsKey(x2);
         assertThat(result.get().get(x2)).isEqualTo(IntRangeDomain.of(0, 1));
     }
 
     @Test
-    void timetable_infeasible_returnsEmpty() {
+    void propagate_infeasible_returnsEmpty() {
         // Both tasks have compulsory parts that together exceed limit
         // s1 ∈ [1,1] (fixed), s2 ∈ [1,1] (fixed), d=2, r=1, limit=1
         Variable<Integer> x1 = F.create("x1");
@@ -121,22 +121,22 @@ public class CumulativeConstraintTest {
         var domains = Map.<Variable<?>, io.github.rcrida.jcsp.domains.Domain<?>>of(
                 x1, IntRangeDomain.of(1, 1),
                 x2, IntRangeDomain.of(1, 1));
-        assertThat(c.timetable(domains)).isEmpty();
+        assertThat(c.propagate(domains)).isEmpty();
     }
 
     @Test
-    void timetable_zeroDuration_returnsNoChange() {
+    void propagate_zeroDuration_returnsNoChange() {
         // With duration=0, minTime == maxTime → early return with no changes.
         Variable<Integer> x = F.create("x");
         var c = CumulativeConstraint.of(List.of(x), List.of(0), List.of(1), 1);
-        var result = c.timetable(Map.<Variable<?>, io.github.rcrida.jcsp.domains.Domain<?>>of(
+        var result = c.propagate(Map.<Variable<?>, io.github.rcrida.jcsp.domains.Domain<?>>of(
                 x, IntRangeDomain.of(0, 0)));
         assertThat(result).isPresent();
         assertThat(result.get()).isEmpty();
     }
 
     @Test
-    void timetable_infeasibleViaExclusiveProfile() {
+    void propagate_infeasibleViaExclusiveProfile() {
         // x1=[0,0] d=1 r=1, x2=[1,1] d=1 r=1, x3=[0,1] d=1 r=2, limit=2
         // Full profile: P[0]=1, P[1]=1 — overload check passes.
         // For x3: ex[0]=1, ex[1]=1. start=0: 1+2=3>2 → skip. start=1: 1+2=3>2 → skip.
@@ -150,16 +150,16 @@ public class CumulativeConstraintTest {
                 x1, IntRangeDomain.of(0, 0),
                 x2, IntRangeDomain.of(1, 1),
                 x3, IntRangeDomain.of(0, 1));
-        assertThat(c.timetable(domains)).isEmpty();
+        assertThat(c.propagate(domains)).isEmpty();
     }
 
     @Test
-    void timetable_noChange_returnsEmptyMap() {
+    void propagate_noChange_returnsEmptyMap() {
         // Wide domains, no compulsory parts → no pruning
         var domains = Map.<Variable<?>, io.github.rcrida.jcsp.domains.Domain<?>>of(
                 s1, IntRangeDomain.of(0, 5),
                 s2, IntRangeDomain.of(0, 5));
-        var result = constraint.timetable(domains);
+        var result = constraint.propagate(domains);
         assertThat(result).isPresent();
         assertThat(result.get()).isEmpty();
     }

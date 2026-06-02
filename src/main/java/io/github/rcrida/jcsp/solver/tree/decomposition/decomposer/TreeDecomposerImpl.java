@@ -109,11 +109,10 @@ public class TreeDecomposerImpl implements TreeDecomposer {
             }
         }
         treeBuilder.constraints(consistencyConstraints);
-        log.info("tree {}", treeBuilder.build());
+        log.debug("tree {}", treeBuilder.build());
         return Optional.of(treeBuilder.build());
     }
 
-    @SuppressWarnings("unchecked")
     private @NonNull List<Set<Variable<?>>> getMaximalCliqueBags(@NonNull ConstraintSatisfactionProblem csp) {
         var workGraph = csp.toBuilder().build();
         val bags = new ArrayList<Set<Variable<?>>>();

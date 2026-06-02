@@ -1,6 +1,7 @@
 package io.github.rcrida.jcsp.solver;
 
 import io.github.rcrida.jcsp.ConstraintSatisfactionProblem;
+import io.github.rcrida.jcsp.constraints.Operator;
 import io.github.rcrida.jcsp.domains.IntRangeDomain;
 import io.github.rcrida.jcsp.variables.Variable;
 import org.junit.jupiter.api.Test;
@@ -66,6 +67,18 @@ public class PropagationFixpointSolverTest {
                 .variableDomain(x1, IntRangeDomain.of(1, 1))
                 .variableDomain(x2, IntRangeDomain.of(1, 1))
                 .notEqualsConstraint(x1, x2)
+                .build();
+        assertThat(solverWith(c -> Stream.empty()).getSolutions(csp)).isEmpty();
+    }
+
+    @Test
+    void infeasibleViaSum_returnsEmpty() {
+        // v1∈{5..9}, v2∈{5..9}, sum ≤ 8 — min sum = 10 > 8 → SumConsistency detects infeasibility
+        Variable<Integer> v1 = F.create("v1"), v2 = F.create("v2");
+        var csp = ConstraintSatisfactionProblem.builder()
+                .variableDomain(v1, IntRangeDomain.of(5, 9))
+                .variableDomain(v2, IntRangeDomain.of(5, 9))
+                .sumConstraint(Set.of(v1, v2), Operator.LEQ, 8)
                 .build();
         assertThat(solverWith(c -> Stream.empty()).getSolutions(csp)).isEmpty();
     }

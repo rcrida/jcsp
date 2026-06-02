@@ -1,6 +1,7 @@
 package io.github.rcrida.jcsp.constraints.nary;
 
 import io.github.rcrida.jcsp.assignments.Assignment;
+import io.github.rcrida.jcsp.consistency.Propagatable;
 import io.github.rcrida.jcsp.domains.Domain;
 import io.github.rcrida.jcsp.domains.IntRangeDomain;
 import io.github.rcrida.jcsp.variables.Variable;
@@ -29,7 +30,7 @@ import java.util.Optional;
  */
 @SuperBuilder
 @EqualsAndHashCode(callSuper = true)
-public class CumulativeConstraint extends NaryConstraint {
+public class CumulativeConstraint extends NaryConstraint implements Propagatable {
     @Singular private final List<Variable<Integer>> starts;
     @Singular private final List<Integer> durations;
     @Singular private final List<Integer> resources;
@@ -78,8 +79,9 @@ public class CumulativeConstraint extends NaryConstraint {
      * @return updated domains for start variables whose bounds were tightened,
      *         or {@link Optional#empty()} if the constraint is infeasible
      */
-    @SuppressWarnings("unchecked")
-    public Optional<Map<Variable<Integer>, IntRangeDomain>> timetable(
+    @Override
+    @SuppressWarnings({"unchecked", "rawtypes"})
+    public Optional<Map<Variable<?>, Domain<?>>> propagate(
             @NonNull Map<Variable<?>, Domain<?>> domains) {
         int n = starts.size();
         int[] est = new int[n]; // earliest start
@@ -117,7 +119,7 @@ public class CumulativeConstraint extends NaryConstraint {
         }
 
         // Tighten each task's start window
-        Map<Variable<Integer>, IntRangeDomain> updated = new HashMap<>();
+        Map<Variable<?>, Domain<?>> updated = new HashMap<>();
         for (int i = 0; i < n; i++) {
             // Exclusive profile: remove task i's compulsory contribution
             int[] ex = profile.clone();

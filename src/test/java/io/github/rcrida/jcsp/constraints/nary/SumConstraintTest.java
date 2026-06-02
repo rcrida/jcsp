@@ -2,6 +2,7 @@ package io.github.rcrida.jcsp.constraints.nary;
 
 import io.github.rcrida.jcsp.assignments.Assignment;
 import io.github.rcrida.jcsp.constraints.Operator;
+import io.github.rcrida.jcsp.domains.IntRangeDomain;
 import io.github.rcrida.jcsp.variables.Variable;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -131,6 +132,104 @@ public class SumConstraintTest {
         var c = SumConstraint.of(Set.of(a, b), Operator.EQ, 3.0);
         assertThat(c.isSatisfiedBy(Assignment.of(Map.of(a, 1.5, b, 1.5)))).isTrue();
         assertThat(c.isSatisfiedBy(Assignment.of(Map.of(a, 1.0, b, 1.0)))).isFalse();
+    }
+
+    // --- propagate() ---
+
+    @Test
+    void propagate_eq_tightensBothBounds() {
+        // v1∈{1..9}, v2∈{1..9}, v3∈{1..9}, sum = 15
+        // new_max(v1) = 15 - min(v2) - min(v3) = 15 - 1 - 1 = 13 → capped at 9 (no change)
+        // After assigning v2=8, v3=6: new_max(v1) = 15-8-6 = 1, new_min(v1) = 15-8-6 = 1 → v1 = {1}
+        Variable<Integer> v3 = F.create("v3");
+        var c = SumConstraint.of(Set.of(v1, v2, v3), Operator.EQ, 15);
+        var domains = Map.<Variable<?>, io.github.rcrida.jcsp.domains.Domain<?>>of(
+                v1, IntRangeDomain.of(1, 9),
+                v2, IntRangeDomain.of(8, 8),
+                v3, IntRangeDomain.of(6, 6));
+        var result = c.propagate(domains);
+        assertThat(result).isPresent();
+        assertThat(result.get()).containsKey(v1);
+        assertThat(result.get().get(v1)).isEqualTo(IntRangeDomain.of(1, 1));
+    }
+
+    @Test
+    void propagate_leq_tightensUpperBound() {
+        // v1∈{1..9}, v2∈{5..5}: sum ≤ 8 → new_max(v1) = 8 - 5 = 3
+        var c = SumConstraint.of(Set.of(v1, v2), Operator.LEQ, 8);
+        var domains = Map.<Variable<?>, io.github.rcrida.jcsp.domains.Domain<?>>of(
+                v1, IntRangeDomain.of(1, 9),
+                v2, IntRangeDomain.of(5, 5));
+        var result = c.propagate(domains);
+        assertThat(result).isPresent();
+        assertThat(result.get()).containsKey(v1);
+        assertThat(result.get().get(v1)).isEqualTo(IntRangeDomain.of(1, 3));
+    }
+
+    @Test
+    void propagate_geq_tightensLowerBound() {
+        // v1∈{1..9}, v2∈{5..5}: sum ≥ 8 → new_min(v1) = 8 - 5 = 3
+        var c = SumConstraint.of(Set.of(v1, v2), Operator.GEQ, 8);
+        var domains = Map.<Variable<?>, io.github.rcrida.jcsp.domains.Domain<?>>of(
+                v1, IntRangeDomain.of(1, 9),
+                v2, IntRangeDomain.of(5, 5));
+        var result = c.propagate(domains);
+        assertThat(result).isPresent();
+        assertThat(result.get()).containsKey(v1);
+        assertThat(result.get().get(v1)).isEqualTo(IntRangeDomain.of(3, 9));
+    }
+
+    @Test
+    void propagate_otherOperator_returnsNoChange() {
+        var c = SumConstraint.of(Set.of(v1, v2), Operator.NEQ, 5);
+        var domains = Map.<Variable<?>, io.github.rcrida.jcsp.domains.Domain<?>>of(
+                v1, IntRangeDomain.of(1, 9),
+                v2, IntRangeDomain.of(1, 9));
+        var result = c.propagate(domains);
+        assertThat(result).isPresent();
+        assertThat(result.get()).isEmpty();
+    }
+
+    @Test
+    void propagate_eq_infeasible_kAboveMax() {
+        // v1∈{1..3}, v2∈{1..3}: max sum = 6 < 10 → infeasible
+        var c = SumConstraint.of(Set.of(v1, v2), Operator.EQ, 10);
+        var domains = Map.<Variable<?>, io.github.rcrida.jcsp.domains.Domain<?>>of(
+                v1, IntRangeDomain.of(1, 3),
+                v2, IntRangeDomain.of(1, 3));
+        assertThat(c.propagate(domains)).isEmpty();
+    }
+
+    @Test
+    void propagate_leq_infeasible() {
+        // v1∈{5..9}, v2∈{5..9}: min sum = 10 > 8 → infeasible for LEQ
+        var c = SumConstraint.of(Set.of(v1, v2), Operator.LEQ, 8);
+        var domains = Map.<Variable<?>, io.github.rcrida.jcsp.domains.Domain<?>>of(
+                v1, IntRangeDomain.of(5, 9),
+                v2, IntRangeDomain.of(5, 9));
+        assertThat(c.propagate(domains)).isEmpty();
+    }
+
+    @Test
+    void propagate_geq_infeasible() {
+        // v1∈{1..3}, v2∈{1..3}: max sum = 6 < 10 → infeasible for GEQ
+        var c = SumConstraint.of(Set.of(v1, v2), Operator.GEQ, 10);
+        var domains = Map.<Variable<?>, io.github.rcrida.jcsp.domains.Domain<?>>of(
+                v1, IntRangeDomain.of(1, 3),
+                v2, IntRangeDomain.of(1, 3));
+        assertThat(c.propagate(domains)).isEmpty();
+    }
+
+    @Test
+    void propagate_noChange_returnsEmptyMap() {
+        // Wide domains — no pruning possible
+        var c = SumConstraint.of(Set.of(v1, v2), Operator.EQ, 10);
+        var domains = Map.<Variable<?>, io.github.rcrida.jcsp.domains.Domain<?>>of(
+                v1, IntRangeDomain.of(1, 9),
+                v2, IntRangeDomain.of(1, 9));
+        var result = c.propagate(domains);
+        assertThat(result).isPresent();
+        assertThat(result.get()).isEmpty();
     }
 
     @Test

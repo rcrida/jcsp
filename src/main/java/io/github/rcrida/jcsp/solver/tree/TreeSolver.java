@@ -27,7 +27,7 @@ public class TreeSolver implements Solver {
     @Override
     public Stream<Assignment> getSolutions(@NonNull ConstraintSatisfactionProblem tcsp) {
         assert tcsp.isTree();
-        log.info("Searching {}", tcsp);
+        log.debug("Searching {}", tcsp);
         val root = tcsp.getVariableDomains().entrySet().iterator().next().getKey();
         val X = topologicalSorter.sort(tcsp, root);
         var current = tcsp;

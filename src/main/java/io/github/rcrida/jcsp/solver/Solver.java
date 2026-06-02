@@ -1,9 +1,11 @@
 package io.github.rcrida.jcsp.solver;
 
+import io.github.rcrida.jcsp.consistency.Inference;
 import lombok.val;
 import io.github.rcrida.jcsp.ConstraintSatisfactionProblem;
 import io.github.rcrida.jcsp.assignments.Assignment;
 import io.github.rcrida.jcsp.consistency.arc.MAC;
+import io.github.rcrida.jcsp.consistency.sum.SumConsistency;
 import io.github.rcrida.jcsp.solver.backtrackingsearch.BacktrackingSearch;
 import io.github.rcrida.jcsp.solver.backtrackingsearch.order.DefaultValueOrderer;
 import io.github.rcrida.jcsp.solver.backtrackingsearch.order.LeastConstrainingValueOrderer;
@@ -73,8 +75,13 @@ public interface Solver {
 
     interface Factory {
         Factory INSTANCE = () -> {
-            val backtrackingSearch = new BacktrackingSearch(MinimumRemainingValuesSelector.INSTANCE, LeastConstrainingValueOrderer.INSTANCE, MAC.INSTANCE);
-            val branchAndBound = BranchAndBoundSolver.builder().inner(backtrackingSearch).unassignedVariableSelector(MinimumRemainingValuesSelector.INSTANCE).domainValuesOrderer(LeastConstrainingValueOrderer.INSTANCE).inference(MAC.INSTANCE).build();
+            // MAC + SumConsistency bounds propagation: after each variable assignment, AC3
+            // propagates binary constraints, then sum bounds propagation prunes domains further.
+            val inference = (Inference)
+                    (problem, variable, assignment) -> MAC.INSTANCE.apply(problem, variable, assignment)
+                            .flatMap(SumConsistency.INSTANCE::apply);
+            val backtrackingSearch = new BacktrackingSearch(MinimumRemainingValuesSelector.INSTANCE, LeastConstrainingValueOrderer.INSTANCE, inference);
+            val branchAndBound = BranchAndBoundSolver.builder().inner(backtrackingSearch).unassignedVariableSelector(MinimumRemainingValuesSelector.INSTANCE).domainValuesOrderer(LeastConstrainingValueOrderer.INSTANCE).inference(inference).build();
             val treeSolver = new TreeSolver(BFSTopologicalSorter.INSTANCE, DefaultValueOrderer.INSTANCE, TreeUnassignedVariableSelector.Factory.INSTANCE);
             val cutsetConditioningSolver = CutsetConditioningSolver.builder()
                     .inner(branchAndBound)

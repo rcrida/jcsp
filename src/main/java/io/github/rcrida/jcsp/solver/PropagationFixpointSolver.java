@@ -6,6 +6,7 @@ import lombok.extern.slf4j.Slf4j;
 import io.github.rcrida.jcsp.ConstraintSatisfactionProblem;
 import io.github.rcrida.jcsp.consistency.alldiff.AllDiffConsistency;
 import io.github.rcrida.jcsp.consistency.arc.AC3;
+import io.github.rcrida.jcsp.consistency.sum.SumConsistency;
 import io.github.rcrida.jcsp.domains.Domain;
 import org.jspecify.annotations.NonNull;
 
@@ -39,6 +40,10 @@ public class PropagationFixpointSolver extends SolverDecorator {
             var afterAllDiff = AllDiffConsistency.INSTANCE.apply(current);
             if (afterAllDiff.isEmpty()) return Optional.empty();
             current = afterAllDiff.get();
+
+            var afterSum = SumConsistency.INSTANCE.apply(current);
+            if (afterSum.isEmpty()) return Optional.empty();
+            current = afterSum.get();
 
             changed = domainSum(current) < domainSumBefore;
         }

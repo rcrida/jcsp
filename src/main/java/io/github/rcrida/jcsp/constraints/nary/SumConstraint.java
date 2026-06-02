@@ -1,13 +1,21 @@
 package io.github.rcrida.jcsp.constraints.nary;
 
+import io.github.rcrida.jcsp.consistency.Propagatable;
 import io.github.rcrida.jcsp.constraints.Operator;
+import io.github.rcrida.jcsp.domains.Domain;
 import io.github.rcrida.jcsp.variables.Variable;
 import lombok.EqualsAndHashCode;
 import lombok.Getter;
 import lombok.experimental.SuperBuilder;
 import org.jspecify.annotations.NonNull;
 
+import java.util.ArrayList;
 import java.util.Collection;
+import java.util.EnumSet;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -20,7 +28,8 @@ import java.util.stream.Collectors;
  */
 @SuperBuilder
 @EqualsAndHashCode(callSuper = true)
-public class SumConstraint<N extends Number> extends UniformNaryConstraint<N> {
+public class SumConstraint<N extends Number> extends UniformNaryConstraint<N> implements Propagatable {
+    private static final Set<Operator> PROPAGATING_OPERATORS = EnumSet.of(Operator.EQ, Operator.LEQ, Operator.GEQ);
     @NonNull private final N bound;
     @NonNull private final Operator operator;
 
@@ -55,6 +64,63 @@ public class SumConstraint<N extends Number> extends UniformNaryConstraint<N> {
             case Double d  -> (N) (Number)        values.stream().mapToDouble(Number::doubleValue).sum();
             default -> throw new IllegalStateException("Unsupported bound type: " + bound.getClass());
         };
+    }
+
+    /**
+     * Bounds propagation: for each variable, tightens its domain to the range of values that
+     * could still participate in a satisfying sum, given the current domains of all other variables.
+     * Only applied for EQ, LEQ, and GEQ operators; other operators return an empty update map.
+     *
+     * @param domains current variable domains
+     * @return updated domains for variables whose bounds were tightened,
+     *         or {@link Optional#empty()} if the constraint is provably infeasible
+     */
+    @Override
+    @SuppressWarnings({"unchecked", "rawtypes"})
+    public Optional<Map<Variable<?>, Domain<?>>> propagate(@NonNull Map<Variable<?>, Domain<?>> domains) {
+        if (!PROPAGATING_OPERATORS.contains(operator)) {
+            return Optional.of(Map.of());
+        }
+        List<Variable<N>> vars = new ArrayList<>((Collection<Variable<N>>) (Collection<?>) getVariables());
+        int n = vars.size();
+        int[] mins = new int[n];
+        int[] maxs = new int[n];
+        for (int i = 0; i < n; i++) {
+            Domain<N> dom = (Domain<N>) domains.get(vars.get(i));
+            mins[i] = dom.stream().mapToInt(Number::intValue).min().orElseThrow();
+            maxs[i] = dom.stream().mapToInt(Number::intValue).max().orElseThrow();
+        }
+        int totalMin = 0, totalMax = 0;
+        for (int i = 0; i < n; i++) { totalMin += mins[i]; totalMax += maxs[i]; }
+        int k = bound.intValue();
+
+        if ((operator == Operator.EQ  && (k < totalMin || k > totalMax)) ||
+            (operator == Operator.LEQ && k < totalMin) ||
+            (operator == Operator.GEQ && k > totalMax)) return Optional.empty();
+
+        Map<Variable<?>, Domain<?>> updated = new HashMap<>();
+        for (int i = 0; i < n; i++) {
+            Domain<N> dom = (Domain<N>) domains.get(vars.get(i));
+            // Upper bound: k - (sum of minimums of other variables)
+            int newMax = (operator != Operator.GEQ) ? k - (totalMin - mins[i]) : Integer.MAX_VALUE;
+            // Lower bound: k - (sum of maximums of other variables)
+            int newMin = (operator != Operator.LEQ) ? k - (totalMax - maxs[i]) : Integer.MIN_VALUE;
+
+            Domain.Builder<N> builder = null;
+            for (N val : dom.toList()) {
+                int v = val.intValue();
+                if (v < newMin || v > newMax) {
+                    if (builder == null) builder = dom.toBuilder();
+                    builder.delete(val);
+                }
+            }
+            if (builder != null) {
+                Domain<N> pruned = builder.build();
+                if (pruned.isEmpty()) return Optional.empty();
+                updated.put(vars.get(i), pruned);
+            }
+        }
+        return Optional.of(updated);
     }
 
     @Override
