@@ -8,7 +8,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 <dependency>
     <groupId>io.github.rcrida</groupId>
     <artifactId>jcsp</artifactId>
-    <version>2.14.0</version>
+    <version>2.16.0</version>
 </dependency>
 ```
 
@@ -50,14 +50,18 @@ This is a Constraint Satisfaction Problem (CSP) solver library implementing clas
 `Solver.Factory.INSTANCE.createSolver()` builds a chain of solver decorators, each applied in order before delegating to the next:
 
 1. **`NodeConsistentSolver`** — prunes domains via node consistency
-2. **`ArcConsistentSolver`** — applies AC3 arc consistency
+2. **`PropagationFixpointSolver`** — runs AC3, AllDiff GAC (Régin 1994), and SumConstraint bounds propagation in a combined fixpoint loop; each propagator can enable the others to make further reductions. Many highly-constrained problems (Zebra, Sudoku, MagicSquare) are solved entirely at this step.
 3. **`CumulativeConsistentSolver`** — applies timetabling propagation for `CumulativeConstraint` instances; no-op if none present
 4. **`IndependentSubproblemSolver`** — decomposes into independent subproblems and combines solutions
-5. **`TreeDecompositionSolver`** — applies tree decomposition for near-tree problems
+5. **`TreeDecompositionSolver`** — applies tree decomposition for near-tree problems; skipped when constraint graph minimum degree ≥ targetTreewidth (exact early exit)
 6. **`CutsetConditioningSolver`** — handles cyclic graphs by conditioning on a cycle cutset
 7. **`TreeSolver`** / **`BacktrackingSearch`** — terminal solvers for tree-structured or general CSPs respectively
 
-`BacktrackingSearch` uses pluggable strategies: `UnassignedVariableSelector` (with `MinimumRemainingValuesSelector`), `DomainValuesOrderer` (with `LeastConstrainingValueOrderer`), and `Inference` (MAC — maintaining arc consistency during search).
+`SolverDecorator.getSolutions()` short-circuits immediately when any preprocessing step reduces all domains to singletons, returning the forced assignment without invoking downstream stages.
+
+`BacktrackingSearch` uses pluggable strategies: `UnassignedVariableSelector` (with `MinimumRemainingValuesSelector`), `DomainValuesOrderer` (with `LeastConstrainingValueOrderer`), and `Inference` (MAC + SumConsistency bounds propagation — detecting sum infeasibility as early as possible during search).
+
+The individual `ArcConsistentSolver` and `AllDiffConsistentSolver` decorators still exist for custom chains but are not in the default chain (replaced by `PropagationFixpointSolver`).
 
 ### Local Search Chain
 
@@ -129,6 +133,7 @@ csp.impliesConstraint(b, constraint)  // b -> constraint
 - **Assertions**: Preconditions (e.g., equal list sizes) are checked with Java `assert` statements
 - **`Operator` enum** — in `constraints` package; covers EQ, NEQ, LT, GT, LEQ, GEQ
 - **`LogicOperator` enum** — in `constraints` package; covers AND, OR, XOR, NAND, NOR, XNOR
+- **`Propagatable` interface** — in `consistency` package; constraints that support domain propagation implement `propagate(Map<Variable<?>, Domain<?>> domains) → Optional<Map<Variable<?>, Domain<?>>>`. `AllDiffConstraint`, `SumConstraint`, and `CumulativeConstraint` implement it. `ConsistencyFixpoint` provides the shared fixpoint loop used by all consistency classes.
 
 ### Integration Tests
 
