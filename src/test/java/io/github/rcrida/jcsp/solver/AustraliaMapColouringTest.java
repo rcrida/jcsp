@@ -101,6 +101,25 @@ public class AustraliaMapColouringTest {
     }
 
     @Test
+    void searchStream_withFullColourDistribution() {
+        // Specify the complete colour distribution at once using globalCardinalityConstraint.
+        // RED=3, GREEN=2, BLUE=2 (total=7). From the 18 valid 3-colorings, exactly 2 satisfy
+        // this full distribution — a stricter result than the 6 from countConstraint(RED, 3) alone.
+        val csp = ConstraintSatisfactionProblem.builder()
+                .variableDomain(WA, DOMAIN).variableDomain(NT, DOMAIN).variableDomain(Q, DOMAIN)
+                .variableDomain(NSW, DOMAIN).variableDomain(V, DOMAIN).variableDomain(SA, DOMAIN)
+                .variableDomain(T, DOMAIN)
+                .notEqualsConstraint(SA, WA).notEqualsConstraint(SA, NT).notEqualsConstraint(SA, Q)
+                .notEqualsConstraint(SA, NSW).notEqualsConstraint(SA, V)
+                .notEqualsChainConstraint(List.of(WA, NT, Q, NSW, V))
+                .globalCardinalityConstraint(
+                        Set.of(WA, NT, Q, NSW, V, SA, T),
+                        Map.of(Colour.RED, 3, Colour.GREEN, 2, Colour.BLUE, 2))
+                .build();
+        assertThat(Solver.Factory.INSTANCE.createSolver().getSolutions(csp)).hasSize(2);
+    }
+
+    @Test
     void localSolution() {
         val csp = problem();
         val solver = MinConflictsSolver.of(1, 500, RandomAssignmentFactory.INSTANCE);
