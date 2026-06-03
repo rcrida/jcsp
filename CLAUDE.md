@@ -50,7 +50,7 @@ This is a Constraint Satisfaction Problem (CSP) solver library implementing clas
 `Solver.Factory.INSTANCE.createSolver()` builds a chain of solver decorators, each applied in order before delegating to the next:
 
 1. **`NodeConsistentSolver`** — prunes domains via node consistency
-2. **`PropagationFixpointSolver`** — runs AC3, AllDiff GAC (Régin 1994), and SumConstraint bounds propagation in a combined fixpoint loop; each propagator can enable the others to make further reductions. Many highly-constrained problems (Zebra, Sudoku, MagicSquare) are solved entirely at this step.
+2. **`PropagationFixpointSolver`** — runs AC3, AllDiff GAC (Régin 1994), SumConstraint bounds propagation, and LinearConstraint bounds propagation in a combined fixpoint loop; each propagator can enable the others to make further reductions. Many highly-constrained problems (Zebra, Sudoku, MagicSquare) are solved entirely at this step.
 3. **`CumulativeConsistentSolver`** — applies timetabling propagation for `CumulativeConstraint` instances; no-op if none present
 4. **`IndependentSubproblemSolver`** — decomposes into independent subproblems and combines solutions
 5. **`TreeDecompositionSolver`** — applies tree decomposition for near-tree problems; skipped when constraint graph minimum degree ≥ targetTreewidth (exact early exit)
@@ -133,7 +133,7 @@ csp.impliesConstraint(b, constraint)  // b -> constraint
 - **Assertions**: Preconditions (e.g., equal list sizes) are checked with Java `assert` statements
 - **`Operator` enum** — in `constraints` package; covers EQ, NEQ, LT, GT, LEQ, GEQ
 - **`LogicOperator` enum** — in `constraints` package; covers AND, OR, XOR, NAND, NOR, XNOR
-- **`Propagatable` interface** — in `consistency` package; constraints that support domain propagation implement `propagate(Map<Variable<?>, Domain<?>> domains) → Optional<Map<Variable<?>, Domain<?>>>`. `AllDiffConstraint`, `SumConstraint`, and `CumulativeConstraint` implement it. `ConsistencyFixpoint` provides the shared fixpoint loop used by all consistency classes.
+- **`Propagatable` interface** — in `consistency` package; constraints that support domain propagation implement `propagate(Map<Variable<?>, Domain<?>> domains) → Optional<Map<Variable<?>, Domain<?>>>`. `AllDiffConstraint`, `SumConstraint`, `LinearConstraint`, and `CumulativeConstraint` implement it. `ConsistencyFixpoint` provides the shared fixpoint loop used by all consistency classes. Each constraint type has a corresponding consistency class (`AllDiffConsistency`, `SumConsistency`, `LinearConsistency`, `CumulativeConsistency`) that drives its fixpoint loop and is invoked by `PropagationFixpointSolver`.
 - **`BinaryDecomposable` interface** — in `constraints` package; n-ary constraints that can be decomposed into an equivalent set of binary constraints implement `getAsBinaryConstraints() → Set<BinaryConstraint<?,?>>`. `AllDiffConstraint`, `AtMostOneConstraint` (and `ExactlyOneConstraint`), `IncreasingConstraint`, `DecreasingConstraint`, and `ReifiedConstraint` implement it. Used by `ConstraintGraph` to infer additional binary constraints for AC3, and by `ConstraintSatisfactionProblem`/`MinConflictsSolver` to identify non-decomposable n-ary constraints. `ReifiedConstraint` returns an empty set when its body is not a `UnaryConstraint`.
 
 ### Integration Tests
