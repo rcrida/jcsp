@@ -36,6 +36,7 @@ import io.github.rcrida.jcsp.constraints.nary.SumConstraint;
 import io.github.rcrida.jcsp.constraints.nary.AtMostOneConstraint;
 import io.github.rcrida.jcsp.constraints.nary.ExactlyOneConstraint;
 import io.github.rcrida.jcsp.constraints.nary.ImplicationConstraint;
+import io.github.rcrida.jcsp.constraints.BinaryDecomposable;
 import io.github.rcrida.jcsp.constraints.nary.NaryConstraint;
 import io.github.rcrida.jcsp.constraints.nary.PredicateConstraint;
 import io.github.rcrida.jcsp.constraints.nary.ReifiedConstraint;
@@ -229,8 +230,8 @@ public class ConstraintSatisfactionProblem {
     public Set<Variable<?>> getUnsplittableVariables() {
         return getConstraints().stream()
                 .filter(c -> c instanceof NaryConstraint)
+                .filter(c -> !(c instanceof BinaryDecomposable bd) || bd.getAsBinaryConstraints().isEmpty())
                 .map(c -> (NaryConstraint) c)
-                .filter(c -> c.getAsBinaryConstraints().isEmpty())
                 .flatMap(c -> c.getVariables().stream())
                 .collect(Collectors.toSet());
     }

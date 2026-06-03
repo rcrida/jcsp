@@ -80,9 +80,7 @@ public class DecreasingConstraintTest {
 
     @Test
     void getAsBinaryConstraints_returnsGeqPairs() {
-        var binary = constraint.getAsBinaryConstraints();
-        assertThat(binary).isPresent();
-        assertThat(binary.get()).hasSize(3); // one per consecutive pair
+        assertThat(constraint.getAsBinaryConstraints()).hasSize(3); // one per consecutive pair
     }
 
     @Test

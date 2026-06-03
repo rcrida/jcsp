@@ -4,6 +4,7 @@ import lombok.EqualsAndHashCode;
 import lombok.Value;
 import lombok.experimental.SuperBuilder;
 import io.github.rcrida.jcsp.assignments.Assignment;
+import io.github.rcrida.jcsp.constraints.BinaryDecomposable;
 import io.github.rcrida.jcsp.constraints.Constraint;
 import io.github.rcrida.jcsp.constraints.binary.BinaryConstraint;
 import io.github.rcrida.jcsp.constraints.binary.BinaryReifiedUnaryConstraint;
@@ -27,7 +28,7 @@ import java.util.Set;
  */
 @SuperBuilder
 @EqualsAndHashCode(callSuper = true)
-public class ReifiedConstraint extends NaryConstraint {
+public class ReifiedConstraint extends NaryConstraint implements BinaryDecomposable {
     @NonNull private final Variable<Boolean> indicator;
     @NonNull private final Constraint body;
 
@@ -49,11 +50,11 @@ public class ReifiedConstraint extends NaryConstraint {
     }
 
     @Override
-    public Optional<Set<BinaryConstraint<?, ?>>> getAsBinaryConstraints() {
+    public Set<BinaryConstraint<?, ?>> getAsBinaryConstraints() {
         if (body instanceof UnaryConstraint<?> unary) {
-            return Optional.of(Set.of(asBinary(unary)));
+            return Set.of(asBinary(unary));
         }
-        return Optional.empty();
+        return Set.of();
     }
 
     private <T> BinaryReifiedUnaryConstraint<T> asBinary(UnaryConstraint<T> unary) {

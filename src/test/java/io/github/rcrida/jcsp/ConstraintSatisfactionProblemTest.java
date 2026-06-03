@@ -2,6 +2,7 @@ package io.github.rcrida.jcsp;
 
 import lombok.val;
 import io.github.rcrida.jcsp.assignments.Assignment;
+import io.github.rcrida.jcsp.constraints.binary.BinaryNotEqualsConstraint;
 import io.github.rcrida.jcsp.constraints.binary.BinaryOffsetConstraint;
 import io.github.rcrida.jcsp.constraints.Operator;
 import io.github.rcrida.jcsp.constraints.unary.UnaryValueConstraint;
@@ -342,5 +343,19 @@ public class ConstraintSatisfactionProblemTest {
                         Assignment.of(Map.of(a, 2, b, 1))))
                 .build();
         assertThat(csp.getConstraints()).hasSize(1);
+    }
+
+    @Test
+    void getUnsplittableVariables_includesReifiedConstraintWithNonUnaryBody() {
+        Variable<Integer> x = VARIABLE_FACTORY.create("x");
+        Variable<Integer> y = VARIABLE_FACTORY.create("y");
+        Variable<Boolean> b = VARIABLE_FACTORY.create("b");
+        val csp = ConstraintSatisfactionProblem.builder()
+                .variableDomain(x, IntRangeDomain.of(1, 3))
+                .variableDomain(y, IntRangeDomain.of(1, 3))
+                .variableDomain(b, BooleanDomain.INSTANCE)
+                .reifyConstraint(b, BinaryNotEqualsConstraint.of(x, y))
+                .build();
+        assertThat(csp.getUnsplittableVariables()).containsExactlyInAnyOrder(b, x, y);
     }
 }

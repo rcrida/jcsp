@@ -3,6 +3,7 @@ package io.github.rcrida.jcsp.constraints.nary;
 import lombok.experimental.SuperBuilder;
 import lombok.val;
 import io.github.rcrida.jcsp.consistency.Propagatable;
+import io.github.rcrida.jcsp.constraints.BinaryDecomposable;
 import io.github.rcrida.jcsp.constraints.binary.BinaryConstraint;
 import io.github.rcrida.jcsp.constraints.binary.BinaryNotEqualsConstraint;
 import io.github.rcrida.jcsp.domains.Domain;
@@ -24,7 +25,7 @@ import java.util.*;
  * provided by the {@link io.github.rcrida.jcsp.assignments.Assignment} and ensures no internal state mutation.
  */
 @SuperBuilder
-public class AllDiffConstraint<T> extends UniformNaryConstraint<T> implements Propagatable {
+public class AllDiffConstraint<T> extends UniformNaryConstraint<T> implements Propagatable, BinaryDecomposable {
 
     @Override
     protected boolean isSatisfiedByValues(@NonNull Collection<T> values) {
@@ -48,7 +49,7 @@ public class AllDiffConstraint<T> extends UniformNaryConstraint<T> implements Pr
 
     @Override
     @SuppressWarnings({"unchecked", "rawtypes"})
-    public Optional<Set<BinaryConstraint<?, ?>>> getAsBinaryConstraints() {
+    public Set<BinaryConstraint<?, ?>> getAsBinaryConstraints() {
         val variables = new ArrayList<>(getVariables());
         val binaryConstraints = new HashSet<BinaryConstraint<?, ?>>();
         for (int i = 0; i < variables.size(); i++) {
@@ -58,7 +59,7 @@ public class AllDiffConstraint<T> extends UniformNaryConstraint<T> implements Pr
                         (Variable) variables.get(j)));
             }
         }
-        return Optional.of(binaryConstraints);
+        return binaryConstraints;
     }
 
     /**

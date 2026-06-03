@@ -5,10 +5,8 @@ import lombok.Value;
 import lombok.experimental.NonFinal;
 import lombok.experimental.SuperBuilder;
 import io.github.rcrida.jcsp.constraints.Constraint;
-import io.github.rcrida.jcsp.constraints.binary.BinaryConstraint;
 import io.github.rcrida.jcsp.variables.Variable;
 
-import java.util.Optional;
 import java.util.Set;
 
 /**
@@ -21,12 +19,6 @@ import java.util.Set;
 @SuperBuilder
 public abstract class NaryConstraint implements Constraint {
     @Singular Set<Variable<?>> variables;
-
-    public abstract String getRelation();
-
-    public Optional<Set<BinaryConstraint<?, ?>>> getAsBinaryConstraints() {
-        return Optional.empty();
-    }
 
     @Override
     public String toString() {

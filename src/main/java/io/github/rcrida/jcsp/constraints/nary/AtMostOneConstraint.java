@@ -2,6 +2,7 @@ package io.github.rcrida.jcsp.constraints.nary;
 
 import lombok.experimental.SuperBuilder;
 import lombok.val;
+import io.github.rcrida.jcsp.constraints.BinaryDecomposable;
 import io.github.rcrida.jcsp.constraints.LogicOperator;
 import io.github.rcrida.jcsp.constraints.binary.BinaryConstraint;
 import io.github.rcrida.jcsp.constraints.binary.BinaryLogicConstraint;
@@ -11,7 +12,6 @@ import org.jspecify.annotations.NonNull;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashSet;
-import java.util.Optional;
 import java.util.Set;
 
 /**
@@ -20,7 +20,7 @@ import java.util.Set;
  * Suitable for use with {@link io.github.rcrida.jcsp.domains.BooleanDomain}.
  */
 @SuperBuilder
-public class AtMostOneConstraint extends UniformNaryConstraint<Boolean> {
+public class AtMostOneConstraint extends UniformNaryConstraint<Boolean> implements BinaryDecomposable {
 
     @Override
     protected boolean isSatisfiedByValues(@NonNull Collection<Boolean> values) {
@@ -34,7 +34,7 @@ public class AtMostOneConstraint extends UniformNaryConstraint<Boolean> {
 
     @Override
     @SuppressWarnings("unchecked")
-    public Optional<Set<BinaryConstraint<?, ?>>> getAsBinaryConstraints() {
+    public Set<BinaryConstraint<?, ?>> getAsBinaryConstraints() {
         val variables = new ArrayList<>(getVariables());
         val binaryConstraints = new HashSet<BinaryConstraint<?, ?>>();
         for (int i = 0; i < variables.size(); i++) {
@@ -45,6 +45,6 @@ public class AtMostOneConstraint extends UniformNaryConstraint<Boolean> {
                         (Variable<Boolean>) variables.get(j)));
             }
         }
-        return Optional.of(binaryConstraints);
+        return binaryConstraints;
     }
 }

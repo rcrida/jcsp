@@ -53,9 +53,8 @@ public class ReifiedConstraintTest {
     @Test
     void unaryBody_decomposesToBinaryReifiedConstraint() {
         val rc = ReifiedConstraint.of(B, BODY);
-        assertThat(rc.getAsBinaryConstraints()).isPresent();
-        assertThat(rc.getAsBinaryConstraints().get()).hasSize(1);
-        assertThat(rc.getAsBinaryConstraints().get().iterator().next())
+        assertThat(rc.getAsBinaryConstraints()).hasSize(1);
+        assertThat(rc.getAsBinaryConstraints().iterator().next())
                 .isInstanceOf(BinaryReifiedUnaryConstraint.class);
     }
 

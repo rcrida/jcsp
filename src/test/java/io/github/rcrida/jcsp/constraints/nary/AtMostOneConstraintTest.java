@@ -58,8 +58,7 @@ public class AtMostOneConstraintTest {
 
     @Test
     void getAsBinaryConstraintsProducesPairs() {
-        assertThat(constraint.getAsBinaryConstraints()).isPresent();
-        assertThat(constraint.getAsBinaryConstraints().get()).hasSize(3);
+        assertThat(constraint.getAsBinaryConstraints()).hasSize(3);
     }
 
     @Test

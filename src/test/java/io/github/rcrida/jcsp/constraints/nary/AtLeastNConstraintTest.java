@@ -1,6 +1,7 @@
 package io.github.rcrida.jcsp.constraints.nary;
 
 import io.github.rcrida.jcsp.assignments.Assignment;
+import io.github.rcrida.jcsp.constraints.BinaryDecomposable;
 import io.github.rcrida.jcsp.variables.Variable;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -65,8 +66,8 @@ public class AtLeastNConstraintTest {
     }
 
     @Test
-    void getAsBinaryConstraintsIsEmpty() {
-        assertThat(constraint2.getAsBinaryConstraints()).isEmpty();
+    void notBinaryDecomposable() {
+        assertThat(constraint2).isNotInstanceOf(BinaryDecomposable.class);
     }
 
     @Test

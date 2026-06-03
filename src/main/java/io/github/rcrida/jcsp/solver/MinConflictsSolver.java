@@ -6,6 +6,7 @@ import lombok.extern.slf4j.Slf4j;
 import lombok.val;
 import io.github.rcrida.jcsp.ConstraintSatisfactionProblem;
 import io.github.rcrida.jcsp.assignments.Assignment;
+import io.github.rcrida.jcsp.constraints.BinaryDecomposable;
 import io.github.rcrida.jcsp.constraints.Constraint;
 import io.github.rcrida.jcsp.constraints.nary.NaryConstraint;
 import io.github.rcrida.jcsp.constraints.unary.UnaryConstraint;
@@ -161,7 +162,7 @@ public class MinConflictsSolver implements LocalSolver {
                 csp.getAllBinaryConstraints().stream(),
                 csp.getConstraints().stream().filter(c -> c instanceof UnaryConstraint));
         Stream<Constraint> nonDecomposableNary = csp.getConstraints().stream()
-                .filter(c -> c instanceof NaryConstraint nc && nc.getAsBinaryConstraints().isEmpty());
+                .filter(c -> c instanceof NaryConstraint && (!(c instanceof BinaryDecomposable bd) || bd.getAsBinaryConstraints().isEmpty()));
         return Stream.concat(binaryAndUnary, nonDecomposableNary);
     }
 

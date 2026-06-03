@@ -4,13 +4,12 @@ import lombok.EqualsAndHashCode;
 import lombok.ToString;
 import lombok.Value;
 import lombok.val;
+import io.github.rcrida.jcsp.constraints.BinaryDecomposable;
 import io.github.rcrida.jcsp.constraints.Constraint;
 import io.github.rcrida.jcsp.constraints.binary.BinaryConstraint;
-import io.github.rcrida.jcsp.constraints.nary.NaryConstraint;
 import io.github.rcrida.jcsp.variables.Variable;
 import org.jspecify.annotations.NonNull;
 
-import java.util.Collection;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
@@ -101,10 +100,9 @@ class ConstraintGraph {
                 .map(c -> (BinaryConstraint<?, ?>) c)
                 .toList();
         val inferredBinaryConstraints = constraints.stream()
-                .filter(c -> c instanceof NaryConstraint)
-                .map(c -> (NaryConstraint) c)
+                .filter(c -> c instanceof BinaryDecomposable)
+                .map(c -> (BinaryDecomposable) c)
                 .flatMap(c -> c.getAsBinaryConstraints().stream())
-                .flatMap(Collection::stream)
                 .toList();
         return Stream.concat(binaryConstraints.stream(), inferredBinaryConstraints.stream())
                 .collect(Collectors.toUnmodifiableSet());
