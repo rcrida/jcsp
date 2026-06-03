@@ -3,6 +3,8 @@ package io.github.rcrida.jcsp.constraints.nary;
 import io.github.rcrida.jcsp.ConstraintSatisfactionProblem;
 import io.github.rcrida.jcsp.assignments.Assignment;
 import io.github.rcrida.jcsp.constraints.Operator;
+import io.github.rcrida.jcsp.domains.Domain;
+import io.github.rcrida.jcsp.domains.DomainObjectSet;
 import io.github.rcrida.jcsp.domains.EnumDomain;
 import io.github.rcrida.jcsp.solver.Solver;
 import io.github.rcrida.jcsp.variables.Variable;
@@ -87,6 +89,120 @@ public class CountConstraintTest {
     @Test
     void of_createsEquivalentConstraint() {
         assertThat(CountConstraint.of(Set.of(v1, v2, v3, v4), Color.RED, Operator.EQ, 2)).isEqualTo(eq2);
+    }
+
+    // --- propagate() ---
+
+    static final Variable.Factory F = Variable.Factory.INSTANCE;
+    static final Variable<Color> a = F.create("a");
+    static final Variable<Color> b = F.create("b");
+    static final Variable<Color> c = F.create("c");
+
+    static final Domain<Color> RED_ONLY   = DomainObjectSet.<Color>builder().value(Color.RED).build();
+    static final Domain<Color> NOT_RED    = DomainObjectSet.<Color>builder().value(Color.GREEN).value(Color.BLUE).build();
+    static final Domain<Color> ALL_COLORS = EnumDomain.allOf(Color.class);
+
+    @Test
+    void propagate_eq_upperLimitReached_excludesValueFromPossibles() {
+        // count(RED)==1, a={RED}, b={R,G,B}, c={R,G,B} → definite=1==n → remove RED from b,c
+        var constraint = CountConstraint.of(Set.of(a, b, c), Color.RED, Operator.EQ, 1);
+        var domains = Map.<Variable<?>, Domain<?>>of(a, RED_ONLY, b, ALL_COLORS, c, ALL_COLORS);
+        var result = constraint.propagate(domains);
+        assertThat(result).isPresent();
+        assertThat(result.get().get(b)).isEqualTo(NOT_RED);
+        assertThat(result.get().get(c)).isEqualTo(NOT_RED);
+    }
+
+    @Test
+    void propagate_eq_lowerLimitBarelyMet_forcesValueIntoPossibles() {
+        // count(RED)==2, a={RED}, b={R,G,B}, c={G,B} → definite=1, possible=[b], maxCount=2==n → force b=RED
+        var constraint = CountConstraint.of(Set.of(a, b, c), Color.RED, Operator.EQ, 2);
+        var domains = Map.<Variable<?>, Domain<?>>of(a, RED_ONLY, b, ALL_COLORS, c, NOT_RED);
+        var result = constraint.propagate(domains);
+        assertThat(result).isPresent();
+        assertThat(result.get().get(b)).isEqualTo(RED_ONLY);
+    }
+
+    @Test
+    void propagate_eq_infeasible_tooManyDefinites() {
+        // count(RED)==1, a={RED}, b={RED} → definiteCount=2 > n=1 → infeasible
+        var constraint = CountConstraint.of(Set.of(a, b), Color.RED, Operator.EQ, 1);
+        var domains = Map.<Variable<?>, Domain<?>>of(a, RED_ONLY, b, RED_ONLY);
+        assertThat(constraint.propagate(domains)).isEmpty();
+    }
+
+    @Test
+    void propagate_eq_infeasible_tooFewPossible() {
+        // count(RED)==3, a={G,B}, b={G,B}, c={G,B} → maxCount=0 < n=3 → infeasible
+        var constraint = CountConstraint.of(Set.of(a, b, c), Color.RED, Operator.EQ, 3);
+        var domains = Map.<Variable<?>, Domain<?>>of(a, NOT_RED, b, NOT_RED, c, NOT_RED);
+        assertThat(constraint.propagate(domains)).isEmpty();
+    }
+
+    @Test
+    void propagate_leq_upperLimitReached_excludesValueFromPossibles() {
+        // count(RED)<=1, a={RED}, b={R,G,B} → definite=1==n → remove RED from b
+        var constraint = CountConstraint.of(Set.of(a, b), Color.RED, Operator.LEQ, 1);
+        var domains = Map.<Variable<?>, Domain<?>>of(a, RED_ONLY, b, ALL_COLORS);
+        var result = constraint.propagate(domains);
+        assertThat(result).isPresent();
+        assertThat(result.get().get(b)).isEqualTo(NOT_RED);
+    }
+
+    @Test
+    void propagate_leq_infeasible() {
+        // count(RED)<=1, a={RED}, b={RED} → definiteCount=2 > n=1 → infeasible
+        var constraint = CountConstraint.of(Set.of(a, b), Color.RED, Operator.LEQ, 1);
+        var domains = Map.<Variable<?>, Domain<?>>of(a, RED_ONLY, b, RED_ONLY);
+        assertThat(constraint.propagate(domains)).isEmpty();
+    }
+
+    @Test
+    void propagate_geq_forcesValueIntoPossibles() {
+        // count(RED)>=2, a={RED}, b={R,G,B}, c={G,B} → definite=1, possible=[b], maxCount=2==n → force b=RED
+        var constraint = CountConstraint.of(Set.of(a, b, c), Color.RED, Operator.GEQ, 2);
+        var domains = Map.<Variable<?>, Domain<?>>of(a, RED_ONLY, b, ALL_COLORS, c, NOT_RED);
+        var result = constraint.propagate(domains);
+        assertThat(result).isPresent();
+        assertThat(result.get().get(b)).isEqualTo(RED_ONLY);
+    }
+
+    @Test
+    void propagate_geq_infeasible() {
+        // count(RED)>=2, a={G,B}, b={G,B} → maxCount=0 < n=2 → infeasible
+        var constraint = CountConstraint.of(Set.of(a, b), Color.RED, Operator.GEQ, 2);
+        var domains = Map.<Variable<?>, Domain<?>>of(a, NOT_RED, b, NOT_RED);
+        assertThat(constraint.propagate(domains)).isEmpty();
+    }
+
+    @Test
+    void propagate_otherOperator_returnsNoChange() {
+        var constraint = CountConstraint.of(Set.of(a, b), Color.RED, Operator.NEQ, 1);
+        var domains = Map.<Variable<?>, Domain<?>>of(a, ALL_COLORS, b, ALL_COLORS);
+        var result = constraint.propagate(domains);
+        assertThat(result).isPresent();
+        assertThat(result.get()).isEmpty();
+    }
+
+    @Test
+    void propagate_noChange_returnsEmptyMap() {
+        // count(RED)==2, a={RED}, b={RED}, c={G,B} → definite=2==n but no possibles → no updates
+        var constraint = CountConstraint.of(Set.of(a, b, c), Color.RED, Operator.EQ, 2);
+        var domains = Map.<Variable<?>, Domain<?>>of(a, RED_ONLY, b, RED_ONLY, c, NOT_RED);
+        var result = constraint.propagate(domains);
+        assertThat(result).isPresent();
+        assertThat(result.get()).isEmpty();
+    }
+
+    @Test
+    void solver_infeasibleCountConstraint_returnsNoSolutions() {
+        // count(RED)==3 but only 2 variables → infeasible detected by propagation
+        var csp = ConstraintSatisfactionProblem.builder()
+                .variableDomain(a, EnumDomain.allOf(Color.class))
+                .variableDomain(b, EnumDomain.allOf(Color.class))
+                .countConstraint(Set.of(a, b), Color.RED, Operator.EQ, 3)
+                .build();
+        assertThat(Solver.Factory.INSTANCE.createSolver().getSolutions(csp)).isEmpty();
     }
 
     @Test
