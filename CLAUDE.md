@@ -73,6 +73,8 @@ NodeConsistency → AC3 → IndependentSubproblems → MinConflicts
 
 Seeded by `RandomAssignmentFactory`, `GreedyAssignmentFactory`, or `FallbackAssignmentFactory`.
 
+The preprocessing chain before `MinConflicts` is: `NodeConsistency → AC3 → SumConsistency → LinearConsistency → CountConsistency`. This detects infeasibility early (avoiding wasted attempts) and prunes domains to improve initial assignment quality. `AllDiffConsistency` (GAC) is intentionally excluded — it is expensive and repair-based search does not benefit from that level of arc consistency.
+
 ### Constraint Construction
 
 `CSP.Builder` provides fluent helper methods. All binary constraint classes also have static `of()` factory methods.
