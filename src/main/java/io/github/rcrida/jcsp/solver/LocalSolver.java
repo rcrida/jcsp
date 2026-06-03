@@ -3,7 +3,10 @@ package io.github.rcrida.jcsp.solver;
 import io.github.rcrida.jcsp.ConstraintSatisfactionProblem;
 import io.github.rcrida.jcsp.assignments.Assignment;
 import io.github.rcrida.jcsp.consistency.arc.AC3;
+import io.github.rcrida.jcsp.consistency.count.CountConsistency;
+import io.github.rcrida.jcsp.consistency.linear.LinearConsistency;
 import io.github.rcrida.jcsp.consistency.node.NodeConsistency;
+import io.github.rcrida.jcsp.consistency.sum.SumConsistency;
 import io.github.rcrida.jcsp.solver.assignmentfactory.InitialAssignmentFactory;
 import lombok.val;
 import org.jspecify.annotations.NonNull;
@@ -43,6 +46,9 @@ public interface LocalSolver {
                 public Optional<Assignment> getLocalSolution(@NonNull ConstraintSatisfactionProblem csp) {
                     return NodeConsistency.INSTANCE.apply(csp)
                             .flatMap(AC3.INSTANCE::apply)
+                            .flatMap(SumConsistency.INSTANCE::apply)
+                            .flatMap(LinearConsistency.INSTANCE::apply)
+                            .flatMap(CountConsistency.INSTANCE::apply)
                             .flatMap(inner::getLocalSolution);
                 }
 
@@ -51,6 +57,9 @@ public interface LocalSolver {
                                                              @NonNull ToDoubleFunction<Assignment> objective) {
                     return NodeConsistency.INSTANCE.apply(csp)
                             .flatMap(AC3.INSTANCE::apply)
+                            .flatMap(SumConsistency.INSTANCE::apply)
+                            .flatMap(LinearConsistency.INSTANCE::apply)
+                            .flatMap(CountConsistency.INSTANCE::apply)
                             .flatMap(reduced -> inner.getLocalSolution(reduced, objective));
                 }
             };
