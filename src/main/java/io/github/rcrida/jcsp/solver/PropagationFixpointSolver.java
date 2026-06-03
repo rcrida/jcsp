@@ -6,6 +6,7 @@ import lombok.extern.slf4j.Slf4j;
 import io.github.rcrida.jcsp.ConstraintSatisfactionProblem;
 import io.github.rcrida.jcsp.consistency.alldiff.AllDiffConsistency;
 import io.github.rcrida.jcsp.consistency.arc.AC3;
+import io.github.rcrida.jcsp.consistency.linear.LinearConsistency;
 import io.github.rcrida.jcsp.consistency.sum.SumConsistency;
 import io.github.rcrida.jcsp.domains.Domain;
 import org.jspecify.annotations.NonNull;
@@ -13,12 +14,13 @@ import org.jspecify.annotations.NonNull;
 import java.util.Optional;
 
 /**
- * Runs AC3, AllDiff GAC, and SumConstraint bounds propagation in a combined fixpoint loop.
+ * Runs AC3, AllDiff GAC, SumConstraint bounds propagation, and LinearConstraint bounds
+ * propagation in a combined fixpoint loop.
  *
  * <p>The propagators are not independent: AllDiff GAC can expose naked pairs that AC3 then
- * propagates to neighbouring constraints; sum bounds propagation tightens domains that AC3 and
- * AllDiff GAC can then exploit further. Running each once misses this feedback. This solver
- * iterates until none of the three makes further progress.
+ * propagates to neighbouring constraints; sum and linear bounds propagation tightens domains
+ * that AC3 and AllDiff GAC can then exploit further. Running each once misses this feedback.
+ * This solver iterates until none of the four makes further progress.
  */
 @Slf4j
 @SuperBuilder
@@ -44,6 +46,10 @@ public class PropagationFixpointSolver extends SolverDecorator {
             var afterSum = SumConsistency.INSTANCE.apply(current);
             if (afterSum.isEmpty()) return Optional.empty();
             current = afterSum.get();
+
+            var afterLinear = LinearConsistency.INSTANCE.apply(current);
+            if (afterLinear.isEmpty()) return Optional.empty();
+            current = afterLinear.get();
 
             changed = domainSum(current) < domainSumBefore;
         }

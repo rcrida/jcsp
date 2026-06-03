@@ -1,14 +1,23 @@
 package io.github.rcrida.jcsp.constraints.nary;
 
 import io.github.rcrida.jcsp.assignments.Assignment;
+import io.github.rcrida.jcsp.consistency.Propagatable;
 import io.github.rcrida.jcsp.constraints.Operator;
+import io.github.rcrida.jcsp.domains.Domain;
 import io.github.rcrida.jcsp.variables.Variable;
 import lombok.EqualsAndHashCode;
 import lombok.experimental.SuperBuilder;
 import org.jspecify.annotations.NonNull;
 
+import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Comparator;
+import java.util.EnumSet;
+import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
+import java.util.Optional;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 /**
@@ -22,7 +31,9 @@ import java.util.stream.Collectors;
  */
 @SuperBuilder
 @EqualsAndHashCode(callSuper = true)
-public class LinearConstraint<N extends Number> extends NaryConstraint {
+public class LinearConstraint<N extends Number> extends NaryConstraint implements Propagatable {
+    private static final Set<Operator> PROPAGATING_OPERATORS = EnumSet.of(Operator.EQ, Operator.LEQ, Operator.GEQ);
+
     @NonNull private final Map<Variable<N>, N> coefficients;
     @NonNull private final Operator operator;
     @NonNull private final N bound;
@@ -42,6 +53,77 @@ public class LinearConstraint<N extends Number> extends NaryConstraint {
     public boolean isSatisfiedBy(@NonNull Assignment assignment) {
         if (!assignment.getValues().keySet().containsAll(getVariables())) return true;
         return operator.compare(weightedSum(assignment), bound);
+    }
+
+    /**
+     * Bounds propagation for weighted sums. For each variable {@code v_i} with coefficient {@code c_i},
+     * computes the tightest domain bounds consistent with the constraint given the current domains of
+     * all other variables. Negative coefficients flip the min/max contributions and reverse the bound
+     * direction when deriving per-variable limits. Only applied for EQ, LEQ, and GEQ operators.
+     */
+    @Override
+    @SuppressWarnings("unchecked")
+    public Optional<Map<Variable<?>, Domain<?>>> propagate(@NonNull Map<Variable<?>, Domain<?>> domains) {
+        if (!PROPAGATING_OPERATORS.contains(operator)) {
+            return Optional.of(Map.of());
+        }
+        List<Variable<N>> vars = new ArrayList<>((Collection<Variable<N>>) (Collection<?>) getVariables());
+        int n = vars.size();
+        int[] coeffs = new int[n];
+        int[] minContribs = new int[n];
+        int[] maxContribs = new int[n];
+
+        for (int i = 0; i < n; i++) {
+            coeffs[i] = coefficients.get(vars.get(i)).intValue();
+            Domain<N> dom = (Domain<N>) domains.get(vars.get(i));
+            int domMin = dom.stream().mapToInt(Number::intValue).min().orElseThrow();
+            int domMax = dom.stream().mapToInt(Number::intValue).max().orElseThrow();
+            minContribs[i] = coeffs[i] >= 0 ? coeffs[i] * domMin : coeffs[i] * domMax;
+            maxContribs[i] = coeffs[i] >= 0 ? coeffs[i] * domMax : coeffs[i] * domMin;
+        }
+
+        int totalMin = 0, totalMax = 0;
+        for (int i = 0; i < n; i++) { totalMin += minContribs[i]; totalMax += maxContribs[i]; }
+        int k = bound.intValue();
+
+        if ((operator == Operator.EQ  && (k < totalMin || k > totalMax)) ||
+            (operator == Operator.LEQ && k < totalMin) ||
+            (operator == Operator.GEQ && k > totalMax)) return Optional.empty();
+
+        Map<Variable<?>, Domain<?>> updated = new HashMap<>();
+        for (int i = 0; i < n; i++) {
+            if (coeffs[i] == 0) continue;
+            Domain<N> dom = (Domain<N>) domains.get(vars.get(i));
+            int restMin = totalMin - minContribs[i];
+            int restMax = totalMax - maxContribs[i];
+
+            // c_i * v_i <= k - restMin  (from LEQ/EQ upper bound)
+            // c_i * v_i >= k - restMax  (from GEQ/EQ lower bound)
+            int newMin, newMax;
+            if (coeffs[i] > 0) {
+                newMax = (operator != Operator.GEQ) ? Math.floorDiv(k - restMin, coeffs[i]) : Integer.MAX_VALUE;
+                newMin = (operator != Operator.LEQ) ? Math.ceilDiv(k - restMax, coeffs[i])  : Integer.MIN_VALUE;
+            } else {
+                // Negative coefficient reverses inequality direction
+                newMin = (operator != Operator.GEQ) ? Math.ceilDiv(k - restMin, coeffs[i])  : Integer.MIN_VALUE;
+                newMax = (operator != Operator.LEQ) ? Math.floorDiv(k - restMax, coeffs[i]) : Integer.MAX_VALUE;
+            }
+
+            Domain.Builder<N> builder = null;
+            for (N val : dom.toList()) {
+                int v = val.intValue();
+                if (v < newMin || v > newMax) {
+                    if (builder == null) builder = dom.toBuilder();
+                    builder.delete(val);
+                }
+            }
+            if (builder != null) {
+                Domain<N> pruned = builder.build();
+                if (pruned.isEmpty()) return Optional.empty();
+                updated.put(vars.get(i), pruned);
+            }
+        }
+        return Optional.of(updated);
     }
 
     @SuppressWarnings("unchecked")
