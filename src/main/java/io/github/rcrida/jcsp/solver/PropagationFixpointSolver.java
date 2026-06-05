@@ -24,7 +24,9 @@ import java.util.Optional;
  * <p>The propagators are not independent: AllDiff GAC can expose naked pairs that AC3 then
  * propagates to neighbouring constraints; sum, linear, count, inverse, and among propagation
  * tightens domains that AC3 and AllDiff GAC can then exploit further. Running each once misses
- * this feedback. This solver iterates until none of the seven makes further progress.
+ * this feedback. This solver iterates until none of the seven makes further progress,
+ * or exits immediately with {@link java.util.Optional#empty()} as soon as any propagator
+ * detects infeasibility.
  */
 @Slf4j
 @SuperBuilder
