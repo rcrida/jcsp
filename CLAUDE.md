@@ -50,7 +50,7 @@ This is a Constraint Satisfaction Problem (CSP) solver library implementing clas
 `Solver.Factory.INSTANCE.createSolver()` builds a chain of solver decorators, each applied in order before delegating to the next:
 
 1. **`NodeConsistentSolver`** — prunes domains via node consistency
-2. **`PropagationFixpointSolver`** — runs AC3, AllDiff GAC (Régin 1994), SumConstraint bounds propagation, LinearConstraint bounds propagation, and CountConstraint value propagation in a combined fixpoint loop; each propagator can enable the others to make further reductions. Many highly-constrained problems (Zebra, Sudoku, MagicSquare) are solved entirely at this step.
+2. **`PropagationFixpointSolver`** — runs AC3, AllDiff GAC (Régin 1994), SumConstraint bounds propagation, LinearConstraint bounds propagation, CountConstraint value propagation, InverseConstraint arc consistency, and AmongConstraint value-set propagation in a combined fixpoint loop; each propagator can enable the others to make further reductions. Many highly-constrained problems (Zebra, Sudoku, MagicSquare) are solved entirely at this step.
 3. **`CumulativeConsistentSolver`** — applies timetabling propagation for `CumulativeConstraint` instances; no-op if none present
 4. **`IndependentSubproblemSolver`** — decomposes into independent subproblems and combines solutions
 5. **`TreeDecompositionSolver`** — applies tree decomposition for near-tree problems; skipped when constraint graph minimum degree ≥ targetTreewidth (exact early exit)
@@ -73,7 +73,7 @@ NodeConsistency → AC3 → IndependentSubproblems → MinConflicts
 
 Seeded by `RandomAssignmentFactory`, `GreedyAssignmentFactory`, or `FallbackAssignmentFactory`.
 
-The preprocessing chain before `MinConflicts` is: `NodeConsistency → AC3 → SumConsistency → LinearConsistency → CountConsistency`. This detects infeasibility early (avoiding wasted attempts) and prunes domains to improve initial assignment quality. `AllDiffConsistency` (GAC) is intentionally excluded — it is expensive and repair-based search does not benefit from that level of arc consistency.
+The preprocessing chain before `MinConflicts` is: `NodeConsistency → AC3 → SumConsistency → LinearConsistency → CountConsistency → InverseConsistency → AmongConsistency`. This detects infeasibility early (avoiding wasted attempts) and prunes domains to improve initial assignment quality. `AllDiffConsistency` (GAC) is intentionally excluded — it is expensive and repair-based search does not benefit from that level of arc consistency.
 
 ### Constraint Construction
 
@@ -110,6 +110,8 @@ csp.exactlyOneConstraint(Set.of(b1, b2, b3))
 csp.sumConstraint(Set.of(v1, v2, v3), Operator.EQ, 10)
 csp.linearConstraint(Map.of(v1, 2, v2, 3), Operator.LEQ, 10)  // weighted sum
 csp.countConstraint(Set.of(v1, v2, v3), value, Operator.EQ, 2)
+csp.amongConstraint(Set.of(v1, v2, v3), Set.of(a, b), Operator.EQ, 2)  // count vars with value in {a,b}
+csp.inverseConstraint(List.of(f1, f2, f3), List.of(g1, g2, g3))        // f[i]==j ↔ g[j-1]==i+1
 csp.globalCardinalityConstraint(Set.of(v1, v2, v3), Map.of(a, 2, b, 1))
 csp.cumulativeConstraint(starts, durations, resources, limit)  // resource scheduling
 csp.tuplesConstraint(Set.of(Assignment.of(...), ...))          // extensional (table)
@@ -135,7 +137,7 @@ csp.impliesConstraint(b, constraint)  // b -> constraint
 - **Assertions**: Preconditions (e.g., equal list sizes) are checked with Java `assert` statements
 - **`Operator` enum** — in `constraints` package; covers EQ, NEQ, LT, GT, LEQ, GEQ
 - **`LogicOperator` enum** — in `constraints` package; covers AND, OR, XOR, NAND, NOR, XNOR
-- **`Propagatable` interface** — in `consistency` package; constraints that support domain propagation implement `propagate(Map<Variable<?>, Domain<?>> domains) → Optional<Map<Variable<?>, Domain<?>>>`. `AllDiffConstraint`, `SumConstraint`, `LinearConstraint`, `CountConstraint`, and `CumulativeConstraint` implement it. `ConsistencyFixpoint` provides the shared fixpoint loop used by all consistency classes. Each constraint type has a corresponding consistency class (`AllDiffConsistency`, `SumConsistency`, `LinearConsistency`, `CountConsistency`, `CumulativeConsistency`) that drives its fixpoint loop and is invoked by `PropagationFixpointSolver`. `CountConstraint` propagation classifies each variable as definite (singleton `{value}`), possible (value present with others), or impossible (value absent), then detects infeasibility and prunes: removes `value` from possible domains when the count quota is met (EQ/LEQ), or forces possible domains to `{value}` when the count must reach its target (EQ/GEQ).
+- **`Propagatable` interface** — in `consistency` package; constraints that support domain propagation implement `propagate(Map<Variable<?>, Domain<?>> domains) → Optional<Map<Variable<?>, Domain<?>>>`. `AllDiffConstraint`, `SumConstraint`, `LinearConstraint`, `CountConstraint`, `InverseConstraint`, `AmongConstraint`, and `CumulativeConstraint` implement it. `ConsistencyFixpoint` provides the shared fixpoint loop used by all consistency classes. Each constraint type has a corresponding consistency class (`AllDiffConsistency`, `SumConsistency`, `LinearConsistency`, `CountConsistency`, `InverseConsistency`, `AmongConsistency`, `CumulativeConsistency`) that drives its fixpoint loop and is invoked by `PropagationFixpointSolver`. `CountConstraint` and `AmongConstraint` propagation classifies variables as definite/possible/impossible, then prunes domains when the count quota is met (EQ/LEQ) or must be reached (EQ/GEQ). `InverseConstraint` propagation runs two passes of pairwise arc consistency between the `f` and `invf` arrays.
 - **`BinaryDecomposable` interface** — in `constraints` package; n-ary constraints that can be decomposed into an equivalent set of binary constraints implement `getAsBinaryConstraints() → Set<BinaryConstraint<?,?>>`. `AllDiffConstraint`, `AtMostOneConstraint` (and `ExactlyOneConstraint`), `IncreasingConstraint`, `DecreasingConstraint`, and `ReifiedConstraint` implement it. Used by `ConstraintGraph` to infer additional binary constraints for AC3, and by `ConstraintSatisfactionProblem`/`MinConflictsSolver` to identify non-decomposable n-ary constraints. `ReifiedConstraint` returns an empty set when its body is not a `UnaryConstraint`.
 
 ### Integration Tests
