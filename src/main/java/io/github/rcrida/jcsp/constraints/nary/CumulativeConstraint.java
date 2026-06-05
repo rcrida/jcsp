@@ -21,7 +21,7 @@ import java.util.Optional;
  * resources consumed by concurrently executing tasks must not exceed {@code limit}.
  * Task {@code i} executes during {@code [start[i], start[i] + duration[i])}.
  * <p>
- * Beyond the basic satisfiability check, {@link #timetable} implements a timetabling
+ * Beyond the basic satisfiability check, {@link #propagate} implements a timetabling
  * propagator: it identifies each task's <em>compulsory part</em> (the interval that must
  * be occupied regardless of the final start time), builds a mandatory-resource profile,
  * and tightens each start-time domain to exclude positions that would exceed the capacity.
