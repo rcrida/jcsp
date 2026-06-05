@@ -8,6 +8,7 @@ import io.github.rcrida.jcsp.consistency.arc.AC3;
 import io.github.rcrida.jcsp.consistency.node.NodeConsistency;
 import io.github.rcrida.jcsp.constraints.nary.AmongConstraint;
 import io.github.rcrida.jcsp.constraints.nary.CountConstraint;
+import io.github.rcrida.jcsp.constraints.nary.CumulativeConstraint;
 import io.github.rcrida.jcsp.constraints.nary.InverseConstraint;
 import io.github.rcrida.jcsp.constraints.nary.LinearConstraint;
 import io.github.rcrida.jcsp.constraints.nary.SumConstraint;
@@ -49,7 +50,8 @@ public interface LocalSolver {
                 FixpointConsistency.of(LinearConstraint.class),
                 FixpointConsistency.of(CountConstraint.class),
                 FixpointConsistency.of(InverseConstraint.class),
-                FixpointConsistency.of(AmongConstraint.class)
+                FixpointConsistency.of(AmongConstraint.class),
+                FixpointConsistency.of(CumulativeConstraint.class)
         );
 
         Factory INSTANCE = (maxAttempts, maxSteps, initialAssignmentFactory) -> {

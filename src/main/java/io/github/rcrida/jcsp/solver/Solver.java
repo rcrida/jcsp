@@ -18,7 +18,7 @@ import io.github.rcrida.jcsp.solver.tree.decomposition.decomposer.TreeDecomposer
 import io.github.rcrida.jcsp.solver.tree.decomposition.decomposer.variableselector.MinimumDegreeVariableSelector;
 import io.github.rcrida.jcsp.solver.tree.selector.TreeUnassignedVariableSelector;
 import io.github.rcrida.jcsp.solver.tree.sorter.BFSTopologicalSorter;
-import io.github.rcrida.jcsp.solver.CumulativeConsistentSolver;
+
 import org.jspecify.annotations.NonNull;
 
 import java.util.Optional;
@@ -95,8 +95,7 @@ public interface Solver {
                     .targetTreewidth(7)
                     .build();
             val independentSubproblemSolver = IndependentSubproblemSolver.builder().inner(treeDecompositionSolver).build();
-            val cumulativeConsistentSolver = CumulativeConsistentSolver.builder().inner(independentSubproblemSolver).build();
-            val propagationFixpointSolver = PropagationFixpointSolver.builder().inner(cumulativeConsistentSolver).build();
+            val propagationFixpointSolver = PropagationFixpointSolver.builder().inner(independentSubproblemSolver).build();
             return NodeConsistentSolver.builder().inner(propagationFixpointSolver).build();
         };
 
