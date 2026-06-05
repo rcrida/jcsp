@@ -39,4 +39,7 @@ build/
 .DS_Store
 
 ### Local-only tests ###
-src/test/**/ignored/.claude/
+src/test/**/ignored/
+
+### Claude Code internals ###
+.claude/
