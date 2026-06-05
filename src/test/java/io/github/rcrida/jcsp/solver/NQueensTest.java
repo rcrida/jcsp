@@ -7,6 +7,7 @@ import io.github.rcrida.jcsp.constraints.Operator;
 import io.github.rcrida.jcsp.domains.Domain;
 import io.github.rcrida.jcsp.domains.IntRangeDomain;
 import io.github.rcrida.jcsp.solver.assignmentfactory.GreedyAssignmentFactory;
+import io.github.rcrida.jcsp.solver.LocalSolver;
 import io.github.rcrida.jcsp.variables.Variable;
 import org.junit.jupiter.api.Test;
 
@@ -98,7 +99,7 @@ public class NQueensTest {
     @Test
     void localSolution() {
         val csp = nQueens();
-        val solver = MinConflictsSolver.of(1, 500, GreedyAssignmentFactory.INSTANCE);
+        val solver = LocalSolver.Factory.INSTANCE.createLocalSolver(10, 500, GreedyAssignmentFactory.INSTANCE);
         val optionalSolution = solver.getLocalSolution(csp);
         printAssignment(optionalSolution.orElseThrow());
     }
