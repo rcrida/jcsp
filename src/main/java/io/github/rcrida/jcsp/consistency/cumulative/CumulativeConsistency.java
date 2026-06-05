@@ -1,6 +1,7 @@
 package io.github.rcrida.jcsp.consistency.cumulative;
 
 import lombok.extern.slf4j.Slf4j;
+import io.github.rcrida.jcsp.consistency.ConstraintConsistency;
 import io.github.rcrida.jcsp.ConstraintSatisfactionProblem;
 import io.github.rcrida.jcsp.consistency.ConsistencyFixpoint;
 import io.github.rcrida.jcsp.constraints.nary.CumulativeConstraint;
@@ -13,11 +14,12 @@ import java.util.Optional;
  * iterating to fixpoint via {@link ConsistencyFixpoint}.
  */
 @Slf4j
-public class CumulativeConsistency {
+public class CumulativeConsistency implements ConstraintConsistency {
     public static final CumulativeConsistency INSTANCE = new CumulativeConsistency();
 
     private CumulativeConsistency() {}
 
+    @Override
     @SuppressWarnings({"unchecked", "rawtypes"})
     public Optional<ConstraintSatisfactionProblem> apply(ConstraintSatisfactionProblem csp) {
         List<CumulativeConstraint> constraints = (List) csp.getConstraints().stream()

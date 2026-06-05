@@ -1,6 +1,7 @@
 package io.github.rcrida.jcsp.consistency.node;
 
 import lombok.extern.slf4j.Slf4j;
+import io.github.rcrida.jcsp.consistency.ConstraintConsistency;
 import lombok.val;
 import io.github.rcrida.jcsp.ConstraintSatisfactionProblem;
 import io.github.rcrida.jcsp.constraints.unary.UnaryConstraint;
@@ -17,7 +18,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
  * accordingly.
  */
 @Slf4j
-public class NodeConsistency {
+public class NodeConsistency implements ConstraintConsistency {
     public static NodeConsistency INSTANCE = new NodeConsistency();
 
     private NodeConsistency() {}
@@ -28,6 +29,7 @@ public class NodeConsistency {
      * @param problem The constraint satisfaction problem to apply node consistency to.
      * @return An Optional containing the updated problem if node consistency was applied successfully, or empty if an inconsistency was found.
      */
+    @Override
     public Optional<ConstraintSatisfactionProblem> apply(ConstraintSatisfactionProblem problem) {
         val builder = problem.toBuilder();
         val unaryConstraints = problem.getConstraints().stream()

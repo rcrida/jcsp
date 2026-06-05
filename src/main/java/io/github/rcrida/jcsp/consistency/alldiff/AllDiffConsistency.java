@@ -1,6 +1,7 @@
 package io.github.rcrida.jcsp.consistency.alldiff;
 
 import lombok.extern.slf4j.Slf4j;
+import io.github.rcrida.jcsp.consistency.ConstraintConsistency;
 import io.github.rcrida.jcsp.ConstraintSatisfactionProblem;
 import io.github.rcrida.jcsp.consistency.ConsistencyFixpoint;
 import io.github.rcrida.jcsp.constraints.nary.AllDiffConstraint;
@@ -13,11 +14,12 @@ import java.util.Optional;
  * iterating to fixpoint via {@link ConsistencyFixpoint}.
  */
 @Slf4j
-public class AllDiffConsistency {
+public class AllDiffConsistency implements ConstraintConsistency {
     public static final AllDiffConsistency INSTANCE = new AllDiffConsistency();
 
     private AllDiffConsistency() {}
 
+    @Override
     @SuppressWarnings({"unchecked", "rawtypes"})
     public Optional<ConstraintSatisfactionProblem> apply(ConstraintSatisfactionProblem csp) {
         List<AllDiffConstraint<?>> constraints = (List) csp.getConstraints().stream()

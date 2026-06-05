@@ -1,6 +1,7 @@
 package io.github.rcrida.jcsp.consistency.linear;
 
 import lombok.extern.slf4j.Slf4j;
+import io.github.rcrida.jcsp.consistency.ConstraintConsistency;
 import io.github.rcrida.jcsp.ConstraintSatisfactionProblem;
 import io.github.rcrida.jcsp.consistency.ConsistencyFixpoint;
 import io.github.rcrida.jcsp.constraints.nary.LinearConstraint;
@@ -13,11 +14,12 @@ import java.util.Optional;
  * iterating to fixpoint via {@link ConsistencyFixpoint}.
  */
 @Slf4j
-public class LinearConsistency {
+public class LinearConsistency implements ConstraintConsistency {
     public static final LinearConsistency INSTANCE = new LinearConsistency();
 
     private LinearConsistency() {}
 
+    @Override
     @SuppressWarnings({"unchecked", "rawtypes"})
     public Optional<ConstraintSatisfactionProblem> apply(ConstraintSatisfactionProblem csp) {
         List<LinearConstraint<?>> constraints = (List) csp.getConstraints().stream()

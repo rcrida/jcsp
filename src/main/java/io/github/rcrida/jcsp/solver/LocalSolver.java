@@ -2,6 +2,7 @@ package io.github.rcrida.jcsp.solver;
 
 import io.github.rcrida.jcsp.ConstraintSatisfactionProblem;
 import io.github.rcrida.jcsp.assignments.Assignment;
+import io.github.rcrida.jcsp.consistency.ConstraintConsistency;
 import io.github.rcrida.jcsp.consistency.among.AmongConsistency;
 import io.github.rcrida.jcsp.consistency.arc.AC3;
 import io.github.rcrida.jcsp.consistency.count.CountConsistency;
@@ -13,6 +14,7 @@ import io.github.rcrida.jcsp.solver.assignmentfactory.InitialAssignmentFactory;
 import lombok.val;
 import org.jspecify.annotations.NonNull;
 
+import java.util.List;
 import java.util.Optional;
 import java.util.function.ToDoubleFunction;
 
@@ -39,6 +41,16 @@ public interface LocalSolver {
     }
 
     interface Factory {
+        List<ConstraintConsistency> PREPROCESSORS = List.of(
+                NodeConsistency.INSTANCE,
+                AC3.INSTANCE,
+                SumConsistency.INSTANCE,
+                LinearConsistency.INSTANCE,
+                CountConsistency.INSTANCE,
+                InverseConsistency.INSTANCE,
+                AmongConsistency.INSTANCE
+        );
+
         Factory INSTANCE = (maxAttempts, maxSteps, initialAssignmentFactory) -> {
             val inner = IndependentSubproblemLocalSolver.builder()
                     .delegate(MinConflictsSolver.of(maxAttempts, maxSteps, initialAssignmentFactory))
@@ -46,27 +58,17 @@ public interface LocalSolver {
             return new LocalSolver() {
                 @Override
                 public Optional<Assignment> getLocalSolution(@NonNull ConstraintSatisfactionProblem csp) {
-                    return NodeConsistency.INSTANCE.apply(csp)
-                            .flatMap(AC3.INSTANCE::apply)
-                            .flatMap(SumConsistency.INSTANCE::apply)
-                            .flatMap(LinearConsistency.INSTANCE::apply)
-                            .flatMap(CountConsistency.INSTANCE::apply)
-                            .flatMap(InverseConsistency.INSTANCE::apply)
-                            .flatMap(AmongConsistency.INSTANCE::apply)
-                            .flatMap(inner::getLocalSolution);
+                    var reduced = Optional.of(csp);
+                    for (var p : PREPROCESSORS) reduced = reduced.flatMap(p::apply);
+                    return reduced.flatMap(inner::getLocalSolution);
                 }
 
                 @Override
                 public Optional<Assignment> getLocalSolution(@NonNull ConstraintSatisfactionProblem csp,
                                                              @NonNull ToDoubleFunction<Assignment> objective) {
-                    return NodeConsistency.INSTANCE.apply(csp)
-                            .flatMap(AC3.INSTANCE::apply)
-                            .flatMap(SumConsistency.INSTANCE::apply)
-                            .flatMap(LinearConsistency.INSTANCE::apply)
-                            .flatMap(CountConsistency.INSTANCE::apply)
-                            .flatMap(InverseConsistency.INSTANCE::apply)
-                            .flatMap(AmongConsistency.INSTANCE::apply)
-                            .flatMap(reduced -> inner.getLocalSolution(reduced, objective));
+                    var reduced = Optional.of(csp);
+                    for (var p : PREPROCESSORS) reduced = reduced.flatMap(p::apply);
+                    return reduced.flatMap(r -> inner.getLocalSolution(r, objective));
                 }
             };
         };

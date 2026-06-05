@@ -1,6 +1,7 @@
 package io.github.rcrida.jcsp.consistency.inverse;
 
 import lombok.extern.slf4j.Slf4j;
+import io.github.rcrida.jcsp.consistency.ConstraintConsistency;
 import io.github.rcrida.jcsp.ConstraintSatisfactionProblem;
 import io.github.rcrida.jcsp.consistency.ConsistencyFixpoint;
 import io.github.rcrida.jcsp.constraints.nary.InverseConstraint;
@@ -13,11 +14,12 @@ import java.util.Optional;
  * iterating to fixpoint via {@link ConsistencyFixpoint}.
  */
 @Slf4j
-public class InverseConsistency {
+public class InverseConsistency implements ConstraintConsistency {
     public static final InverseConsistency INSTANCE = new InverseConsistency();
 
     private InverseConsistency() {}
 
+    @Override
     @SuppressWarnings({"unchecked", "rawtypes"})
     public Optional<ConstraintSatisfactionProblem> apply(ConstraintSatisfactionProblem csp) {
         List<InverseConstraint> constraints = (List) csp.getConstraints().stream()

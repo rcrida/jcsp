@@ -1,6 +1,7 @@
 package io.github.rcrida.jcsp.consistency.count;
 
 import lombok.extern.slf4j.Slf4j;
+import io.github.rcrida.jcsp.consistency.ConstraintConsistency;
 import io.github.rcrida.jcsp.ConstraintSatisfactionProblem;
 import io.github.rcrida.jcsp.consistency.ConsistencyFixpoint;
 import io.github.rcrida.jcsp.constraints.nary.CountConstraint;
@@ -13,11 +14,12 @@ import java.util.Optional;
  * iterating to fixpoint via {@link ConsistencyFixpoint}.
  */
 @Slf4j
-public class CountConsistency {
+public class CountConsistency implements ConstraintConsistency {
     public static final CountConsistency INSTANCE = new CountConsistency();
 
     private CountConsistency() {}
 
+    @Override
     @SuppressWarnings({"unchecked", "rawtypes"})
     public Optional<ConstraintSatisfactionProblem> apply(ConstraintSatisfactionProblem csp) {
         List<CountConstraint<?>> constraints = (List) csp.getConstraints().stream()

@@ -3,6 +3,7 @@ package io.github.rcrida.jcsp.consistency.arc;
 import lombok.extern.slf4j.Slf4j;
 import lombok.val;
 import io.github.rcrida.jcsp.ConstraintSatisfactionProblem;
+import io.github.rcrida.jcsp.consistency.ConstraintConsistency;
 import io.github.rcrida.jcsp.constraints.binary.BinaryConstraint;
 import io.github.rcrida.jcsp.domains.Domain;
 
@@ -19,7 +20,7 @@ import java.util.stream.Collectors;
  * the domains of variables associated with those constraints.
  */
 @Slf4j
-public class AC3 implements ArcConsistency {
+public class AC3 implements ConstraintConsistency {
     public static final AC3 INSTANCE = new AC3();
 
     private AC3() {}
