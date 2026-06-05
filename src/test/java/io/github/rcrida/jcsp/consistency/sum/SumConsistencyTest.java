@@ -10,7 +10,7 @@ import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import io.github.rcrida.jcsp.consistency.FixpointConsistency;
+import io.github.rcrida.jcsp.consistency.fixpoint.FixpointConsistency;
 import io.github.rcrida.jcsp.constraints.nary.SumConstraint;
 
 public class SumConsistencyTest {

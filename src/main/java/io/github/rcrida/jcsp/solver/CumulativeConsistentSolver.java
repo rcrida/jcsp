@@ -3,7 +3,7 @@ package io.github.rcrida.jcsp.solver;
 import lombok.EqualsAndHashCode;
 import lombok.experimental.SuperBuilder;
 import io.github.rcrida.jcsp.ConstraintSatisfactionProblem;
-import io.github.rcrida.jcsp.consistency.FixpointConsistency;
+import io.github.rcrida.jcsp.consistency.fixpoint.FixpointConsistency;
 import io.github.rcrida.jcsp.constraints.nary.CumulativeConstraint;
 import org.jspecify.annotations.NonNull;
 

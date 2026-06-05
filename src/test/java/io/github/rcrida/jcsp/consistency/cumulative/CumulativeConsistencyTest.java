@@ -9,7 +9,7 @@ import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import io.github.rcrida.jcsp.consistency.FixpointConsistency;
+import io.github.rcrida.jcsp.consistency.fixpoint.FixpointConsistency;
 import io.github.rcrida.jcsp.constraints.nary.CumulativeConstraint;
 
 public class CumulativeConsistencyTest {

@@ -1,6 +1,8 @@
-package io.github.rcrida.jcsp.consistency;
+package io.github.rcrida.jcsp.consistency.fixpoint;
 
 import io.github.rcrida.jcsp.ConstraintSatisfactionProblem;
+import io.github.rcrida.jcsp.consistency.ConstraintConsistency;
+import io.github.rcrida.jcsp.consistency.Propagatable;
 import io.github.rcrida.jcsp.domains.Domain;
 import io.github.rcrida.jcsp.variables.Variable;
 import org.slf4j.Logger;

@@ -3,7 +3,7 @@ package io.github.rcrida.jcsp.solver;
 import io.github.rcrida.jcsp.ConstraintSatisfactionProblem;
 import io.github.rcrida.jcsp.assignments.Assignment;
 import io.github.rcrida.jcsp.consistency.ConstraintConsistency;
-import io.github.rcrida.jcsp.consistency.FixpointConsistency;
+import io.github.rcrida.jcsp.consistency.fixpoint.FixpointConsistency;
 import io.github.rcrida.jcsp.consistency.arc.AC3;
 import io.github.rcrida.jcsp.consistency.node.NodeConsistency;
 import io.github.rcrida.jcsp.constraints.nary.AmongConstraint;
