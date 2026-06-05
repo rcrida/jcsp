@@ -9,6 +9,8 @@ import io.github.rcrida.jcsp.consistency.fixpoint.FixpointConsistency;
 import io.github.rcrida.jcsp.consistency.arc.AC3;
 import io.github.rcrida.jcsp.constraints.nary.AllDiffConstraint;
 import io.github.rcrida.jcsp.constraints.nary.AmongConstraint;
+import io.github.rcrida.jcsp.constraints.nary.AtLeastNConstraint;
+import io.github.rcrida.jcsp.constraints.nary.AtMostNConstraint;
 import io.github.rcrida.jcsp.constraints.nary.CountConstraint;
 import io.github.rcrida.jcsp.constraints.nary.CumulativeConstraint;
 import io.github.rcrida.jcsp.constraints.nary.InverseConstraint;
@@ -48,6 +50,8 @@ public class PropagationFixpointSolver extends SolverDecorator {
             FixpointConsistency.of(CountConstraint.class),
             FixpointConsistency.of(InverseConstraint.class),
             FixpointConsistency.of(AmongConstraint.class),
+            FixpointConsistency.of(AtLeastNConstraint.class),
+            FixpointConsistency.of(AtMostNConstraint.class),
             FixpointConsistency.of(CumulativeConstraint.class)
     );
 

@@ -2,6 +2,8 @@ package io.github.rcrida.jcsp.constraints.nary;
 
 import io.github.rcrida.jcsp.assignments.Assignment;
 import io.github.rcrida.jcsp.constraints.BinaryDecomposable;
+import io.github.rcrida.jcsp.domains.BooleanDomain;
+import io.github.rcrida.jcsp.domains.Domain;
 import io.github.rcrida.jcsp.variables.Variable;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -11,6 +13,10 @@ import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.util.Map;
 import java.util.Set;
+
+import static io.github.rcrida.jcsp.constraints.nary.AtMostNConstraintTest.BOTH;
+import static io.github.rcrida.jcsp.constraints.nary.AtMostNConstraintTest.FALSE;
+import static io.github.rcrida.jcsp.constraints.nary.AtMostNConstraintTest.TRUE;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -79,5 +85,37 @@ public class AtLeastNConstraintTest {
     @Test
     void testToString() {
         assertThat(constraint2.toString()).isEqualTo("<(v1, v2, v3, v4), AtLeast2>");
+    }
+
+    // --- propagate() ---
+
+    static final Variable.Factory F = Variable.Factory.INSTANCE;
+
+    @Test
+    void propagate_maxCountEqualsN_forcesPossiblyTrueToTrue() {
+        // atLeast(2): a={true}, b={true,false}, c={false} → definite=1, possible=[b], maxCount=2==n → force b to true
+        Variable<Boolean> a = F.create("a"), b = F.create("b"), c = F.create("c");
+        var constraint = AtLeastNConstraint.builder().variables(Set.of(a, b, c)).n(2).build();
+        var result = constraint.propagate(Map.of(a, TRUE, b, BOTH, c, FALSE));
+        assertThat(result).isPresent();
+        assertThat(result.get().get(b)).isEqualTo(TRUE);
+    }
+
+    @Test
+    void propagate_infeasible_maxCountBelowN() {
+        // atLeast(3): a={true}, b={false} → maxCount=1 < n=3 → infeasible
+        Variable<Boolean> a = F.create("a"), b = F.create("b");
+        var constraint = AtLeastNConstraint.builder().variables(Set.of(a, b)).n(3).build();
+        assertThat(constraint.propagate(Map.of(a, TRUE, b, FALSE))).isEmpty();
+    }
+
+    @Test
+    void propagate_noChange_maxCountAboveN() {
+        // atLeast(1): a={true,false}, b={true,false}, c={true,false} → maxCount=3 > n=1 → no pruning
+        Variable<Boolean> a = F.create("a"), b = F.create("b"), c = F.create("c");
+        var constraint = AtLeastNConstraint.builder().variables(Set.of(a, b, c)).n(1).build();
+        var result = constraint.propagate(Map.of(a, BOTH, b, BOTH, c, BOTH));
+        assertThat(result).isPresent();
+        assertThat(result.get()).isEmpty();
     }
 }
