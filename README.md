@@ -8,12 +8,12 @@ A Java library implementing classic AI algorithms for solving Constraint Satisfa
 
 - **Multiple solving strategies**: backtracking search, tree solver, cutset conditioning, tree decomposition, and independent subproblem decomposition
 - **Optimization**: branch-and-bound search via `getSolution(csp, objective)` and `getSolutions(csp, objective)` — returns the optimal assignment or an improving stream of assignments
-- **Consistency preprocessing**: AC3 arc consistency, node consistency, and AllDiff GAC (Régin 1994) for domain pruning — run in a combined fixpoint loop so each propagator benefits from the others' reductions
-- **Flexible constraint types**: unary, binary (equals, not-equals, offset, comparator, logic, element, predicate, tuples), and n-ary (AllDiff, AtMostOne, AtLeastN, AtMostN, ExactlyOne, Sum, Linear, Count, GlobalCardinality, Cumulative, Tuples, Increasing, Decreasing, Lex, predicate)
+- **Consistency preprocessing**: AC3 arc consistency, node consistency, AllDiff GAC (Régin 1994), SumConstraint and LinearConstraint bounds propagation, CountConstraint and AmongConstraint value-set propagation, and InverseConstraint arc consistency — all run in a combined fixpoint loop so each propagator benefits from the others' reductions
+- **Flexible constraint types**: unary, binary (equals, not-equals, offset, comparator, logic, element, predicate, tuples), and n-ary (AllDiff, AtMostOne, AtLeastN, AtMostN, ExactlyOne, Sum, Linear, Count, Among, Inverse, GlobalCardinality, Cumulative, Tuples, Increasing, Decreasing, Lex, predicate)
 - **Boolean domain**: `BooleanDomain` for modelling binary assignment problems (e.g. timetabling as a 0-1 matrix)
 - **Functional style**: immutable value objects, composable solver decorators, and a lazy `Stream<Assignment>` API throughout
 - **Heuristics**: MRV variable selection, LCV value ordering, and Minimum Degree variable elimination for tree decomposition
-- **Local search**: `LocalSolver.Factory.INSTANCE` wires the full pipeline (NC + AC3 → independent subproblem decomposition → min-conflicts) and supports both satisfaction and optimization. Seeded by `RandomAssignmentFactory`, `GreedyAssignmentFactory`, or `FallbackAssignmentFactory` for hybrid restart strategies
+- **Local search**: `LocalSolver.Factory.INSTANCE` wires the full pipeline (NC + AC3 + bounds/value propagation → independent subproblem decomposition → min-conflicts) and supports both satisfaction and optimization. Seeded by `RandomAssignmentFactory`, `GreedyAssignmentFactory`, or `FallbackAssignmentFactory` for hybrid restart strategies
 - **Reification**: `ReifiedConstraint` (`b <-> body`) and `ImplicationConstraint` (`b -> body`) introduce boolean indicator variables that capture constraint satisfaction — enables soft constraints, counting satisfaction, and conditional constraints via `csp.reifyConstraint(b, constraint)` and `csp.impliesConstraint(b, constraint)`
 
 ## Usage
@@ -75,8 +75,10 @@ builder.biPredicateConstraint(v1, v2, biPredicate)          // biPredicate.test(
 ```java
 builder.sumConstraint(Set.of(v1, v2, v3), Operator.EQ, 10)          // v1 + v2 + v3 == 10  (also LEQ, GEQ, etc.)
 builder.linearConstraint(Map.of(v1, 2, v2, 3), Operator.LEQ, 10)    // 2*v1 + 3*v2 <= 10  (weighted sum / linear)
-builder.countConstraint(Set.of(v1, v2, v3), value, Operator.EQ, 2)           // number of variables equal to value == 2  (also LEQ, GEQ, etc.)
-builder.globalCardinalityConstraint(Set.of(v1, v2, v3), Map.of(a, 2, b, 1))  // count(v, a)==2 AND count(v, b)==1  (open GCC)
+builder.countConstraint(Set.of(v1, v2, v3), value, Operator.EQ, 2)                    // number of variables equal to value == 2  (also LEQ, GEQ, etc.)
+builder.amongConstraint(Set.of(v1, v2, v3), Set.of(a, b), Operator.EQ, 2)             // number of variables with value in {a,b} == 2  (MiniZinc among)
+builder.inverseConstraint(List.of(f1, f2, f3), List.of(g1, g2, g3))                   // f[i]==j ↔ g[j-1]==i+1  (MiniZinc inverse; 1-based values)
+builder.globalCardinalityConstraint(Set.of(v1, v2, v3), Map.of(a, 2, b, 1))           // count(v, a)==2 AND count(v, b)==1  (open GCC)
 builder.tuplesConstraint(Set.of(Assignment.of(...), ...))           // variable values must match one of the allowed assignments (order-independent)
 builder.increasingConstraint(List.of(v1, v2, v3))                   // v1 <= v2 <= v3  (MiniZinc increasing)
 builder.decreasingConstraint(List.of(v1, v2, v3))                   // v1 >= v2 >= v3  (MiniZinc decreasing)
@@ -102,12 +104,12 @@ builder.impliesConstraint(b, constraint)                    // b -> constraint  
 The default solver (`Solver.Factory.INSTANCE.createSolver()`) applies strategies in order, each preprocessing the problem before delegating:
 
 ```
-NodeConsistency → PropagationFixpoint(AC3 ↔ AllDiff GAC ↔ SumBounds) → CumulativeConsistency
+NodeConsistency → PropagationFixpoint(AC3 ↔ AllDiff GAC ↔ SumBounds ↔ LinearBounds ↔ CountValue ↔ InverseArc ↔ AmongValue) → CumulativeConsistency
     → IndependentSubproblems → TreeDecomposition → CutsetConditioning
     → TreeSolver / BranchAndBound(BacktrackingSearch + SumBounds)
 ```
 
-`PropagationFixpoint` runs AC3, AllDiff GAC, and SumConstraint bounds propagation in a combined fixpoint loop — each can expose new reductions the others exploit. Many highly-constrained problems (e.g. Zebra, Sudoku, MagicSquare) are solved entirely by propagation without any backtracking. SumConstraint bounds propagation is also applied inside the MAC inference during backtracking, detecting sum infeasibility as early as possible.
+`PropagationFixpoint` runs AC3, AllDiff GAC, SumConstraint and LinearConstraint bounds propagation, CountConstraint and AmongConstraint value-set propagation, and InverseConstraint arc consistency in a combined fixpoint loop — each can expose new reductions the others exploit. Many highly-constrained problems (e.g. Zebra, Sudoku, MagicSquare) are solved entirely by propagation without any backtracking. SumConstraint bounds propagation is also applied inside the MAC inference during backtracking, detecting sum infeasibility as early as possible.
 
 Tree decomposition uses a domain-aware clique size limit (`d^targetTreewidth`, capped at 1,000,000) and is skipped when: the estimated tree complexity exceeds the search space, the constraint graph minimum degree ≥ targetTreewidth (guaranteeing the decomposer would fail), or when preprocessing fully determines the solution. When preprocessing produces all-singleton domains the solver short-circuits and returns the forced assignment directly without invoking any downstream stages. Cutset conditioning applies a practical three-tier complexity guard before conditioning.
 
@@ -116,7 +118,7 @@ Tree decomposition uses a domain-aware clique size limit (`d^targetTreewidth`, c
 `LocalSolver.Factory.INSTANCE` wires the local search pipeline:
 
 ```
-NodeConsistency → ArcConsistency (AC3) → IndependentSubproblems → MinConflicts
+NodeConsistency → AC3 → SumBounds → LinearBounds → CountValue → InverseArc → AmongValue → IndependentSubproblems → MinConflicts
 ```
 
 Create a local solver and call `getLocalSolution` for satisfaction, or pass an objective for optimization:
