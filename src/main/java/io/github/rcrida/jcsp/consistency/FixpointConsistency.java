@@ -10,38 +10,36 @@ import java.util.List;
 import java.util.Optional;
 
 /**
- * Base class for {@link ConstraintConsistency} implementations that run a subset of
- * {@link Propagatable} constraints to fixpoint.
+ * A {@link ConstraintConsistency} that runs all {@link Propagatable} constraints of a given
+ * type to fixpoint: filters, propagates, and repeats until no further domain reductions occur,
+ * returning {@link Optional#empty()} as soon as any propagator signals infeasibility.
  *
- * <p>Filters the problem's constraints to those matching the supplied type, then iterates
- * propagation until no further domain reductions occur, returning {@link Optional#empty()}
- * as soon as any propagator signals infeasibility.
- *
- * <p>Subclasses need only supply the constraint type and expose a singleton instance:
- * <pre>
- *   public final class SumConsistency extends FixpointConsistency {
- *       public static final SumConsistency INSTANCE = new SumConsistency();
- *       private SumConsistency() { super(SumConstraint.class); }
- *   }
- * </pre>
+ * <p>Use the {@link #of} factory to create instances. Adding a new propagator to the solver
+ * chains ({@code PropagationFixpointSolver.PROPAGATORS}, {@code LocalSolver.Factory.PREPROCESSORS})
+ * requires only a single {@code FixpointConsistency.of(MyConstraint.class)} entry.
  */
-public abstract class FixpointConsistency implements ConstraintConsistency {
-    private final Class<? extends Propagatable> constraintType;
-    private final Logger log;
+public final class FixpointConsistency implements ConstraintConsistency {
+    private static final Logger log = LoggerFactory.getLogger(FixpointConsistency.class);
 
-    protected FixpointConsistency(Class<? extends Propagatable> constraintType) {
+    private final Class<? extends Propagatable> constraintType;
+
+    private FixpointConsistency(Class<? extends Propagatable> constraintType) {
         this.constraintType = constraintType;
-        this.log = LoggerFactory.getLogger(getClass());
+    }
+
+    public static FixpointConsistency of(Class<? extends Propagatable> constraintType) {
+        return new FixpointConsistency(constraintType);
     }
 
     @Override
     @SuppressWarnings({"unchecked", "rawtypes"})
-    public final Optional<ConstraintSatisfactionProblem> apply(ConstraintSatisfactionProblem csp) {
+    public Optional<ConstraintSatisfactionProblem> apply(ConstraintSatisfactionProblem csp) {
         List<Propagatable> constraints = (List) csp.getConstraints().stream()
                 .filter(constraintType::isInstance)
                 .toList();
+        var name = constraintType.getSimpleName();
         if (constraints.isEmpty()) {
-            log.info("{}: fixpoint reached", getClass().getSimpleName());
+            log.info("{}: fixpoint reached", name);
             return Optional.of(csp);
         }
         var current = csp;
@@ -51,7 +49,7 @@ public abstract class FixpointConsistency implements ConstraintConsistency {
             for (Propagatable constraint : constraints) {
                 var result = constraint.propagate(current.getVariableDomains());
                 if (result.isEmpty()) {
-                    log.warn("{}: infeasible detected", getClass().getSimpleName());
+                    log.warn("{}: infeasible detected", name);
                     return Optional.empty();
                 }
                 var updates = result.get();
@@ -65,7 +63,7 @@ public abstract class FixpointConsistency implements ConstraintConsistency {
                 }
             }
         }
-        log.info("{}: fixpoint reached", getClass().getSimpleName());
+        log.info("{}: fixpoint reached", name);
         return Optional.of(current);
     }
 }

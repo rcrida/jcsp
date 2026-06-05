@@ -9,13 +9,17 @@ import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import io.github.rcrida.jcsp.consistency.FixpointConsistency;
+import io.github.rcrida.jcsp.constraints.nary.CumulativeConstraint;
+
 public class CumulativeConsistencyTest {
+    private static final FixpointConsistency CONSISTENCY = FixpointConsistency.of(CumulativeConstraint.class);
     static final Variable.Factory F = Variable.Factory.INSTANCE;
 
     @Test
     void apply_noCumulativeConstraints_returnsUnchanged() {
         var csp = ConstraintSatisfactionProblem.builder().build();
-        assertThat(CumulativeConsistency.INSTANCE.apply(csp)).hasValue(csp);
+        assertThat(CONSISTENCY.apply(csp)).hasValue(csp);
     }
 
     @Test
@@ -30,7 +34,7 @@ public class CumulativeConsistencyTest {
                 .variableDomain(x2, IntRangeDomain.of(0, 3))
                 .cumulativeConstraint(List.of(x1, x2), List.of(2, 2), List.of(2, 2), 2)
                 .build();
-        var result = CumulativeConsistency.INSTANCE.apply(csp);
+        var result = CONSISTENCY.apply(csp);
         assertThat(result).isPresent();
         assertThat(result.get().findDomain(x2)).hasValue(IntRangeDomain.of(2, 3));
     }
@@ -45,6 +49,6 @@ public class CumulativeConsistencyTest {
                 .variableDomain(x2, IntRangeDomain.of(1, 1))
                 .cumulativeConstraint(List.of(x1, x2), List.of(2, 2), List.of(1, 1), 1)
                 .build();
-        assertThat(CumulativeConsistency.INSTANCE.apply(csp)).isEmpty();
+        assertThat(CONSISTENCY.apply(csp)).isEmpty();
     }
 }

@@ -3,13 +3,14 @@ package io.github.rcrida.jcsp.solver;
 import io.github.rcrida.jcsp.ConstraintSatisfactionProblem;
 import io.github.rcrida.jcsp.assignments.Assignment;
 import io.github.rcrida.jcsp.consistency.ConstraintConsistency;
-import io.github.rcrida.jcsp.consistency.among.AmongConsistency;
+import io.github.rcrida.jcsp.consistency.FixpointConsistency;
 import io.github.rcrida.jcsp.consistency.arc.AC3;
-import io.github.rcrida.jcsp.consistency.count.CountConsistency;
-import io.github.rcrida.jcsp.consistency.inverse.InverseConsistency;
-import io.github.rcrida.jcsp.consistency.linear.LinearConsistency;
 import io.github.rcrida.jcsp.consistency.node.NodeConsistency;
-import io.github.rcrida.jcsp.consistency.sum.SumConsistency;
+import io.github.rcrida.jcsp.constraints.nary.AmongConstraint;
+import io.github.rcrida.jcsp.constraints.nary.CountConstraint;
+import io.github.rcrida.jcsp.constraints.nary.InverseConstraint;
+import io.github.rcrida.jcsp.constraints.nary.LinearConstraint;
+import io.github.rcrida.jcsp.constraints.nary.SumConstraint;
 import io.github.rcrida.jcsp.solver.assignmentfactory.InitialAssignmentFactory;
 import lombok.val;
 import org.jspecify.annotations.NonNull;
@@ -44,11 +45,11 @@ public interface LocalSolver {
         List<ConstraintConsistency> PREPROCESSORS = List.of(
                 NodeConsistency.INSTANCE,
                 AC3.INSTANCE,
-                SumConsistency.INSTANCE,
-                LinearConsistency.INSTANCE,
-                CountConsistency.INSTANCE,
-                InverseConsistency.INSTANCE,
-                AmongConsistency.INSTANCE
+                FixpointConsistency.of(SumConstraint.class),
+                FixpointConsistency.of(LinearConstraint.class),
+                FixpointConsistency.of(CountConstraint.class),
+                FixpointConsistency.of(InverseConstraint.class),
+                FixpointConsistency.of(AmongConstraint.class)
         );
 
         Factory INSTANCE = (maxAttempts, maxSteps, initialAssignmentFactory) -> {

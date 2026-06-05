@@ -10,13 +10,17 @@ import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import io.github.rcrida.jcsp.consistency.FixpointConsistency;
+import io.github.rcrida.jcsp.constraints.nary.SumConstraint;
+
 public class SumConsistencyTest {
+    private static final FixpointConsistency CONSISTENCY = FixpointConsistency.of(SumConstraint.class);
     static final Variable.Factory F = Variable.Factory.INSTANCE;
 
     @Test
     void apply_noSumConstraints_returnsUnchanged() {
         var csp = ConstraintSatisfactionProblem.builder().build();
-        assertThat(SumConsistency.INSTANCE.apply(csp)).hasValue(csp);
+        assertThat(CONSISTENCY.apply(csp)).hasValue(csp);
     }
 
     @Test
@@ -29,7 +33,7 @@ public class SumConsistencyTest {
                 .variableDomain(v3, IntRangeDomain.of(6, 6))
                 .sumConstraint(Set.of(v1, v2, v3), Operator.EQ, 15)
                 .build();
-        var result = SumConsistency.INSTANCE.apply(csp);
+        var result = CONSISTENCY.apply(csp);
         assertThat(result).isPresent();
         assertThat(result.get().findDomain(v1)).hasValue(IntRangeDomain.of(1, 1));
     }
@@ -43,6 +47,6 @@ public class SumConsistencyTest {
                 .variableDomain(v2, IntRangeDomain.of(5, 9))
                 .sumConstraint(Set.of(v1, v2), Operator.LEQ, 8)
                 .build();
-        assertThat(SumConsistency.INSTANCE.apply(csp)).isEmpty();
+        assertThat(CONSISTENCY.apply(csp)).isEmpty();
     }
 }

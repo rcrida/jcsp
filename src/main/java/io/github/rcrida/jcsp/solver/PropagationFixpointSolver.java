@@ -5,13 +5,14 @@ import lombok.experimental.SuperBuilder;
 import lombok.extern.slf4j.Slf4j;
 import io.github.rcrida.jcsp.ConstraintSatisfactionProblem;
 import io.github.rcrida.jcsp.consistency.ConstraintConsistency;
-import io.github.rcrida.jcsp.consistency.alldiff.AllDiffConsistency;
-import io.github.rcrida.jcsp.consistency.among.AmongConsistency;
+import io.github.rcrida.jcsp.consistency.FixpointConsistency;
 import io.github.rcrida.jcsp.consistency.arc.AC3;
-import io.github.rcrida.jcsp.consistency.count.CountConsistency;
-import io.github.rcrida.jcsp.consistency.inverse.InverseConsistency;
-import io.github.rcrida.jcsp.consistency.linear.LinearConsistency;
-import io.github.rcrida.jcsp.consistency.sum.SumConsistency;
+import io.github.rcrida.jcsp.constraints.nary.AllDiffConstraint;
+import io.github.rcrida.jcsp.constraints.nary.AmongConstraint;
+import io.github.rcrida.jcsp.constraints.nary.CountConstraint;
+import io.github.rcrida.jcsp.constraints.nary.InverseConstraint;
+import io.github.rcrida.jcsp.constraints.nary.LinearConstraint;
+import io.github.rcrida.jcsp.constraints.nary.SumConstraint;
 import io.github.rcrida.jcsp.domains.Domain;
 import org.jspecify.annotations.NonNull;
 
@@ -30,8 +31,8 @@ import java.util.Optional;
  * or exits immediately with {@link Optional#empty()} as soon as any propagator
  * detects infeasibility.
  *
- * <p>To add a new propagator, implement {@link ConstraintConsistency} and append the singleton
- * instance to {@link #PROPAGATORS}.
+ * <p>To add a new propagator for a {@link io.github.rcrida.jcsp.consistency.Propagatable} constraint
+ * type, append {@code FixpointConsistency.of(MyConstraint.class)} to {@link #PROPAGATORS}.
  */
 @Slf4j
 @SuperBuilder
@@ -40,12 +41,12 @@ public class PropagationFixpointSolver extends SolverDecorator {
 
     private static final List<ConstraintConsistency> PROPAGATORS = List.of(
             AC3.INSTANCE,
-            AllDiffConsistency.INSTANCE,
-            SumConsistency.INSTANCE,
-            LinearConsistency.INSTANCE,
-            CountConsistency.INSTANCE,
-            InverseConsistency.INSTANCE,
-            AmongConsistency.INSTANCE
+            FixpointConsistency.of(AllDiffConstraint.class),
+            FixpointConsistency.of(SumConstraint.class),
+            FixpointConsistency.of(LinearConstraint.class),
+            FixpointConsistency.of(CountConstraint.class),
+            FixpointConsistency.of(InverseConstraint.class),
+            FixpointConsistency.of(AmongConstraint.class)
     );
 
     @Override

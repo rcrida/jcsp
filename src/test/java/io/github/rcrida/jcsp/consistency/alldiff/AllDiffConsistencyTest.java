@@ -9,13 +9,17 @@ import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import io.github.rcrida.jcsp.consistency.FixpointConsistency;
+import io.github.rcrida.jcsp.constraints.nary.AllDiffConstraint;
+
 public class AllDiffConsistencyTest {
+    private static final FixpointConsistency CONSISTENCY = FixpointConsistency.of(AllDiffConstraint.class);
     static final Variable.Factory F = Variable.Factory.INSTANCE;
 
     @Test
     void apply_noCumulativeConstraints_returnsUnchanged() {
         var csp = ConstraintSatisfactionProblem.builder().build();
-        assertThat(AllDiffConsistency.INSTANCE.apply(csp)).hasValue(csp);
+        assertThat(CONSISTENCY.apply(csp)).hasValue(csp);
     }
 
     @Test
@@ -32,7 +36,7 @@ public class AllDiffConsistencyTest {
                 .variableDomain(x3, IntRangeDomain.of(1, 3))
                 .allDiffConstraint(java.util.Set.of(x1, x2, x3))
                 .build();
-        var result = AllDiffConsistency.INSTANCE.apply(csp);
+        var result = CONSISTENCY.apply(csp);
         assertThat(result).isPresent();
         assertThat(result.get().findDomain(x3)).hasValue(IntRangeDomain.of(3, 3));
     }
@@ -49,7 +53,7 @@ public class AllDiffConsistencyTest {
                 .variableDomain(x3, IntRangeDomain.of(1, 2))
                 .allDiffConstraint(java.util.Set.of(x1, x2, x3))
                 .build();
-        assertThat(AllDiffConsistency.INSTANCE.apply(csp)).isEmpty();
+        assertThat(CONSISTENCY.apply(csp)).isEmpty();
     }
 
     @Test
@@ -62,7 +66,7 @@ public class AllDiffConsistencyTest {
                 .variableDomain(x2, IntRangeDomain.of(1, 5))
                 .allDiffConstraint(java.util.Set.of(x1, x2))
                 .build();
-        var result = AllDiffConsistency.INSTANCE.apply(csp);
+        var result = CONSISTENCY.apply(csp);
         assertThat(result).isPresent();
         assertThat(result.get().findDomain(x1)).hasValue(IntRangeDomain.of(1, 5));
         assertThat(result.get().findDomain(x2)).hasValue(IntRangeDomain.of(1, 5));
@@ -79,7 +83,7 @@ public class AllDiffConsistencyTest {
                 .variableDomain(x2, IntRangeDomain.of(1, 3))
                 .allDiffConstraint(java.util.Set.of(x1, x2))
                 .build();
-        var result = AllDiffConsistency.INSTANCE.apply(csp);
+        var result = CONSISTENCY.apply(csp);
         assertThat(result).isPresent();
         assertThat(result.get().findDomain(x2)).hasValue(IntRangeDomain.of(2, 3));
     }
@@ -99,7 +103,7 @@ public class AllDiffConsistencyTest {
                 .variableDomain(x4, IntRangeDomain.of(1, 4))
                 .allDiffConstraint(java.util.Set.of(x1, x2, x3, x4))
                 .build();
-        var result = AllDiffConsistency.INSTANCE.apply(csp);
+        var result = CONSISTENCY.apply(csp);
         assertThat(result).isPresent();
         assertThat(result.get().findDomain(x4)).hasValue(IntRangeDomain.of(4, 4));
     }
