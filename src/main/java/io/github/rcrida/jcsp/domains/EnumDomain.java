@@ -14,6 +14,11 @@ public class EnumDomain<E extends Enum<E>> extends DomainObjectSet<E> {
         return new EnumDomain<>(EnumSet.allOf(elementType));
     }
 
+    @SafeVarargs
+    public static <E extends Enum<E>> EnumDomain<E> of(@NonNull E first, E... rest) {
+        return new EnumDomain<>(EnumSet.of(first, rest));
+    }
+
     public EnumDomain(@NonNull EnumSet<E> values) {
         super(values);
     }
