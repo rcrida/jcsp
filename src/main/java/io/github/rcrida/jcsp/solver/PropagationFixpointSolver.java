@@ -5,8 +5,10 @@ import lombok.experimental.SuperBuilder;
 import lombok.extern.slf4j.Slf4j;
 import io.github.rcrida.jcsp.ConstraintSatisfactionProblem;
 import io.github.rcrida.jcsp.consistency.alldiff.AllDiffConsistency;
+import io.github.rcrida.jcsp.consistency.among.AmongConsistency;
 import io.github.rcrida.jcsp.consistency.arc.AC3;
 import io.github.rcrida.jcsp.consistency.count.CountConsistency;
+import io.github.rcrida.jcsp.consistency.inverse.InverseConsistency;
 import io.github.rcrida.jcsp.consistency.linear.LinearConsistency;
 import io.github.rcrida.jcsp.consistency.sum.SumConsistency;
 import io.github.rcrida.jcsp.domains.Domain;
@@ -16,12 +18,13 @@ import java.util.Optional;
 
 /**
  * Runs AC3, AllDiff GAC, SumConstraint bounds propagation, LinearConstraint bounds propagation,
- * and CountConstraint value propagation in a combined fixpoint loop.
+ * CountConstraint value propagation, InverseConstraint arc consistency, and AmongConstraint
+ * value-set propagation in a combined fixpoint loop.
  *
  * <p>The propagators are not independent: AllDiff GAC can expose naked pairs that AC3 then
- * propagates to neighbouring constraints; sum, linear, and count propagation tightens domains
- * that AC3 and AllDiff GAC can then exploit further. Running each once misses this feedback.
- * This solver iterates until none of the five makes further progress.
+ * propagates to neighbouring constraints; sum, linear, count, inverse, and among propagation
+ * tightens domains that AC3 and AllDiff GAC can then exploit further. Running each once misses
+ * this feedback. This solver iterates until none of the seven makes further progress.
  */
 @Slf4j
 @SuperBuilder
@@ -55,6 +58,14 @@ public class PropagationFixpointSolver extends SolverDecorator {
             var afterCount = CountConsistency.INSTANCE.apply(current);
             if (afterCount.isEmpty()) return Optional.empty();
             current = afterCount.get();
+
+            var afterInverse = InverseConsistency.INSTANCE.apply(current);
+            if (afterInverse.isEmpty()) return Optional.empty();
+            current = afterInverse.get();
+
+            var afterAmong = AmongConsistency.INSTANCE.apply(current);
+            if (afterAmong.isEmpty()) return Optional.empty();
+            current = afterAmong.get();
 
             changed = domainSum(current) < domainSumBefore;
         }

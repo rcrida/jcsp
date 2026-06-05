@@ -2,8 +2,10 @@ package io.github.rcrida.jcsp.solver;
 
 import io.github.rcrida.jcsp.ConstraintSatisfactionProblem;
 import io.github.rcrida.jcsp.assignments.Assignment;
+import io.github.rcrida.jcsp.consistency.among.AmongConsistency;
 import io.github.rcrida.jcsp.consistency.arc.AC3;
 import io.github.rcrida.jcsp.consistency.count.CountConsistency;
+import io.github.rcrida.jcsp.consistency.inverse.InverseConsistency;
 import io.github.rcrida.jcsp.consistency.linear.LinearConsistency;
 import io.github.rcrida.jcsp.consistency.node.NodeConsistency;
 import io.github.rcrida.jcsp.consistency.sum.SumConsistency;
@@ -49,6 +51,8 @@ public interface LocalSolver {
                             .flatMap(SumConsistency.INSTANCE::apply)
                             .flatMap(LinearConsistency.INSTANCE::apply)
                             .flatMap(CountConsistency.INSTANCE::apply)
+                            .flatMap(InverseConsistency.INSTANCE::apply)
+                            .flatMap(AmongConsistency.INSTANCE::apply)
                             .flatMap(inner::getLocalSolution);
                 }
 
@@ -60,6 +64,8 @@ public interface LocalSolver {
                             .flatMap(SumConsistency.INSTANCE::apply)
                             .flatMap(LinearConsistency.INSTANCE::apply)
                             .flatMap(CountConsistency.INSTANCE::apply)
+                            .flatMap(InverseConsistency.INSTANCE::apply)
+                            .flatMap(AmongConsistency.INSTANCE::apply)
                             .flatMap(reduced -> inner.getLocalSolution(reduced, objective));
                 }
             };
