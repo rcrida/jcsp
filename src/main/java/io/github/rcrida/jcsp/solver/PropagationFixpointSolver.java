@@ -17,6 +17,7 @@ import io.github.rcrida.jcsp.constraints.nary.GlobalCardinalityConstraint;
 import io.github.rcrida.jcsp.constraints.nary.InverseConstraint;
 import io.github.rcrida.jcsp.constraints.nary.LexConstraint;
 import io.github.rcrida.jcsp.constraints.nary.LinearConstraint;
+import io.github.rcrida.jcsp.constraints.nary.NaryTuplesConstraint;
 import io.github.rcrida.jcsp.constraints.nary.SumConstraint;
 import io.github.rcrida.jcsp.domains.Domain;
 import org.jspecify.annotations.NonNull;
@@ -56,7 +57,8 @@ public class PropagationFixpointSolver extends SolverDecorator {
             FixpointConsistency.of(AtMostNConstraint.class),
             FixpointConsistency.of(CumulativeConstraint.class),
             FixpointConsistency.of(GlobalCardinalityConstraint.class),
-            FixpointConsistency.of(LexConstraint.class)
+            FixpointConsistency.of(LexConstraint.class),
+            FixpointConsistency.of(NaryTuplesConstraint.class)
     );
 
     @Override

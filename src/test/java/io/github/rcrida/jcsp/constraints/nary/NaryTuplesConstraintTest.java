@@ -2,6 +2,7 @@ package io.github.rcrida.jcsp.constraints.nary;
 
 import io.github.rcrida.jcsp.ConstraintSatisfactionProblem;
 import io.github.rcrida.jcsp.assignments.Assignment;
+import io.github.rcrida.jcsp.domains.Domain;
 import io.github.rcrida.jcsp.domains.IntRangeDomain;
 import io.github.rcrida.jcsp.solver.Solver;
 import io.github.rcrida.jcsp.variables.Variable;
@@ -75,6 +76,38 @@ public class NaryTuplesConstraintTest {
     @Test
     void of_createsEquivalentConstraint() {
         assertThat(NaryTuplesConstraint.of(Set.of(t1, t2, t3))).isEqualTo(constraint);
+    }
+
+    // --- propagate() ---
+
+    @Test
+    void propagate_prunesValuesWithNoSupportingTuple() {
+        // z restricted to {3} → only t1=(1,2,3) is live → x and y are pruned to {1} and {2}
+        var domains = Map.<Variable<?>, Domain<?>>of(
+                x, IntRangeDomain.of(1, 3), y, IntRangeDomain.of(1, 3), z, IntRangeDomain.of(3, 3));
+        var result = constraint.propagate(domains);
+        assertThat(result).isPresent();
+        assertThat(result.get().get(x)).isEqualTo(IntRangeDomain.of(1, 1));
+        assertThat(result.get().get(y)).isEqualTo(IntRangeDomain.of(2, 2));
+        assertThat(result.get()).doesNotContainKey(z);
+    }
+
+    @Test
+    void propagate_noLiveTuples_infeasible() {
+        // x=y=z={1}: no cyclic permutation of (1,2,3) has all three variables equal to 1
+        var domains = Map.<Variable<?>, Domain<?>>of(
+                x, IntRangeDomain.of(1, 1), y, IntRangeDomain.of(1, 1), z, IntRangeDomain.of(1, 1));
+        assertThat(constraint.propagate(domains)).isEmpty();
+    }
+
+    @Test
+    void propagate_allTuplesLive_noChange() {
+        // every value of every variable is used by at least one of the three tuples
+        var domains = Map.<Variable<?>, Domain<?>>of(
+                x, IntRangeDomain.of(1, 3), y, IntRangeDomain.of(1, 3), z, IntRangeDomain.of(1, 3));
+        var result = constraint.propagate(domains);
+        assertThat(result).isPresent();
+        assertThat(result.get()).isEmpty();
     }
 
     @Test

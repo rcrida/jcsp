@@ -15,6 +15,7 @@ import io.github.rcrida.jcsp.constraints.nary.GlobalCardinalityConstraint;
 import io.github.rcrida.jcsp.constraints.nary.InverseConstraint;
 import io.github.rcrida.jcsp.constraints.nary.LexConstraint;
 import io.github.rcrida.jcsp.constraints.nary.LinearConstraint;
+import io.github.rcrida.jcsp.constraints.nary.NaryTuplesConstraint;
 import io.github.rcrida.jcsp.constraints.nary.SumConstraint;
 import io.github.rcrida.jcsp.solver.assignmentfactory.InitialAssignmentFactory;
 import lombok.val;
@@ -59,7 +60,8 @@ public interface LocalSolver {
                 FixpointConsistency.of(AtMostNConstraint.class),
                 FixpointConsistency.of(CumulativeConstraint.class),
                 FixpointConsistency.of(GlobalCardinalityConstraint.class),
-                FixpointConsistency.of(LexConstraint.class)
+                FixpointConsistency.of(LexConstraint.class),
+                FixpointConsistency.of(NaryTuplesConstraint.class)
         );
 
         Factory INSTANCE = (maxAttempts, maxSteps, initialAssignmentFactory) -> {

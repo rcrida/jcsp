@@ -1,12 +1,18 @@
 package io.github.rcrida.jcsp.constraints.nary;
 
 import io.github.rcrida.jcsp.assignments.Assignment;
+import io.github.rcrida.jcsp.consistency.Propagatable;
+import io.github.rcrida.jcsp.domains.Domain;
+import io.github.rcrida.jcsp.variables.Variable;
 import lombok.EqualsAndHashCode;
 import lombok.Singular;
 import lombok.experimental.SuperBuilder;
 import org.jspecify.annotations.NonNull;
 
 import java.util.Comparator;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -22,7 +28,7 @@ import java.util.stream.Collectors;
  */
 @SuperBuilder
 @EqualsAndHashCode(callSuper = true)
-public class NaryTuplesConstraint extends NaryConstraint {
+public class NaryTuplesConstraint extends NaryConstraint implements Propagatable {
     @Singular Set<Assignment> tuples;
 
     public static NaryTuplesConstraint of(@NonNull Set<Assignment> tuples) {
@@ -39,6 +45,32 @@ public class NaryTuplesConstraint extends NaryConstraint {
     public boolean isSatisfiedBy(@NonNull Assignment assignment) {
         if (!assignment.getValues().keySet().containsAll(getVariables())) return true;
         return tuples.contains(assignment.extractPartialAssignment(getVariables()));
+    }
+
+    /**
+     * Generalised arc consistency for the table constraint: a tuple is "live" if every one of
+     * its values is still present in the corresponding variable's domain. If no tuples remain
+     * live, the constraint is infeasible. Otherwise, for each variable, any domain value not
+     * used by some live tuple has no support and is pruned.
+     */
+    @Override
+    public Optional<Map<Variable<?>, Domain<?>>> propagate(@NonNull Map<Variable<?>, Domain<?>> domains) {
+        var liveTuples = tuples.stream()
+                .filter(t -> getVariables().stream().allMatch(v -> domains.get(v).contains(t.getValue(v).orElseThrow())))
+                .toList();
+        if (liveTuples.isEmpty()) return Optional.empty();
+
+        Map<Variable<?>, Domain<?>> updated = new HashMap<>();
+        for (Variable<?> v : getVariables()) {
+            Domain<?> dom = domains.get(v);
+            var supportedValues = liveTuples.stream().map(t -> t.getValue(v).orElseThrow()).collect(Collectors.toSet());
+            if (supportedValues.size() < dom.size()) {
+                var builder = dom.toBuilder();
+                for (var value : dom.toList()) if (!supportedValues.contains(value)) builder.delete(value);
+                updated.put(v, builder.build());
+            }
+        }
+        return Optional.of(updated);
     }
 
     @Override
