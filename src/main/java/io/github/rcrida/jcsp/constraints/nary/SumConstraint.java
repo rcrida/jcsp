@@ -75,11 +75,15 @@ public class SumConstraint<N extends Number> extends UniformNaryConstraint<N> im
      *         or {@link Optional#empty()} if the constraint is provably infeasible
      */
     @Override
-    @SuppressWarnings({"unchecked"})
     public Optional<Map<Variable<?>, Domain<?>>> propagate(@NonNull Map<Variable<?>, Domain<?>> domains) {
         if (!PROPAGATING_OPERATORS.contains(operator)) {
             return Optional.of(Map.of());
         }
+        return (bound instanceof Double) ? propagateDouble(domains) : propagateInt(domains);
+    }
+
+    @SuppressWarnings({"unchecked"})
+    private Optional<Map<Variable<?>, Domain<?>>> propagateInt(@NonNull Map<Variable<?>, Domain<?>> domains) {
         List<Variable<N>> vars = new ArrayList<>((Collection<Variable<N>>) (Collection<?>) getVariables());
         int n = vars.size();
         int[] mins = new int[n];
@@ -117,6 +121,42 @@ public class SumConstraint<N extends Number> extends UniformNaryConstraint<N> im
                 Domain<N> pruned = builder.build();
                 if (pruned.isEmpty()) return Optional.empty();
                 updated.put(vars.get(i), pruned);
+            }
+        }
+        return Optional.of(updated);
+    }
+
+    @SuppressWarnings({"unchecked"})
+    private Optional<Map<Variable<?>, Domain<?>>> propagateDouble(@NonNull Map<Variable<?>, Domain<?>> domains) {
+        List<Variable<N>> vars = new ArrayList<>((Collection<Variable<N>>) (Collection<?>) getVariables());
+        int n = vars.size();
+        double[] mins = new double[n];
+        double[] maxs = new double[n];
+        for (int i = 0; i < n; i++) {
+            Domain<N> dom = (Domain<N>) domains.get(vars.get(i));
+            mins[i] = NumericBounds.min(dom);
+            maxs[i] = NumericBounds.max(dom);
+        }
+        double totalMin = 0, totalMax = 0;
+        for (int i = 0; i < n; i++) { totalMin += mins[i]; totalMax += maxs[i]; }
+        double k = bound.doubleValue();
+
+        if ((operator == Operator.EQ  && (k < totalMin || k > totalMax)) ||
+            (operator == Operator.LEQ && k < totalMin) ||
+            (operator == Operator.GEQ && k > totalMax)) return Optional.empty();
+
+        Map<Variable<?>, Domain<?>> updated = new HashMap<>();
+        for (int i = 0; i < n; i++) {
+            Domain<N> dom = (Domain<N>) domains.get(vars.get(i));
+            // Upper bound: k - (sum of minimums of other variables)
+            double newMax = (operator != Operator.GEQ) ? k - (totalMin - mins[i]) : Double.POSITIVE_INFINITY;
+            // Lower bound: k - (sum of maximums of other variables)
+            double newMin = (operator != Operator.LEQ) ? k - (totalMax - maxs[i]) : Double.NEGATIVE_INFINITY;
+
+            var pruned = NumericBounds.narrow(dom, newMin, newMax);
+            if (pruned.isPresent()) {
+                if (pruned.get().isEmpty()) return Optional.empty();
+                updated.put(vars.get(i), pruned.get());
             }
         }
         return Optional.of(updated);

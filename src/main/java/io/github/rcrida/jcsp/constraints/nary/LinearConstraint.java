@@ -62,11 +62,15 @@ public class LinearConstraint<N extends Number> extends NaryConstraint implement
      * direction when deriving per-variable limits. Only applied for EQ, LEQ, and GEQ operators.
      */
     @Override
-    @SuppressWarnings("unchecked")
     public Optional<Map<Variable<?>, Domain<?>>> propagate(@NonNull Map<Variable<?>, Domain<?>> domains) {
         if (!PROPAGATING_OPERATORS.contains(operator)) {
             return Optional.of(Map.of());
         }
+        return (bound instanceof Double) ? propagateDouble(domains) : propagateInt(domains);
+    }
+
+    @SuppressWarnings("unchecked")
+    private Optional<Map<Variable<?>, Domain<?>>> propagateInt(@NonNull Map<Variable<?>, Domain<?>> domains) {
         List<Variable<N>> vars = new ArrayList<>((Collection<Variable<N>>) (Collection<?>) getVariables());
         int n = vars.size();
         int[] coeffs = new int[n];
@@ -121,6 +125,59 @@ public class LinearConstraint<N extends Number> extends NaryConstraint implement
                 Domain<N> pruned = builder.build();
                 if (pruned.isEmpty()) return Optional.empty();
                 updated.put(vars.get(i), pruned);
+            }
+        }
+        return Optional.of(updated);
+    }
+
+    @SuppressWarnings("unchecked")
+    private Optional<Map<Variable<?>, Domain<?>>> propagateDouble(@NonNull Map<Variable<?>, Domain<?>> domains) {
+        List<Variable<N>> vars = new ArrayList<>((Collection<Variable<N>>) (Collection<?>) getVariables());
+        int n = vars.size();
+        double[] coeffs = new double[n];
+        double[] minContribs = new double[n];
+        double[] maxContribs = new double[n];
+
+        for (int i = 0; i < n; i++) {
+            coeffs[i] = coefficients.get(vars.get(i)).doubleValue();
+            Domain<N> dom = (Domain<N>) domains.get(vars.get(i));
+            double domMin = NumericBounds.min(dom);
+            double domMax = NumericBounds.max(dom);
+            minContribs[i] = coeffs[i] >= 0 ? coeffs[i] * domMin : coeffs[i] * domMax;
+            maxContribs[i] = coeffs[i] >= 0 ? coeffs[i] * domMax : coeffs[i] * domMin;
+        }
+
+        double totalMin = 0, totalMax = 0;
+        for (int i = 0; i < n; i++) { totalMin += minContribs[i]; totalMax += maxContribs[i]; }
+        double k = bound.doubleValue();
+
+        if ((operator == Operator.EQ  && (k < totalMin || k > totalMax)) ||
+            (operator == Operator.LEQ && k < totalMin) ||
+            (operator == Operator.GEQ && k > totalMax)) return Optional.empty();
+
+        Map<Variable<?>, Domain<?>> updated = new HashMap<>();
+        for (int i = 0; i < n; i++) {
+            if (coeffs[i] == 0) continue;
+            Domain<N> dom = (Domain<N>) domains.get(vars.get(i));
+            double restMin = totalMin - minContribs[i];
+            double restMax = totalMax - maxContribs[i];
+
+            // c_i * v_i <= k - restMin  (from LEQ/EQ upper bound)
+            // c_i * v_i >= k - restMax  (from GEQ/EQ lower bound)
+            double newMin, newMax;
+            if (coeffs[i] > 0) {
+                newMax = (operator != Operator.GEQ) ? (k - restMin) / coeffs[i] : Double.POSITIVE_INFINITY;
+                newMin = (operator != Operator.LEQ) ? (k - restMax) / coeffs[i] : Double.NEGATIVE_INFINITY;
+            } else {
+                // Negative coefficient reverses inequality direction
+                newMin = (operator != Operator.GEQ) ? (k - restMin) / coeffs[i] : Double.NEGATIVE_INFINITY;
+                newMax = (operator != Operator.LEQ) ? (k - restMax) / coeffs[i] : Double.POSITIVE_INFINITY;
+            }
+
+            var pruned = NumericBounds.narrow(dom, newMin, newMax);
+            if (pruned.isPresent()) {
+                if (pruned.get().isEmpty()) return Optional.empty();
+                updated.put(vars.get(i), pruned.get());
             }
         }
         return Optional.of(updated);

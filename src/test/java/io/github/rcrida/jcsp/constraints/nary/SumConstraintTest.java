@@ -3,6 +3,7 @@ package io.github.rcrida.jcsp.constraints.nary;
 import io.github.rcrida.jcsp.assignments.Assignment;
 import io.github.rcrida.jcsp.constraints.Operator;
 import io.github.rcrida.jcsp.domains.IntRangeDomain;
+import io.github.rcrida.jcsp.domains.IntervalDomain;
 import io.github.rcrida.jcsp.variables.Variable;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -230,6 +231,141 @@ public class SumConstraintTest {
         var result = c.propagate(domains);
         assertThat(result).isPresent();
         assertThat(result.get()).isEmpty();
+    }
+
+    // --- propagate() : Double / IntervalDomain ---
+
+    @Test
+    void propagateDouble_eq_tightensIntervalBounds() {
+        Variable<Double> d1 = F.create("d1");
+        Variable<Double> d2 = F.create("d2");
+        Variable<Double> d3 = F.create("d3");
+        var c = SumConstraint.of(Set.of(d1, d2, d3), Operator.EQ, 10.0);
+        var domains = Map.<Variable<?>, io.github.rcrida.jcsp.domains.Domain<?>>of(
+                d1, IntervalDomain.of(0.0, 10.0),
+                d2, IntervalDomain.of(3.0, 3.0),
+                d3, IntervalDomain.of(0.0, 10.0));
+        var result = c.propagate(domains);
+        assertThat(result).isPresent();
+        assertThat(result.get().get(d1)).isEqualTo(IntervalDomain.of(0.0, 7.0));
+        assertThat(result.get().get(d3)).isEqualTo(IntervalDomain.of(0.0, 7.0));
+        assertThat(result.get()).doesNotContainKey(d2);
+    }
+
+    @Test
+    void propagateDouble_leq_tightensUpperBound() {
+        Variable<Double> d1 = F.create("d1");
+        Variable<Double> d2 = F.create("d2");
+        var c = SumConstraint.of(Set.of(d1, d2), Operator.LEQ, 8.0);
+        var domains = Map.<Variable<?>, io.github.rcrida.jcsp.domains.Domain<?>>of(
+                d1, IntervalDomain.of(0.0, 10.0),
+                d2, IntervalDomain.of(5.0, 5.0));
+        var result = c.propagate(domains);
+        assertThat(result).isPresent();
+        assertThat(result.get().get(d1)).isEqualTo(IntervalDomain.of(0.0, 3.0));
+    }
+
+    @Test
+    void propagateDouble_geq_tightensLowerBound() {
+        Variable<Double> d1 = F.create("d1");
+        Variable<Double> d2 = F.create("d2");
+        var c = SumConstraint.of(Set.of(d1, d2), Operator.GEQ, 8.0);
+        var domains = Map.<Variable<?>, io.github.rcrida.jcsp.domains.Domain<?>>of(
+                d1, IntervalDomain.of(0.0, 10.0),
+                d2, IntervalDomain.of(5.0, 5.0));
+        var result = c.propagate(domains);
+        assertThat(result).isPresent();
+        assertThat(result.get().get(d1)).isEqualTo(IntervalDomain.of(3.0, 10.0));
+    }
+
+    @Test
+    void propagateDouble_infeasible_kAboveMax() {
+        Variable<Double> d1 = F.create("d1");
+        Variable<Double> d2 = F.create("d2");
+        var c = SumConstraint.of(Set.of(d1, d2), Operator.EQ, 10.0);
+        var domains = Map.<Variable<?>, io.github.rcrida.jcsp.domains.Domain<?>>of(
+                d1, IntervalDomain.of(0.0, 3.0),
+                d2, IntervalDomain.of(0.0, 3.0));
+        assertThat(c.propagate(domains)).isEmpty();
+    }
+
+    @Test
+    void propagateDouble_eq_infeasible_kBelowMin() {
+        // d1,d2 ∈ [5,9]: min sum = 10 > 8 → infeasible for EQ
+        Variable<Double> d1 = F.create("d1");
+        Variable<Double> d2 = F.create("d2");
+        var c = SumConstraint.of(Set.of(d1, d2), Operator.EQ, 8.0);
+        var domains = Map.<Variable<?>, io.github.rcrida.jcsp.domains.Domain<?>>of(
+                d1, IntervalDomain.of(5.0, 9.0),
+                d2, IntervalDomain.of(5.0, 9.0));
+        assertThat(c.propagate(domains)).isEmpty();
+    }
+
+    @Test
+    void propagateDouble_leq_infeasible() {
+        // d1,d2 ∈ [5,9]: min sum = 10 > 8 → infeasible for LEQ
+        Variable<Double> d1 = F.create("d1");
+        Variable<Double> d2 = F.create("d2");
+        var c = SumConstraint.of(Set.of(d1, d2), Operator.LEQ, 8.0);
+        var domains = Map.<Variable<?>, io.github.rcrida.jcsp.domains.Domain<?>>of(
+                d1, IntervalDomain.of(5.0, 9.0),
+                d2, IntervalDomain.of(5.0, 9.0));
+        assertThat(c.propagate(domains)).isEmpty();
+    }
+
+    @Test
+    void propagateDouble_geq_infeasible() {
+        // d1,d2 ∈ [0,3]: max sum = 6 < 10 → infeasible for GEQ
+        Variable<Double> d1 = F.create("d1");
+        Variable<Double> d2 = F.create("d2");
+        var c = SumConstraint.of(Set.of(d1, d2), Operator.GEQ, 10.0);
+        var domains = Map.<Variable<?>, io.github.rcrida.jcsp.domains.Domain<?>>of(
+                d1, IntervalDomain.of(0.0, 3.0),
+                d2, IntervalDomain.of(0.0, 3.0));
+        assertThat(c.propagate(domains)).isEmpty();
+    }
+
+    @Test
+    void propagateDouble_noChange_returnsEmptyMap() {
+        Variable<Double> d1 = F.create("d1");
+        Variable<Double> d2 = F.create("d2");
+        var c = SumConstraint.of(Set.of(d1, d2), Operator.EQ, 10.0);
+        var domains = Map.<Variable<?>, io.github.rcrida.jcsp.domains.Domain<?>>of(
+                d1, IntervalDomain.of(0.0, 10.0),
+                d2, IntervalDomain.of(0.0, 10.0));
+        var result = c.propagate(domains);
+        assertThat(result).isPresent();
+        assertThat(result.get()).isEmpty();
+    }
+
+    @Test
+    void propagateDouble_mixedIntervalAndEnumerableOperands() {
+        // d1 is an IntervalDomain, d2 is a plain enumerable Domain<Double>; d1 + d2 == 10
+        Variable<Double> d1 = F.create("d1");
+        Variable<Double> d2 = F.create("d2");
+        var c = SumConstraint.of(Set.of(d1, d2), Operator.EQ, 10.0);
+        var domains = Map.<Variable<?>, io.github.rcrida.jcsp.domains.Domain<?>>of(
+                d1, IntervalDomain.of(0.0, 10.0),
+                d2, io.github.rcrida.jcsp.domains.DomainObjectSet.<Double>builder().value(2.0).value(8.0).build());
+        var result = c.propagate(domains);
+        assertThat(result).isPresent();
+        // newMin(d1) = 10 - max(d2) = 10 - 8 = 2; newMax(d1) = 10 - min(d2) = 10 - 2 = 8
+        assertThat(result.get().get(d1)).isEqualTo(IntervalDomain.of(2.0, 8.0));
+        assertThat(result.get()).doesNotContainKey(d2);
+    }
+
+    @Test
+    void propagateDouble_enumerableOperandPrunedToEmpty_infeasible() {
+        // d1 enumerable {0.0, 1.0}, d2∈[9.2, 9.8]; d1 + d2 == 10
+        // Globally feasible (totalMin=9.2, totalMax=10.8), but d1 must narrow to [0.2, 0.8],
+        // which excludes both 0.0 and 1.0 → infeasible per-variable.
+        Variable<Double> d1 = F.create("d1");
+        Variable<Double> d2 = F.create("d2");
+        var c = SumConstraint.of(Set.of(d1, d2), Operator.EQ, 10.0);
+        var domains = Map.<Variable<?>, io.github.rcrida.jcsp.domains.Domain<?>>of(
+                d1, io.github.rcrida.jcsp.domains.DomainObjectSet.<Double>builder().value(0.0).value(1.0).build(),
+                d2, IntervalDomain.of(9.2, 9.8));
+        assertThat(c.propagate(domains)).isEmpty();
     }
 
     @Test

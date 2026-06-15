@@ -19,7 +19,8 @@ import io.github.rcrida.jcsp.constraints.nary.LexConstraint;
 import io.github.rcrida.jcsp.constraints.nary.LinearConstraint;
 import io.github.rcrida.jcsp.constraints.nary.NaryTuplesConstraint;
 import io.github.rcrida.jcsp.constraints.nary.SumConstraint;
-import io.github.rcrida.jcsp.domains.Domain;
+import io.github.rcrida.jcsp.domains.BoundedDomain;
+import io.github.rcrida.jcsp.domains.IntervalDomain;
 import org.jspecify.annotations.NonNull;
 
 import java.util.List;
@@ -67,7 +68,7 @@ public class PropagationFixpointSolver extends SolverDecorator {
         var current = csp;
         boolean changed = true;
         while (changed) {
-            int domainSumBefore = domainSum(current);
+            double domainSumBefore = domainSum(current);
             for (var propagator : PROPAGATORS) {
                 var after = propagator.apply(current);
                 if (after.isEmpty()) return Optional.empty();
@@ -79,7 +80,16 @@ public class PropagationFixpointSolver extends SolverDecorator {
         return Optional.of(current);
     }
 
-    private static int domainSum(@NonNull ConstraintSatisfactionProblem csp) {
-        return csp.getVariableDomains().values().stream().mapToInt(Domain::size).sum();
+    /**
+     * Sums each domain's "size" as a progress metric for fixpoint convergence: discrete domains
+     * contribute their element count, while {@link BoundedDomain} (e.g. {@link IntervalDomain})
+     * contribute their width, so interval narrowing is recognised as progress.
+     */
+    private static double domainSum(@NonNull ConstraintSatisfactionProblem csp) {
+        return csp.getVariableDomains().values().stream()
+                .mapToDouble(d -> (d instanceof BoundedDomain<?> bd)
+                        ? bd.getMax().doubleValue() - bd.getMin().doubleValue()
+                        : d.size())
+                .sum();
     }
 }

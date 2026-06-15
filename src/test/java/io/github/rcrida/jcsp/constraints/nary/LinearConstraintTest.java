@@ -6,6 +6,7 @@ import io.github.rcrida.jcsp.constraints.Operator;
 import io.github.rcrida.jcsp.domains.Domain;
 import io.github.rcrida.jcsp.domains.DomainObjectSet;
 import io.github.rcrida.jcsp.domains.IntRangeDomain;
+import io.github.rcrida.jcsp.domains.IntervalDomain;
 import io.github.rcrida.jcsp.solver.Solver;
 import io.github.rcrida.jcsp.variables.Variable;
 import org.junit.jupiter.api.BeforeEach;
@@ -316,5 +317,203 @@ public class LinearConstraintTest {
         var result = eq12.propagate(domains);
         assertThat(result).isPresent();
         assertThat(result.get()).isEmpty();
+    }
+
+    // --- propagate() : Double / IntervalDomain ---
+
+    @Test
+    void propagateDouble_eq_tightensBounds() {
+        // 2*dx + 3*dy == 12, dy fixed at 2.0: 2*dx == 6 → dx == 3.0
+        Variable<Double> dx = F.create("dx");
+        Variable<Double> dy = F.create("dy");
+        var c = LinearConstraint.of(Map.of(dx, 2.0, dy, 3.0), Operator.EQ, 12.0);
+        var domains = Map.<Variable<?>, Domain<?>>of(
+                dx, IntervalDomain.of(0.0, 9.0),
+                dy, IntervalDomain.of(2.0, 2.0));
+        var result = c.propagate(domains);
+        assertThat(result).isPresent();
+        assertThat(result.get().get(dx)).isEqualTo(IntervalDomain.of(3.0, 3.0));
+        assertThat(result.get()).doesNotContainKey(dy);
+    }
+
+    @Test
+    void propagateDouble_leq_tightensUpperBound() {
+        // 2*dx + 3*dy <= 12, dy fixed at 2.0: 2*dx <= 6 → dx <= 3.0
+        Variable<Double> dx = F.create("dx");
+        Variable<Double> dy = F.create("dy");
+        var c = LinearConstraint.of(Map.of(dx, 2.0, dy, 3.0), Operator.LEQ, 12.0);
+        var domains = Map.<Variable<?>, Domain<?>>of(
+                dx, IntervalDomain.of(0.0, 9.0),
+                dy, IntervalDomain.of(2.0, 2.0));
+        var result = c.propagate(domains);
+        assertThat(result).isPresent();
+        assertThat(result.get().get(dx)).isEqualTo(IntervalDomain.of(0.0, 3.0));
+    }
+
+    @Test
+    void propagateDouble_geq_tightensLowerBound() {
+        // 2*dx + 3*dy >= 12, dy fixed at 2.0: 2*dx >= 6 → dx >= 3.0
+        Variable<Double> dx = F.create("dx");
+        Variable<Double> dy = F.create("dy");
+        var c = LinearConstraint.of(Map.of(dx, 2.0, dy, 3.0), Operator.GEQ, 12.0);
+        var domains = Map.<Variable<?>, Domain<?>>of(
+                dx, IntervalDomain.of(0.0, 9.0),
+                dy, IntervalDomain.of(2.0, 2.0));
+        var result = c.propagate(domains);
+        assertThat(result).isPresent();
+        assertThat(result.get().get(dx)).isEqualTo(IntervalDomain.of(3.0, 9.0));
+    }
+
+    @Test
+    void propagateDouble_negativeCoefficient_eq_tightensBounds() {
+        // -dx + dy == 3, dx∈[0,5], dy∈[0,5] → dx narrowed to [0,2], dy narrowed to [3,5]
+        Variable<Double> dx = F.create("ndx");
+        Variable<Double> dy = F.create("ndy");
+        var c = LinearConstraint.of(Map.of(dx, -1.0, dy, 1.0), Operator.EQ, 3.0);
+        var domains = Map.<Variable<?>, Domain<?>>of(
+                dx, IntervalDomain.of(0.0, 5.0),
+                dy, IntervalDomain.of(0.0, 5.0));
+        var result = c.propagate(domains);
+        assertThat(result).isPresent();
+        assertThat(result.get().get(dx)).isEqualTo(IntervalDomain.of(0.0, 2.0));
+        assertThat(result.get().get(dy)).isEqualTo(IntervalDomain.of(3.0, 5.0));
+    }
+
+    @Test
+    void propagateDouble_zeroCoefficient_skipsVariable() {
+        // 0*dx + 3*dz == 12: dx is unconstrained, dz narrowed to 4.0
+        Variable<Double> dx = F.create("dx2");
+        Variable<Double> dz = F.create("dz");
+        var c = LinearConstraint.of(Map.of(dx, 0.0, dz, 3.0), Operator.EQ, 12.0);
+        var domains = Map.<Variable<?>, Domain<?>>of(
+                dx, IntervalDomain.of(0.0, 9.0),
+                dz, IntervalDomain.of(0.0, 9.0));
+        var result = c.propagate(domains);
+        assertThat(result).isPresent();
+        assertThat(result.get()).doesNotContainKey(dx);
+        assertThat(result.get().get(dz)).isEqualTo(IntervalDomain.of(4.0, 4.0));
+    }
+
+    @Test
+    void propagateDouble_eq_infeasible_kBelowMin() {
+        // 2*dx + 3*dy == 12, both domains [5,9]: min weighted sum = 25 > 12
+        Variable<Double> dx = F.create("dx");
+        Variable<Double> dy = F.create("dy");
+        var c = LinearConstraint.of(Map.of(dx, 2.0, dy, 3.0), Operator.EQ, 12.0);
+        var domains = Map.<Variable<?>, Domain<?>>of(
+                dx, IntervalDomain.of(5.0, 9.0),
+                dy, IntervalDomain.of(5.0, 9.0));
+        assertThat(c.propagate(domains)).isEmpty();
+    }
+
+    @Test
+    void propagateDouble_eq_infeasible_kAboveMax() {
+        // 2*dx + 3*dy == 12, both domains [0,1]: max weighted sum = 5 < 12
+        Variable<Double> dx = F.create("dx");
+        Variable<Double> dy = F.create("dy");
+        var c = LinearConstraint.of(Map.of(dx, 2.0, dy, 3.0), Operator.EQ, 12.0);
+        var domains = Map.<Variable<?>, Domain<?>>of(
+                dx, IntervalDomain.of(0.0, 1.0),
+                dy, IntervalDomain.of(0.0, 1.0));
+        assertThat(c.propagate(domains)).isEmpty();
+    }
+
+    @Test
+    void propagateDouble_leq_infeasible() {
+        // 2*dx + 3*dy <= 12, both domains [5,9]: min weighted sum = 25 > 12
+        Variable<Double> dx = F.create("dx");
+        Variable<Double> dy = F.create("dy");
+        var c = LinearConstraint.of(Map.of(dx, 2.0, dy, 3.0), Operator.LEQ, 12.0);
+        var domains = Map.<Variable<?>, Domain<?>>of(
+                dx, IntervalDomain.of(5.0, 9.0),
+                dy, IntervalDomain.of(5.0, 9.0));
+        assertThat(c.propagate(domains)).isEmpty();
+    }
+
+    @Test
+    void propagateDouble_geq_infeasible() {
+        // 2*dx + 3*dy >= 12, both domains [0,1]: max weighted sum = 5 < 12
+        Variable<Double> dx = F.create("dx");
+        Variable<Double> dy = F.create("dy");
+        var c = LinearConstraint.of(Map.of(dx, 2.0, dy, 3.0), Operator.GEQ, 12.0);
+        var domains = Map.<Variable<?>, Domain<?>>of(
+                dx, IntervalDomain.of(0.0, 1.0),
+                dy, IntervalDomain.of(0.0, 1.0));
+        assertThat(c.propagate(domains)).isEmpty();
+    }
+
+    @Test
+    void propagateDouble_negativeCoefficient_geq_tightensUpperBound() {
+        // -dx + dy >= 3, dx∈[0,5], dy fixed at 5.0
+        // newMax(dx) = (3-5)/-1 = 2 → dx narrowed to [0,2]
+        // newMin(dx) = NEGATIVE_INFINITY (GEQ → no lower constraint on negative-coeff variable)
+        Variable<Double> dx = F.create("ndx");
+        Variable<Double> dy = F.create("ndy");
+        var c = LinearConstraint.of(Map.of(dx, -1.0, dy, 1.0), Operator.GEQ, 3.0);
+        var domains = Map.<Variable<?>, Domain<?>>of(
+                dx, IntervalDomain.of(0.0, 5.0),
+                dy, IntervalDomain.of(5.0, 5.0));
+        var result = c.propagate(domains);
+        assertThat(result).isPresent();
+        assertThat(result.get().get(dx)).isEqualTo(IntervalDomain.of(0.0, 2.0));
+    }
+
+    @Test
+    void propagateDouble_negativeCoefficient_leq_tightensLowerBound() {
+        // -dx + dy <= 0, dx∈[0,5], dy fixed at 3.0
+        // newMin(dx) = (0-3)/-1 = 3 → dx narrowed to [3,5]
+        // newMax(dx) = POSITIVE_INFINITY (LEQ → no upper constraint on negative-coeff variable)
+        Variable<Double> dx = F.create("ndx");
+        Variable<Double> dy = F.create("ndy");
+        var c = LinearConstraint.of(Map.of(dx, -1.0, dy, 1.0), Operator.LEQ, 0.0);
+        var domains = Map.<Variable<?>, Domain<?>>of(
+                dx, IntervalDomain.of(0.0, 5.0),
+                dy, IntervalDomain.of(3.0, 3.0));
+        var result = c.propagate(domains);
+        assertThat(result).isPresent();
+        assertThat(result.get().get(dx)).isEqualTo(IntervalDomain.of(3.0, 5.0));
+    }
+
+    @Test
+    void propagateDouble_noChange_returnsEmptyMap() {
+        // Domains already at propagation fixpoint: dx∈[0,6], dy∈[0,4]
+        Variable<Double> dx = F.create("dx");
+        Variable<Double> dy = F.create("dy");
+        var c = LinearConstraint.of(Map.of(dx, 2.0, dy, 3.0), Operator.EQ, 12.0);
+        var domains = Map.<Variable<?>, Domain<?>>of(
+                dx, IntervalDomain.of(0.0, 6.0),
+                dy, IntervalDomain.of(0.0, 4.0));
+        var result = c.propagate(domains);
+        assertThat(result).isPresent();
+        assertThat(result.get()).isEmpty();
+    }
+
+    @Test
+    void propagateDouble_mixedIntervalAndEnumerableOperands() {
+        // dx is an IntervalDomain, dy is a plain enumerable Domain<Double>; dx + dy == 10
+        Variable<Double> dx = F.create("dx");
+        Variable<Double> dy = F.create("dy");
+        var c = LinearConstraint.of(Map.of(dx, 1.0, dy, 1.0), Operator.EQ, 10.0);
+        var domains = Map.<Variable<?>, Domain<?>>of(
+                dx, IntervalDomain.of(0.0, 10.0),
+                dy, DomainObjectSet.<Double>builder().value(2.0).value(8.0).build());
+        var result = c.propagate(domains);
+        assertThat(result).isPresent();
+        assertThat(result.get().get(dx)).isEqualTo(IntervalDomain.of(2.0, 8.0));
+        assertThat(result.get()).doesNotContainKey(dy);
+    }
+
+    @Test
+    void propagateDouble_enumerableOperandPrunedToEmpty_infeasible() {
+        // dx enumerable {0.0, 1.0}, dy∈[9.2, 9.8]; dx + dy == 10
+        // Globally feasible (totalMin=9.2, totalMax=10.8), but dx must narrow to [0.2, 0.8],
+        // which excludes both 0.0 and 1.0 → infeasible per-variable.
+        Variable<Double> dx = F.create("dx");
+        Variable<Double> dy = F.create("dy");
+        var c = LinearConstraint.of(Map.of(dx, 1.0, dy, 1.0), Operator.EQ, 10.0);
+        var domains = Map.<Variable<?>, Domain<?>>of(
+                dx, DomainObjectSet.<Double>builder().value(0.0).value(1.0).build(),
+                dy, IntervalDomain.of(9.2, 9.8));
+        assertThat(c.propagate(domains)).isEmpty();
     }
 }

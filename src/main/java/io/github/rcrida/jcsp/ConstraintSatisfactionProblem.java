@@ -47,6 +47,7 @@ import io.github.rcrida.jcsp.constraints.unary.UnaryNotEqualsConstraint;
 import io.github.rcrida.jcsp.constraints.unary.UnaryPredicateConstraint;
 import io.github.rcrida.jcsp.constraints.unary.UnaryValueConstraint;
 import io.github.rcrida.jcsp.domains.BooleanDomain;
+import io.github.rcrida.jcsp.domains.BoundedDomain;
 import io.github.rcrida.jcsp.domains.Domain;
 import io.github.rcrida.jcsp.domains.IntRangeDomain;
 import io.github.rcrida.jcsp.variables.Variable;
@@ -77,6 +78,14 @@ import java.util.stream.IntStream;
 @NonFinal
 @AllArgsConstructor(access = AccessLevel.NONE)
 public class ConstraintSatisfactionProblem {
+    /**
+     * Constraint types that support {@link io.github.rcrida.jcsp.domains.BoundedDomain} (e.g.
+     * {@link io.github.rcrida.jcsp.domains.IntervalDomain}) variables via interval-arithmetic bounds
+     * propagation. Any other constraint type referencing such a variable is rejected at build time.
+     */
+    private static final Set<Class<? extends Constraint>> CONTINUOUS_COMPATIBLE_CONSTRAINTS =
+            Set.of(SumConstraint.class, LinearConstraint.class);
+
     Map<Variable<?>, Domain<?>> variableDomains;
     @Getter(AccessLevel.NONE) @EqualsAndHashCode.Exclude ConstraintGraph constraintGraph;
 
@@ -120,6 +129,28 @@ public class ConstraintSatisfactionProblem {
                 .collect(Collectors.toSet());
         if (!unknownVariables.isEmpty()) {
             throw new IllegalArgumentException(String.format("Constraints reference unknown variables %s", unknownVariables));
+        }
+
+        val boundedVariables = variableDomains.entrySet().stream()
+                .filter(e -> e.getValue() instanceof BoundedDomain<?>)
+                .map(Map.Entry::getKey)
+                .collect(Collectors.toSet());
+        if (boundedVariables.isEmpty()) {
+            return;
+        }
+        for (Constraint constraint : constraints) {
+            if (CONTINUOUS_COMPATIBLE_CONSTRAINTS.contains(constraint.getClass())) {
+                continue;
+            }
+            val incompatible = constraint.getVariables().stream()
+                    .filter(boundedVariables::contains)
+                    .collect(Collectors.toSet());
+            if (!incompatible.isEmpty()) {
+                throw new IllegalArgumentException(String.format(
+                        "Variables %s use a BoundedDomain (e.g. IntervalDomain) but are referenced by " +
+                                "unsupported constraint %s; only %s support BoundedDomain variables",
+                        incompatible, constraint.getClass().getSimpleName(), CONTINUOUS_COMPATIBLE_CONSTRAINTS));
+            }
         }
     }
 

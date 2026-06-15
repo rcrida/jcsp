@@ -50,6 +50,47 @@ public class ConstraintSatisfactionProblemTest {
     }
 
     @Test
+    void validateConstraints_boundedDomainWithUnsupportedConstraint() {
+        Variable<Double> a = VARIABLE_FACTORY.create("A");
+        Variable<Double> b = VARIABLE_FACTORY.create("B");
+        assertThatThrownBy(() -> ConstraintSatisfactionProblem.builder()
+                .variableDomain(a, io.github.rcrida.jcsp.domains.IntervalDomain.of(0.0, 10.0))
+                .variableDomain(b, io.github.rcrida.jcsp.domains.IntervalDomain.of(0.0, 10.0))
+                .notEqualsConstraint(a, b)
+                .build())
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("BoundedDomain")
+                .hasMessageContaining("BinaryNotEqualsConstraint");
+    }
+
+    @Test
+    void validateConstraints_unsupportedConstraintNotReferencingBoundedDomain_allowed() {
+        Variable<Double> a = VARIABLE_FACTORY.create("A");
+        Variable<Integer> x = VARIABLE_FACTORY.create("X");
+        Variable<Integer> y = VARIABLE_FACTORY.create("Y");
+        var csp = ConstraintSatisfactionProblem.builder()
+                .variableDomain(a, io.github.rcrida.jcsp.domains.IntervalDomain.of(0.0, 10.0))
+                .variableDomain(x, IntRangeDomain.of(0, 5))
+                .variableDomain(y, IntRangeDomain.of(0, 5))
+                .sumConstraint(Set.of(a), Operator.EQ, 5.0)
+                .notEqualsConstraint(x, y)
+                .build();
+        assertThat(csp.getVariableDomains()).containsKeys(a, x, y);
+    }
+
+    @Test
+    void validateConstraints_boundedDomainWithSumConstraint_allowed() {
+        Variable<Double> a = VARIABLE_FACTORY.create("A");
+        Variable<Double> b = VARIABLE_FACTORY.create("B");
+        var csp = ConstraintSatisfactionProblem.builder()
+                .variableDomain(a, io.github.rcrida.jcsp.domains.IntervalDomain.of(0.0, 10.0))
+                .variableDomain(b, io.github.rcrida.jcsp.domains.IntervalDomain.of(0.0, 10.0))
+                .sumConstraint(Set.of(a, b), Operator.EQ, 10.0)
+                .build();
+        assertThat(csp.getVariableDomains()).containsKeys(a, b);
+    }
+
+    @Test
     void getNeightbours() {
         val csp = AustraliaMapColouringTest.problem();
         val expected = Map.of(

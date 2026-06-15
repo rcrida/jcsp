@@ -15,6 +15,7 @@ A Java library implementing classic AI algorithms for solving Constraint Satisfa
 - **Heuristics**: MRV variable selection, LCV value ordering, and Minimum Degree variable elimination for tree decomposition
 - **Local search**: `LocalSolver.Factory.INSTANCE` wires the full pipeline (NC + AC3 + bounds/value propagation → independent subproblem decomposition → min-conflicts) and supports both satisfaction and optimization. Seeded by `RandomAssignmentFactory`, `GreedyAssignmentFactory`, or `FallbackAssignmentFactory` for hybrid restart strategies
 - **Reification**: `ReifiedConstraint` (`b <-> body`) and `ImplicationConstraint` (`b -> body`) introduce boolean indicator variables that capture constraint satisfaction — enables soft constraints, counting satisfaction, and conditional constraints via `csp.reifyConstraint(b, constraint)` and `csp.impliesConstraint(b, constraint)`
+- **Real-valued variables**: `IntervalDomain` represents a continuous `[min, max]` range of `double`s. `SumConstraint` and `LinearConstraint` (with a `Double` bound) propagate over interval bounds, so many continuous linear-arithmetic problems are solved entirely by propagation
 
 ## Usage
 
@@ -47,6 +48,27 @@ Optional<Assignment> best = solver.getSolution(csp, assignment ->
 
 // Returns a stream of improving assignments; the last element is the global optimum
 solver.getSolutions(csp, objective).forEach(System.out::println);
+```
+
+### Real-valued variables
+
+`IntervalDomain` models a continuous `[min, max]` range of `double`s. Only `SumConstraint` and `LinearConstraint` (with a `Double` bound) support `IntervalDomain` variables — they propagate over interval bounds using interval arithmetic, so many continuous problems are solved entirely by propagation without backtracking search. Any other constraint type referencing an `IntervalDomain` variable is rejected with `IllegalArgumentException` at build time.
+
+```java
+Variable<Double> rent = F.create("rent");
+Variable<Double> food = F.create("food");
+Variable<Double> transport = F.create("transport");
+
+ConstraintSatisfactionProblem csp = ConstraintSatisfactionProblem.builder()
+    .variableDomain(rent, IntervalDomain.of(60.0, 60.0))
+    .variableDomain(food, IntervalDomain.of(0.0, 100.0))
+    .variableDomain(transport, IntervalDomain.of(0.0, 100.0))
+    .sumConstraint(Set.of(rent, food), Operator.EQ, 100.0)            // rent + food == 100
+    .linearConstraint(Map.of(rent, 1.0, transport, 5.0), Operator.EQ, 120.0)  // rent + 5*transport == 120
+    .build();
+
+// Resolved to a single solution by bounds propagation alone: food=40.0, transport=12.0
+Solver.Factory.INSTANCE.createSolver().getSolutions(csp).forEach(System.out::println);
 ```
 
 ### Constraint builder methods

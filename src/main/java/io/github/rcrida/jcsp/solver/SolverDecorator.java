@@ -70,7 +70,7 @@ public abstract class SolverDecorator implements Solver {
      */
     private static Stream<Assignment> forcedSolution(ConstraintSatisfactionProblem csp) {
         val values = csp.getVariableDomains().entrySet().stream()
-                .collect(Collectors.toMap(Map.Entry::getKey, e -> e.getValue().stream().findFirst().orElseThrow()));
+                .collect(Collectors.toMap(Map.Entry::getKey, e -> e.getValue().singleValue().orElseThrow()));
         Assignment a = Assignment.of(values);
         boolean valid = csp.getConstraints().stream().allMatch(c -> c.isSatisfiedBy(a));
         return valid ? Stream.of(a) : Stream.empty();
