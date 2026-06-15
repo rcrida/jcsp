@@ -369,6 +369,25 @@ public class SumConstraintTest {
     }
 
     @Test
+    void propagateFloat_eq_tightensEnumerableDomain() {
+        // f1 ∈ {0..9} (Float), f2 fixed at 5.0f; f1 + f2 == 8.0f → f1 narrowed to {3.0f}
+        Variable<Float> f1 = F.create("f1");
+        Variable<Float> f2 = F.create("f2");
+        var c = SumConstraint.of(Set.of(f1, f2), Operator.EQ, 8.0f);
+        var f1Domain = io.github.rcrida.jcsp.domains.DomainObjectSet.<Float>builder();
+        for (float v = 0f; v <= 9f; v++) f1Domain.value(v);
+        var domains = Map.<Variable<?>, io.github.rcrida.jcsp.domains.Domain<?>>of(
+                f1, f1Domain.build(),
+                f2, io.github.rcrida.jcsp.domains.DomainObjectSet.<Float>builder().value(5.0f).build());
+        var result = c.propagate(domains);
+        assertThat(result).isPresent();
+        @SuppressWarnings("unchecked")
+        io.github.rcrida.jcsp.domains.Domain<Float> f1Result =
+                (io.github.rcrida.jcsp.domains.Domain<Float>) result.get().get(f1);
+        assertThat(f1Result.toList()).containsExactly(3.0f);
+    }
+
+    @Test
     void sum_unsupportedBoundType() {
         Variable<Number> a = F.create("a"), b = F.create("b");
         var c = SumConstraint.<Number>builder()

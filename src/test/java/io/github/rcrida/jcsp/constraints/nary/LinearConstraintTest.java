@@ -504,6 +504,24 @@ public class LinearConstraintTest {
     }
 
     @Test
+    void propagateFloat_eq_tightensEnumerableDomain() {
+        // 2.0f*fx + 3.0f*fy == 12.0f, fy fixed at 2.0f: 2*fx == 6 → fx == 3.0f
+        Variable<Float> fx = F.create("fx");
+        Variable<Float> fy = F.create("fy");
+        var c = LinearConstraint.of(Map.of(fx, 2.0f, fy, 3.0f), Operator.EQ, 12.0f);
+        var fxDomain = DomainObjectSet.<Float>builder();
+        for (float v = 0f; v <= 9f; v++) fxDomain.value(v);
+        var domains = Map.<Variable<?>, Domain<?>>of(
+                fx, fxDomain.build(),
+                fy, DomainObjectSet.<Float>builder().value(2.0f).build());
+        var result = c.propagate(domains);
+        assertThat(result).isPresent();
+        @SuppressWarnings("unchecked")
+        Domain<Float> fxResult = (Domain<Float>) result.get().get(fx);
+        assertThat(fxResult.toList()).containsExactly(3.0f);
+    }
+
+    @Test
     void propagateDouble_enumerableOperandPrunedToEmpty_infeasible() {
         // dx enumerable {0.0, 1.0}, dy∈[9.2, 9.8]; dx + dy == 10
         // Globally feasible (totalMin=9.2, totalMax=10.8), but dx must narrow to [0.2, 0.8],

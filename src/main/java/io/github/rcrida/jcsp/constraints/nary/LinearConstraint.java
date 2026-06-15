@@ -66,7 +66,7 @@ public class LinearConstraint<N extends Number> extends NaryConstraint implement
         if (!PROPAGATING_OPERATORS.contains(operator)) {
             return Optional.of(Map.of());
         }
-        return (bound instanceof Double) ? propagateDouble(domains) : propagateInt(domains);
+        return (bound instanceof Double || bound instanceof Float) ? propagateDouble(domains) : propagateInt(domains);
     }
 
     @SuppressWarnings("unchecked")
