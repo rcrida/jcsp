@@ -13,6 +13,7 @@ import io.github.rcrida.jcsp.constraints.nary.AtLeastNConstraint;
 import io.github.rcrida.jcsp.constraints.nary.AtMostNConstraint;
 import io.github.rcrida.jcsp.constraints.nary.CountConstraint;
 import io.github.rcrida.jcsp.constraints.nary.CumulativeConstraint;
+import io.github.rcrida.jcsp.constraints.nary.GlobalCardinalityConstraint;
 import io.github.rcrida.jcsp.constraints.nary.InverseConstraint;
 import io.github.rcrida.jcsp.constraints.nary.LinearConstraint;
 import io.github.rcrida.jcsp.constraints.nary.SumConstraint;
@@ -52,7 +53,8 @@ public class PropagationFixpointSolver extends SolverDecorator {
             FixpointConsistency.of(AmongConstraint.class),
             FixpointConsistency.of(AtLeastNConstraint.class),
             FixpointConsistency.of(AtMostNConstraint.class),
-            FixpointConsistency.of(CumulativeConstraint.class)
+            FixpointConsistency.of(CumulativeConstraint.class),
+            FixpointConsistency.of(GlobalCardinalityConstraint.class)
     );
 
     @Override

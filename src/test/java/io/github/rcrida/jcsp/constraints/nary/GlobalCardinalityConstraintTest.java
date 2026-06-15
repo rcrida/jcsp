@@ -2,6 +2,7 @@ package io.github.rcrida.jcsp.constraints.nary;
 
 import io.github.rcrida.jcsp.ConstraintSatisfactionProblem;
 import io.github.rcrida.jcsp.assignments.Assignment;
+import io.github.rcrida.jcsp.domains.Domain;
 import io.github.rcrida.jcsp.domains.EnumDomain;
 import io.github.rcrida.jcsp.solver.Solver;
 import io.github.rcrida.jcsp.variables.Variable;
@@ -86,6 +87,82 @@ public class GlobalCardinalityConstraintTest {
                 Set.of(v1, v2, v3, v4),
                 Map.of(Color.RED, 2, Color.GREEN, 1, Color.BLUE, 1)))
                 .isEqualTo(constraint);
+    }
+
+    // --- propagate() ---
+
+    static final Domain<Color> RED_ONLY    = EnumDomain.of(Color.RED);
+    static final Domain<Color> ALL         = EnumDomain.allOf(Color.class); // RED, GREEN, BLUE
+    static final Domain<Color> RED_GREEN   = EnumDomain.of(Color.RED, Color.GREEN);
+    static final Domain<Color> GREEN_BLUE  = EnumDomain.of(Color.GREEN, Color.BLUE);
+
+    @Test
+    void propagate_definiteQuotaReached_removesValueFromPossibles() {
+        // RED==2: v1, v2 definite RED → definiteCount==2==n → remove RED from v3's domain
+        var c = GlobalCardinalityConstraint.of(Set.of(v1, v2, v3), Map.of(Color.RED, 2));
+        var domains = Map.<Variable<?>, Domain<?>>of(v1, RED_ONLY, v2, RED_ONLY, v3, ALL);
+        var result = c.propagate(domains);
+        assertThat(result).isPresent();
+        assertThat(result.get().get(v3)).isEqualTo(GREEN_BLUE);
+    }
+
+    @Test
+    void propagate_maxCountEqualsN_forcesPossiblesToValue() {
+        // RED==2: v1 definite RED, v2 possible (RED,GREEN), v3 impossible (GREEN,BLUE)
+        // definiteCount=1, maxCount=1+1=2==n → force v2 to {RED}
+        var c = GlobalCardinalityConstraint.of(Set.of(v1, v2, v3), Map.of(Color.RED, 2));
+        var domains = Map.<Variable<?>, Domain<?>>of(v1, RED_ONLY, v2, RED_GREEN, v3, GREEN_BLUE);
+        var result = c.propagate(domains);
+        assertThat(result).isPresent();
+        assertThat(result.get().get(v2)).isEqualTo(RED_ONLY);
+    }
+
+    @Test
+    void propagate_infeasible_tooManyDefinites() {
+        // RED==1: v1, v2 both definite RED → definiteCount=2 > n=1 → infeasible
+        var c = GlobalCardinalityConstraint.of(Set.of(v1, v2), Map.of(Color.RED, 1));
+        var domains = Map.<Variable<?>, Domain<?>>of(v1, RED_ONLY, v2, RED_ONLY);
+        assertThat(c.propagate(domains)).isEmpty();
+    }
+
+    @Test
+    void propagate_infeasible_tooFewPossible() {
+        // RED==2: v1, v2 both impossible (no RED in domain) → maxCount=0 < n=2 → infeasible
+        var c = GlobalCardinalityConstraint.of(Set.of(v1, v2), Map.of(Color.RED, 2));
+        var domains = Map.<Variable<?>, Domain<?>>of(v1, GREEN_BLUE, v2, GREEN_BLUE);
+        assertThat(c.propagate(domains)).isEmpty();
+    }
+
+    @Test
+    void propagate_noChange_returnsEmptyMap() {
+        // RED==1: v1 definite RED (quota met), v2 impossible → no possibles to update
+        var c = GlobalCardinalityConstraint.of(Set.of(v1, v2), Map.of(Color.RED, 1));
+        var domains = Map.<Variable<?>, Domain<?>>of(v1, RED_ONLY, v2, GREEN_BLUE);
+        var result = c.propagate(domains);
+        assertThat(result).isPresent();
+        assertThat(result.get()).isEmpty();
+    }
+
+    @Test
+    void propagate_neitherQuotaMet_noChange() {
+        // RED==1: v1, v2 both possible (no definites) → definiteCount=0, maxCount=2 — neither equals n=1
+        var c = GlobalCardinalityConstraint.of(Set.of(v1, v2), Map.of(Color.RED, 1));
+        var domains = Map.<Variable<?>, Domain<?>>of(v1, ALL, v2, ALL);
+        var result = c.propagate(domains);
+        assertThat(result).isPresent();
+        assertThat(result.get()).isEmpty();
+    }
+
+    @Test
+    void propagate_multipleValues_bothProcessed() {
+        // RED==2, GREEN==1: v1, v2 definite RED (quota met) → remove RED from v3, v4;
+        // GREEN possibles v3, v4 unaffected (maxCount=2 != n=1)
+        var c = GlobalCardinalityConstraint.of(Set.of(v1, v2, v3, v4), Map.of(Color.RED, 2, Color.GREEN, 1));
+        var domains = Map.<Variable<?>, Domain<?>>of(v1, RED_ONLY, v2, RED_ONLY, v3, ALL, v4, ALL);
+        var result = c.propagate(domains);
+        assertThat(result).isPresent();
+        assertThat(result.get().get(v3)).isEqualTo(GREEN_BLUE);
+        assertThat(result.get().get(v4)).isEqualTo(GREEN_BLUE);
     }
 
     @Test

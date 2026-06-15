@@ -1,16 +1,21 @@
 package io.github.rcrida.jcsp.constraints.nary;
 
+import io.github.rcrida.jcsp.consistency.Propagatable;
+import io.github.rcrida.jcsp.domains.Domain;
 import io.github.rcrida.jcsp.variables.Variable;
 import lombok.EqualsAndHashCode;
 import lombok.Singular;
 import lombok.experimental.SuperBuilder;
 import org.jspecify.annotations.NonNull;
 
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Comparator;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -28,7 +33,7 @@ import java.util.stream.Collectors;
  */
 @SuperBuilder
 @EqualsAndHashCode(callSuper = true)
-public class GlobalCardinalityConstraint<T> extends UniformNaryConstraint<T> {
+public class GlobalCardinalityConstraint<T> extends UniformNaryConstraint<T> implements Propagatable {
     @Singular private final Map<T, Integer> cardinalities;
 
     public static <T> GlobalCardinalityConstraint<T> of(@NonNull Set<Variable<T>> variables,
@@ -52,6 +57,63 @@ public class GlobalCardinalityConstraint<T> extends UniformNaryConstraint<T> {
             if (!Objects.equals(counts.getOrDefault(entry.getKey(), 0), entry.getValue())) return false;
         }
         return true;
+    }
+
+    /**
+     * For each tracked value, classifies variables as <em>definite</em> (domain is exactly
+     * {@code {value}}), <em>possible</em> (value is in the domain alongside other values), or
+     * <em>impossible</em> (value absent from the domain).
+     * <p>
+     * When the definite count reaches the required cardinality, the value is removed from all
+     * possible domains. When the definite count plus the number of possible variables equals the
+     * required cardinality, every possible domain is forced to {@code {value}}. Domain changes
+     * from one tracked value feed into the classification of the next.
+     */
+    @Override
+    @SuppressWarnings("unchecked")
+    public Optional<Map<Variable<?>, Domain<?>>> propagate(@NonNull Map<Variable<?>, Domain<?>> domains) {
+        Map<Variable<?>, Domain<?>> current = new HashMap<>(domains);
+        Map<Variable<?>, Domain<?>> updated = new HashMap<>();
+
+        for (var entry : cardinalities.entrySet()) {
+            T value = entry.getKey();
+            int n = entry.getValue();
+
+            List<Variable<T>> possibleVars = new ArrayList<>();
+            int definiteCount = 0;
+            for (Variable<?> var : getVariables()) {
+                Domain<T> dom = (Domain<T>) current.get(var);
+                if (dom.stream().anyMatch(value::equals)) {
+                    if (dom.size() == 1) definiteCount++;
+                    else possibleVars.add((Variable<T>) var);
+                }
+            }
+            int maxCount = definiteCount + possibleVars.size();
+
+            if (definiteCount > n) return Optional.empty();
+            if (maxCount < n) return Optional.empty();
+
+            if (definiteCount == n) {
+                for (Variable<T> var : possibleVars) {
+                    Domain<T> newDom = ((Domain<T>) current.get(var)).toBuilder().delete(value).build();
+                    current.put(var, newDom);
+                    updated.put(var, newDom);
+                }
+            } else if (maxCount == n) {
+                for (Variable<T> var : possibleVars) {
+                    Domain<T> dom = (Domain<T>) current.get(var);
+                    Domain.Builder<T> builder = dom.toBuilder();
+                    for (T v : dom.toList()) {
+                        if (!value.equals(v)) builder.delete(v);
+                    }
+                    Domain<T> newDom = builder.build();
+                    current.put(var, newDom);
+                    updated.put(var, newDom);
+                }
+            }
+        }
+
+        return Optional.of(updated);
     }
 
     @Override
