@@ -2,6 +2,7 @@ package io.github.rcrida.jcsp.constraints.nary;
 
 import io.github.rcrida.jcsp.assignments.Assignment;
 import io.github.rcrida.jcsp.consistency.Propagatable;
+import io.github.rcrida.jcsp.domains.DiscreteDomain;
 import io.github.rcrida.jcsp.domains.Domain;
 import io.github.rcrida.jcsp.domains.IntRangeDomain;
 import io.github.rcrida.jcsp.variables.Variable;
@@ -88,7 +89,7 @@ public class CumulativeConstraint extends NaryConstraint implements Propagatable
         int[] lst = new int[n]; // latest start
 
         for (int i = 0; i < n; i++) {
-            var dom = (Domain<Integer>) domains.get(starts.get(i));
+            var dom = (DiscreteDomain<Integer>) domains.get(starts.get(i));
             est[i] = dom.stream().mapToInt(v -> v).min().orElseThrow();
             lst[i] = dom.stream().mapToInt(v -> v).max().orElseThrow();
         }

@@ -5,7 +5,7 @@ import io.github.rcrida.jcsp.consistency.ConstraintConsistency;
 import lombok.val;
 import io.github.rcrida.jcsp.ConstraintSatisfactionProblem;
 import io.github.rcrida.jcsp.constraints.unary.UnaryConstraint;
-import io.github.rcrida.jcsp.domains.Domain;
+import io.github.rcrida.jcsp.domains.DiscreteDomain;
 
 import java.util.HashMap;
 import java.util.Optional;
@@ -39,7 +39,7 @@ public class NodeConsistency implements ConstraintConsistency {
         val variableDomains = new HashMap<>(problem.getVariableDomains());
         for (UnaryConstraint<?> constraint : unaryConstraints) {
             val variable = constraint.getVariable();
-            val domain = variableDomains.get(variable);
+            val domain = (DiscreteDomain<?>) variableDomains.get(variable);
             val optionalRevisedDomain = revise(domain, constraint);
             if (optionalRevisedDomain.isPresent()) {
                 val revisedDomain = optionalRevisedDomain.get();
@@ -56,7 +56,7 @@ public class NodeConsistency implements ConstraintConsistency {
         return Optional.of(nodeConsistentProblem);
     }
 
-    private Optional<Domain<?>> revise(Domain<?> domain, UnaryConstraint<?> constraint) {
+    private Optional<DiscreteDomain<?>> revise(DiscreteDomain<?> domain, UnaryConstraint<?> constraint) {
         val revised = new AtomicBoolean(false);
         val revisedDomainBuilder = domain.toBuilder();
         domain.stream().forEach(x -> {

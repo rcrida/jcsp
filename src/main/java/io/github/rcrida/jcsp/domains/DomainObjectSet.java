@@ -16,7 +16,7 @@ import java.util.stream.Stream;
 @Value
 @NonFinal
 @Builder(toBuilder = true)
-public class DomainObjectSet<T> implements Domain<T> {
+public class DomainObjectSet<T> implements DiscreteDomain<T> {
     @Singular
     Set<T> values;
 
@@ -52,9 +52,9 @@ public class DomainObjectSet<T> implements Domain<T> {
                 '}';
     }
 
-    public static class DomainObjectSetBuilder<T> implements Domain.Builder<T> {
+    public static class DomainObjectSetBuilder<T> implements DiscreteDomain.Builder<T> {
         @Override
-        public Domain.Builder<T> delete(@NonNull Object value) {
+        public DiscreteDomain.Builder<T> delete(@NonNull Object value) {
             this.values.remove(value);
             return this;
         }

@@ -5,7 +5,7 @@ import lombok.NoArgsConstructor;
 import lombok.val;
 import io.github.rcrida.jcsp.ConstraintSatisfactionProblem;
 import io.github.rcrida.jcsp.assignments.Assignment;
-import io.github.rcrida.jcsp.domains.Domain;
+import io.github.rcrida.jcsp.domains.DiscreteDomain;
 import org.jspecify.annotations.NonNull;
 
 import java.util.concurrent.ThreadLocalRandom;
@@ -27,11 +27,11 @@ public class RandomAssignmentFactory implements InitialAssignmentFactory {
     @Override
     public Assignment getAssignment(@NonNull ConstraintSatisfactionProblem csp) {
         val builder = Assignment.builder();
-        csp.getVariableDomains().forEach((key, value) -> builder.value(key, getRandomValue(value)));
+        csp.getVariableDomains().forEach((key, value) -> builder.value(key, getRandomValue((DiscreteDomain<?>) value)));
         return builder.build();
     }
 
-    private Object getRandomValue(Domain domain) {
+    private Object getRandomValue(DiscreteDomain domain) {
         int index = ThreadLocalRandom.current().nextInt(domain.size());
         return domain.stream().skip(index).findAny().get();
     }

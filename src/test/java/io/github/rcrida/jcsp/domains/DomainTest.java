@@ -9,8 +9,9 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 public class DomainTest {
 
-    /** Minimal Domain implementation that does not override toList(), exercising the default method. */
-    static final Domain DOMAIN = new Domain() {
+    /** Minimal DiscreteDomain implementation exercising the default toList(), isSingleton(), singleValue() methods. */
+    @SuppressWarnings("rawtypes")
+    static final DiscreteDomain DOMAIN = new DiscreteDomain() {
         @Override public boolean contains(Object value) { return List.of(1, 2, 3).contains(value); }
         @Override public boolean isEmpty() { return false; }
         @Override public int size() { return 3; }
@@ -18,8 +19,8 @@ public class DomainTest {
         @Override public Builder toBuilder() { throw new UnsupportedOperationException(); }
     };
 
-    /** Minimal Domain implementation with a single value, exercising the singleton default methods. */
-    static final Domain SINGLETON_DOMAIN = new Domain() {
+    @SuppressWarnings("rawtypes")
+    static final DiscreteDomain SINGLETON_DOMAIN = new DiscreteDomain() {
         @Override public boolean contains(Object value) { return List.of(1).contains(value); }
         @Override public boolean isEmpty() { return false; }
         @Override public int size() { return 1; }

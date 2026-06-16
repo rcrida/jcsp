@@ -6,6 +6,7 @@ import io.github.rcrida.jcsp.consistency.Propagatable;
 import io.github.rcrida.jcsp.constraints.BinaryDecomposable;
 import io.github.rcrida.jcsp.constraints.binary.BinaryConstraint;
 import io.github.rcrida.jcsp.constraints.binary.BinaryNotEqualsConstraint;
+import io.github.rcrida.jcsp.domains.DiscreteDomain;
 import io.github.rcrida.jcsp.domains.Domain;
 import io.github.rcrida.jcsp.variables.Variable;
 import org.jspecify.annotations.NonNull;
@@ -77,7 +78,7 @@ public class AllDiffConstraint<T> extends UniformNaryConstraint<T> implements Pr
         List<Object> valueList = new ArrayList<>();
         Map<Object, Integer> valueIndex = new LinkedHashMap<>();
         for (Variable<T> v : vars) {
-            Domain<T> dom = (Domain<T>) domains.get(v);
+            DiscreteDomain<T> dom = (DiscreteDomain<T>) domains.get(v);
             for (T val : dom.toList()) {
                 if (!valueIndex.containsKey(val)) {
                     valueIndex.put(val, valueList.size());
@@ -89,7 +90,7 @@ public class AllDiffConstraint<T> extends UniformNaryConstraint<T> implements Pr
 
         List<List<Integer>> varAdj = new ArrayList<>(n);
         for (Variable<T> v : vars) {
-            Domain<T> dom = (Domain<T>) domains.get(v);
+            DiscreteDomain<T> dom = (DiscreteDomain<T>) domains.get(v);
             varAdj.add(dom.stream().map(val -> valueIndex.get(val)).toList());
         }
 
@@ -132,8 +133,8 @@ public class AllDiffConstraint<T> extends UniformNaryConstraint<T> implements Pr
         Map<Variable<?>, Domain<?>> updates = new HashMap<>();
         for (int i = 0; i < n; i++) {
             int mv = matchVar[i];
-            Domain<T> dom = (Domain<T>) domains.get(vars.get(i));
-            Domain.Builder<T> builder = null;
+            DiscreteDomain<T> dom = (DiscreteDomain<T>) domains.get(vars.get(i));
+            DiscreteDomain.Builder<T> builder = null;
             for (int vj : varAdj.get(i)) {
                 if (vj != mv && scc[i] != scc[n + vj]) {
                     if (builder == null) builder = dom.toBuilder();

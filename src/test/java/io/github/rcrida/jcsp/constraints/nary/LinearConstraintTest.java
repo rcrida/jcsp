@@ -3,6 +3,7 @@ package io.github.rcrida.jcsp.constraints.nary;
 import io.github.rcrida.jcsp.ConstraintSatisfactionProblem;
 import io.github.rcrida.jcsp.assignments.Assignment;
 import io.github.rcrida.jcsp.constraints.Operator;
+import io.github.rcrida.jcsp.domains.DiscreteDomain;
 import io.github.rcrida.jcsp.domains.Domain;
 import io.github.rcrida.jcsp.domains.DomainObjectSet;
 import io.github.rcrida.jcsp.domains.IntRangeDomain;
@@ -517,7 +518,7 @@ public class LinearConstraintTest {
         var result = c.propagate(domains);
         assertThat(result).isPresent();
         @SuppressWarnings("unchecked")
-        Domain<Float> fxResult = (Domain<Float>) result.get().get(fx);
+        DiscreteDomain<Float> fxResult = (DiscreteDomain<Float>) result.get().get(fx);
         assertThat(fxResult.toList()).containsExactly(3.0f);
     }
 

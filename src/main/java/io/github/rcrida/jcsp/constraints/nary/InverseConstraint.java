@@ -2,6 +2,7 @@ package io.github.rcrida.jcsp.constraints.nary;
 
 import io.github.rcrida.jcsp.assignments.Assignment;
 import io.github.rcrida.jcsp.consistency.Propagatable;
+import io.github.rcrida.jcsp.domains.DiscreteDomain;
 import io.github.rcrida.jcsp.domains.Domain;
 import io.github.rcrida.jcsp.variables.Variable;
 import lombok.EqualsAndHashCode;
@@ -63,17 +64,17 @@ public class InverseConstraint extends NaryConstraint implements Propagatable {
 
         // Pass 1: prune invf[j] — remove val if (j+1) ∉ dom(f[val-1])
         for (int j = 0; j < n; j++) {
-            Domain<Integer> invfDom = (Domain<Integer>) domains.get(invf.get(j));
-            Domain.Builder<Integer> builder = null;
+            DiscreteDomain<Integer> invfDom = (DiscreteDomain<Integer>) domains.get(invf.get(j));
+            DiscreteDomain.Builder<Integer> builder = null;
             for (Integer val : invfDom.toList()) {
-                Domain<Integer> fDom = (Domain<Integer>) domains.get(f.get(val - 1));
+                DiscreteDomain<Integer> fDom = (DiscreteDomain<Integer>) domains.get(f.get(val - 1));
                 if (!fDom.contains(j + 1)) {
                     if (builder == null) builder = invfDom.toBuilder();
                     builder.delete(val);
                 }
             }
             if (builder != null) {
-                Domain<Integer> pruned = builder.build();
+                DiscreteDomain<Integer> pruned = builder.build();
                 if (pruned.isEmpty()) return Optional.empty();
                 updated.put(invf.get(j), pruned);
             }
@@ -81,10 +82,10 @@ public class InverseConstraint extends NaryConstraint implements Propagatable {
 
         // Pass 2: prune f[i] — remove j if (i+1) ∉ dom(invf[j-1]) (using updated invf domains)
         for (int i = 0; i < n; i++) {
-            Domain<Integer> fDom = (Domain<Integer>) domains.get(f.get(i));
-            Domain.Builder<Integer> builder = null;
+            DiscreteDomain<Integer> fDom = (DiscreteDomain<Integer>) domains.get(f.get(i));
+            DiscreteDomain.Builder<Integer> builder = null;
             for (Integer j : fDom.toList()) {
-                Domain<Integer> invfDom = (Domain<Integer>) updated.getOrDefault(invf.get(j - 1),
+                DiscreteDomain<Integer> invfDom = (DiscreteDomain<Integer>) updated.getOrDefault(invf.get(j - 1),
                         domains.get(invf.get(j - 1)));
                 if (!invfDom.contains(i + 1)) {
                     if (builder == null) builder = fDom.toBuilder();
@@ -92,7 +93,7 @@ public class InverseConstraint extends NaryConstraint implements Propagatable {
                 }
             }
             if (builder != null) {
-                Domain<Integer> pruned = builder.build();
+                DiscreteDomain<Integer> pruned = builder.build();
                 if (pruned.isEmpty()) return Optional.empty();
                 updated.put(f.get(i), pruned);
             }

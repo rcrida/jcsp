@@ -2,6 +2,7 @@ package io.github.rcrida.jcsp.constraints.nary;
 
 import io.github.rcrida.jcsp.assignments.Assignment;
 import io.github.rcrida.jcsp.constraints.Operator;
+import io.github.rcrida.jcsp.domains.DiscreteDomain;
 import io.github.rcrida.jcsp.domains.IntRangeDomain;
 import io.github.rcrida.jcsp.domains.IntervalDomain;
 import io.github.rcrida.jcsp.variables.Variable;
@@ -382,8 +383,7 @@ public class SumConstraintTest {
         var result = c.propagate(domains);
         assertThat(result).isPresent();
         @SuppressWarnings("unchecked")
-        io.github.rcrida.jcsp.domains.Domain<Float> f1Result =
-                (io.github.rcrida.jcsp.domains.Domain<Float>) result.get().get(f1);
+        DiscreteDomain<Float> f1Result = (DiscreteDomain<Float>) result.get().get(f1);
         assertThat(f1Result.toList()).containsExactly(3.0f);
     }
 

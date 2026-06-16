@@ -1,6 +1,7 @@
 package io.github.rcrida.jcsp.constraints.nary;
 
 import io.github.rcrida.jcsp.consistency.Propagatable;
+import io.github.rcrida.jcsp.domains.DiscreteDomain;
 import io.github.rcrida.jcsp.domains.Domain;
 import io.github.rcrida.jcsp.variables.Variable;
 import lombok.experimental.SuperBuilder;
@@ -51,7 +52,7 @@ public class AtMostNConstraint extends UniformNaryConstraint<Boolean> implements
         Map<Variable<?>, Domain<?>> updated = new HashMap<>();
         if (definiteTrue == n) {
             for (Variable<Boolean> var : possiblyTrue)
-                updated.put(var, ((Domain<Boolean>) domains.get(var)).toBuilder().delete(Boolean.TRUE).build());
+                updated.put(var, ((DiscreteDomain<Boolean>) domains.get(var)).toBuilder().delete(Boolean.TRUE).build());
         }
         return Optional.of(updated);
     }

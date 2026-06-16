@@ -5,6 +5,7 @@ import lombok.experimental.NonFinal;
 import lombok.experimental.SuperBuilder;
 import io.github.rcrida.jcsp.ConstraintSatisfactionProblem;
 import io.github.rcrida.jcsp.assignments.Assignment;
+import io.github.rcrida.jcsp.domains.Domain;
 import lombok.val;
 import org.jspecify.annotations.NonNull;
 
@@ -61,7 +62,7 @@ public abstract class SolverDecorator implements Solver {
 
     /** Returns true when every domain has exactly one value — the problem is fully determined. */
     private static boolean allSingleton(ConstraintSatisfactionProblem csp) {
-        return csp.getVariableDomains().values().stream().allMatch(d -> d.size() == 1);
+        return csp.getVariableDomains().values().stream().allMatch(Domain::isSingleton);
     }
 
     /**

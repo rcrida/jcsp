@@ -36,7 +36,7 @@ public class AssignmentDomain extends DomainObjectSet<Assignment> {
         val variableAssignments = variableDomains.entrySet().stream()
                 .collect(Collectors.toMap(
                         Map.Entry::getKey,
-                        e -> e.getValue().stream()
+                        e -> ((DiscreteDomain<?>) e.getValue()).stream()
                                 .map(v -> Assignment.builder().value(e.getKey(), v).build())
                                 .toList()));
         // now merge all the combinations of the variable assignments, as long as they are consistent

@@ -10,6 +10,7 @@ import io.github.rcrida.jcsp.constraints.BinaryDecomposable;
 import io.github.rcrida.jcsp.constraints.Constraint;
 import io.github.rcrida.jcsp.constraints.nary.NaryConstraint;
 import io.github.rcrida.jcsp.constraints.unary.UnaryConstraint;
+import io.github.rcrida.jcsp.domains.DiscreteDomain;
 import io.github.rcrida.jcsp.solver.assignmentfactory.InitialAssignmentFactory;
 import io.github.rcrida.jcsp.solver.backtrackingsearch.selector.ConflictedVariableSelector;
 import io.github.rcrida.jcsp.solver.backtrackingsearch.selector.UnassignedVariableSelector;
@@ -124,7 +125,7 @@ public class MinConflictsSolver implements LocalSolver {
         val variableConstraints = conflictConstraints(csp)
                 .filter(c -> c.getVariables().contains(variable))
                 .toList();
-        val costs = csp.getDomain(variable).stream()
+        val costs = ((DiscreteDomain<T>) csp.getDomain(variable)).stream()
                 .map(v -> new ValueCost<>(v,
                         weighConflicts(variable, v, current, variableConstraints, constraintWeights),
                         objective.applyAsDouble(current.withValue(variable, v))))
@@ -192,7 +193,7 @@ public class MinConflictsSolver implements LocalSolver {
         val variableConstraints = conflictConstraints(csp)
                 .filter(constraint -> constraint.getVariables().contains(variable))
                 .toList();
-        Map<T, Double> valueWeights = csp.getDomain(variable).stream()
+        Map<T, Double> valueWeights = ((DiscreteDomain<T>) csp.getDomain(variable)).stream()
                 .collect(Collectors.toMap(v -> v, v -> weighConflicts(variable, v, current, variableConstraints, constraintWeights)));
         log.debug("Value weights: {}", valueWeights);
         val minWeight = valueWeights.values().stream().min(Comparator.naturalOrder()).orElseThrow();

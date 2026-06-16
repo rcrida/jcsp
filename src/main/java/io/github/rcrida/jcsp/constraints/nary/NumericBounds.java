@@ -1,6 +1,7 @@
 package io.github.rcrida.jcsp.constraints.nary;
 
 import io.github.rcrida.jcsp.domains.BoundedDomain;
+import io.github.rcrida.jcsp.domains.DiscreteDomain;
 import io.github.rcrida.jcsp.domains.Domain;
 
 import java.util.Optional;
@@ -17,12 +18,12 @@ final class NumericBounds {
 
     static <N extends Number> double min(Domain<N> domain) {
         if (domain instanceof BoundedDomain<?> bounded) return bounded.getMin().doubleValue();
-        return domain.stream().mapToDouble(Number::doubleValue).min().orElseThrow();
+        return ((DiscreteDomain<N>) domain).stream().mapToDouble(Number::doubleValue).min().orElseThrow();
     }
 
     static <N extends Number> double max(Domain<N> domain) {
         if (domain instanceof BoundedDomain<?> bounded) return bounded.getMax().doubleValue();
-        return domain.stream().mapToDouble(Number::doubleValue).max().orElseThrow();
+        return ((DiscreteDomain<N>) domain).stream().mapToDouble(Number::doubleValue).max().orElseThrow();
     }
 
     /**
@@ -43,11 +44,12 @@ final class NumericBounds {
             return Optional.of((Domain<N>) raw.withBounds(lo, hi));
         }
 
-        Domain.Builder<N> builder = null;
-        for (N val : domain.toList()) {
+        DiscreteDomain<N> discrete = (DiscreteDomain<N>) domain;
+        DiscreteDomain.Builder<N> builder = null;
+        for (N val : discrete.toList()) {
             double v = val.doubleValue();
             if (v < newMin || v > newMax) {
-                if (builder == null) builder = domain.toBuilder();
+                if (builder == null) builder = discrete.toBuilder();
                 builder.delete(val);
             }
         }

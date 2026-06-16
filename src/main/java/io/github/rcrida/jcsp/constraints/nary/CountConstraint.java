@@ -2,6 +2,7 @@ package io.github.rcrida.jcsp.constraints.nary;
 
 import io.github.rcrida.jcsp.consistency.Propagatable;
 import io.github.rcrida.jcsp.constraints.Operator;
+import io.github.rcrida.jcsp.domains.DiscreteDomain;
 import io.github.rcrida.jcsp.domains.Domain;
 import io.github.rcrida.jcsp.variables.Variable;
 import lombok.EqualsAndHashCode;
@@ -75,9 +76,9 @@ public class CountConstraint<T> extends UniformNaryConstraint<T> implements Prop
         List<Variable<T>> possibleVars = new ArrayList<>();
         int definiteCount = 0;
         for (Variable<?> var : getVariables()) {
-            Domain<T> dom = (Domain<T>) domains.get(var);
+            DiscreteDomain<T> dom = (DiscreteDomain<T>) domains.get(var);
             if (dom.stream().anyMatch(value::equals)) {
-                if (dom.size() == 1) definiteCount++;
+                if (dom.isSingleton()) definiteCount++;
                 else possibleVars.add((Variable<T>) var);
             }
         }
@@ -93,13 +94,13 @@ public class CountConstraint<T> extends UniformNaryConstraint<T> implements Prop
 
         if (applyUpper && definiteCount == n) {
             for (Variable<T> var : possibleVars)
-                updated.put(var, ((Domain<T>) domains.get(var)).toBuilder().delete(value).build());
+                updated.put(var, ((DiscreteDomain<T>) domains.get(var)).toBuilder().delete(value).build());
         }
 
         if (applyLower && maxCount == n) {
             for (Variable<T> var : possibleVars) {
-                Domain<T> dom = (Domain<T>) domains.get(var);
-                Domain.Builder<T> builder = dom.toBuilder();
+                DiscreteDomain<T> dom = (DiscreteDomain<T>) domains.get(var);
+                DiscreteDomain.Builder<T> builder = dom.toBuilder();
                 for (T v : dom.toList()) {
                     if (!value.equals(v)) builder.delete(v);
                 }

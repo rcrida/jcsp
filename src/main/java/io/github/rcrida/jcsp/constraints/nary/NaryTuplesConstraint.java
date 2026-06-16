@@ -2,6 +2,7 @@ package io.github.rcrida.jcsp.constraints.nary;
 
 import io.github.rcrida.jcsp.assignments.Assignment;
 import io.github.rcrida.jcsp.consistency.Propagatable;
+import io.github.rcrida.jcsp.domains.DiscreteDomain;
 import io.github.rcrida.jcsp.domains.Domain;
 import io.github.rcrida.jcsp.variables.Variable;
 import lombok.EqualsAndHashCode;
@@ -62,7 +63,7 @@ public class NaryTuplesConstraint extends NaryConstraint implements Propagatable
 
         Map<Variable<?>, Domain<?>> updated = new HashMap<>();
         for (Variable<?> v : getVariables()) {
-            Domain<?> dom = domains.get(v);
+            DiscreteDomain<?> dom = (DiscreteDomain<?>) domains.get(v);
             var supportedValues = liveTuples.stream().map(t -> t.getValue(v).orElseThrow()).collect(Collectors.toSet());
             if (supportedValues.size() < dom.size()) {
                 var builder = dom.toBuilder();

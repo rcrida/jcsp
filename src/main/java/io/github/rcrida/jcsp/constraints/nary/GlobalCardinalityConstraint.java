@@ -1,6 +1,7 @@
 package io.github.rcrida.jcsp.constraints.nary;
 
 import io.github.rcrida.jcsp.consistency.Propagatable;
+import io.github.rcrida.jcsp.domains.DiscreteDomain;
 import io.github.rcrida.jcsp.domains.Domain;
 import io.github.rcrida.jcsp.variables.Variable;
 import lombok.EqualsAndHashCode;
@@ -82,9 +83,9 @@ public class GlobalCardinalityConstraint<T> extends UniformNaryConstraint<T> imp
             List<Variable<T>> possibleVars = new ArrayList<>();
             int definiteCount = 0;
             for (Variable<?> var : getVariables()) {
-                Domain<T> dom = (Domain<T>) current.get(var);
+                DiscreteDomain<T> dom = (DiscreteDomain<T>) current.get(var);
                 if (dom.stream().anyMatch(value::equals)) {
-                    if (dom.size() == 1) definiteCount++;
+                    if (dom.isSingleton()) definiteCount++;
                     else possibleVars.add((Variable<T>) var);
                 }
             }
@@ -95,18 +96,18 @@ public class GlobalCardinalityConstraint<T> extends UniformNaryConstraint<T> imp
 
             if (definiteCount == n) {
                 for (Variable<T> var : possibleVars) {
-                    Domain<T> newDom = ((Domain<T>) current.get(var)).toBuilder().delete(value).build();
+                    Domain<T> newDom = ((DiscreteDomain<T>) current.get(var)).toBuilder().delete(value).build();
                     current.put(var, newDom);
                     updated.put(var, newDom);
                 }
             } else if (maxCount == n) {
                 for (Variable<T> var : possibleVars) {
-                    Domain<T> dom = (Domain<T>) current.get(var);
-                    Domain.Builder<T> builder = dom.toBuilder();
+                    DiscreteDomain<T> dom = (DiscreteDomain<T>) current.get(var);
+                    DiscreteDomain.Builder<T> builder = dom.toBuilder();
                     for (T v : dom.toList()) {
                         if (!value.equals(v)) builder.delete(v);
                     }
-                    Domain<T> newDom = builder.build();
+                    DiscreteDomain<T> newDom = builder.build();
                     current.put(var, newDom);
                     updated.put(var, newDom);
                 }

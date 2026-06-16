@@ -5,7 +5,7 @@ import lombok.val;
 import io.github.rcrida.jcsp.ConstraintSatisfactionProblem;
 import io.github.rcrida.jcsp.consistency.ConstraintConsistency;
 import io.github.rcrida.jcsp.constraints.binary.BinaryConstraint;
-import io.github.rcrida.jcsp.domains.Domain;
+import io.github.rcrida.jcsp.domains.DiscreteDomain;
 
 import java.util.*;
 import java.util.stream.Collectors;
@@ -85,9 +85,9 @@ public class AC3 implements ConstraintConsistency {
         return Optional.of(problem.toBuilder().variableDomains(variableDomains).build());
     }
 
-    public Optional<Domain<?>> revise(ConstraintSatisfactionProblem problem, Arc arc, BinaryConstraint<?, ?> constraint) {
-        val D_i = problem.getVariableDomains().get(arc.getFrom());
-        val D_j = problem.getVariableDomains().get(arc.getTo());
+    public Optional<DiscreteDomain<?>> revise(ConstraintSatisfactionProblem problem, Arc arc, BinaryConstraint<?, ?> constraint) {
+        val D_i = (DiscreteDomain<?>) problem.getVariableDomains().get(arc.getFrom());
+        val D_j = (DiscreteDomain<?>) problem.getVariableDomains().get(arc.getTo());
         val valuesToDelete = D_i.stream()
                 .filter(x -> D_j.stream().noneMatch(y -> constraint.isSatisfiedBy(arc.toAssignment(x, y))))
                 .toList();

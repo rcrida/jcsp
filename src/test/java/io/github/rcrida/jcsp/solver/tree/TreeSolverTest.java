@@ -3,6 +3,7 @@ package io.github.rcrida.jcsp.solver.tree;
 import lombok.val;
 import io.github.rcrida.jcsp.ConstraintSatisfactionProblem;
 import io.github.rcrida.jcsp.assignments.Assignment;
+import io.github.rcrida.jcsp.domains.DiscreteDomain;
 import io.github.rcrida.jcsp.domains.Domain;
 import io.github.rcrida.jcsp.domains.EnumDomain;
 import io.github.rcrida.jcsp.solver.backtrackingsearch.order.DefaultValueOrderer;
@@ -74,7 +75,7 @@ public class TreeSolverTest {
                 .variableDomain(NT, DOMAIN_RED_ONLY)
                 .notEqualsConstraint(WA, NT)
                 .build();
-        assertThat(treeSolver.makeArcConsistent(problem, WA, NT).get().getDomain(WA).stream()).isEqualTo(List.of(GREEN));
+        assertThat(((DiscreteDomain<?>) treeSolver.makeArcConsistent(problem, WA, NT).get().getDomain(WA)).toList()).isEqualTo(List.of(GREEN));
     }
 
     @Test

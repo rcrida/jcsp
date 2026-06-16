@@ -91,15 +91,4 @@ public class IntervalDomainTest {
         assertThat(IntervalDomain.of(1.0, 5.0).toString()).isEqualTo("[1.0, 5.0]");
     }
 
-    @Test
-    void stream_throwsUnsupportedOperationException() {
-        var d = IntervalDomain.of(1.0, 5.0);
-        assertThatThrownBy(d::stream).isInstanceOf(UnsupportedOperationException.class);
-    }
-
-    @Test
-    void toBuilder_throwsUnsupportedOperationException() {
-        var d = IntervalDomain.of(1.0, 5.0);
-        assertThatThrownBy(d::toBuilder).isInstanceOf(UnsupportedOperationException.class);
-    }
 }

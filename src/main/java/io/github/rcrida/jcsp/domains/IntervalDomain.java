@@ -5,7 +5,6 @@ import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 
 import java.util.Optional;
-import java.util.stream.Stream;
 
 /**
  * A continuous domain of {@code double} values in the inclusive range {@code [min, max]}.
@@ -56,6 +55,11 @@ public final class IntervalDomain implements BoundedDomain<Double> {
     }
 
     @Override
+    public int size() {
+        return isSingleton() ? 1 : Integer.MAX_VALUE;
+    }
+
+    @Override
     public boolean isSingleton() {
         return min == max;
     }
@@ -63,21 +67,6 @@ public final class IntervalDomain implements BoundedDomain<Double> {
     @Override
     public Optional<Double> singleValue() {
         return isSingleton() ? Optional.of(min) : Optional.empty();
-    }
-
-    @Override
-    public int size() {
-        return isSingleton() ? 1 : Integer.MAX_VALUE;
-    }
-
-    @Override
-    public Stream<Double> stream() {
-        throw new UnsupportedOperationException("IntervalDomain is not enumerable; use getMin()/getMax()/withBounds()");
-    }
-
-    @Override
-    public Builder<Double> toBuilder() {
-        throw new UnsupportedOperationException("IntervalDomain does not support value deletion; use withBounds()");
     }
 
     @Override

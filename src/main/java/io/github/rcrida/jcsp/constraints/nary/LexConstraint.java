@@ -3,6 +3,7 @@ package io.github.rcrida.jcsp.constraints.nary;
 import io.github.rcrida.jcsp.assignments.Assignment;
 import io.github.rcrida.jcsp.consistency.Propagatable;
 import io.github.rcrida.jcsp.constraints.Operator;
+import io.github.rcrida.jcsp.domains.DiscreteDomain;
 import io.github.rcrida.jcsp.domains.Domain;
 import io.github.rcrida.jcsp.variables.Variable;
 import lombok.EqualsAndHashCode;
@@ -98,10 +99,10 @@ public class LexConstraint<T extends Comparable<T>> extends NaryConstraint imple
             VariablePair<T> pair = variablePairs.get(i);
             Variable<T> lesser  = swapped ? pair.right() : pair.left();
             Variable<T> greater = swapped ? pair.left()  : pair.right();
-            Domain<T> lesserDom  = (Domain<T>) domains.get(lesser);
-            Domain<T> greaterDom = (Domain<T>) domains.get(greater);
+            DiscreteDomain<T> lesserDom  = (DiscreteDomain<T>) domains.get(lesser);
+            DiscreteDomain<T> greaterDom = (DiscreteDomain<T>) domains.get(greater);
 
-            if (lesserDom.size() == 1 && greaterDom.size() == 1
+            if (lesserDom.isSingleton() && greaterDom.isSingleton()
                     && lesserDom.toList().get(0).equals(greaterDom.toList().get(0))) {
                 continue;
             }
@@ -113,8 +114,8 @@ public class LexConstraint<T extends Comparable<T>> extends NaryConstraint imple
             Predicate<T> keepLesser  = strictHere ? v -> v.compareTo(greaterMax) < 0 : v -> v.compareTo(greaterMax) <= 0;
             Predicate<T> keepGreater = strictHere ? v -> v.compareTo(lesserMin) > 0  : v -> v.compareTo(lesserMin) >= 0;
 
-            Domain<T> newLesserDom  = prune(lesserDom, keepLesser);
-            Domain<T> newGreaterDom = prune(greaterDom, keepGreater);
+            DiscreteDomain<T> newLesserDom  = prune(lesserDom, keepLesser);
+            DiscreteDomain<T> newGreaterDom = prune(greaterDom, keepGreater);
             if (newLesserDom.isEmpty()) return Optional.empty();
 
             Map<Variable<?>, Domain<?>> updated = new HashMap<>();
@@ -126,8 +127,8 @@ public class LexConstraint<T extends Comparable<T>> extends NaryConstraint imple
         return operator.compare(0, 0) ? Optional.of(Map.of()) : Optional.empty();
     }
 
-    private static <T> Domain<T> prune(Domain<T> domain, Predicate<T> keep) {
-        Domain.Builder<T> builder = domain.toBuilder();
+    private static <T> DiscreteDomain<T> prune(DiscreteDomain<T> domain, Predicate<T> keep) {
+        DiscreteDomain.Builder<T> builder = domain.toBuilder();
         for (T v : domain.toList()) if (!keep.test(v)) builder.delete(v);
         return builder.build();
     }

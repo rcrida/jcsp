@@ -3,6 +3,7 @@ package io.github.rcrida.jcsp.constraints.nary;
 import io.github.rcrida.jcsp.assignments.Assignment;
 import io.github.rcrida.jcsp.consistency.Propagatable;
 import io.github.rcrida.jcsp.constraints.Operator;
+import io.github.rcrida.jcsp.domains.DiscreteDomain;
 import io.github.rcrida.jcsp.domains.Domain;
 import io.github.rcrida.jcsp.variables.Variable;
 import lombok.EqualsAndHashCode;
@@ -79,7 +80,7 @@ public class LinearConstraint<N extends Number> extends NaryConstraint implement
 
         for (int i = 0; i < n; i++) {
             coeffs[i] = coefficients.get(vars.get(i)).intValue();
-            Domain<N> dom = (Domain<N>) domains.get(vars.get(i));
+            DiscreteDomain<N> dom = (DiscreteDomain<N>) domains.get(vars.get(i));
             int domMin = dom.stream().mapToInt(Number::intValue).min().orElseThrow();
             int domMax = dom.stream().mapToInt(Number::intValue).max().orElseThrow();
             minContribs[i] = coeffs[i] >= 0 ? coeffs[i] * domMin : coeffs[i] * domMax;
@@ -97,7 +98,7 @@ public class LinearConstraint<N extends Number> extends NaryConstraint implement
         Map<Variable<?>, Domain<?>> updated = new HashMap<>();
         for (int i = 0; i < n; i++) {
             if (coeffs[i] == 0) continue;
-            Domain<N> dom = (Domain<N>) domains.get(vars.get(i));
+            DiscreteDomain<N> dom = (DiscreteDomain<N>) domains.get(vars.get(i));
             int restMin = totalMin - minContribs[i];
             int restMax = totalMax - maxContribs[i];
 
@@ -113,7 +114,7 @@ public class LinearConstraint<N extends Number> extends NaryConstraint implement
                 newMax = (operator != Operator.LEQ) ? Math.floorDiv(k - restMax, coeffs[i]) : Integer.MAX_VALUE;
             }
 
-            Domain.Builder<N> builder = null;
+            DiscreteDomain.Builder<N> builder = null;
             for (N val : dom.toList()) {
                 int v = val.intValue();
                 if (v < newMin || v > newMax) {
@@ -122,7 +123,7 @@ public class LinearConstraint<N extends Number> extends NaryConstraint implement
                 }
             }
             if (builder != null) {
-                Domain<N> pruned = builder.build();
+                DiscreteDomain<N> pruned = builder.build();
                 if (pruned.isEmpty()) return Optional.empty();
                 updated.put(vars.get(i), pruned);
             }

@@ -7,6 +7,7 @@ import lombok.val;
 import io.github.rcrida.jcsp.ConstraintSatisfactionProblem;
 import io.github.rcrida.jcsp.assignments.Assignment;
 import io.github.rcrida.jcsp.constraints.Constraint;
+import io.github.rcrida.jcsp.domains.DiscreteDomain;
 import io.github.rcrida.jcsp.domains.Domain;
 import io.github.rcrida.jcsp.solver.Solver;
 import io.github.rcrida.jcsp.solver.SolverDecorator;
@@ -59,7 +60,7 @@ public class CutsetConditioningSolver extends SolverDecorator {
                 val overlappingVariables = new HashSet<>(constraint.getVariables());
                 overlappingVariables.retainAll(variableDomains.keySet());
                 for (Variable<?> X_i : overlappingVariables) {
-                    val D_i = variableDomains.get(X_i);
+                    val D_i = (DiscreteDomain<?>) variableDomains.get(X_i);
                     val revisedDomain = revise(X_i, D_i, cutsetAssignment, constraint);
                     if (revisedDomain.isEmpty()) {
                         log.warn("Domain of variable {} is empty during cutset conditioning", X_i);
@@ -73,7 +74,7 @@ public class CutsetConditioningSolver extends SolverDecorator {
             return Optional.of(constrainedTree);
         }
 
-        private Domain<?> revise(@NonNull Variable<?> X_i, @NonNull Domain<?> D_i, @NonNull Assignment cutsetAssignment, @NonNull Constraint constraint) {
+        private DiscreteDomain<?> revise(@NonNull Variable<?> X_i, @NonNull DiscreteDomain<?> D_i, @NonNull Assignment cutsetAssignment, @NonNull Constraint constraint) {
             val valuesToDelete = D_i.stream()
                     .filter(x -> !constraint.isSatisfiedBy(cutsetAssignment.withValue(X_i, x)))
                     .toList();

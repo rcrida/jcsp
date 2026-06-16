@@ -2,6 +2,7 @@ package io.github.rcrida.jcsp.constraints.nary;
 
 import io.github.rcrida.jcsp.consistency.Propagatable;
 import io.github.rcrida.jcsp.constraints.Operator;
+import io.github.rcrida.jcsp.domains.DiscreteDomain;
 import io.github.rcrida.jcsp.domains.Domain;
 import io.github.rcrida.jcsp.variables.Variable;
 import lombok.EqualsAndHashCode;
@@ -76,7 +77,7 @@ public class AmongConstraint<T> extends UniformNaryConstraint<T> implements Prop
         List<Variable<T>> possibleVars = new ArrayList<>();
         int definiteCount = 0;
         for (Variable<?> var : getVariables()) {
-            Domain<T> dom = (Domain<T>) domains.get(var);
+            DiscreteDomain<T> dom = (DiscreteDomain<T>) domains.get(var);
             boolean hasInS = dom.stream().anyMatch(values::contains);
             if (!hasInS) continue;
             if (dom.stream().allMatch(values::contains)) definiteCount++;
@@ -95,8 +96,8 @@ public class AmongConstraint<T> extends UniformNaryConstraint<T> implements Prop
         // Upper quota filled: remove S values from possible domains
         if (applyUpper && definiteCount == n) {
             for (Variable<T> var : possibleVars) {
-                Domain<T> dom = (Domain<T>) domains.get(var);
-                Domain.Builder<T> builder = dom.toBuilder();
+                DiscreteDomain<T> dom = (DiscreteDomain<T>) domains.get(var);
+                DiscreteDomain.Builder<T> builder = dom.toBuilder();
                 for (T v : dom.toList()) {
                     if (values.contains(v)) builder.delete(v);
                 }
@@ -107,8 +108,8 @@ public class AmongConstraint<T> extends UniformNaryConstraint<T> implements Prop
         // Lower quota requires all possibles: remove non-S values from possible domains
         if (applyLower && maxCount == n) {
             for (Variable<T> var : possibleVars) {
-                Domain<T> dom = (Domain<T>) domains.get(var);
-                Domain.Builder<T> builder = dom.toBuilder();
+                DiscreteDomain<T> dom = (DiscreteDomain<T>) domains.get(var);
+                DiscreteDomain.Builder<T> builder = dom.toBuilder();
                 for (T v : dom.toList()) {
                     if (!values.contains(v)) builder.delete(v);
                 }

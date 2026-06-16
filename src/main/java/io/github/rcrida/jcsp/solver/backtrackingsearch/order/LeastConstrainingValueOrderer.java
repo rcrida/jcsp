@@ -4,6 +4,7 @@ import lombok.val;
 import io.github.rcrida.jcsp.ConstraintSatisfactionProblem;
 import io.github.rcrida.jcsp.assignments.Assignment;
 import io.github.rcrida.jcsp.constraints.binary.BinaryConstraint;
+import io.github.rcrida.jcsp.domains.DiscreteDomain;
 import io.github.rcrida.jcsp.variables.Variable;
 import org.jspecify.annotations.NonNull;
 
@@ -40,7 +41,7 @@ public class LeastConstrainingValueOrderer implements DomainValuesOrderer {
                 .filter(constraint -> constraint.getLeft().equals(variable) || constraint.getRight().equals(variable))
                 .toList();
 
-        return csp.getVariableDomains().get(variable).stream()
+        return ((DiscreteDomain<?>) csp.getVariableDomains().get(variable)).stream()
                 .sorted(Comparator.comparingLong(value ->
                         countEliminatedValues(csp, assignment, variable, value, binaryConstraints)));
     }
@@ -61,7 +62,7 @@ public class LeastConstrainingValueOrderer implements DomainValuesOrderer {
                 continue;
             }
 
-            val neighbourDomain = csp.getVariableDomains().get(neighbourVariable);
+            val neighbourDomain = (DiscreteDomain<?>) csp.getVariableDomains().get(neighbourVariable);
 
             eliminated += neighbourDomain.stream()
                     .filter(neighbourValue -> !constraint.isSatisfiedBy(Assignment.of(Map.of(variable, value, neighbourVariable, neighbourValue))))

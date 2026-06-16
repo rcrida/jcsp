@@ -3,6 +3,7 @@ package io.github.rcrida.jcsp.consistency.arc;
 import lombok.val;
 import io.github.rcrida.jcsp.ConstraintSatisfactionProblem;
 import io.github.rcrida.jcsp.constraints.binary.BinaryTuplesConstraint;
+import io.github.rcrida.jcsp.domains.DiscreteDomain;
 import io.github.rcrida.jcsp.domains.DomainObjectSet;
 import io.github.rcrida.jcsp.domains.EnumDomain;
 import io.github.rcrida.jcsp.domains.IntRangeDomain;
@@ -87,7 +88,7 @@ public class AC3Test {
                 .notEqualsConstraint(WA, NT)
                 .build();
         val result = AC3.INSTANCE.revise(problem, Arc.of(WA, NT));
-        assertThat(result.get().getDomain(WA).toList()).isEqualTo(List.of(GREEN));
+        assertThat(((DiscreteDomain<?>) result.get().getDomain(WA)).toList()).isEqualTo(List.of(GREEN));
     }
 
     @Test

@@ -5,6 +5,7 @@ import lombok.NoArgsConstructor;
 import lombok.val;
 import io.github.rcrida.jcsp.ConstraintSatisfactionProblem;
 import io.github.rcrida.jcsp.assignments.Assignment;
+import io.github.rcrida.jcsp.domains.DiscreteDomain;
 import io.github.rcrida.jcsp.variables.Variable;
 import org.jspecify.annotations.NonNull;
 
@@ -47,7 +48,7 @@ public class GreedyAssignmentFactory implements InitialAssignmentFactory {
 
         AtomicInteger bestViolations = new AtomicInteger(Integer.MAX_VALUE);
         List<Object> bestValues = new ArrayList<>();
-        csp.getDomain(variable).stream().forEach(value -> {
+        ((DiscreteDomain<?>) csp.getDomain(variable)).stream().forEach(value -> {
             val candidate = Assignment.of(addEntry(current, variable, value));
             int violations = (int) constraintsOnVariable.stream()
                     .filter(c -> c.getVariables().stream().allMatch(v -> candidate.getValue(v).isPresent()))

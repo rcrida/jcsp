@@ -2,6 +2,7 @@ package io.github.rcrida.jcsp.constraints.nary;
 
 import io.github.rcrida.jcsp.consistency.Propagatable;
 import io.github.rcrida.jcsp.constraints.Operator;
+import io.github.rcrida.jcsp.domains.DiscreteDomain;
 import io.github.rcrida.jcsp.domains.Domain;
 import io.github.rcrida.jcsp.variables.Variable;
 import lombok.EqualsAndHashCode;
@@ -89,7 +90,7 @@ public class SumConstraint<N extends Number> extends UniformNaryConstraint<N> im
         int[] mins = new int[n];
         int[] maxs = new int[n];
         for (int i = 0; i < n; i++) {
-            Domain<N> dom = (Domain<N>) domains.get(vars.get(i));
+            DiscreteDomain<N> dom = (DiscreteDomain<N>) domains.get(vars.get(i));
             mins[i] = dom.stream().mapToInt(Number::intValue).min().orElseThrow();
             maxs[i] = dom.stream().mapToInt(Number::intValue).max().orElseThrow();
         }
@@ -103,13 +104,13 @@ public class SumConstraint<N extends Number> extends UniformNaryConstraint<N> im
 
         Map<Variable<?>, Domain<?>> updated = new HashMap<>();
         for (int i = 0; i < n; i++) {
-            Domain<N> dom = (Domain<N>) domains.get(vars.get(i));
+            DiscreteDomain<N> dom = (DiscreteDomain<N>) domains.get(vars.get(i));
             // Upper bound: k - (sum of minimums of other variables)
             int newMax = (operator != Operator.GEQ) ? k - (totalMin - mins[i]) : Integer.MAX_VALUE;
             // Lower bound: k - (sum of maximums of other variables)
             int newMin = (operator != Operator.LEQ) ? k - (totalMax - maxs[i]) : Integer.MIN_VALUE;
 
-            Domain.Builder<N> builder = null;
+            DiscreteDomain.Builder<N> builder = null;
             for (N val : dom.toList()) {
                 int v = val.intValue();
                 if (v < newMin || v > newMax) {

@@ -1,7 +1,7 @@
 package io.github.rcrida.jcsp.constraints.binary;
 
 import io.github.rcrida.jcsp.assignments.Assignment;
-import io.github.rcrida.jcsp.domains.Domain;
+import io.github.rcrida.jcsp.domains.DiscreteDomain;
 import io.github.rcrida.jcsp.domains.IntRangeDomain;
 import io.github.rcrida.jcsp.variables.Variable;
 import org.junit.jupiter.api.BeforeEach;
@@ -25,7 +25,7 @@ public class BinaryTuplesConstraintTest {
             BinaryTuple.of(2, 4),
             BinaryTuple.of(3, 9)
     );
-    static final Domain DOMAIN = IntRangeDomain.of(0, 10);
+    static final DiscreteDomain DOMAIN = IntRangeDomain.of(0, 10);
     static final Variable.Factory VARIABLE_FACTORY = Variable.Factory.INSTANCE;
 
     Variable<Object> left = VARIABLE_FACTORY.create("left");

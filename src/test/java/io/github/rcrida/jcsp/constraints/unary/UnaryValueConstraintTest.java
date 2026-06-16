@@ -1,7 +1,7 @@
 package io.github.rcrida.jcsp.constraints.unary;
 
 import io.github.rcrida.jcsp.assignments.Assignment;
-import io.github.rcrida.jcsp.domains.Domain;
+import io.github.rcrida.jcsp.domains.DiscreteDomain;
 import io.github.rcrida.jcsp.domains.IntRangeDomain;
 import io.github.rcrida.jcsp.variables.Variable;
 import org.junit.jupiter.api.BeforeEach;
@@ -18,7 +18,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 public class UnaryValueConstraintTest {
     static final Object VALUE = 5;
-    static final Domain DOMAIN = IntRangeDomain.of(0, 100);
+    static final DiscreteDomain DOMAIN = IntRangeDomain.of(0, 100);
     static final Variable.Factory VARIABLE_FACTORY = Variable.Factory.INSTANCE;
 
     Variable<Object> variable = VARIABLE_FACTORY.create("variable");
