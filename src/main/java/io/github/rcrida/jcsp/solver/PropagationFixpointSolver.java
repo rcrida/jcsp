@@ -77,6 +77,12 @@ public class PropagationFixpointSolver extends SolverDecorator {
             changed = domainSum(current) < domainSumBefore;
         }
         log.debug("PropagationFixpoint converged; domain-sum={}", domainSum(current));
+        if (current.getVariableDomains().values().stream()
+                .anyMatch(d -> d instanceof BoundedDomain<?> && !d.isSingleton())) {
+            throw new UnsupportedOperationException(
+                    "Propagation could not reduce all interval variables to singletons; " +
+                    "backtracking search over continuous domains is not supported.");
+        }
         return Optional.of(current);
     }
 

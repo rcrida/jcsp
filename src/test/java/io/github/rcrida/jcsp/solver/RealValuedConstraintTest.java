@@ -11,6 +11,7 @@ import java.util.Map;
 import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
  * Real-valued (continuous) variables via {@link IntervalDomain}: rent is fixed at 60.0, and
@@ -44,6 +45,20 @@ public class RealValuedConstraintTest {
         assertThat(solution.getValue(RENT)).contains(60.0);
         assertThat(solution.getValue(FOOD)).contains(40.0);
         assertThat(solution.getValue(TRANSPORT)).contains(12.0);
+    }
+
+    @Test
+    void underdetermined_throwsUnsupportedOperationException() {
+        // x + y = 7.0 with x, y ∈ [0.0, 5.0]; propagation narrows both to [2.0, 5.0] but neither becomes singleton
+        Variable<Double> x = F.create("x");
+        Variable<Double> y = F.create("y");
+        var csp = ConstraintSatisfactionProblem.builder()
+                .variableDomain(x, IntervalDomain.of(0.0, 5.0))
+                .variableDomain(y, IntervalDomain.of(0.0, 5.0))
+                .sumConstraint(Set.of(x, y), Operator.EQ, 7.0)
+                .build();
+        assertThatThrownBy(() -> Solver.Factory.INSTANCE.createSolver().getSolutions(csp).toList())
+                .isInstanceOf(UnsupportedOperationException.class);
     }
 
     @Test

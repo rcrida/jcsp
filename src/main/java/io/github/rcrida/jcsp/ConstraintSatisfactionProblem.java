@@ -597,13 +597,6 @@ public class ConstraintSatisfactionProblem {
         }
 
         /**
-         * Create a sequence of binary not-equals constraints to ensure that each variable in the specified list
-         * cannot take the same value as its neighbours in the list.
-         *
-         * @param variables a list of variables, neighbours in the list cannot have the same value
-         * @return the builder
-         */
-        /**
          * Constrain a sequence of variables to be non-decreasing: {@code vars[0] <= vars[1] <= ... <= vars[n-1]}.
          * Equivalent to MiniZinc's {@code increasing(vars)}.
          *
