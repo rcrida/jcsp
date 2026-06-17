@@ -6,6 +6,7 @@ import lombok.val;
 import io.github.rcrida.jcsp.ConstraintSatisfactionProblem;
 import io.github.rcrida.jcsp.assignments.Assignment;
 import io.github.rcrida.jcsp.domains.DiscreteDomain;
+import io.github.rcrida.jcsp.domains.Domain;
 import io.github.rcrida.jcsp.consistency.arc.AC3;
 import io.github.rcrida.jcsp.consistency.arc.Arc;
 import io.github.rcrida.jcsp.solver.backtrackingsearch.order.DomainValuesOrderer;
@@ -39,10 +40,10 @@ public class TreeSolver implements Solver {
         }
         val finalTcsp = current;
         val unassignedVariableSelector = selectorFactory.createSelector(X);
-        val domain = (DiscreteDomain<?>) finalTcsp.getDomain(root);
-        log.info("Domain {}", domain);
+        Domain<?> rootDomain = finalTcsp.getDomain(root);
+        log.info("Domain {}", rootDomain);
         val start = Assignment.empty();
-        return domain.stream()
+        return (rootDomain instanceof DiscreteDomain<?> dd ? dd.stream() : rootDomain.singleValue().stream())
                 .<Assignment>map(value -> start.withValue(root, value))
                 .flatMap(rootAssignment -> populateAssignment(finalTcsp, rootAssignment, unassignedVariableSelector));
     }

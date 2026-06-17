@@ -3,6 +3,7 @@ package io.github.rcrida.jcsp.solver;
 import io.github.rcrida.jcsp.ConstraintSatisfactionProblem;
 import io.github.rcrida.jcsp.assignments.Assignment;
 import io.github.rcrida.jcsp.constraints.Operator;
+import io.github.rcrida.jcsp.domains.IntRangeDomain;
 import io.github.rcrida.jcsp.domains.IntervalDomain;
 import io.github.rcrida.jcsp.variables.Variable;
 import org.junit.jupiter.api.Test;
@@ -48,6 +49,22 @@ public class BisectionConditioningSolverTest {
         var solutions = solver(1.0).getSolutions(csp).toList();
         assertThat(solutions).hasSize(1);
         assertThat((Double) solutions.get(0).getValue(x).orElseThrow()).isCloseTo(2.25, within(1e-9));
+    }
+
+    @Test
+    void nonBoundedDomainVariable_ignoredByFindWidestBounded() {
+        // n (IntRangeDomain) is not a BoundedDomain → exercises the instanceof=false branch in findWidestBounded
+        Variable<Double> x = F.create("x");
+        Variable<Integer> n = F.create("n");
+        var csp = ConstraintSatisfactionProblem.builder()
+                .variableDomain(x, IntervalDomain.of(2.0, 3.0))
+                .variableDomain(n, IntRangeDomain.of(5, 5))
+                .build();
+        // epsilon=2.0, x.width=1.0 ≤ epsilon → snap x to midpoint 2.5; n is non-BoundedDomain, left unchanged
+        var solutions = solver(2.0).getSolutions(csp).toList();
+        assertThat(solutions).hasSize(1);
+        assertThat((Double) solutions.get(0).getValue(x).orElseThrow()).isCloseTo(2.5, within(1e-9));
+        assertThat(solutions.get(0).getValue(n)).contains(5);
     }
 
     @Test

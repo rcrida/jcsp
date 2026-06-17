@@ -49,6 +49,12 @@ import java.util.Optional;
 @EqualsAndHashCode(callSuper = true)
 public class PropagationFixpointSolver extends SolverDecorator {
 
+    /** When true (the default for plain CSP), non-singleton {@link BoundedDomain} variables are
+     *  snapped to their interval midpoints after propagation converges, giving one concrete solution.
+     *  Set to false in optimization chains where {@link BisectionConditioningSolver} explores the
+     *  feasible region instead. */
+    boolean snapBoundedDomains;
+
     private static final List<ConstraintConsistency> PROPAGATORS = List.of(
             AC3.INSTANCE,
             FixpointConsistency.of(AllDiffConstraint.class),
@@ -78,7 +84,7 @@ public class PropagationFixpointSolver extends SolverDecorator {
                 current = after.get();
             }
             changed = domainSum(current) < domainSumBefore;
-            if (!changed) {
+            if (!changed && snapBoundedDomains) {
                 var snapTarget = findWidestNonSingletonBounded(current);
                 if (snapTarget != null) {
                     current = snapToMidpoint(current, snapTarget);

@@ -20,6 +20,7 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.function.ToDoubleFunction;
 import java.util.stream.Stream;
 
 /**
@@ -38,6 +39,20 @@ public class BisectionConditioningSolver extends SolverDecorator {
     );
 
     double epsilon;
+
+    @Override
+    public Stream<Assignment> getSolutions(@NonNull ConstraintSatisfactionProblem csp,
+                                           @NonNull ToDoubleFunction<Assignment> objective) {
+        double[] incumbent = {Double.MAX_VALUE};
+        return getSolutions(csp).filter(candidate -> {
+            double cost = objective.applyAsDouble(candidate);
+            if (cost < incumbent[0]) {
+                incumbent[0] = cost;
+                return true;
+            }
+            return false;
+        });
+    }
 
     @Override
     public Stream<Assignment> getSolutions(@NonNull ConstraintSatisfactionProblem csp) {

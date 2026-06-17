@@ -3,6 +3,7 @@ package io.github.rcrida.jcsp.solver.backtrackingsearch.order;
 import io.github.rcrida.jcsp.ConstraintSatisfactionProblem;
 import io.github.rcrida.jcsp.assignments.Assignment;
 import io.github.rcrida.jcsp.domains.DiscreteDomain;
+import io.github.rcrida.jcsp.domains.Domain;
 import io.github.rcrida.jcsp.variables.Variable;
 import org.jspecify.annotations.NonNull;
 
@@ -15,6 +16,7 @@ public class DefaultValueOrderer implements DomainValuesOrderer {
 
     @Override
     public Stream<?> order(@NonNull ConstraintSatisfactionProblem csp, @NonNull Variable<?> variable, @NonNull Assignment assignment) {
-        return csp.findDomain(variable).stream().flatMap(d -> ((DiscreteDomain<?>) d).stream());
+        return csp.findDomain(variable).stream().flatMap(d ->
+                d instanceof DiscreteDomain<?> dd ? dd.stream() : d.singleValue().stream());
     }
 }

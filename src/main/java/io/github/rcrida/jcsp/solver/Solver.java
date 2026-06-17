@@ -75,14 +75,14 @@ public interface Solver {
     }
 
     interface Factory {
+        /** MAC + SumConstraint bounds propagation used as the {@link Inference} in both solver chains. */
+        Inference MAC_SUM_INFERENCE = (problem, variable, assignment) ->
+                MAC.INSTANCE.apply(problem, variable, assignment)
+                        .flatMap(FixpointConsistency.of(SumConstraint.class)::apply);
+
         Factory INSTANCE = () -> {
-            // MAC + SumConsistency bounds propagation: after each variable assignment, AC3
-            // propagates binary constraints, then sum bounds propagation prunes domains further.
-            val inference = (Inference)
-                    (problem, variable, assignment) -> MAC.INSTANCE.apply(problem, variable, assignment)
-                            .flatMap(FixpointConsistency.of(SumConstraint.class)::apply);
-            val backtrackingSearch = new BacktrackingSearch(MinimumRemainingValuesSelector.INSTANCE, LeastConstrainingValueOrderer.INSTANCE, inference);
-            val branchAndBound = BranchAndBoundSolver.builder().inner(backtrackingSearch).unassignedVariableSelector(MinimumRemainingValuesSelector.INSTANCE).domainValuesOrderer(LeastConstrainingValueOrderer.INSTANCE).inference(inference).build();
+            val backtrackingSearch = new BacktrackingSearch(MinimumRemainingValuesSelector.INSTANCE, LeastConstrainingValueOrderer.INSTANCE, MAC_SUM_INFERENCE);
+            val branchAndBound = BranchAndBoundSolver.builder().inner(backtrackingSearch).unassignedVariableSelector(MinimumRemainingValuesSelector.INSTANCE).domainValuesOrderer(LeastConstrainingValueOrderer.INSTANCE).inference(MAC_SUM_INFERENCE).build();
             val treeSolver = new TreeSolver(BFSTopologicalSorter.INSTANCE, DefaultValueOrderer.INSTANCE, TreeUnassignedVariableSelector.Factory.INSTANCE);
             val cutsetConditioningSolver = CutsetConditioningSolver.builder()
                     .inner(branchAndBound)
@@ -95,10 +95,39 @@ public interface Solver {
                     .targetTreewidth(7)
                     .build();
             val independentSubproblemSolver = IndependentSubproblemSolver.builder().inner(treeDecompositionSolver).build();
-            val propagationFixpointSolver = PropagationFixpointSolver.builder().inner(independentSubproblemSolver).build();
+            val propagationFixpointSolver = PropagationFixpointSolver.builder().inner(independentSubproblemSolver).snapBoundedDomains(true).build();
             return NodeConsistentSolver.builder().inner(propagationFixpointSolver).build();
         };
 
         Solver createSolver();
+
+        /**
+         * Creates a solver that uses {@link BisectionConditioningSolver} to explore the feasible
+         * region of {@link io.github.rcrida.jcsp.domains.BoundedDomain} variables, yielding multiple
+         * concrete solutions that an objective can be evaluated against via
+         * {@link #getSolutions(ConstraintSatisfactionProblem, ToDoubleFunction)}.
+         * Unlike {@link #createSolver()}, {@link PropagationFixpointSolver} does <em>not</em> snap
+         * non-singleton intervals to midpoints; instead {@link BisectionConditioningSolver}
+         * recursively bisects them down to {@code bisectionEpsilon}.
+         */
+        default Solver createContinuousOptimizationSolver(double bisectionEpsilon) {
+            val backtrackingSearch = new BacktrackingSearch(MinimumRemainingValuesSelector.INSTANCE, LeastConstrainingValueOrderer.INSTANCE, MAC_SUM_INFERENCE);
+            val branchAndBound = BranchAndBoundSolver.builder().inner(backtrackingSearch).unassignedVariableSelector(MinimumRemainingValuesSelector.INSTANCE).domainValuesOrderer(LeastConstrainingValueOrderer.INSTANCE).inference(MAC_SUM_INFERENCE).build();
+            val treeSolver = new TreeSolver(BFSTopologicalSorter.INSTANCE, DefaultValueOrderer.INSTANCE, TreeUnassignedVariableSelector.Factory.INSTANCE);
+            val cutsetConditioningSolver = CutsetConditioningSolver.builder()
+                    .inner(branchAndBound)
+                    .treeSolver(treeSolver)
+                    .build();
+            val treeDecompositionSolver = TreeDecompositionSolver.builder()
+                    .inner(cutsetConditioningSolver)
+                    .treeDecomposer(new TreeDecomposerImpl(MinimumDegreeVariableSelector.Factory.INSTANCE))
+                    .treeSolver(treeSolver)
+                    .targetTreewidth(7)
+                    .build();
+            val independentSubproblemSolver = IndependentSubproblemSolver.builder().inner(treeDecompositionSolver).build();
+            val bisectionConditioningSolver = BisectionConditioningSolver.builder().inner(independentSubproblemSolver).epsilon(bisectionEpsilon).build();
+            val propagationFixpointSolver = PropagationFixpointSolver.builder().inner(bisectionConditioningSolver).snapBoundedDomains(false).build();
+            return NodeConsistentSolver.builder().inner(propagationFixpointSolver).build();
+        }
     }
 }

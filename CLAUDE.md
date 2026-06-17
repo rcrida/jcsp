@@ -58,13 +58,23 @@ This is a Constraint Satisfaction Problem (CSP) solver library implementing clas
 5. **`CutsetConditioningSolver`** — handles cyclic graphs by conditioning on a cycle cutset
 6. **`TreeSolver`** / **`BacktrackingSearch`** — terminal solvers for tree-structured or general CSPs respectively
 
-`BisectionConditioningSolver` is a separate composable component (not in the default chain) intended for optimization solver chains: it recursively bisects the widest non-singleton `BoundedDomain` interval at its midpoint, re-propagating `SumConstraint`/`LinearConstraint` bounds on each half, and snapping to the midpoint once the interval width falls within `epsilon`.
+`BisectionConditioningSolver` is used in the continuous optimization chain (see below) but not in the default plain-CSP chain: it recursively bisects the widest non-singleton `BoundedDomain` interval at its midpoint, re-propagating `SumConstraint`/`LinearConstraint` bounds on each half, and snapping to the midpoint once the interval width falls within `epsilon`.
 
 `SolverDecorator.getSolutions()` short-circuits immediately when any preprocessing step reduces all domains to singletons, returning the forced assignment without invoking downstream stages.
 
 `BacktrackingSearch` uses pluggable strategies: `UnassignedVariableSelector` (with `MinimumRemainingValuesSelector`), `DomainValuesOrderer` (with `LeastConstrainingValueOrderer`), and `Inference` (MAC + SumConsistency bounds propagation — detecting sum infeasibility as early as possible during search).
 
 `ArcConsistentSolver`, `AllDiffConsistentSolver`, and `CumulativeConsistentSolver` have been deleted — their functionality is covered by `AC3.INSTANCE` and `FixpointConsistency.of(...)` entries in `PROPAGATORS`.
+
+### Continuous Optimization Chain
+
+`Solver.Factory.INSTANCE.createContinuousOptimizationSolver(bisectionEpsilon)` builds:
+
+```
+NodeConsistency → PropagationFixpointSolver(snapBoundedDomains=false) → BisectionConditioningSolver(epsilon) → IndependentSubproblems → TreeDecomposition → CutsetConditioning → BranchAndBound → BacktrackingSearch
+```
+
+Differs from `createSolver()` in two ways: `PropagationFixpointSolver` does **not** snap non-singleton intervals to midpoints (so the feasible region is preserved intact), and `BisectionConditioningSolver` is inserted immediately after to enumerate many concrete feasible points by recursive bisection. Calling `getSolution(csp, objective)` on this solver returns the feasible point with the minimum objective found across the bisection tree.
 
 ### Local Search Chain
 
