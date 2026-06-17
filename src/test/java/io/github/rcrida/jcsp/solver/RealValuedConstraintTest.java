@@ -11,7 +11,7 @@ import java.util.Map;
 import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.api.Assertions.within;
 
 /**
  * Real-valued (continuous) variables via {@link IntervalDomain}: rent is fixed at 60.0, and
@@ -48,8 +48,9 @@ public class RealValuedConstraintTest {
     }
 
     @Test
-    void underdetermined_throwsUnsupportedOperationException() {
-        // x + y = 7.0 with x, y ∈ [0.0, 5.0]; propagation narrows both to [2.0, 5.0] but neither becomes singleton
+    void underdetermined_midpointSnapResolvesSystem() {
+        // x + y = 7.0 with x, y ∈ [0.0, 5.0]; propagation narrows both to [2.0, 5.0] but neither becomes singleton;
+        // PropagationFixpointSolver snaps the widest (x) to midpoint 3.5, then propagation forces y = 3.5
         Variable<Double> x = F.create("x");
         Variable<Double> y = F.create("y");
         var csp = ConstraintSatisfactionProblem.builder()
@@ -57,8 +58,11 @@ public class RealValuedConstraintTest {
                 .variableDomain(y, IntervalDomain.of(0.0, 5.0))
                 .sumConstraint(Set.of(x, y), Operator.EQ, 7.0)
                 .build();
-        assertThatThrownBy(() -> Solver.Factory.INSTANCE.createSolver().getSolutions(csp).toList())
-                .isInstanceOf(UnsupportedOperationException.class);
+        var solution = Solver.Factory.INSTANCE.createSolver().getSolution(csp);
+        assertThat(solution).isPresent();
+        double xVal = (Double) solution.get().getValue(x).orElseThrow();
+        double yVal = (Double) solution.get().getValue(y).orElseThrow();
+        assertThat(xVal + yVal).isCloseTo(7.0, within(1e-9));
     }
 
     @Test
