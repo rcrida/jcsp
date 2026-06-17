@@ -4,6 +4,7 @@ import lombok.EqualsAndHashCode;
 import lombok.experimental.SuperBuilder;
 import lombok.extern.slf4j.Slf4j;
 import io.github.rcrida.jcsp.ConstraintSatisfactionProblem;
+import io.github.rcrida.jcsp.assignments.Assignment;
 import io.github.rcrida.jcsp.consistency.ConstraintConsistency;
 import io.github.rcrida.jcsp.consistency.fixpoint.FixpointConsistency;
 import io.github.rcrida.jcsp.consistency.arc.AC3;
@@ -28,6 +29,7 @@ import org.jspecify.annotations.Nullable;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Optional;
+import java.util.stream.Stream;
 
 /**
  * Runs AC3, AllDiff GAC, SumConstraint bounds propagation, LinearConstraint bounds propagation,
@@ -43,17 +45,18 @@ import java.util.Optional;
  *
  * <p>To add a new propagator for a {@link io.github.rcrida.jcsp.consistency.Propagatable} constraint
  * type, append {@code FixpointConsistency.of(MyConstraint.class)} to {@link #PROPAGATORS}.
+ *
+ * <p>When called without an objective ({@link #getSolutions(ConstraintSatisfactionProblem)}),
+ * any non-singleton {@link BoundedDomain} variables remaining after propagation are snapped to
+ * their interval midpoints, giving one concrete solution for underdetermined continuous systems.
+ * When called with an objective, {@link #preprocess} runs the propagation fixpoint only, leaving
+ * intervals open so that a downstream {@link BisectionConditioningSolver} can explore the feasible
+ * region instead.
  */
 @Slf4j
 @SuperBuilder
 @EqualsAndHashCode(callSuper = true)
 public class PropagationFixpointSolver extends SolverDecorator {
-
-    /** When true (the default for plain CSP), non-singleton {@link BoundedDomain} variables are
-     *  snapped to their interval midpoints after propagation converges, giving one concrete solution.
-     *  Set to false in optimization chains where {@link BisectionConditioningSolver} explores the
-     *  feasible region instead. */
-    boolean snapBoundedDomains;
 
     private static final List<ConstraintConsistency> PROPAGATORS = List.of(
             AC3.INSTANCE,
@@ -71,9 +74,23 @@ public class PropagationFixpointSolver extends SolverDecorator {
             FixpointConsistency.of(NaryTuplesConstraint.class)
     );
 
+    /** Called by the inherited {@code getSolutions(csp, objective)} path — runs propagation only. */
     @Override
     protected @NonNull Optional<ConstraintSatisfactionProblem> preprocess(
             @NonNull ConstraintSatisfactionProblem csp) {
+        return runFixpoint(csp, false);
+    }
+
+    /** No-objective path: propagate then snap non-singleton bounded domains to midpoints. */
+    @Override
+    public Stream<Assignment> getSolutions(@NonNull ConstraintSatisfactionProblem csp) {
+        return runFixpoint(csp, true)
+                .map(p -> getInner().getSolutions(p))
+                .orElse(Stream.empty());
+    }
+
+    private @NonNull Optional<ConstraintSatisfactionProblem> runFixpoint(
+            @NonNull ConstraintSatisfactionProblem csp, boolean snap) {
         var current = csp;
         boolean changed = true;
         while (changed) {
@@ -84,7 +101,7 @@ public class PropagationFixpointSolver extends SolverDecorator {
                 current = after.get();
             }
             changed = domainSum(current) < domainSumBefore;
-            if (!changed && snapBoundedDomains) {
+            if (!changed && snap) {
                 var snapTarget = findWidestNonSingletonBounded(current);
                 if (snapTarget != null) {
                     current = snapToMidpoint(current, snapTarget);

@@ -43,6 +43,9 @@ public class BisectionConditioningSolver extends SolverDecorator {
     @Override
     public Stream<Assignment> getSolutions(@NonNull ConstraintSatisfactionProblem csp,
                                            @NonNull ToDoubleFunction<Assignment> objective) {
+        if (findWidestBounded(csp) == null) {
+            return getInner().getSolutions(csp, objective);
+        }
         double[] incumbent = {Double.MAX_VALUE};
         return getSolutions(csp).filter(candidate -> {
             double cost = objective.applyAsDouble(candidate);

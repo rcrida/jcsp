@@ -13,11 +13,12 @@ import static org.assertj.core.api.Assertions.within;
 
 /**
  * Optimization over continuous {@link IntervalDomain} variables via
- * {@link Solver.Factory#createContinuousOptimizationSolver(double)}.
+ * {@link Solver.Factory#createSolver()}.
  *
  * <p>x+y=7, x,y∈[0,10]. Minimise (x−2)²: the optimum is x=2, y=5.
- * Bisection explores the feasible region down to epsilon=1e-3; the
- * improving sequence via {@code getSolution(csp, objective)} converges to x≈2.
+ * {@link BisectionConditioningSolver} explores the feasible region down to
+ * {@link Solver.Factory#DEFAULT_BISECTION_EPSILON}; the improving sequence via
+ * {@code getSolution(csp, objective)} converges to x≈2.
  */
 public class ContinuousOptimizationTest {
     static final Variable.Factory F = Variable.Factory.INSTANCE;
@@ -31,7 +32,7 @@ public class ContinuousOptimizationTest {
                 .variableDomain(y, IntervalDomain.of(0.0, 10.0))
                 .sumConstraint(Set.of(x, y), Operator.EQ, 7.0)
                 .build();
-        var solution = Solver.Factory.INSTANCE.createContinuousOptimizationSolver(1e-3)
+        var solution = Solver.Factory.INSTANCE.createSolver()
                 .getSolution(csp, a -> Math.pow((Double) a.getValue(x).orElseThrow() - 2.0, 2));
         assertThat(solution).isPresent();
         assertThat((Double) solution.get().getValue(x).orElseThrow()).isCloseTo(2.0, within(0.01));
