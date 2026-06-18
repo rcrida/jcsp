@@ -43,11 +43,12 @@ public class BisectionConditioningSolver extends SolverDecorator {
     @Override
     public Stream<Assignment> getSolutions(@NonNull ConstraintSatisfactionProblem csp,
                                            @NonNull ToDoubleFunction<Assignment> objective) {
-        if (findWidestBounded(csp) == null) {
+        val target = findWidestBounded(csp);
+        if (target == null) {
             return getInner().getSolutions(csp, objective);
         }
         double[] incumbent = {Double.MAX_VALUE};
-        return getSolutions(csp).filter(candidate -> {
+        return bisect(csp, target).filter(candidate -> {
             double cost = objective.applyAsDouble(candidate);
             if (cost < incumbent[0]) {
                 incumbent[0] = cost;
@@ -63,6 +64,11 @@ public class BisectionConditioningSolver extends SolverDecorator {
         if (target == null) {
             return getInner().getSolutions(csp);
         }
+        return bisect(csp, target);
+    }
+
+    private Stream<Assignment> bisect(@NonNull ConstraintSatisfactionProblem csp,
+                                      @NonNull Variable<?> target) {
         val bd = (BoundedDomain<?>) csp.getDomain(target);
         double lo = bd.getMin().doubleValue();
         double hi = bd.getMax().doubleValue();
@@ -79,7 +85,7 @@ public class BisectionConditioningSolver extends SolverDecorator {
     }
 
     @Nullable
-    private static Variable<?> findWidestBounded(ConstraintSatisfactionProblem csp) {
+    static Variable<?> findWidestBounded(ConstraintSatisfactionProblem csp) {
         return csp.getVariableDomains().entrySet().stream()
                 .filter(e -> e.getValue() instanceof BoundedDomain<?> bd && !bd.isSingleton())
                 .max(Comparator.comparingDouble(e ->
@@ -90,8 +96,8 @@ public class BisectionConditioningSolver extends SolverDecorator {
     }
 
     @SuppressWarnings("unchecked")
-    private static ConstraintSatisfactionProblem withSnapped(ConstraintSatisfactionProblem csp,
-                                                              Variable<?> target, double mid) {
+    static ConstraintSatisfactionProblem withSnapped(ConstraintSatisfactionProblem csp,
+                                                     Variable<?> target, double mid) {
         return csp.toBuilder()
                 .variableDomainEntry((Variable) target, IntervalDomain.of(mid, mid))
                 .build();

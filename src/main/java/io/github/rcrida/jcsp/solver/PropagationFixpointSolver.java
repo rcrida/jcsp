@@ -21,12 +21,8 @@ import io.github.rcrida.jcsp.constraints.nary.LinearConstraint;
 import io.github.rcrida.jcsp.constraints.nary.NaryTuplesConstraint;
 import io.github.rcrida.jcsp.constraints.nary.SumConstraint;
 import io.github.rcrida.jcsp.domains.BoundedDomain;
-import io.github.rcrida.jcsp.domains.IntervalDomain;
-import io.github.rcrida.jcsp.variables.Variable;
 import org.jspecify.annotations.NonNull;
-import org.jspecify.annotations.Nullable;
 
-import java.util.Comparator;
 import java.util.List;
 import java.util.Optional;
 import java.util.stream.Stream;
@@ -85,7 +81,7 @@ public class PropagationFixpointSolver extends SolverDecorator {
     @Override
     public Stream<Assignment> getSolutions(@NonNull ConstraintSatisfactionProblem csp) {
         return runFixpoint(csp, true)
-                .map(p -> getInner().getSolutions(p))
+                .map(p -> allSingleton(p) ? forcedSolution(p) : getInner().getSolutions(p))
                 .orElse(Stream.empty());
     }
 
@@ -102,36 +98,17 @@ public class PropagationFixpointSolver extends SolverDecorator {
             }
             changed = domainSum(current) < domainSumBefore;
             if (!changed && snap) {
-                var snapTarget = findWidestNonSingletonBounded(current);
+                var snapTarget = BisectionConditioningSolver.findWidestBounded(current);
                 if (snapTarget != null) {
-                    current = snapToMidpoint(current, snapTarget);
+                    BoundedDomain<?> bd = (BoundedDomain<?>) current.getDomain(snapTarget);
+                    double mid = (bd.getMin().doubleValue() + bd.getMax().doubleValue()) / 2.0;
+                    current = BisectionConditioningSolver.withSnapped(current, snapTarget, mid);
                     changed = true;
                 }
             }
         }
         log.debug("PropagationFixpoint converged; domain-sum={}", domainSum(current));
         return Optional.of(current);
-    }
-
-    @Nullable
-    private static Variable<?> findWidestNonSingletonBounded(@NonNull ConstraintSatisfactionProblem csp) {
-        return csp.getVariableDomains().entrySet().stream()
-                .filter(e -> e.getValue() instanceof BoundedDomain<?> bd && !bd.isSingleton())
-                .max(Comparator.comparingDouble(e ->
-                        ((BoundedDomain<?>) e.getValue()).getMax().doubleValue()
-                        - ((BoundedDomain<?>) e.getValue()).getMin().doubleValue()))
-                .map(java.util.Map.Entry::getKey)
-                .orElse(null);
-    }
-
-    @SuppressWarnings("unchecked")
-    private static ConstraintSatisfactionProblem snapToMidpoint(
-            @NonNull ConstraintSatisfactionProblem csp, @NonNull Variable<?> target) {
-        BoundedDomain<?> bd = (BoundedDomain<?>) csp.getDomain(target);
-        double mid = (bd.getMin().doubleValue() + bd.getMax().doubleValue()) / 2.0;
-        return csp.toBuilder()
-                .variableDomainEntry((Variable) target, IntervalDomain.of(mid, mid))
-                .build();
     }
 
     /**

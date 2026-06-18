@@ -47,11 +47,17 @@ public interface Solver {
      * The default implementation filters the full solution stream — no pruning occurs.
      * Implementations may override this method with branch-and-bound pruning for efficiency.
      * <p>
-     * The {@code objective} is called on <em>partial</em> assignments during search, so it must
-     * return a lower bound on the cost of any completion. For additive cost functions, use
+     * <b>Discrete CSPs</b> (no {@link io.github.rcrida.jcsp.domains.BoundedDomain} variables):
+     * the objective is called on <em>partial</em> assignments during branch-and-bound pruning, so
+     * it must return a lower bound on the cost of any completion. For additive cost functions, use
      * {@code assignment.getValue(v).orElse(neutralValue)} so unassigned variables contribute
      * their neutral value (e.g. 0 for a sum). The lower-bound property
      * {@code objective(partial) ≤ objective(completion)} must hold for all completions.
+     * <p>
+     * <b>Continuous CSPs</b> (with {@link io.github.rcrida.jcsp.domains.BoundedDomain} variables):
+     * {@link BisectionConditioningSolver} intercepts this path and applies the objective only to
+     * <em>complete</em> assignments produced by bisection. No lower-bound property is required;
+     * {@code assignment.getValue(v).orElseThrow()} is safe.
      */
     default Stream<Assignment> getSolutions(@NonNull ConstraintSatisfactionProblem csp,
                                              @NonNull ToDoubleFunction<Assignment> objective) {

@@ -61,7 +61,7 @@ public abstract class SolverDecorator implements Solver {
     }
 
     /** Returns true when every domain has exactly one value — the problem is fully determined. */
-    private static boolean allSingleton(ConstraintSatisfactionProblem csp) {
+    protected static boolean allSingleton(ConstraintSatisfactionProblem csp) {
         return csp.getVariableDomains().values().stream().allMatch(Domain::isSingleton);
     }
 
@@ -69,7 +69,7 @@ public abstract class SolverDecorator implements Solver {
      * Extracts the forced assignment from singleton domains and validates it against all constraints.
      * Returns a singleton stream when valid, empty otherwise.
      */
-    private static Stream<Assignment> forcedSolution(ConstraintSatisfactionProblem csp) {
+    protected static Stream<Assignment> forcedSolution(ConstraintSatisfactionProblem csp) {
         val values = csp.getVariableDomains().entrySet().stream()
                 .collect(Collectors.toMap(Map.Entry::getKey, e -> e.getValue().singleValue().orElseThrow()));
         Assignment a = Assignment.of(values);
