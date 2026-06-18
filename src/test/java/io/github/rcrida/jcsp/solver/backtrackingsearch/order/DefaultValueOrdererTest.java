@@ -4,6 +4,7 @@ import io.github.rcrida.jcsp.ConstraintSatisfactionProblem;
 import io.github.rcrida.jcsp.assignments.Assignment;
 import io.github.rcrida.jcsp.domains.Domain;
 import io.github.rcrida.jcsp.domains.DomainObjectSet;
+import io.github.rcrida.jcsp.domains.IntervalDomain;
 import io.github.rcrida.jcsp.variables.Variable;
 import org.junit.jupiter.api.Test;
 
@@ -28,5 +29,15 @@ public class DefaultValueOrdererTest {
     @Test
     void order_unknownVariable() {
         assertThat(DefaultValueOrderer.INSTANCE.order(CSP, B, Assignment.empty())).isEmpty();
+    }
+
+    @Test
+    void order_intervalDomain_singleton() {
+        // Exercises the non-DiscreteDomain branch: singleValue().stream()
+        Variable<Double> x = FACTORY.create("x_dvo");
+        var csp = ConstraintSatisfactionProblem.builder()
+                .variableDomain(x, IntervalDomain.of(3.0, 3.0))
+                .build();
+        assertThat(DefaultValueOrderer.INSTANCE.order(csp, x, Assignment.empty()).toList()).isEqualTo(List.of(3.0));
     }
 }

@@ -6,9 +6,11 @@ import io.github.rcrida.jcsp.assignments.Assignment;
 import io.github.rcrida.jcsp.domains.DiscreteDomain;
 import io.github.rcrida.jcsp.domains.Domain;
 import io.github.rcrida.jcsp.domains.EnumDomain;
+import io.github.rcrida.jcsp.domains.IntervalDomain;
 import io.github.rcrida.jcsp.solver.backtrackingsearch.order.DefaultValueOrderer;
 import io.github.rcrida.jcsp.solver.tree.selector.TreeUnassignedVariableSelector;
 import io.github.rcrida.jcsp.solver.tree.sorter.BFSTopologicalSorter;
+import io.github.rcrida.jcsp.variables.Variable;
 import org.junit.jupiter.api.Test;
 
 import java.util.EnumSet;
@@ -83,5 +85,17 @@ public class TreeSolverTest {
         val emptyCsp = ConstraintSatisfactionProblem.builder().build();
         assertThatThrownBy(() -> treeSolver.getSolutions(emptyCsp))
                 .isInstanceOf(AssertionError.class);
+    }
+
+    @Test
+    void getSolutions_intervalDomainRoot() {
+        // Exercises the non-DiscreteDomain branch in getSolutions: rootDomain.singleValue().stream()
+        Variable<Double> x = Variable.Factory.INSTANCE.create("x_ts");
+        var csp = ConstraintSatisfactionProblem.builder()
+                .variableDomain(x, IntervalDomain.of(5.0, 5.0))
+                .build();
+        val solutions = treeSolver.getSolutions(csp).toList();
+        assertThat(solutions).hasSize(1);
+        assertThat(solutions.get(0).getValue(x)).contains(5.0);
     }
 }
