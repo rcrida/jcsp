@@ -47,7 +47,7 @@ public class TwoSumTest {
 
     @Test
     void solutions() {
-        val solutions = Solver.Factory.INSTANCE.createSolver().getSolutions(problem()).toList();
+        val solutions = Solver.Factory.INSTANCE.createSolver(problem()).getSolutions().toList();
         assertThat(solutions).hasSize(2);
         solutions.forEach(System.out::println);
     }

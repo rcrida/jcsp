@@ -179,7 +179,7 @@ public class AmongConstraintTest {
                 .variableDomain(v2, EnumDomain.allOf(Color.class))
                 .amongConstraint(Set.of(v1, v2), S, Operator.EQ, 3)
                 .build();
-        assertThat(Solver.Factory.INSTANCE.createSolver().getSolutions(csp)).isEmpty();
+        assertThat(Solver.Factory.INSTANCE.createSolver(csp).getSolutions()).isEmpty();
     }
 
     @Test
@@ -194,7 +194,7 @@ public class AmongConstraintTest {
                 .variableDomain(v3, EnumDomain.allOf(Color.class))
                 .amongConstraint(Set.of(v1, v2, v3), S, Operator.EQ, 1)
                 .build();
-        var solutions = Solver.Factory.INSTANCE.createSolver().getSolutions(csp).toList();
+        var solutions = Solver.Factory.INSTANCE.createSolver(csp).getSolutions().toList();
         assertThat(solutions).hasSize(6);
         assertThat(solutions).allSatisfy(sol -> {
             long inS = java.util.stream.Stream.of(v1, v2, v3)

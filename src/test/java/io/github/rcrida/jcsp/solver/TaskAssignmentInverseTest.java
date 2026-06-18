@@ -74,13 +74,13 @@ public class TaskAssignmentInverseTest {
 
     @Test
     void exactlyTwoSolutions() {
-        val solutions = Solver.Factory.INSTANCE.createSolver().getSolutions(buildProblem()).toList();
+        val solutions = Solver.Factory.INSTANCE.createSolver(buildProblem()).getSolutions().toList();
         assertThat(solutions).hasSize(2);
     }
 
     @Test
     void solutionsAreValid() {
-        val solutions = Solver.Factory.INSTANCE.createSolver().getSolutions(buildProblem()).toList();
+        val solutions = Solver.Factory.INSTANCE.createSolver(buildProblem()).getSolutions().toList();
 
         assertThat(solutions).allSatisfy(sol -> {
             // Forward: task[i] gives the task for engineer i+1
@@ -96,7 +96,7 @@ public class TaskAssignmentInverseTest {
 
     @Test
     void firstSolution_engineersFollowSkillDomains() {
-        val solutions = Solver.Factory.INSTANCE.createSolver().getSolutions(buildProblem()).toList();
+        val solutions = Solver.Factory.INSTANCE.createSolver(buildProblem()).getSolutions().toList();
 
         assertThat(solutions).allSatisfy(sol -> {
             // Each engineer's assigned task must be in their skill domain
@@ -109,7 +109,7 @@ public class TaskAssignmentInverseTest {
 
     @Test
     void knownAssignments() {
-        val solutions = Solver.Factory.INSTANCE.createSolver().getSolutions(buildProblem()).toList();
+        val solutions = Solver.Factory.INSTANCE.createSolver(buildProblem()).getSolutions().toList();
 
         // Solution A: [1,2,3,4] — engineer i+1 leads task i+1, inverse is identity
         assertThat(solutions).anySatisfy(sol -> {

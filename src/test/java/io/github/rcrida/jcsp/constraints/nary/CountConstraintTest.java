@@ -202,7 +202,7 @@ public class CountConstraintTest {
                 .variableDomain(b, EnumDomain.allOf(Color.class))
                 .countConstraint(Set.of(a, b), Color.RED, Operator.EQ, 3)
                 .build();
-        assertThat(Solver.Factory.INSTANCE.createSolver().getSolutions(csp)).isEmpty();
+        assertThat(Solver.Factory.INSTANCE.createSolver(csp).getSolutions()).isEmpty();
     }
 
     @Test
@@ -220,6 +220,6 @@ public class CountConstraintTest {
                 .variableDomain(x3, domain).variableDomain(x4, domain)
                 .countConstraint(Set.of(x1, x2, x3, x4), Color.RED, Operator.EQ, 2)
                 .build();
-        assertThat(Solver.Factory.INSTANCE.createSolver().getSolutions(csp)).hasSize(24);
+        assertThat(Solver.Factory.INSTANCE.createSolver(csp).getSolutions()).hasSize(24);
     }
 }

@@ -119,6 +119,6 @@ public class NaryTuplesConstraintTest {
                 .variableDomain(z, IntRangeDomain.of(1, 3))
                 .tuplesConstraint(Set.of(t1, t2, t3))
                 .build();
-        assertThat(Solver.Factory.INSTANCE.createSolver().getSolutions(csp)).hasSize(3);
+        assertThat(Solver.Factory.INSTANCE.createSolver(csp).getSolutions()).hasSize(3);
     }
 }

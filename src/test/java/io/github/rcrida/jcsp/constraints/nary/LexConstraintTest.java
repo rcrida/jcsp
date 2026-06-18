@@ -246,6 +246,6 @@ public class LexConstraintTest {
                 .variableDomain(c, domain).variableDomain(d, domain)
                 .lexConstraint(List.of(a, b), Operator.LEQ, List.of(c, d))
                 .build();
-        assertThat(Solver.Factory.INSTANCE.createSolver().getSolutions(csp)).hasSize(45);
+        assertThat(Solver.Factory.INSTANCE.createSolver(csp).getSolutions()).hasSize(45);
     }
 }

@@ -73,6 +73,6 @@ public class BinaryElementConstraintTest {
                 .variableDomain(RESULT, resultDomain)
                 .elementConstraint(INDEX, RESULT, ARRAY)
                 .build();
-        assertThat(Solver.Factory.INSTANCE.createSolver().getSolutions(csp)).hasSize(3);
+        assertThat(Solver.Factory.INSTANCE.createSolver(csp).getSolutions()).hasSize(3);
     }
 }

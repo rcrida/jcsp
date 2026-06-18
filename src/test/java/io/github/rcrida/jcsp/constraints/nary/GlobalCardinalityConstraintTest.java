@@ -181,6 +181,6 @@ public class GlobalCardinalityConstraintTest {
                         Set.of(x1, x2, x3, x4),
                         Map.of(Color.RED, 2, Color.GREEN, 1, Color.BLUE, 1))
                 .build();
-        assertThat(Solver.Factory.INSTANCE.createSolver().getSolutions(csp)).hasSize(12);
+        assertThat(Solver.Factory.INSTANCE.createSolver(csp).getSolutions()).hasSize(12);
     }
 }

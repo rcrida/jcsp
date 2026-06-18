@@ -18,7 +18,7 @@ public class EmptyTest {
     void solution() {
         val csp = problem();
         assertThat(csp.getSearchSpace()).isEqualTo(BigInteger.valueOf(1));
-        val optionalSolution = Solver.Factory.INSTANCE.createSolver().getSolution(csp);
+        val optionalSolution = Solver.Factory.INSTANCE.createSolver(csp).getSolution();
         assertThat(optionalSolution).contains(Assignment.empty());
     }
 }

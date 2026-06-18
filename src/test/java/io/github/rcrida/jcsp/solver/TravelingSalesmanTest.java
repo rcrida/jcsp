@@ -7,7 +7,6 @@ import io.github.rcrida.jcsp.domains.IntRangeDomain;
 import io.github.rcrida.jcsp.variables.Variable;
 import org.junit.jupiter.api.Test;
 
-import java.util.Comparator;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
@@ -22,7 +21,6 @@ import static org.assertj.core.api.Assertions.offset;
  * For N=6 (regular hexagon) each edge has length 1, so the optimal tour cost is 6.0.
  */
 public class TravelingSalesmanTest {
-    static final Solver SOLVER = Solver.Factory.INSTANCE.createSolver();
     static final Variable.Factory F = Variable.Factory.INSTANCE;
     static final int N = 12;
 
@@ -103,14 +101,14 @@ public class TravelingSalesmanTest {
 
     @Test
     void optimize_findsShortestTour() {
-        val result = SOLVER.getSolution(TSP, TravelingSalesmanTest::tourLength);
+        val result = Solver.Factory.INSTANCE.createSolver(TSP, TravelingSalesmanTest::tourLength).getSolution();
         assertThat(result).isPresent();
         assertThat(tourLength(result.get())).isCloseTo(OPTIMAL_TOUR_LENGTH, offset(1e-9));
     }
 
     @Test
     void getSolutions_returnsImprovingTours() {
-        val improving = SOLVER.getSolutions(TSP, TravelingSalesmanTest::tourLength).toList();
+        val improving = Solver.Factory.INSTANCE.createSolver(TSP, TravelingSalesmanTest::tourLength).getSolutions().toList();
         assertThat(improving).isNotEmpty();
         for (int i = 1; i < improving.size(); i++) {
             assertThat(tourLength(improving.get(i))).isLessThan(tourLength(improving.get(i - 1)));

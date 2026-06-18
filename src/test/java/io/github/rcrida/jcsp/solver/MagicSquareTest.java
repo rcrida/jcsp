@@ -65,7 +65,7 @@ public class MagicSquareTest {
     @Test
     void solution() {
         val problem = square();
-        val result = Solver.Factory.INSTANCE.createSolver().getSolution(problem.csp());
+        val result = Solver.Factory.INSTANCE.createSolver(problem.csp()).getSolution();
         assertThat(result).hasValueSatisfying(assignment -> {
             assertThat(assignment.isSolution(problem.csp())).isTrue();
             System.out.println("Statistics: " + assignment.getStatistics());
@@ -76,7 +76,7 @@ public class MagicSquareTest {
     @Test
     void allSolutions() {
         val problem = square();
-        val solutions = Solver.Factory.INSTANCE.createSolver().getSolutions(problem.csp()).toList();
+        val solutions = Solver.Factory.INSTANCE.createSolver(problem.csp()).getSolutions().toList();
         System.out.println("Total magic squares: " + solutions.size());
         assertThat(solutions).hasSize(8);
     }
@@ -92,7 +92,7 @@ public class MagicSquareTest {
         val csp = p.csp().toBuilder()
                 .constraint(io.github.rcrida.jcsp.constraints.nary.LexConstraint.of(row0, Operator.LEQ, row2))
                 .build();
-        assertThat(Solver.Factory.INSTANCE.createSolver().getSolutions(csp)).hasSize(4);
+        assertThat(Solver.Factory.INSTANCE.createSolver(csp).getSolutions()).hasSize(4);
     }
 
     static void printSquare(Assignment assignment, Variable<Integer>[][] cells) {

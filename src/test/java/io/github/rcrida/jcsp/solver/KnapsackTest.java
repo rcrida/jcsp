@@ -48,7 +48,7 @@ public class KnapsackTest {
 
     @Test
     void feasibility_allValidSelections() {
-        assertThat(Solver.Factory.INSTANCE.createSolver().getSolutions(problem())).hasSize(10);
+        assertThat(Solver.Factory.INSTANCE.createSolver(problem()).getSolutions()).hasSize(10);
     }
 
     @Test
@@ -57,11 +57,11 @@ public class KnapsackTest {
         // Optimal: x2=1, x4=1 → weight=10, value=12.
         // orElse(1) gives the optimistic lower bound for the negated objective: assume every
         // unassigned variable takes its maximum value (1), so the true value can only be lower.
-        val result = Solver.Factory.INSTANCE.createSolver().getSolution(problem(),
+        val result = Solver.Factory.INSTANCE.createSolver(problem(),
                 a -> -(4 * a.getValue(X1).orElse(1)
                       + 5 * a.getValue(X2).orElse(1)
                       + 6 * a.getValue(X3).orElse(1)
-                      + 7 * a.getValue(X4).orElse(1)));
+                      + 7 * a.getValue(X4).orElse(1))).getSolution();
         assertThat(result).hasValueSatisfying(a -> {
             assertThat(a.getValue(X1)).hasValue(0);
             assertThat(a.getValue(X2)).hasValue(1);

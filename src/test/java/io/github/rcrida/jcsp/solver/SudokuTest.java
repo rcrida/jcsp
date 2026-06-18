@@ -87,8 +87,8 @@ public class SudokuTest {
     void solution() {
         val csp = sudoku();
         assertThat(csp.getSearchSpace()).isEqualTo(new BigInteger("196627050475552913618075908526912116283103450944214766927315415537966391196809"));
-        val solver = Solver.Factory.INSTANCE.createSolver();
-        val optionalSolution = solver.getSolution(csp);
+        val solver = Solver.Factory.INSTANCE.createSolver(csp);
+        val optionalSolution = solver.getSolution();
         optionalSolution.ifPresent(assignment -> {
             print2dArray(extractArray(assignment));
             System.out.println(assignment.getStatistics());
@@ -108,7 +108,7 @@ public class SudokuTest {
     @Test
     void solutions() {
         val csp = sudoku();
-        val solver = Solver.Factory.INSTANCE.createSolver();
-        assertThat(solver.getSolutions(csp)).hasSize(1);
+        val solver = Solver.Factory.INSTANCE.createSolver(csp);
+        assertThat(solver.getSolutions()).hasSize(1);
     }
 }

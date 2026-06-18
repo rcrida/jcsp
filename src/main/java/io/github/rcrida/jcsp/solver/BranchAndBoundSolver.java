@@ -16,13 +16,15 @@ import java.util.function.ToDoubleFunction;
 import java.util.stream.Stream;
 
 /**
- * A terminal solver that overrides {@link Solver#getSolutions(ConstraintSatisfactionProblem, ToDoubleFunction)}
- * with branch-and-bound pruning. Whenever the cost of the current partial assignment meets or
- * exceeds the best complete solution found so far (the <em>incumbent</em>), the branch is cut
- * immediately.
+ * An optimization solver that applies branch-and-bound pruning. Whenever the cost of the current
+ * partial assignment meets or exceeds the best complete solution found so far (the
+ * <em>incumbent</em>), the branch is cut immediately.
  *
- * <p>{@link #getSolutions(ConstraintSatisfactionProblem)} performs plain backtracking (no
- * objective) by delegating to {@code inner}.
+ * <p>Returns a stream of improving complete assignments (each strictly better than the previous);
+ * the last element is the global optimum found within the search.
+ *
+ * <p>The objective is supplied at construction time by {@link Solver.Factory#createSolver(ConstraintSatisfactionProblem, ToDoubleFunction)},
+ * so it must return a lower bound on the cost of any completion of a partial assignment.
  */
 @Slf4j
 @SuperBuilder
@@ -31,18 +33,17 @@ public class BranchAndBoundSolver extends SolverDecorator {
     @NonNull UnassignedVariableSelector unassignedVariableSelector;
     @NonNull DomainValuesOrderer domainValuesOrderer;
     @NonNull Inference inference;
+    @NonNull ToDoubleFunction<Assignment> objective;
 
     @Override
-    public Stream<Assignment> getSolutions(@NonNull ConstraintSatisfactionProblem csp,
-                                            @NonNull ToDoubleFunction<Assignment> objective) {
+    public Stream<Assignment> getSolutions(@NonNull ConstraintSatisfactionProblem csp) {
         log.info("Search space before branch-and-bound = {}", csp.getSearchSpace());
         double[] incumbent = {Double.MAX_VALUE};
-        return search(csp, Assignment.empty(), objective, incumbent);
+        return search(csp, Assignment.empty(), incumbent);
     }
 
     private Stream<Assignment> search(ConstraintSatisfactionProblem csp,
                                        Assignment assignment,
-                                       ToDoubleFunction<Assignment> objective,
                                        double[] incumbent) {
         if (objective.applyAsDouble(assignment) >= incumbent[0]) {
             return Stream.empty();
@@ -54,7 +55,7 @@ public class BranchAndBoundSolver extends SolverDecorator {
             return Stream.of(assignment);
         }
         val variable = unassignedVariableSelector.select(csp, assignment);
-        return searchValues(variable, csp, assignment, objective, incumbent);
+        return searchValues(variable, csp, assignment, incumbent);
     }
 
     /**
@@ -64,13 +65,11 @@ public class BranchAndBoundSolver extends SolverDecorator {
     private <T> Stream<Assignment> searchValues(Variable<T> variable,
                                                  ConstraintSatisfactionProblem csp,
                                                  Assignment assignment,
-                                                 ToDoubleFunction<Assignment> objective,
                                                  double[] incumbent) {
         return domainValuesOrderer.order(csp, variable, assignment)
                 .map(value -> assignment.withValue(variable, value))
                 .filter(next -> next.isConsistent(csp))
                 .flatMap(next -> inference.apply(csp, variable, next).stream()
-                        .flatMap(c -> search(c, next, objective, incumbent)));
+                        .flatMap(c -> search(c, next, incumbent)));
     }
-
 }

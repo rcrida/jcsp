@@ -154,7 +154,7 @@ public class TimetableSchedulingViaColouringTest {
     @Test
     void findSchedule() {
         val csp = timetable();
-        val solution = Solver.Factory.INSTANCE.createSolver().getSolution(csp);
+        val solution = Solver.Factory.INSTANCE.createSolver(csp).getSolution();
         assertThat(solution).hasValueSatisfying(assignment -> {
             assertThat(assignment.isSolution(csp)).isTrue();
             System.out.println("Statistics: " + assignment.getStatistics());
@@ -165,7 +165,7 @@ public class TimetableSchedulingViaColouringTest {
     @Test
     void allSchedules() {
         val csp = timetable();
-        val solutions = Solver.Factory.INSTANCE.createSolver().getSolutions(csp).toList();
+        val solutions = Solver.Factory.INSTANCE.createSolver(csp).getSolutions().toList();
         System.out.println("Total valid schedules: " + solutions.size());
         assertThat(solutions).hasSize(2880);
     }

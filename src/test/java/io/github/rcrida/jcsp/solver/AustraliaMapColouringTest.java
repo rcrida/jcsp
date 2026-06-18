@@ -55,7 +55,7 @@ public class AustraliaMapColouringTest {
     void solution() {
         val csp = problem();
         assertThat(csp.getSearchSpace()).isEqualTo(BigInteger.valueOf(2187));
-        val optionalSolution = Solver.Factory.INSTANCE.createSolver().getSolution(csp);
+        val optionalSolution = Solver.Factory.INSTANCE.createSolver(csp).getSolution();
         System.out.println(optionalSolution);
         assertThat(optionalSolution).hasValueSatisfying(value -> {
                     assertThat(value).isIn(
@@ -80,7 +80,7 @@ public class AustraliaMapColouringTest {
     @Test
     void searchStream() {
         val csp = problem();
-        assertThat(Solver.Factory.INSTANCE.createSolver().getSolutions(csp)).hasSize(18);
+        assertThat(Solver.Factory.INSTANCE.createSolver(csp).getSolutions()).hasSize(18);
     }
 
     @Test
@@ -97,7 +97,7 @@ public class AustraliaMapColouringTest {
                 .notEqualsChainConstraint(List.of(WA, NT, Q, NSW, V))
                 .countConstraint(Set.of(WA, NT, Q, NSW, V, SA, T), Colour.RED, Operator.EQ, 3)
                 .build();
-        assertThat(Solver.Factory.INSTANCE.createSolver().getSolutions(csp)).hasSize(6);
+        assertThat(Solver.Factory.INSTANCE.createSolver(csp).getSolutions()).hasSize(6);
     }
 
     @Test
@@ -116,7 +116,7 @@ public class AustraliaMapColouringTest {
                         Set.of(WA, NT, Q, NSW, V, SA, T),
                         Map.of(Colour.RED, 3, Colour.GREEN, 2, Colour.BLUE, 2))
                 .build();
-        assertThat(Solver.Factory.INSTANCE.createSolver().getSolutions(csp)).hasSize(2);
+        assertThat(Solver.Factory.INSTANCE.createSolver(csp).getSolutions()).hasSize(2);
     }
 
     @Test

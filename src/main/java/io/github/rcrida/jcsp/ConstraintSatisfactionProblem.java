@@ -163,6 +163,11 @@ public class ConstraintSatisfactionProblem {
         return variableDomains.isEmpty();
     }
 
+    /** Returns true when every variable's domain is a singleton — the problem is fully determined. */
+    public boolean isFullyDetermined() {
+        return variableDomains.values().stream().allMatch(Domain::isSingleton);
+    }
+
     /**
      * @return true if the problem graph is a tree
      */

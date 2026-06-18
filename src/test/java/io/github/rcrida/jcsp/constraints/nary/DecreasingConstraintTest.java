@@ -95,6 +95,6 @@ public class DecreasingConstraintTest {
                 .variableDomain(x1, domain).variableDomain(x2, domain).variableDomain(x3, domain)
                 .decreasingConstraint(List.of(x1, x2, x3))
                 .build();
-        assertThat(Solver.Factory.INSTANCE.createSolver().getSolutions(csp)).hasSize(10);
+        assertThat(Solver.Factory.INSTANCE.createSolver(csp).getSolutions()).hasSize(10);
     }
 }

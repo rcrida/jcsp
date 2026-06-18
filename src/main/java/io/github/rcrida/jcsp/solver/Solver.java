@@ -1,12 +1,12 @@
 package io.github.rcrida.jcsp.solver;
 
-import io.github.rcrida.jcsp.consistency.Inference;
-import lombok.val;
 import io.github.rcrida.jcsp.ConstraintSatisfactionProblem;
 import io.github.rcrida.jcsp.assignments.Assignment;
-import io.github.rcrida.jcsp.consistency.fixpoint.FixpointConsistency;
+import io.github.rcrida.jcsp.consistency.Inference;
 import io.github.rcrida.jcsp.consistency.arc.MAC;
+import io.github.rcrida.jcsp.consistency.fixpoint.FixpointConsistency;
 import io.github.rcrida.jcsp.constraints.nary.SumConstraint;
+import io.github.rcrida.jcsp.domains.BoundedDomain;
 import io.github.rcrida.jcsp.solver.backtrackingsearch.BacktrackingSearch;
 import io.github.rcrida.jcsp.solver.backtrackingsearch.order.DefaultValueOrderer;
 import io.github.rcrida.jcsp.solver.backtrackingsearch.order.LeastConstrainingValueOrderer;
@@ -18,7 +18,7 @@ import io.github.rcrida.jcsp.solver.tree.decomposition.decomposer.TreeDecomposer
 import io.github.rcrida.jcsp.solver.tree.decomposition.decomposer.variableselector.MinimumDegreeVariableSelector;
 import io.github.rcrida.jcsp.solver.tree.selector.TreeUnassignedVariableSelector;
 import io.github.rcrida.jcsp.solver.tree.sorter.BFSTopologicalSorter;
-
+import lombok.val;
 import org.jspecify.annotations.NonNull;
 
 import java.util.Optional;
@@ -40,75 +40,105 @@ public interface Solver {
         return getSolutions(csp).findFirst();
     }
 
-    /**
-     * Returns a stream of complete assignments in the order they are discovered, each strictly
-     * better (lower objective) than the previous. The last element is the global optimum.
-     * <p>
-     * The default implementation filters the full solution stream — no pruning occurs.
-     * Implementations may override this method with branch-and-bound pruning for efficiency.
-     * <p>
-     * <b>Discrete CSPs</b> (no {@link io.github.rcrida.jcsp.domains.BoundedDomain} variables):
-     * the objective is called on <em>partial</em> assignments during branch-and-bound pruning, so
-     * it must return a lower bound on the cost of any completion. For additive cost functions, use
-     * {@code assignment.getValue(v).orElse(neutralValue)} so unassigned variables contribute
-     * their neutral value (e.g. 0 for a sum). The lower-bound property
-     * {@code objective(partial) ≤ objective(completion)} must hold for all completions.
-     * <p>
-     * <b>Continuous CSPs</b> (with {@link io.github.rcrida.jcsp.domains.BoundedDomain} variables):
-     * {@link BisectionConditioningSolver} intercepts this path and applies the objective only to
-     * <em>complete</em> assignments produced by bisection. No lower-bound property is required;
-     * {@code assignment.getValue(v).orElseThrow()} is safe.
-     */
-    default Stream<Assignment> getSolutions(@NonNull ConstraintSatisfactionProblem csp,
-                                             @NonNull ToDoubleFunction<Assignment> objective) {
-        double[] incumbent = {Double.MAX_VALUE};
-        return getSolutions(csp).filter(candidate -> {
-            double cost = objective.applyAsDouble(candidate);
-            if (cost < incumbent[0]) {
-                incumbent[0] = cost;
-                return true;
-            }
-            return false;
-        });
-    }
-
-    /**
-     * Returns the assignment with the minimum objective value, exhausting the search space.
-     */
-    default Optional<Assignment> getSolution(@NonNull ConstraintSatisfactionProblem csp,
-                                              @NonNull ToDoubleFunction<Assignment> objective) {
-        return getSolutions(csp, objective).reduce((a, b) -> b);
-    }
-
     interface Factory {
         /** MAC + SumConstraint bounds propagation used as the {@link Inference} in the solver chain. */
         Inference MAC_SUM_INFERENCE = (problem, variable, assignment) ->
                 MAC.INSTANCE.apply(problem, variable, assignment)
                         .flatMap(FixpointConsistency.of(SumConstraint.class)::apply);
 
-        /** Bisection precision for {@link BisectionConditioningSolver} in the default solver chain. */
+        /** Bisection precision for {@link BisectionConditioningSolver} in the optimization chain. */
         double DEFAULT_BISECTION_EPSILON = 1e-3;
 
-        Factory INSTANCE = () -> {
-            val backtrackingSearch = new BacktrackingSearch(MinimumRemainingValuesSelector.INSTANCE, LeastConstrainingValueOrderer.INSTANCE, MAC_SUM_INFERENCE);
-            val branchAndBound = BranchAndBoundSolver.builder().inner(backtrackingSearch).unassignedVariableSelector(MinimumRemainingValuesSelector.INSTANCE).domainValuesOrderer(LeastConstrainingValueOrderer.INSTANCE).inference(MAC_SUM_INFERENCE).build();
-            val treeSolver = new TreeSolver(BFSTopologicalSorter.INSTANCE, DefaultValueOrderer.INSTANCE, TreeUnassignedVariableSelector.Factory.INSTANCE);
-            val cutsetConditioningSolver = CutsetConditioningSolver.builder()
-                    .inner(branchAndBound)
-                    .treeSolver(treeSolver)
-                    .build();
-            val treeDecompositionSolver = TreeDecompositionSolver.builder()
-                    .inner(cutsetConditioningSolver)
-                    .treeDecomposer(new TreeDecomposerImpl(MinimumDegreeVariableSelector.Factory.INSTANCE))
-                    .treeSolver(treeSolver)
-                    .targetTreewidth(7)
-                    .build();
-            val independentSubproblemSolver = IndependentSubproblemSolver.builder().inner(treeDecompositionSolver).build();
-            val bisectionConditioningSolver = BisectionConditioningSolver.builder().inner(independentSubproblemSolver).epsilon(DEFAULT_BISECTION_EPSILON).build();
-            val propagationFixpointSolver = PropagationFixpointSolver.builder().inner(bisectionConditioningSolver).build();
-            return NodeConsistentSolver.builder().inner(propagationFixpointSolver).build();
-        };
+        /**
+         * Builds a solver chain tailored for satisfaction. The chain is:
+         * NodeConsistency → PropagationFixpoint → IndependentSubproblems → TreeDecomposition
+         * → CutsetConditioning → BacktrackingSearch.
+         * <p>
+         * For problems with {@link BoundedDomain} variables, the fixpoint snaps non-singleton
+         * intervals to their midpoints, giving one concrete solution for underdetermined continuous systems.
+         */
+        BoundSolver createSolver(@NonNull ConstraintSatisfactionProblem csp);
 
-        Solver createSolver();
+        /**
+         * Builds a solver chain tailored for optimization.
+         * <p>
+         * <b>Discrete CSPs</b> (no {@link BoundedDomain} variables):
+         * NodeConsistency → PropagationFixpoint → BranchAndBound. The objective is called on
+         * <em>partial</em> assignments for pruning, so it must return a lower bound on the cost
+         * of any completion. The lower-bound property {@code objective(partial) ≤ objective(completion)}
+         * must hold for all completions.
+         * <p>
+         * <b>Continuous CSPs</b> (with {@link BoundedDomain} variables):
+         * NodeConsistency → PropagationFixpoint → BisectionConditioning → BranchAndBound.
+         * {@link BisectionConditioningSolver} applies the objective only to <em>complete</em>
+         * assignments; no lower-bound property is required and {@code getValue(v).orElseThrow()} is safe.
+         */
+        BoundSolver createSolver(@NonNull ConstraintSatisfactionProblem csp,
+                                 @NonNull ToDoubleFunction<Assignment> objective);
+
+        Factory INSTANCE = new Factory() {
+            @Override
+            public BoundSolver createSolver(@NonNull ConstraintSatisfactionProblem csp) {
+                boolean hasContinuous = csp.getVariableDomains().values().stream()
+                        .anyMatch(BoundedDomain.class::isInstance);
+                val backtrackingSearch = new BacktrackingSearch(MinimumRemainingValuesSelector.INSTANCE, LeastConstrainingValueOrderer.INSTANCE, MAC_SUM_INFERENCE);
+                val treeSolver = new TreeSolver(BFSTopologicalSorter.INSTANCE, DefaultValueOrderer.INSTANCE, TreeUnassignedVariableSelector.Factory.INSTANCE);
+                val cutsetConditioningSolver = CutsetConditioningSolver.builder()
+                        .inner(backtrackingSearch)
+                        .treeSolver(treeSolver)
+                        .build();
+                val treeDecompositionSolver = TreeDecompositionSolver.builder()
+                        .inner(cutsetConditioningSolver)
+                        .treeDecomposer(new TreeDecomposerImpl(MinimumDegreeVariableSelector.Factory.INSTANCE))
+                        .treeSolver(treeSolver)
+                        .targetTreewidth(7)
+                        .build();
+                val independentSubproblemSolver = IndependentSubproblemSolver.builder().inner(treeDecompositionSolver).build();
+                val propagationFixpointSolver = PropagationFixpointSolver.builder()
+                        .inner(independentSubproblemSolver)
+                        .snap(hasContinuous)
+                        .build();
+                Solver chain = NodeConsistentSolver.builder().inner(propagationFixpointSolver).build();
+                return () -> chain.getSolutions(csp);
+            }
+
+            @Override
+            public BoundSolver createSolver(@NonNull ConstraintSatisfactionProblem csp,
+                                            @NonNull ToDoubleFunction<Assignment> objective) {
+                boolean hasContinuous = csp.getVariableDomains().values().stream()
+                        .anyMatch(BoundedDomain.class::isInstance);
+                val backtrackingSearch = new BacktrackingSearch(MinimumRemainingValuesSelector.INSTANCE, LeastConstrainingValueOrderer.INSTANCE, MAC_SUM_INFERENCE);
+                val branchAndBound = BranchAndBoundSolver.builder()
+                        .inner(backtrackingSearch)
+                        .objective(objective)
+                        .unassignedVariableSelector(MinimumRemainingValuesSelector.INSTANCE)
+                        .domainValuesOrderer(LeastConstrainingValueOrderer.INSTANCE)
+                        .inference(MAC_SUM_INFERENCE)
+                        .build();
+                Solver terminal = hasContinuous
+                        ? BisectionConditioningSolver.builder()
+                                .inner(branchAndBound)
+                                .epsilon(DEFAULT_BISECTION_EPSILON)
+                                .objective(objective)
+                                .build()
+                        : branchAndBound;
+                val propagationFixpointSolver = PropagationFixpointSolver.builder()
+                        .inner(terminal)
+                        .snap(false)
+                        .build();
+                Solver chain = NodeConsistentSolver.builder().inner(propagationFixpointSolver).build();
+                return new BoundSolver() {
+                    @Override
+                    public Stream<Assignment> getSolutions() {
+                        return chain.getSolutions(csp);
+                    }
+
+                    @Override
+                    public Optional<Assignment> getSolution() {
+                        return chain.getSolutions(csp).reduce((a, b) -> b);
+                    }
+                };
+            }
+        };
     }
 }

@@ -81,6 +81,6 @@ public class BinaryLogicConstraintTest {
                 .logicConstraint(A, LogicOperator.OR,  B)
                 .logicConstraint(B, LogicOperator.XOR, C)
                 .build();
-        assertThat(Solver.Factory.INSTANCE.createSolver().getSolutions(csp)).hasSize(3);
+        assertThat(Solver.Factory.INSTANCE.createSolver(csp).getSolutions()).hasSize(3);
     }
 }

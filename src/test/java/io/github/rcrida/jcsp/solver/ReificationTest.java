@@ -54,7 +54,7 @@ public class ReificationTest {
 
     @Test
     void allSolutionsSatisfyAtLeastTwoPreferences() {
-        val solutions = Solver.Factory.INSTANCE.createSolver().getSolutions(CSP).toList();
+        val solutions = Solver.Factory.INSTANCE.createSolver(CSP).getSolutions().toList();
         assertThat(solutions).isNotEmpty();
         assertThat(solutions).allSatisfy(sol -> {
             long satisfied = Stream.of(
@@ -72,7 +72,7 @@ public class ReificationTest {
         //   (RED, GREEN, BLUE) — all 3 preferences     ← r1=T, b ≠ a ✓, b ≠ c ✓
         //   (RED, GREEN, RED)  — r1 and r2             ← b=GREEN ≠ RED ✓, c=RED ≠ GREEN ✓
         //   (BLUE, GREEN, BLUE) — r2 and r3            ← a=BLUE ≠ GREEN ✓, c=BLUE ≠ GREEN ✓
-        val solutions = Solver.Factory.INSTANCE.createSolver().getSolutions(CSP).toList();
+        val solutions = Solver.Factory.INSTANCE.createSolver(CSP).getSolutions().toList();
         assertThat(solutions).hasSize(3);
         assertThat(solutions).anySatisfy(s -> {
             assertThat(s.getValue(A)).hasValue(Colour.RED);

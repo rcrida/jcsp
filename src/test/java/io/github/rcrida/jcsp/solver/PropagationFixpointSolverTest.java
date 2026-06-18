@@ -50,7 +50,7 @@ public class PropagationFixpointSolverTest {
                 .build();
 
         // Use the full solver to observe the effect after propagation
-        var solutions = Solver.Factory.INSTANCE.createSolver().getSolutions(csp).toList();
+        var solutions = Solver.Factory.INSTANCE.createSolver(csp).getSolutions().toList();
         // x3 must be 3; x4 must be 4 or 5
         solutions.forEach(a -> {
             assertThat(a.getValue(x3)).hasValue(3);

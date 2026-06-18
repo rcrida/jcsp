@@ -26,7 +26,11 @@ import java.util.stream.Stream;
 /**
  * Handles {@link BoundedDomain} variables that do not collapse to singletons during propagation
  * by recursively bisecting the widest non-singleton interval and re-propagating until all
- * intervals are singleton or within epsilon.
+ * intervals are within epsilon of their midpoint. Only present in the optimization chain;
+ * {@code inner} is a {@link BranchAndBoundSolver} that handles any remaining discrete variables.
+ *
+ * <p>{@link #getSolutions(ConstraintSatisfactionProblem)} explores all feasible points via
+ * bisection and returns them in improving objective order (each strictly better than the previous).
  */
 @Slf4j
 @SuperBuilder
@@ -38,17 +42,17 @@ public class BisectionConditioningSolver extends SolverDecorator {
             FixpointConsistency.of(LinearConstraint.class)
     );
 
+    @NonNull ToDoubleFunction<Assignment> objective;
     double epsilon;
 
     @Override
-    public Stream<Assignment> getSolutions(@NonNull ConstraintSatisfactionProblem csp,
-                                           @NonNull ToDoubleFunction<Assignment> objective) {
+    public Stream<Assignment> getSolutions(@NonNull ConstraintSatisfactionProblem csp) {
         val target = findWidestBounded(csp);
         if (target == null) {
-            return getInner().getSolutions(csp, objective);
+            return getInner().getSolutions(csp);
         }
         double[] incumbent = {Double.MAX_VALUE};
-        return bisect(csp, target).filter(candidate -> {
+        return allFeasible(csp).filter(candidate -> {
             double cost = objective.applyAsDouble(candidate);
             if (cost < incumbent[0]) {
                 incumbent[0] = cost;
@@ -58,29 +62,25 @@ public class BisectionConditioningSolver extends SolverDecorator {
         });
     }
 
-    @Override
-    public Stream<Assignment> getSolutions(@NonNull ConstraintSatisfactionProblem csp) {
+    private Stream<Assignment> allFeasible(@NonNull ConstraintSatisfactionProblem csp) {
         val target = findWidestBounded(csp);
         if (target == null) {
-            return getInner().getSolutions(csp);
+            // All bounded domains are singletons. If fully determined, validate and return the
+            // forced assignment; otherwise delegate remaining discrete variables to inner.
+            return csp.isFullyDetermined() ? forcedSolution(csp) : getInner().getSolutions(csp);
         }
-        return bisect(csp, target);
-    }
-
-    private Stream<Assignment> bisect(@NonNull ConstraintSatisfactionProblem csp,
-                                      @NonNull Variable<?> target) {
         val bd = (BoundedDomain<?>) csp.getDomain(target);
         double lo = bd.getMin().doubleValue();
         double hi = bd.getMax().doubleValue();
         double mid = (lo + hi) / 2.0;
         if (hi - lo <= epsilon) {
             log.debug("Snapping {} to {}", target, mid);
-            return getSolutions(withSnapped(csp, target, mid));
+            return allFeasible(withSnapped(csp, target, mid));
         }
         log.debug("Bisecting {} at {} in [{}, {}]", target, mid, lo, hi);
         return Stream.concat(
-                narrow(csp, target, lo, mid).stream().flatMap(this::getSolutions),
-                narrow(csp, target, mid, hi).stream().flatMap(this::getSolutions)
+                narrow(csp, target, lo, mid).stream().flatMap(this::allFeasible),
+                narrow(csp, target, mid, hi).stream().flatMap(this::allFeasible)
         );
     }
 

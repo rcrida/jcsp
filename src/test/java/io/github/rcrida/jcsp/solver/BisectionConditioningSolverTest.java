@@ -8,6 +8,7 @@ import io.github.rcrida.jcsp.domains.IntervalDomain;
 import io.github.rcrida.jcsp.variables.Variable;
 import org.junit.jupiter.api.Test;
 
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -25,7 +26,11 @@ public class BisectionConditioningSolverTest {
                     .collect(Collectors.toMap(Map.Entry::getKey, e -> e.getValue().singleValue().orElseThrow()))));
 
     static BisectionConditioningSolver solver(double epsilon) {
-        return BisectionConditioningSolver.builder().inner(SINGLETON_EXTRACTOR).epsilon(epsilon).build();
+        return BisectionConditioningSolver.builder()
+                .inner(SINGLETON_EXTRACTOR)
+                .epsilon(epsilon)
+                .objective(a -> 0.0)
+                .build();
     }
 
     @Test
@@ -65,6 +70,30 @@ public class BisectionConditioningSolverTest {
         assertThat(solutions).hasSize(1);
         assertThat((Double) solutions.get(0).getValue(x).orElseThrow()).isCloseTo(2.5, within(1e-9));
         assertThat(solutions.get(0).getValue(n)).contains(5);
+    }
+
+    @Test
+    void nonSingletonDiscrete_delegatesToInner() {
+        // x ∈ [0,0.5] (width ≤ epsilon=1.0 → snapped immediately to 0.25),
+        // n ∈ {1,2} (non-singleton discrete — not a BoundedDomain).
+        // After snapping x: findWidestBounded returns null but !isFullyDetermined() → delegates to inner.
+        // This exercises the false branch of the isFullyDetermined() ternary in allFeasible.
+        Variable<Double> x = F.create("x_disc");
+        Variable<Integer> n = F.create("n_disc");
+        var csp = ConstraintSatisfactionProblem.builder()
+                .variableDomain(x, IntervalDomain.of(0.0, 0.5))
+                .variableDomain(n, IntRangeDomain.of(1, 2))
+                .build();
+        Solver inner = c -> List.of(1, 2).stream()
+                .map(v -> Assignment.of(Map.of(x, c.getDomain(x).singleValue().orElseThrow(), n, v)));
+        var solver = BisectionConditioningSolver.builder()
+                .inner(inner)
+                .epsilon(1.0)
+                .objective(a -> 0.0)
+                .build();
+        // getSolutions filters by improving objective (a->0.0): first included, second excluded
+        var solutions = solver.getSolutions(csp).toList();
+        assertThat(solutions).hasSize(1);
     }
 
     @Test

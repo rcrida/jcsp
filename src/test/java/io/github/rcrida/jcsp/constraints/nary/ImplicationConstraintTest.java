@@ -64,7 +64,7 @@ public class ImplicationConstraintTest {
                 .impliesConstraint(B, BODY)
                 .equalsConstraint(B, true)
                 .build();
-        val solutions = Solver.Factory.INSTANCE.createSolver().getSolutions(csp).toList();
+        val solutions = Solver.Factory.INSTANCE.createSolver(csp).getSolutions().toList();
         assertThat(solutions).hasSize(1);
         assertThat(solutions.get(0).getValue(X)).hasValue(3);
     }
@@ -78,7 +78,7 @@ public class ImplicationConstraintTest {
                 .impliesConstraint(B, BODY)
                 .equalsConstraint(B, false)
                 .build();
-        val solutions = Solver.Factory.INSTANCE.createSolver().getSolutions(csp).toList();
+        val solutions = Solver.Factory.INSTANCE.createSolver(csp).getSolutions().toList();
         assertThat(solutions).hasSize(5);
     }
 

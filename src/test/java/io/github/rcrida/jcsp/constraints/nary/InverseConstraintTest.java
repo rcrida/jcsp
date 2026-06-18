@@ -176,7 +176,7 @@ public class InverseConstraintTest {
                 .inverseConstraint(fVars, invfVars)
                 .allDiffConstraint(java.util.Set.of(f0, f1, f2))
                 .build();
-        var solutions = Solver.Factory.INSTANCE.createSolver().getSolutions(csp).toList();
+        var solutions = Solver.Factory.INSTANCE.createSolver(csp).getSolutions().toList();
         assertThat(solutions).hasSize(6); // 3! permutations, each with a unique inverse
         assertThat(solutions).allSatisfy(sol -> {
             int fi0 = sol.getValue(f0).orElseThrow();
@@ -198,6 +198,6 @@ public class InverseConstraintTest {
                 .variableDomain(g1, domain123()).variableDomain(g2, domain123())
                 .inverseConstraint(fVars, invfVars)
                 .build();
-        assertThat(Solver.Factory.INSTANCE.createSolver().getSolutions(csp)).isEmpty();
+        assertThat(Solver.Factory.INSTANCE.createSolver(csp).getSolutions()).isEmpty();
     }
 }

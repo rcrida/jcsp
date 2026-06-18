@@ -40,10 +40,9 @@ public class AtLeastNConstraintWithCountingTest {
                     .atLeastNConstraint(Set.of(V1, V2, V3, V4), n)
                     .build();
 
-            long countingCount = Solver.Factory.INSTANCE.createSolver()
-                    .getSolutions(csp(n)).count();
-            long plainCount = Solver.Factory.INSTANCE.createSolver()
-                    .getSolutions(plain).count();
+            val cspN = csp(n);
+            long countingCount = Solver.Factory.INSTANCE.createSolver(cspN).getSolutions().count();
+            long plainCount = Solver.Factory.INSTANCE.createSolver(plain).getSolutions().count();
 
             assertThat(countingCount)
                     .as("atLeast%d: counting chain vs plain", n)
@@ -53,7 +52,7 @@ public class AtLeastNConstraintWithCountingTest {
 
     @Test
     void atLeast2_onlySolutionsWithTwoOrMoreTrue() {
-        val solutions = Solver.Factory.INSTANCE.createSolver().getSolutions(csp(2)).toList();
+        val solutions = Solver.Factory.INSTANCE.createSolver(csp(2)).getSolutions().toList();
         assertThat(solutions).allSatisfy(sol -> {
             long trueCount = Set.of(V1, V2, V3, V4).stream()
                     .filter(v -> sol.getValue(v).orElse(false))
@@ -64,7 +63,7 @@ public class AtLeastNConstraintWithCountingTest {
 
     @Test
     void atLeast4_onlyAllTrueSolution() {
-        val solutions = Solver.Factory.INSTANCE.createSolver().getSolutions(csp(4)).toList();
+        val solutions = Solver.Factory.INSTANCE.createSolver(csp(4)).getSolutions().toList();
         assertThat(solutions).hasSize(1);
         assertThat(solutions.get(0).getValue(V1)).hasValue(true);
         assertThat(solutions.get(0).getValue(V2)).hasValue(true);

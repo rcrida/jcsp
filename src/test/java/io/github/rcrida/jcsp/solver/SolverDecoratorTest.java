@@ -4,9 +4,13 @@ import io.github.rcrida.jcsp.ConstraintSatisfactionProblem;
 import io.github.rcrida.jcsp.assignments.Assignment;
 import io.github.rcrida.jcsp.domains.IntRangeDomain;
 import io.github.rcrida.jcsp.variables.Variable;
+import lombok.EqualsAndHashCode;
+import lombok.experimental.SuperBuilder;
 import org.junit.jupiter.api.Test;
 
+import java.util.Map;
 import java.util.Set;
+import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -16,6 +20,11 @@ import static org.assertj.core.api.Assertions.assertThat;
  */
 public class SolverDecoratorTest {
     static final Variable.Factory F = Variable.Factory.INSTANCE;
+
+    /** Concrete subclass that uses the default {@code preprocess} passthrough. */
+    @SuperBuilder
+    @EqualsAndHashCode(callSuper = true)
+    static class PassthroughDecorator extends SolverDecorator {}
 
     @Test
     void singletonDomains_returnsDirectly() {
@@ -28,7 +37,7 @@ public class SolverDecoratorTest {
                 .variableDomain(x2, IntRangeDomain.of(2, 2))
                 .allDiffConstraint(Set.of(x1, x2))
                 .build();
-        var result = Solver.Factory.INSTANCE.createSolver().getSolution(csp);
+        var result = Solver.Factory.INSTANCE.createSolver(csp).getSolution();
         assertThat(result).isPresent();
         assertThat(result.get().getValue(x1)).hasValue(1);
         assertThat(result.get().getValue(x2)).hasValue(2);
@@ -45,7 +54,7 @@ public class SolverDecoratorTest {
                 .variableDomain(x2, IntRangeDomain.of(2, 2))
                 .predicateConstraint(Set.of(x1, x2), a -> false)
                 .build();
-        assertThat(Solver.Factory.INSTANCE.createSolver().getSolution(csp)).isEmpty();
+        assertThat(Solver.Factory.INSTANCE.createSolver(csp).getSolution()).isEmpty();
     }
 
     @Test
@@ -55,9 +64,22 @@ public class SolverDecoratorTest {
         var csp = ConstraintSatisfactionProblem.builder()
                 .variableDomain(x1, IntRangeDomain.of(5, 5))
                 .build();
-        var result = Solver.Factory.INSTANCE.createSolver()
-                .getSolution(csp, a -> a.getValue(x1).map(Integer::doubleValue).orElse(0.0));
+        var result = Solver.Factory.INSTANCE.createSolver(csp, a -> a.getValue(x1).map(Integer::doubleValue).orElse(0.0))
+                .getSolution();
         assertThat(result).isPresent();
         assertThat(result.get().getValue(x1)).hasValue(5);
+    }
+
+    @Test
+    void defaultPreprocess_isPassthrough() {
+        // Exercises SolverDecorator.preprocess default via PassthroughDecorator (no preprocess override).
+        // The default preprocess returns the CSP unchanged; getSolutions then delegates to inner.
+        Variable<Integer> x = F.create("x_pt");
+        var csp = ConstraintSatisfactionProblem.builder()
+                .variableDomain(x, IntRangeDomain.of(1, 2))
+                .build();
+        Solver inner = c -> Stream.of(1, 2).map(v -> Assignment.of(Map.of(x, v)));
+        var solutions = PassthroughDecorator.builder().inner(inner).build().getSolutions(csp).toList();
+        assertThat(solutions).hasSize(2);
     }
 }

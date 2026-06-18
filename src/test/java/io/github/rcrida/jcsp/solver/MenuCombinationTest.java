@@ -61,13 +61,13 @@ public class MenuCombinationTest {
 
     @Test
     void allSolutions() {
-        val solutions = Solver.Factory.INSTANCE.createSolver().getSolutions(problem()).toList();
+        val solutions = Solver.Factory.INSTANCE.createSolver(problem()).getSolutions().toList();
         assertThat(solutions).hasSize(6);
     }
 
     @Test
     void solution() {
-        val result = Solver.Factory.INSTANCE.createSolver().getSolution(problem());
+        val result = Solver.Factory.INSTANCE.createSolver(problem()).getSolution();
         assertThat(result).hasValueSatisfying(assignment -> {
             assertThat(assignment.isSolution(problem())).isTrue();
             System.out.println("Menu: " + assignment);

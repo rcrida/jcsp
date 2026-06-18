@@ -38,7 +38,7 @@ public class RealValuedConstraintTest {
 
     @Test
     void solvedEntirelyByBoundsPropagation() {
-        var solutions = Solver.Factory.INSTANCE.createSolver().getSolutions(problem()).toList();
+        var solutions = Solver.Factory.INSTANCE.createSolver(problem()).getSolutions().toList();
         assertThat(solutions).hasSize(1);
 
         Assignment solution = solutions.get(0);
@@ -58,7 +58,7 @@ public class RealValuedConstraintTest {
                 .variableDomain(y, IntervalDomain.of(0.0, 5.0))
                 .sumConstraint(Set.of(x, y), Operator.EQ, 7.0)
                 .build();
-        var solution = Solver.Factory.INSTANCE.createSolver().getSolution(csp);
+        var solution = Solver.Factory.INSTANCE.createSolver(csp).getSolution();
         assertThat(solution).isPresent();
         double xVal = (Double) solution.get().getValue(x).orElseThrow();
         double yVal = (Double) solution.get().getValue(y).orElseThrow();
@@ -73,6 +73,6 @@ public class RealValuedConstraintTest {
                 .variableDomain(FOOD, IntervalDomain.of(0.0, 30.0))
                 .sumConstraint(Set.of(RENT, FOOD), Operator.EQ, 100.0)
                 .build();
-        assertThat(Solver.Factory.INSTANCE.createSolver().getSolutions(csp)).isEmpty();
+        assertThat(Solver.Factory.INSTANCE.createSolver(csp).getSolutions()).isEmpty();
     }
 }

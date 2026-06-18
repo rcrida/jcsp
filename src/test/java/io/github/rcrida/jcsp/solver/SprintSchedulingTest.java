@@ -56,7 +56,7 @@ public class SprintSchedulingTest {
         //   review at 0: dev1 and dev2 must start ≥ 1  → (1,1), (1,2), (2,1), (2,2) — 4 schedules
         //   review at 1: both devs must start at 2     → (2,2,1)                    — 1 schedule
         //   review at 2: both devs must start at 0     → (0,0,2)                    — 1 schedule
-        val solutions = Solver.Factory.INSTANCE.createSolver().getSolutions(problem()).toList();
+        val solutions = Solver.Factory.INSTANCE.createSolver(problem()).getSolutions().toList();
         assertThat(solutions).hasSize(6);
         solutions.forEach(a -> System.out.println(
                 "dev1=" + a.getValue(DEV1).orElseThrow() +

@@ -62,8 +62,8 @@ public class NQueensTest {
     void solution() {
         val csp = nQueens();
         assertThat(csp.getSearchSpace()).isEqualTo(BigInteger.valueOf(16777216));
-        val solver = Solver.Factory.INSTANCE.createSolver();
-        val optionalSolution = solver.getSolution(csp);
+        val solver = Solver.Factory.INSTANCE.createSolver(csp);
+        val optionalSolution = solver.getSolution();
         printAssignment(optionalSolution.orElseThrow());
         System.out.println(optionalSolution.orElseThrow().getStatistics());
     }
@@ -71,8 +71,8 @@ public class NQueensTest {
     @Test
     void solutions() {
         val csp = nQueens();
-        val solver = Solver.Factory.INSTANCE.createSolver();
-        assertThat(solver.getSolutions(csp)).hasSize(92);
+        val solver = Solver.Factory.INSTANCE.createSolver(csp);
+        assertThat(solver.getSolutions()).hasSize(92);
     }
 
     @Test
@@ -93,7 +93,7 @@ public class NQueensTest {
             for (int j = 0; j < i; j++)
                 cspBuilder.offsetConstraint(VARIABLES[i], i - j, Operator.NEQ, VARIABLES[j]);
         cspBuilder.increasingConstraint(List.of(VARIABLES[0], VARIABLES[N - 1]));
-        assertThat(Solver.Factory.INSTANCE.createSolver().getSolutions(cspBuilder.build())).hasSize(46);
+        assertThat(Solver.Factory.INSTANCE.createSolver(cspBuilder.build()).getSolutions()).hasSize(46);
     }
 
     @Test

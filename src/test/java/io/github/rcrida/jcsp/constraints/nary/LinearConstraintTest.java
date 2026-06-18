@@ -133,7 +133,7 @@ public class LinearConstraintTest {
                 .variableDomain(y, IntRangeDomain.of(0, 1))
                 .linearConstraint(Map.of(x, 2, y, 3), Operator.EQ, 50)
                 .build();
-        assertThat(Solver.Factory.INSTANCE.createSolver().getSolutions(csp)).isEmpty();
+        assertThat(Solver.Factory.INSTANCE.createSolver(csp).getSolutions()).isEmpty();
     }
 
     @Test
@@ -144,7 +144,7 @@ public class LinearConstraintTest {
                 .variableDomain(y, IntRangeDomain.of(0, 4))
                 .linearConstraint(Map.of(x, 2, y, 3), Operator.EQ, 12)
                 .build();
-        assertThat(Solver.Factory.INSTANCE.createSolver().getSolutions(csp)).hasSize(2);
+        assertThat(Solver.Factory.INSTANCE.createSolver(csp).getSolutions()).hasSize(2);
     }
 
     // --- propagate() ---

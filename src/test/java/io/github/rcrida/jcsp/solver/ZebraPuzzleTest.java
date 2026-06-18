@@ -135,7 +135,7 @@ public class ZebraPuzzleTest {
     @Test
     void solution() {
         val csp = puzzle();
-        val result = Solver.Factory.INSTANCE.createSolver().getSolution(csp);
+        val result = Solver.Factory.INSTANCE.createSolver(csp).getSolution();
         assertThat(result).hasValueSatisfying(assignment -> {
             assertThat(assignment.isSolution(csp)).isTrue();
             assertThat(assignment).isEqualTo(Assignment.of(Map.ofEntries(
@@ -153,6 +153,6 @@ public class ZebraPuzzleTest {
     @Test
     void uniqueSolution() {
         val csp = puzzle();
-        assertThat(Solver.Factory.INSTANCE.createSolver().getSolutions(csp)).hasSize(1);
+        assertThat(Solver.Factory.INSTANCE.createSolver(csp).getSolutions()).hasSize(1);
     }
 }

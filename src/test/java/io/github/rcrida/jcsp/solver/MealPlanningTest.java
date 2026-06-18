@@ -56,15 +56,15 @@ public class MealPlanningTest {
     @Test
     void exactlyTwoProduce_correctSolutionCount() {
         // C(5,2) × 2^2 × 3^3 = 10 × 4 × 27 = 1080
-        val solutions = Solver.Factory.INSTANCE.createSolver()
-                .getSolutions(basicPlan(Operator.EQ, 2)).toList();
+        val solutions = Solver.Factory.INSTANCE.createSolver(basicPlan(Operator.EQ, 2))
+                .getSolutions().toList();
         assertThat(solutions).hasSize(1080);
     }
 
     @Test
     void exactlyTwoProduce_allSolutionsSatisfyConstraint() {
-        val solutions = Solver.Factory.INSTANCE.createSolver()
-                .getSolutions(basicPlan(Operator.EQ, 2)).toList();
+        val solutions = Solver.Factory.INSTANCE.createSolver(basicPlan(Operator.EQ, 2))
+                .getSolutions().toList();
         assertThat(solutions).allSatisfy(sol -> {
             long produceCount = ALL_MEALS.stream()
                     .map(v -> sol.getValue(v).orElseThrow())
@@ -81,8 +81,8 @@ public class MealPlanningTest {
         // k=4: C(5,4)×2^4×3^1 = 5×16×3  = 240
         // k=5: C(5,5)×2^5×3^0 = 1×32×1  = 32
         // Total: 720 + 240 + 32 = 992
-        val solutions = Solver.Factory.INSTANCE.createSolver()
-                .getSolutions(basicPlan(Operator.GEQ, 3)).toList();
+        val solutions = Solver.Factory.INSTANCE.createSolver(basicPlan(Operator.GEQ, 3))
+                .getSolutions().toList();
         assertThat(solutions).hasSize(992);
     }
 
@@ -91,8 +91,8 @@ public class MealPlanningTest {
         // k=0: 3^5 = 243
         // k=1: C(5,1)×2×3^4 = 5×2×81 = 810
         // Total: 243 + 810 = 1053
-        val solutions = Solver.Factory.INSTANCE.createSolver()
-                .getSolutions(basicPlan(Operator.LEQ, 1)).toList();
+        val solutions = Solver.Factory.INSTANCE.createSolver(basicPlan(Operator.LEQ, 1))
+                .getSolutions().toList();
         assertThat(solutions).hasSize(1053);
     }
 
@@ -116,7 +116,7 @@ public class MealPlanningTest {
                 .amongConstraint(ALL_MEALS, PRODUCE,                Operator.EQ, 2)
                 .amongConstraint(ALL_MEALS, Set.of(Food.PROTEIN),   Operator.EQ, 1)
                 .build();
-        val solutions = Solver.Factory.INSTANCE.createSolver().getSolutions(csp).toList();
+        val solutions = Solver.Factory.INSTANCE.createSolver(csp).getSolutions().toList();
         assertThat(solutions).hasSize(480);
         assertThat(solutions).allSatisfy(sol -> {
             long produceMeals  = ALL_MEALS.stream().map(v -> sol.getValue(v).orElseThrow()).filter(PRODUCE::contains).count();
@@ -139,7 +139,7 @@ public class MealPlanningTest {
                 .variableDomain(DINNER,          EnumDomain.of(Food.PROTEIN, Food.CARBS, Food.FAT))
                 .amongConstraint(ALL_MEALS, PRODUCE, Operator.EQ, 2)
                 .build();
-        val solutions = Solver.Factory.INSTANCE.createSolver().getSolutions(csp).toList();
+        val solutions = Solver.Factory.INSTANCE.createSolver(csp).getSolutions().toList();
         // morning_snack and afternoon_snack both forced to produce (2 choices each).
         // Other 3 slots: 3 non-produce choices each. 2×2×3^3 = 4×27 = 108 solutions.
         assertThat(solutions).hasSize(108);
@@ -161,7 +161,7 @@ public class MealPlanningTest {
                 .variableDomain(DINNER,          nonProduceDomain)
                 .amongConstraint(ALL_MEALS, PRODUCE, Operator.EQ, 2)
                 .build();
-        assertThat(Solver.Factory.INSTANCE.createSolver().getSolutions(csp)).isEmpty();
+        assertThat(Solver.Factory.INSTANCE.createSolver(csp).getSolutions()).isEmpty();
     }
 
     @Test
@@ -180,7 +180,7 @@ public class MealPlanningTest {
                 .amongConstraint(ALL_MEALS, PRODUCE,              Operator.GEQ, 1)
                 .increasingConstraint(List.of(BREAKFAST, MORNING_SNACK, LUNCH, AFTERNOON_SNACK, DINNER))
                 .build();
-        val solution = Solver.Factory.INSTANCE.createSolver().getSolution(csp);
+        val solution = Solver.Factory.INSTANCE.createSolver(csp).getSolution();
         assertThat(solution).isPresent();
         assertThat(solution).hasValueSatisfying(sol -> {
             long proteinMeals = ALL_MEALS.stream()

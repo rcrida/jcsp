@@ -75,8 +75,8 @@ public class CryptarithmeticTest {
     void solution() {
         val csp = twoPlusTwoEqualsFour();
         assertThat(csp.getSearchSpace()).isEqualTo(BigInteger.valueOf(8000000));
-        val solver = Solver.Factory.INSTANCE.createSolver();
-        val optionalSolution = solver.getSolution(csp);
+        val solver = Solver.Factory.INSTANCE.createSolver(csp);
+        val optionalSolution = solver.getSolution();
         System.out.println(optionalSolution);
         assertThat(optionalSolution).hasValueSatisfying(value -> {
             assertThat(value).isEqualTo(Assignment.of(Map.of(
@@ -98,8 +98,8 @@ public class CryptarithmeticTest {
     @Test
     void searchStream() {
         val csp = twoPlusTwoEqualsFour();
-        val solver = Solver.Factory.INSTANCE.createSolver();
-        val solutions = solver.getSolutions(csp).toList();
+        val solver = Solver.Factory.INSTANCE.createSolver(csp);
+        val solutions = solver.getSolutions().toList();
         System.out.println(solutions);
         assertThat(solutions).hasSize(7);
     }

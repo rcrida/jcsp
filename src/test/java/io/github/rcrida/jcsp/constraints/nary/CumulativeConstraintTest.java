@@ -178,6 +178,6 @@ public class CumulativeConstraintTest {
                 .variableDomain(s2, IntRangeDomain.of(0, 3))
                 .cumulativeConstraint(List.of(s1, s2), List.of(2, 2), List.of(1, 1), 1)
                 .build();
-        assertThat(Solver.Factory.INSTANCE.createSolver().getSolutions(csp)).hasSize(6);
+        assertThat(Solver.Factory.INSTANCE.createSolver(csp).getSolutions()).hasSize(6);
     }
 }

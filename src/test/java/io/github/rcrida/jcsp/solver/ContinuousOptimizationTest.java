@@ -32,8 +32,8 @@ public class ContinuousOptimizationTest {
                 .variableDomain(y, IntervalDomain.of(0.0, 10.0))
                 .sumConstraint(Set.of(x, y), Operator.EQ, 7.0)
                 .build();
-        var solution = Solver.Factory.INSTANCE.createSolver()
-                .getSolution(csp, a -> Math.pow((Double) a.getValue(x).orElseThrow() - 2.0, 2));
+        var solution = Solver.Factory.INSTANCE.createSolver(csp, a -> Math.pow((Double) a.getValue(x).orElseThrow() - 2.0, 2))
+                .getSolution();
         assertThat(solution).isPresent();
         assertThat((Double) solution.get().getValue(x).orElseThrow()).isCloseTo(2.0, within(0.01));
         assertThat((Double) solution.get().getValue(y).orElseThrow()).isCloseTo(5.0, within(0.01));

@@ -27,7 +27,7 @@ public class IndependentSubproblemSolverTest {
             .notEqualsConstraint(V3, V4)
             .build();
 
-    Solver inner = Solver.Factory.INSTANCE.createSolver();
+    Solver inner = csp -> Solver.Factory.INSTANCE.createSolver(csp).getSolutions();
     IndependentSubproblemSolver solver = IndependentSubproblemSolver.builder().inner(inner).build();
 
     @Test
