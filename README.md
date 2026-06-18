@@ -7,7 +7,7 @@ A Java library implementing classic AI algorithms for solving Constraint Satisfa
 ## Features
 
 - **Multiple solving strategies**: backtracking search, tree solver, cutset conditioning, tree decomposition, and independent subproblem decomposition
-- **Optimization**: branch-and-bound search via `getSolution(csp, objective)` and `getSolutions(csp, objective)` — returns the optimal assignment or an improving stream of assignments
+- **Optimization**: branch-and-bound search via `createSolver(csp, objective)` — returns a `BoundSolver` whose `getSolution()` finds the global optimum and `getSolutions()` streams improving assignments
 - **Consistency preprocessing**: AC3 arc consistency, node consistency, AllDiff GAC (Régin 1994), SumConstraint and LinearConstraint bounds propagation, CountConstraint and AmongConstraint value-set propagation, InverseConstraint arc consistency, AtLeastN/AtMostN boolean forcing, CumulativeConstraint timetabling propagation, GlobalCardinalityConstraint value propagation, LexConstraint bounds propagation, and NaryTuplesConstraint table GAC — all run in a combined fixpoint loop so each propagator benefits from the others' reductions
 - **Flexible constraint types**: unary, binary (equals, not-equals, offset, comparator, logic, element, predicate, tuples), and n-ary (AllDiff, AtMostOne, AtLeastN, AtMostN, ExactlyOne, Sum, Linear, Count, Among, Inverse, GlobalCardinality, Cumulative, Tuples, Increasing, Decreasing, Lex, predicate)
 - **Boolean domain**: `BooleanDomain` for modelling binary assignment problems (e.g. timetabling as a 0-1 matrix)
@@ -16,7 +16,7 @@ A Java library implementing classic AI algorithms for solving Constraint Satisfa
 - **Local search**: `LocalSolver.Factory.INSTANCE` wires the full pipeline (NC + AC3 + bounds/value propagation → independent subproblem decomposition → min-conflicts) and supports both satisfaction and optimization. Seeded by `RandomAssignmentFactory`, `GreedyAssignmentFactory`, or `FallbackAssignmentFactory` for hybrid restart strategies
 - **Reification**: `ReifiedConstraint` (`b <-> body`) and `ImplicationConstraint` (`b -> body`) introduce boolean indicator variables that capture constraint satisfaction — enables soft constraints, counting satisfaction, and conditional constraints via `csp.reifyConstraint(b, constraint)` and `csp.impliesConstraint(b, constraint)`
 - **Real-valued variables**: `IntervalDomain` represents a continuous `[min, max]` range of `double`s. `SumConstraint` and `LinearConstraint` (with a `Double` bound) propagate over interval bounds, so many continuous linear-arithmetic problems are solved entirely by propagation
-- **Continuous optimization**: the same `createSolver()` auto-detects `IntervalDomain` variables and explores their feasible region via `BisectionConditioningSolver` — recursively bisecting intervals to within `DEFAULT_BISECTION_EPSILON (1e-3)`, repropagating bounds at each step, then filtering the resulting feasible points by a `ToDoubleFunction<Assignment>` objective and returning the minimum via `getSolution(csp, objective)`
+- **Continuous optimization**: `createSolver(csp, objective)` auto-detects `IntervalDomain` variables and explores their feasible region via `BisectionConditioningSolver` — recursively bisecting intervals to within `DEFAULT_BISECTION_EPSILON (1e-3)`, repropagating bounds at each step, then filtering the resulting feasible points by the objective; `getSolution()` returns the global optimum and `getSolutions()` streams improving assignments
 
 ## Usage
 
@@ -33,22 +33,20 @@ ConstraintSatisfactionProblem csp = ConstraintSatisfactionProblem.builder()
     .allDiffConstraint(Set.of(v1, v2, v3))
     .build();
 
-Solver.Factory.INSTANCE.createSolver().getSolutions(csp).forEach(System.out::println);
+Solver.Factory.INSTANCE.createSolver(csp).getSolutions().forEach(System.out::println);
 ```
 
 ### Optimization
 
-Pass a `ToDoubleFunction<Assignment>` as the objective to minimise. The objective is called on partial assignments during branch-and-bound pruning, so unassigned variables must be handled gracefully (e.g. with `orElse`):
+Pass a `ToDoubleFunction<Assignment>` as the objective to minimise. `createSolver(csp, objective)` returns a `BoundSolver`: call `getSolution()` for the global optimum or `getSolutions()` for the full improving stream. The objective is called on partial assignments during branch-and-bound pruning, so unassigned variables must be handled gracefully (e.g. with `orElse`):
 
 ```java
-Solver solver = Solver.Factory.INSTANCE.createSolver();
-
 // Returns the assignment with the minimum cost
-Optional<Assignment> best = solver.getSolution(csp, assignment ->
-    assignment.getValue(x).orElse(0) + assignment.getValue(y).orElse(0));
+Optional<Assignment> best = Solver.Factory.INSTANCE.createSolver(csp, assignment ->
+    assignment.getValue(x).orElse(0) + assignment.getValue(y).orElse(0)).getSolution();
 
 // Returns a stream of improving assignments; the last element is the global optimum
-solver.getSolutions(csp, objective).forEach(System.out::println);
+Solver.Factory.INSTANCE.createSolver(csp, objective).getSolutions().forEach(System.out::println);
 ```
 
 ### Real-valued variables
@@ -69,12 +67,12 @@ ConstraintSatisfactionProblem csp = ConstraintSatisfactionProblem.builder()
     .build();
 
 // Resolved to a single solution by bounds propagation alone: food=40.0, transport=12.0
-Solver.Factory.INSTANCE.createSolver().getSolutions(csp).forEach(System.out::println);
+Solver.Factory.INSTANCE.createSolver(csp).getSolutions().forEach(System.out::println);
 ```
 
 ### Continuous optimization
 
-`createSolver()` auto-detects `IntervalDomain` variables when called with an objective. `BisectionConditioningSolver` recursively bisects each non-singleton interval to within `DEFAULT_BISECTION_EPSILON` (`1e-3`), repropagating bounds at each step to prune infeasible halves, and returns the feasible point with the lowest objective value. Unlike branch-and-bound, the objective is always called on **complete** assignments, so `orElseThrow()` is safe:
+`createSolver(csp, objective)` auto-detects `IntervalDomain` variables. `BisectionConditioningSolver` recursively bisects each non-singleton interval to within `DEFAULT_BISECTION_EPSILON` (`1e-3`), repropagating bounds at each step to prune infeasible halves, and returns the feasible point with the lowest objective value. Unlike branch-and-bound, the objective is always called on **complete** assignments, so `orElseThrow()` is safe:
 
 ```java
 Variable<Double> x = F.create("x");
@@ -87,11 +85,12 @@ ConstraintSatisfactionProblem csp = ConstraintSatisfactionProblem.builder()
     .build();
 
 // Minimise (x−2)² subject to x+y=7, x,y∈[0,10]  →  x≈2, y≈5
-Optional<Assignment> best = Solver.Factory.INSTANCE.createSolver()
-    .getSolution(csp, a -> Math.pow((Double) a.getValue(x).orElseThrow() - 2.0, 2));
+Optional<Assignment> best = Solver.Factory.INSTANCE
+    .createSolver(csp, a -> Math.pow((Double) a.getValue(x).orElseThrow() - 2.0, 2))
+    .getSolution();
 ```
 
-`getSolutions(csp, objective)` returns a lazy stream of improving assignments (each strictly better than the previous); the last element is the global optimum found within the bisection resolution.
+`getSolutions()` on the returned `BoundSolver` gives a lazy stream of improving assignments (each strictly better than the previous); the last element is the global optimum found within the bisection resolution.
 
 ### Constraint builder methods
 
@@ -145,19 +144,26 @@ builder.impliesConstraint(b, constraint)                    // b -> constraint  
 
 ## Solver Chain
 
-The default solver (`Solver.Factory.INSTANCE.createSolver()`) applies strategies in order, each preprocessing the problem before delegating:
+`Solver.Factory.INSTANCE` builds two distinct chains, each returning a `BoundSolver`:
 
+**Satisfaction** (`createSolver(csp)`):
 ```
 NodeConsistency → PropagationFixpoint(AC3 ↔ AllDiff GAC ↔ SumBounds ↔ LinearBounds ↔ CountValue ↔ InverseArc ↔ AmongValue ↔ AtLeastN/AtMostN ↔ CumulativeTimetable ↔ GlobalCardinalityValue ↔ LexBounds ↔ TuplesGAC)
     → IndependentSubproblems → TreeDecomposition → CutsetConditioning
-    → TreeSolver / BranchAndBound(BacktrackingSearch + SumBounds)
+    → TreeSolver / BacktrackingSearch(MAC + SumBounds)
 ```
+For problems with `IntervalDomain` variables the fixpoint snaps non-singleton intervals to their midpoints, giving one concrete solution.
 
-`PropagationFixpoint` runs AC3, AllDiff GAC, SumConstraint and LinearConstraint bounds propagation, CountConstraint and AmongConstraint value-set propagation, InverseConstraint arc consistency, AtLeastN/AtMostN boolean forcing, CumulativeConstraint timetabling propagation, GlobalCardinalityConstraint value propagation, LexConstraint bounds propagation, and NaryTuplesConstraint table GAC in a combined fixpoint loop — each can expose new reductions the others exploit. Many highly-constrained problems (e.g. Zebra, Sudoku, MagicSquare) are solved entirely by propagation without any backtracking. SumConstraint bounds propagation is also applied inside the MAC inference during backtracking, detecting sum infeasibility as early as possible.
+**Optimization** (`createSolver(csp, objective)`):
+```
+NodeConsistency → PropagationFixpoint → BisectionConditioning (continuous only)
+    → BranchAndBound(BacktrackingSearch + MAC + SumBounds)
+```
+The fixpoint leaves intervals open for bisection. `BisectionConditioningSolver` bisects each non-singleton interval to within `DEFAULT_BISECTION_EPSILON`, repropagating bounds at each step; for purely discrete CSPs it is a passthrough. `BranchAndBound` then handles remaining discrete variables.
+
+`PropagationFixpoint` runs all propagators in a combined fixpoint loop — each can expose new reductions the others exploit. Many highly-constrained problems (e.g. Zebra, Sudoku, MagicSquare) are solved entirely by propagation without any backtracking. SumConstraint bounds propagation is also applied inside the MAC inference during backtracking, detecting sum infeasibility as early as possible.
 
 Tree decomposition uses a domain-aware clique size limit (`d^targetTreewidth`, capped at 1,000,000) and is skipped when: the estimated tree complexity exceeds the search space, the constraint graph minimum degree ≥ targetTreewidth (guaranteeing the decomposer would fail), or when preprocessing fully determines the solution. When preprocessing produces all-singleton domains the solver short-circuits and returns the forced assignment directly without invoking any downstream stages. Cutset conditioning applies a practical three-tier complexity guard before conditioning.
-
-`BisectionConditioningSolver` sits between `PropagationFixpoint` and `IndependentSubproblems` in the single chain. When called without an objective it is a passthrough (no bounded domains remain after `PropagationFixpoint` snaps them to midpoints). When called with an objective it auto-detects non-singleton `IntervalDomain` variables and bisects them to within `DEFAULT_BISECTION_EPSILON`, repropagating bounds at each step; for discrete problems it passes through to branch-and-bound unchanged.
 
 ## Local Search
 

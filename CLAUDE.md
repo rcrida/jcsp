@@ -35,7 +35,7 @@ Coverage report is generated at `target/site/jacoco/index.html`. **100% instruct
 
 ## Architecture Overview
 
-This is a Constraint Satisfaction Problem (CSP) solver library implementing classic AI algorithms. The core flow is: define a `ConstraintSatisfactionProblem` (variables + domains + constraints), then call `Solver.Factory.INSTANCE.createSolver().getSolutions(csp)` to get a lazy `Stream` of `Assignment` solutions.
+This is a Constraint Satisfaction Problem (CSP) solver library implementing classic AI algorithms. The core flow is: define a `ConstraintSatisfactionProblem` (variables + domains + constraints), then call `Solver.Factory.INSTANCE.createSolver(csp).getSolutions()` to get a lazy `Stream` of `Assignment` solutions.
 
 ### Core Abstractions
 
@@ -45,19 +45,26 @@ This is a Constraint Satisfaction Problem (CSP) solver library implementing clas
 - **`BoundedDomain<T extends Number & Comparable<T>>`** — `Domain` extension for non-enumerable continuous ranges; `getMin()`/`getMax()`/`withBounds(newMin, newMax)`. `IntervalDomain` is the sole implementation: a `[min, max]` range of `double`s representing a real-valued variable; `size()` returns `1` for a singleton interval and `Integer.MAX_VALUE` otherwise. Only `SumConstraint` and `LinearConstraint` (with a `Double` bound) support `BoundedDomain` variables; `ConstraintSatisfactionProblem`'s build-time validation rejects any other constraint type referencing one with `IllegalArgumentException`
 - **`Assignment`** — immutable mapping of variables to values; validated against domains and constraints
 - **`Constraint`** / `UnaryConstraint` / `BinaryConstraint` / `NaryConstraint` — hierarchical constraint interfaces; each checks `isSatisfiedBy(Assignment)`
-- **`ConstraintSatisfactionProblem`** — aggregates variables, domains, constraints; analyzes graph structure (tree/cyclic, connected components, cutsets)
+- **`ConstraintSatisfactionProblem`** — aggregates variables, domains, constraints; analyzes graph structure (tree/cyclic, connected components, cutsets); `isFullyDetermined()` returns true when every variable's domain is a singleton
+- **`BoundSolver`** — public API returned by `Solver.Factory.createSolver(csp)` and `createSolver(csp, objective)`; wraps a built chain with the CSP already bound. Provides no-arg `getSolutions()` and `getSolution()`. The satisfaction factory returns a lambda; the optimization factory returns an anonymous class that overrides `getSolution()` to use `reduce((a,b) -> b)` so it returns the global optimum rather than the first improving candidate
 
 ### Solver Chain (Decorator Pattern)
 
-`Solver.Factory.INSTANCE.createSolver()` builds a chain of solver decorators, each applied in order before delegating to the next:
+`Solver.Factory.INSTANCE` builds two distinct chains, each returning a `BoundSolver` with the CSP already bound:
+
+**Satisfaction** (`createSolver(csp)`): `NodeConsistency → PropagationFixpoint(snap=true) → IndependentSubproblems → TreeDecomposition → CutsetConditioning → TreeSolver / BacktrackingSearch`
+
+**Optimization** (`createSolver(csp, objective)`): `NodeConsistency → PropagationFixpoint(snap=false) → BisectionConditioning (continuous only) → BranchAndBound`
+
+Key decorators:
 
 1. **`NodeConsistentSolver`** — prunes domains via node consistency
-2. **`PropagationFixpointSolver`** — runs AC3, AllDiff GAC (Régin 1994), SumConstraint bounds propagation, LinearConstraint bounds propagation, CountConstraint value propagation, InverseConstraint arc consistency, AmongConstraint value-set propagation, AtLeastNConstraint/AtMostNConstraint boolean forcing, CumulativeConstraint timetabling propagation, GlobalCardinalityConstraint value propagation, LexConstraint bounds propagation, and NaryTuplesConstraint table GAC in a combined fixpoint loop via `PROPAGATORS` list; each propagator can enable the others to make further reductions. Many highly-constrained problems (Zebra, Sudoku, MagicSquare) are solved entirely at this step. Adding a new propagator requires one line: `FixpointConsistency.of(MyConstraint.class)`. The solver branches on the call type: `getSolutions(csp)` (no objective) snaps any non-singleton `BoundedDomain` variable to its interval midpoint after propagation converges, giving one concrete solution; `getSolutions(csp, objective)` runs the propagation fixpoint only, leaving intervals open for `BisectionConditioningSolver` downstream.
-3. **`BisectionConditioningSolver`** — handles `BoundedDomain` variables that remain non-singleton after propagation by recursively bisecting the widest interval at its midpoint, re-propagating `SumConstraint`/`LinearConstraint` bounds on each half, and snapping to the midpoint once the width falls within `epsilon` (`Solver.Factory.DEFAULT_BISECTION_EPSILON = 1e-3`). When called without an objective, it auto-detects whether any non-singleton bounded domains exist and passes through to the inner chain if not. When called with an objective, it similarly passes through for discrete problems (no bounded domains), or enumerates feasible points via bisection and filters for improving candidates — so `getSolution(csp, objective)` returns the feasible point with the minimum objective found across the bisection tree.
-4. **`IndependentSubproblemSolver`** — decomposes into independent subproblems and combines solutions
+2. **`PropagationFixpointSolver`** — runs AC3, AllDiff GAC (Régin 1994), SumConstraint bounds propagation, LinearConstraint bounds propagation, CountConstraint value propagation, InverseConstraint arc consistency, AmongConstraint value-set propagation, AtLeastNConstraint/AtMostNConstraint boolean forcing, CumulativeConstraint timetabling propagation, GlobalCardinalityConstraint value propagation, LexConstraint bounds propagation, and NaryTuplesConstraint table GAC in a combined fixpoint loop via `PROPAGATORS` list; each propagator can enable the others to make further reductions. Many highly-constrained problems (Zebra, Sudoku, MagicSquare) are solved entirely at this step. Adding a new propagator requires one line: `FixpointConsistency.of(MyConstraint.class)`. The `snap` field controls `BoundedDomain` handling: `true` (satisfaction chain) snaps non-singleton intervals to their midpoint giving one concrete solution; `false` (optimization chain) leaves intervals open for `BisectionConditioningSolver` downstream.
+3. **`BisectionConditioningSolver`** — only in the optimization chain; handles `BoundedDomain` variables that remain non-singleton after propagation by recursively bisecting the widest interval at its midpoint, re-propagating `SumConstraint`/`LinearConstraint` bounds on each half, and snapping to the midpoint once the width falls within `epsilon` (`Solver.Factory.DEFAULT_BISECTION_EPSILON = 1e-3`). When `findWidestBounded` returns null (all bounded domains are singleton), checks `isFullyDetermined()`: if true returns `forcedSolution(csp)`; if false (discrete variables remain) delegates to the inner chain. Passes through entirely for discrete CSPs (no bounded domains). Streams feasible points filtered by improving objective.
+4. **`IndependentSubproblemSolver`** — decomposes into independent subproblems and combines solutions (satisfaction chain only)
 5. **`TreeDecompositionSolver`** — applies tree decomposition for near-tree problems; skipped when constraint graph minimum degree ≥ targetTreewidth (exact early exit)
 6. **`CutsetConditioningSolver`** — handles cyclic graphs by conditioning on a cycle cutset
-7. **`TreeSolver`** / **`BacktrackingSearch`** — terminal solvers for tree-structured or general CSPs respectively
+7. **`TreeSolver`** / **`BacktrackingSearch`** — terminal solvers for tree-structured or general CSPs respectively; `BranchAndBoundSolver` wraps `BacktrackingSearch` in the optimization chain
 
 `SolverDecorator.getSolutions()` short-circuits immediately when any preprocessing step reduces all domains to singletons, returning the forced assignment without invoking downstream stages.
 
@@ -160,4 +167,4 @@ Classic CSP problems serve as end-to-end integration tests:
 - `ReificationTest` — soft constraints via `reifyConstraint` / `impliesConstraint`
 - `ParkrunSchedulingTest` / `TimetableSchedulingBinaryAssignmentTest` — real-world scheduling
 - `RealValuedConstraintTest` — `IntervalDomain` variables solved entirely by `sumConstraint`/`linearConstraint` bounds propagation
-- `ContinuousOptimizationTest` — continuous optimization via `getSolution(csp, objective)` over `IntervalDomain` variables; bisection explores the feasible region down to `DEFAULT_BISECTION_EPSILON`
+- `ContinuousOptimizationTest` — continuous optimization via `createSolver(csp, objective).getSolution()` over `IntervalDomain` variables; bisection explores the feasible region down to `DEFAULT_BISECTION_EPSILON`
