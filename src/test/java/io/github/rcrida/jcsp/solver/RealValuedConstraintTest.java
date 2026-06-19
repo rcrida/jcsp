@@ -129,6 +129,36 @@ public class RealValuedConstraintTest {
     }
 
     @Test
+    void offsetConstraint_leq_clipsUpperBound() {
+        // x∈[0,10], y∈[0,10], x+3<=y: propagation clips x.max to 7; sum x+y=12 resolves both.
+        Variable<Double> x = F.create("x_oleq"), y = F.create("y_oleq");
+        var csp = ConstraintSatisfactionProblem.builder()
+                .variableDomain(x, IntervalDomain.of(0.0, 10.0))
+                .variableDomain(y, IntervalDomain.of(0.0, 10.0))
+                .offsetConstraint(x, 3.0, Operator.LEQ, y)
+                .sumConstraint(Set.of(x, y), Operator.EQ, 12.0)
+                .build();
+        var solution = Solver.Factory.INSTANCE.createSolver(csp).getSolution();
+        assertThat(solution).isPresent();
+        double xVal = (Double) solution.get().getValue(x).orElseThrow();
+        double yVal = (Double) solution.get().getValue(y).orElseThrow();
+        assertThat(xVal + 3.0).isLessThanOrEqualTo(yVal + 1e-9);
+        assertThat(xVal + yVal).isCloseTo(12.0, within(1e-9));
+    }
+
+    @Test
+    void offsetConstraint_infeasible_returnsNoSolutions() {
+        // x∈[5,10], y∈[0,3], x+3<=y: x.min+3=8 > y.max=3 → infeasible detected by propagation
+        Variable<Double> x = F.create("x_oinf"), y = F.create("y_oinf");
+        var csp = ConstraintSatisfactionProblem.builder()
+                .variableDomain(x, IntervalDomain.of(5.0, 10.0))
+                .variableDomain(y, IntervalDomain.of(0.0, 3.0))
+                .offsetConstraint(x, 3.0, Operator.LEQ, y)
+                .build();
+        assertThat(Solver.Factory.INSTANCE.createSolver(csp).getSolutions()).isEmpty();
+    }
+
+    @Test
     void infeasibleBudget_returnsNoSolutions() {
         // rent fixed at 60.0, but food can be at most 30.0 → rent + food <= 90.0 < 100.0
         var csp = ConstraintSatisfactionProblem.builder()
