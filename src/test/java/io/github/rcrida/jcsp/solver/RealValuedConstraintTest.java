@@ -110,6 +110,25 @@ public class RealValuedConstraintTest {
     }
 
     @Test
+    void offsetConstraint_propagatesBetweenIntervals() {
+        // x∈[0,10], y∈[0,10], x+3.0=y: propagation clips x to [0,7] and y to [3,10].
+        // Sum x+y=10 then forces x=[0,7]∩[0,7]=? → snap x to 3.5, sum forces y=6.5; 3.5+3=6.5 ✓
+        Variable<Double> x = F.create("x_off"), y = F.create("y_off");
+        var csp = ConstraintSatisfactionProblem.builder()
+                .variableDomain(x, IntervalDomain.of(0.0, 10.0))
+                .variableDomain(y, IntervalDomain.of(0.0, 10.0))
+                .offsetConstraint(x, 3.0, Operator.EQ, y)
+                .sumConstraint(Set.of(x, y), Operator.EQ, 10.0)
+                .build();
+        var solution = Solver.Factory.INSTANCE.createSolver(csp).getSolution();
+        assertThat(solution).isPresent();
+        double xVal = (Double) solution.get().getValue(x).orElseThrow();
+        double yVal = (Double) solution.get().getValue(y).orElseThrow();
+        assertThat(xVal + 3.0).isCloseTo(yVal, within(1e-9));
+        assertThat(xVal + yVal).isCloseTo(10.0, within(1e-9));
+    }
+
+    @Test
     void infeasibleBudget_returnsNoSolutions() {
         // rent fixed at 60.0, but food can be at most 30.0 → rent + food <= 90.0 < 100.0
         var csp = ConstraintSatisfactionProblem.builder()

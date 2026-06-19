@@ -17,6 +17,7 @@ import io.github.rcrida.jcsp.constraints.nary.LexConstraint;
 import io.github.rcrida.jcsp.constraints.nary.LinearConstraint;
 import io.github.rcrida.jcsp.constraints.nary.NaryTuplesConstraint;
 import io.github.rcrida.jcsp.constraints.binary.BinaryComparatorConstraint;
+import io.github.rcrida.jcsp.constraints.binary.BinaryOffsetConstraint;
 import io.github.rcrida.jcsp.constraints.nary.SumConstraint;
 import io.github.rcrida.jcsp.constraints.unary.UnaryComparatorConstraint;
 import io.github.rcrida.jcsp.solver.assignmentfactory.InitialAssignmentFactory;
@@ -54,6 +55,7 @@ public interface LocalSolver {
                 NodeConsistency.INSTANCE,
                 FixpointConsistency.of(UnaryComparatorConstraint.class),
                 FixpointConsistency.of(BinaryComparatorConstraint.class),
+                FixpointConsistency.of(BinaryOffsetConstraint.class),
                 AC3.INSTANCE,
                 FixpointConsistency.of(SumConstraint.class),
                 FixpointConsistency.of(LinearConstraint.class),

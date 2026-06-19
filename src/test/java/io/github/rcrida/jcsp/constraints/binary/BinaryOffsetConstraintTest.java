@@ -1,6 +1,10 @@
 package io.github.rcrida.jcsp.constraints.binary;
 
 import io.github.rcrida.jcsp.constraints.Operator;
+import io.github.rcrida.jcsp.domains.Domain;
+import io.github.rcrida.jcsp.domains.DomainObjectSet;
+import io.github.rcrida.jcsp.domains.IntRangeDomain;
+import io.github.rcrida.jcsp.domains.IntervalDomain;
 import lombok.val;
 import io.github.rcrida.jcsp.assignments.Assignment;
 import io.github.rcrida.jcsp.variables.Variable;
@@ -9,6 +13,7 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
 
+import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Stream;
 
@@ -106,5 +111,106 @@ public class BinaryOffsetConstraintTest {
     void of_createsEquivalentConstraint() {
         val expected = BinaryOffsetConstraint.<Number>builder().left(LEFT).right(RIGHT).offset(5).operator(Operator.EQ).build();
         assertThat(BinaryOffsetConstraint.of(LEFT, (Number) 5, Operator.EQ, RIGHT)).isEqualTo(expected);
+    }
+
+    // propagate() tests for IntervalDomain — offset=3.0, L+3 op R
+    static final Variable<Double> L = Variable.Factory.INSTANCE.create("l_off");
+    static final Variable<Double> R = Variable.Factory.INSTANCE.create("r_off");
+    static final double O = 3.0;
+
+    static Map<Variable<?>, Domain<?>> domains(double lLo, double lHi, double rLo, double rHi) {
+        return Map.of(L, IntervalDomain.of(lLo, lHi), R, IntervalDomain.of(rLo, rHi));
+    }
+    static IntervalDomain left(Map<Variable<?>, Domain<?>> m)  { return (IntervalDomain) m.get(L); }
+    static IntervalDomain right(Map<Variable<?>, Domain<?>> m) { return (IntervalDomain) m.get(R); }
+
+    @Test void propagate_neq_noChange() {
+        var result = BinaryOffsetConstraint.of(L, O, Operator.NEQ, R).propagate(domains(0, 10, 0, 10));
+        assertThat(result).isPresent();
+        assertThat(result.get()).isEmpty();
+    }
+
+    @Test void propagate_leq_clipsLeftMaxOnly() {
+        // L=[0,10], R=[3,8], L+3<=R: L.max=min(10,8-3)=5; R.min=max(3,0+3)=3 unchanged
+        var result = BinaryOffsetConstraint.of(L, O, Operator.LEQ, R).propagate(domains(0, 10, 3, 8)).orElseThrow();
+        assertThat(left(result).getMax()).isEqualTo(5.0);
+        assertThat(result.containsKey(R)).isFalse();
+    }
+
+    @Test void propagate_leq_clipsRightMinOnly() {
+        // L=[0,5], R=[0,10], L+3<=R: L.max=min(5,10-3)=5 unchanged; R.min=max(0,0+3)=3
+        var result = BinaryOffsetConstraint.of(L, O, Operator.LEQ, R).propagate(domains(0, 5, 0, 10)).orElseThrow();
+        assertThat(right(result).getMin()).isEqualTo(3.0);
+        assertThat(result.containsKey(L)).isFalse();
+    }
+
+    @Test void propagate_lt_sameAsLeq() {
+        var result = BinaryOffsetConstraint.of(L, O, Operator.LT, R).propagate(domains(0, 10, 3, 8)).orElseThrow();
+        assertThat(left(result).getMax()).isEqualTo(5.0);
+    }
+
+    @Test void propagate_geq_clipsLeftMinOnly() {
+        // L=[0,10], R=[5,8], L+3>=R: L.min=max(0,5-3)=2; R.max=min(8,10+3)=8 unchanged
+        var result = BinaryOffsetConstraint.of(L, O, Operator.GEQ, R).propagate(domains(0, 10, 5, 8)).orElseThrow();
+        assertThat(left(result).getMin()).isEqualTo(2.0);
+        assertThat(result.containsKey(R)).isFalse();
+    }
+
+    @Test void propagate_geq_clipsRightMaxOnly() {
+        // L=[5,10], R=[0,20], L+3>=R: L.min=max(5,0-3)=5 unchanged; R.max=min(20,10+3)=13
+        var result = BinaryOffsetConstraint.of(L, O, Operator.GEQ, R).propagate(domains(5, 10, 0, 20)).orElseThrow();
+        assertThat(right(result).getMax()).isEqualTo(13.0);
+        assertThat(result.containsKey(L)).isFalse();
+    }
+
+    @Test void propagate_gt_sameAsGeq() {
+        var result = BinaryOffsetConstraint.of(L, O, Operator.GT, R).propagate(domains(0, 10, 5, 8)).orElseThrow();
+        assertThat(left(result).getMin()).isEqualTo(2.0);
+    }
+
+    @Test void propagate_eq_clipsLeftMinAndRightMax() {
+        // L=[0,10], R=[5,15], L+3==R: L.min=max(0,5-3)=2; L.max=min(10,15-3)=10 unchanged
+        //                              R.min=max(5,0+3)=5 unchanged; R.max=min(15,10+3)=13
+        var result = BinaryOffsetConstraint.of(L, O, Operator.EQ, R).propagate(domains(0, 10, 5, 15)).orElseThrow();
+        assertThat(left(result).getMin()).isEqualTo(2.0);
+        assertThat(right(result).getMax()).isEqualTo(13.0);
+    }
+
+    @Test void propagate_infeasible() {
+        // L=[5,10], R=[0,3], L+3<=R: L.max=min(10,3-3)=0 < L.min=5 → infeasible
+        assertThat(BinaryOffsetConstraint.of(L, O, Operator.LEQ, R).propagate(domains(5, 10, 0, 3))).isEmpty();
+    }
+
+    @Test void propagate_noChange() {
+        // L=[0,5], R=[5,10], L+3<=R: L.max=min(5,10-3)=5 unchanged; R.min=max(5,0+3)=5 unchanged
+        var result = BinaryOffsetConstraint.of(L, O, Operator.LEQ, R).propagate(domains(0, 5, 5, 10));
+        assertThat(result).isPresent();
+        assertThat(result.get()).isEmpty();
+    }
+
+    @Test void propagate_bothDiscrete_skipped() {
+        Variable<Integer> il = Variable.Factory.INSTANCE.create("il_off"), ir = Variable.Factory.INSTANCE.create("ir_off");
+        var result = BinaryOffsetConstraint.of(il, 3, Operator.LEQ, ir)
+                .propagate(Map.of(il, IntRangeDomain.of(0, 5), ir, IntRangeDomain.of(0, 10)));
+        assertThat(result).isPresent();
+        assertThat(result.get()).isEmpty();
+    }
+
+    @Test void propagate_leftBounded_rightDiscrete_clipsLeft() {
+        // L=Interval[0,10], R={8.0}, L+3<=R: L.max=min(10,8-3)=5
+        var discrete = DomainObjectSet.<Double>builder().value(8.0).build();
+        var result = BinaryOffsetConstraint.of(L, O, Operator.LEQ, R)
+                .propagate(Map.of(L, IntervalDomain.of(0.0, 10.0), R, discrete)).orElseThrow();
+        assertThat(((IntervalDomain) result.get(L)).getMax()).isEqualTo(5.0);
+        assertThat(result.containsKey(R)).isFalse();
+    }
+
+    @Test void propagate_leftDiscrete_rightBounded_clipsRight() {
+        // L={2.0,5.0}, R=Interval[0,10], L+3>=R: R.max=min(10,5+3)=8
+        var discrete = DomainObjectSet.<Double>builder().value(2.0).value(5.0).build();
+        var result = BinaryOffsetConstraint.of(L, O, Operator.GEQ, R)
+                .propagate(Map.of(L, discrete, R, IntervalDomain.of(0.0, 10.0))).orElseThrow();
+        assertThat(((IntervalDomain) result.get(R)).getMax()).isEqualTo(8.0);
+        assertThat(result.containsKey(L)).isFalse();
     }
 }
