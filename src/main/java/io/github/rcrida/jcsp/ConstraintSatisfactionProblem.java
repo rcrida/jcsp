@@ -196,6 +196,11 @@ public class ConstraintSatisfactionProblem {
         return constraintGraph.getNeighbours();
     }
 
+    /** Returns the neighbours of {@code variable}, or an empty set if it has none. */
+    public Set<Variable<?>> getNeighbours(Variable<?> variable) {
+        return getNeighbours().getOrDefault(variable, Set.of());
+    }
+
     /**
      * A set of all binary constraints applicable to this problem. Where possible casts n-ary constrains
      * as additional binary constraints. Ignores n-ary constraints that aren't decomposable.

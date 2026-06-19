@@ -119,7 +119,7 @@ public class TreeDecomposerImpl implements TreeDecomposer {
         while (workGraph.getNumVariables() > 0) {
             // build bag = pick U neighbours (uneliminated)
             val pick = selectVertex(workGraph);
-            val N = workGraph.getNeighbours().get(pick); // TODO add csp.getNeightbours(v)
+            val N = workGraph.getNeighbours(pick);
             val bag = new HashSet<>(N);
             bag.add(pick);
             bags.add(bag);
