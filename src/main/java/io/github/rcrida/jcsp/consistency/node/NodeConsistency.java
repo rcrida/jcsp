@@ -39,7 +39,7 @@ public class NodeConsistency implements ConstraintConsistency {
         val variableDomains = new HashMap<>(problem.getVariableDomains());
         for (UnaryConstraint<?> constraint : unaryConstraints) {
             val variable = constraint.getVariable();
-            val domain = (DiscreteDomain<?>) variableDomains.get(variable);
+            if (!(variableDomains.get(variable) instanceof DiscreteDomain<?> domain)) continue;
             val optionalRevisedDomain = revise(domain, constraint);
             if (optionalRevisedDomain.isPresent()) {
                 val revisedDomain = optionalRevisedDomain.get();

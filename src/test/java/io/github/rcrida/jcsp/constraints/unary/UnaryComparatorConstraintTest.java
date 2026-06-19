@@ -2,6 +2,8 @@ package io.github.rcrida.jcsp.constraints.unary;
 
 import io.github.rcrida.jcsp.assignments.Assignment;
 import io.github.rcrida.jcsp.constraints.Operator;
+import io.github.rcrida.jcsp.domains.Domain;
+import io.github.rcrida.jcsp.domains.IntervalDomain;
 import io.github.rcrida.jcsp.variables.Variable;
 import org.junit.jupiter.api.Test;
 
@@ -38,5 +40,72 @@ public class UnaryComparatorConstraintTest {
     @Test
     void getRelationIncludesOperatorSymbol() {
         assertThat(UnaryComparatorConstraint.of(X, Operator.GEQ, 3).getRelation()).contains(">=").contains("3");
+    }
+
+    // propagate() tests for IntervalDomain
+    static final Variable<Double> DX = Variable.Factory.INSTANCE.create("dx");
+
+    static Map<Variable<?>, Domain<?>> domains(double lo, double hi) {
+        return Map.of(DX, IntervalDomain.of(lo, hi));
+    }
+
+    static IntervalDomain narrowed(Map<Variable<?>, Domain<?>> result) {
+        return (IntervalDomain) result.get(DX);
+    }
+
+    @Test void propagate_geq_clipsMin() {
+        var result = UnaryComparatorConstraint.of(DX, Operator.GEQ, 3.0).propagate(domains(0.0, 10.0));
+        assertThat(result).isPresent();
+        assertThat(narrowed(result.get()).getMin()).isEqualTo(3.0);
+        assertThat(narrowed(result.get()).getMax()).isEqualTo(10.0);
+    }
+
+    @Test void propagate_gt_clipsMin() {
+        var result = UnaryComparatorConstraint.of(DX, Operator.GT, 3.0).propagate(domains(0.0, 10.0));
+        assertThat(result).isPresent();
+        assertThat(narrowed(result.get()).getMin()).isEqualTo(3.0);
+    }
+
+    @Test void propagate_leq_clipsMax() {
+        var result = UnaryComparatorConstraint.of(DX, Operator.LEQ, 7.0).propagate(domains(0.0, 10.0));
+        assertThat(result).isPresent();
+        assertThat(narrowed(result.get()).getMax()).isEqualTo(7.0);
+        assertThat(narrowed(result.get()).getMin()).isEqualTo(0.0);
+    }
+
+    @Test void propagate_lt_clipsMax() {
+        var result = UnaryComparatorConstraint.of(DX, Operator.LT, 7.0).propagate(domains(0.0, 10.0));
+        assertThat(result).isPresent();
+        assertThat(narrowed(result.get()).getMax()).isEqualTo(7.0);
+    }
+
+    @Test void propagate_eq_pinsDomain() {
+        var result = UnaryComparatorConstraint.of(DX, Operator.EQ, 5.0).propagate(domains(0.0, 10.0));
+        assertThat(result).isPresent();
+        assertThat(narrowed(result.get()).getMin()).isEqualTo(5.0);
+        assertThat(narrowed(result.get()).getMax()).isEqualTo(5.0);
+    }
+
+    @Test void propagate_neq_noChange() {
+        var result = UnaryComparatorConstraint.of(DX, Operator.NEQ, 5.0).propagate(domains(0.0, 10.0));
+        assertThat(result).isPresent();
+        assertThat(result.get()).isEmpty();
+    }
+
+    @Test void propagate_infeasible_returnsEmpty() {
+        var result = UnaryComparatorConstraint.of(DX, Operator.GEQ, 20.0).propagate(domains(0.0, 10.0));
+        assertThat(result).isEmpty();
+    }
+
+    @Test void propagate_noChange_returnsEmptyMap() {
+        var result = UnaryComparatorConstraint.of(DX, Operator.GEQ, 0.0).propagate(domains(0.0, 10.0));
+        assertThat(result).isPresent();
+        assertThat(result.get()).isEmpty();
+    }
+
+    @Test void propagate_discreteDomain_skipped() {
+        var result = UnaryComparatorConstraint.of(X, Operator.GEQ, 3).propagate(Map.of(X, io.github.rcrida.jcsp.domains.IntRangeDomain.of(1, 5)));
+        assertThat(result).isPresent();
+        assertThat(result.get()).isEmpty();
     }
 }

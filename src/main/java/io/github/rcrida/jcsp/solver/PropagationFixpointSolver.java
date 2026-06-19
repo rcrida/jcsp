@@ -19,6 +19,7 @@ import io.github.rcrida.jcsp.constraints.nary.LexConstraint;
 import io.github.rcrida.jcsp.constraints.nary.LinearConstraint;
 import io.github.rcrida.jcsp.constraints.nary.NaryTuplesConstraint;
 import io.github.rcrida.jcsp.constraints.nary.SumConstraint;
+import io.github.rcrida.jcsp.constraints.unary.UnaryComparatorConstraint;
 import io.github.rcrida.jcsp.domains.BoundedDomain;
 import org.jspecify.annotations.NonNull;
 
@@ -52,6 +53,7 @@ import java.util.Optional;
 public class PropagationFixpointSolver extends SolverDecorator {
 
     private static final List<ConstraintConsistency> PROPAGATORS = List.of(
+            FixpointConsistency.of(UnaryComparatorConstraint.class),
             AC3.INSTANCE,
             FixpointConsistency.of(AllDiffConstraint.class),
             FixpointConsistency.of(SumConstraint.class),

@@ -66,6 +66,27 @@ public class RealValuedConstraintTest {
     }
 
     @Test
+    void comparatorConstraint_clipsInterval() {
+        // x ∈ [0, 10], x >= 3.0 and x <= 7.0: propagation clips to [3.0, 7.0];
+        // sumConstraint x + y = 5.0 with y ∈ [0, 10] forces y to [0, 2] after clipping x.
+        Variable<Double> x = F.create("x_cc");
+        Variable<Double> y = F.create("y_cc");
+        var csp = ConstraintSatisfactionProblem.builder()
+                .variableDomain(x, IntervalDomain.of(0.0, 10.0))
+                .variableDomain(y, IntervalDomain.of(0.0, 10.0))
+                .comparatorConstraint(x, Operator.GEQ, 3.0)
+                .comparatorConstraint(x, Operator.LEQ, 7.0)
+                .sumConstraint(Set.of(x, y), Operator.EQ, 10.0)
+                .build();
+        var solution = Solver.Factory.INSTANCE.createSolver(csp).getSolution();
+        assertThat(solution).isPresent();
+        double xVal = (Double) solution.get().getValue(x).orElseThrow();
+        double yVal = (Double) solution.get().getValue(y).orElseThrow();
+        assertThat(xVal).isBetween(3.0, 7.0);
+        assertThat(xVal + yVal).isCloseTo(10.0, within(1e-9));
+    }
+
+    @Test
     void infeasibleBudget_returnsNoSolutions() {
         // rent fixed at 60.0, but food can be at most 30.0 → rent + food <= 90.0 < 100.0
         var csp = ConstraintSatisfactionProblem.builder()

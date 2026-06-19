@@ -2,8 +2,11 @@ package io.github.rcrida.jcsp.consistency.node;
 
 import lombok.val;
 import io.github.rcrida.jcsp.ConstraintSatisfactionProblem;
+import io.github.rcrida.jcsp.constraints.Operator;
 import io.github.rcrida.jcsp.domains.DomainObjectSet;
 import io.github.rcrida.jcsp.domains.EnumDomain;
+import io.github.rcrida.jcsp.domains.IntervalDomain;
+import io.github.rcrida.jcsp.variables.Variable;
 import org.junit.jupiter.api.Test;
 
 import java.util.EnumSet;
@@ -55,6 +58,20 @@ public class NodeConsistencyTest {
                 .isPresent()
                 .hasValueSatisfying(updatedProblem ->
                         assertThat(updatedProblem.getVariableDomains().get(WA)).isEqualTo(domain));
+    }
+
+    @Test
+    void intervalDomain_skippedByNodeConsistency() {
+        // UnaryComparatorConstraint on an IntervalDomain variable: NodeConsistency skips it
+        // (leaves it to FixpointConsistency); the domain should be unchanged.
+        Variable<Double> x = Variable.Factory.INSTANCE.create("x_nc");
+        var csp = ConstraintSatisfactionProblem.builder()
+                .variableDomain(x, IntervalDomain.of(0.0, 10.0))
+                .comparatorConstraint(x, Operator.GEQ, 3.0)
+                .build();
+        var result = NodeConsistency.INSTANCE.apply(csp);
+        assertThat(result).isPresent();
+        assertThat(result.get().getDomain(x)).isEqualTo(IntervalDomain.of(0.0, 10.0));
     }
 
     @Test
