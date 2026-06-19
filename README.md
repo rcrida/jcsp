@@ -15,7 +15,7 @@ A Java library implementing classic AI algorithms for solving Constraint Satisfa
 - **Heuristics**: MRV variable selection, LCV value ordering, and Minimum Degree variable elimination for tree decomposition
 - **Local search**: `LocalSolver.Factory.INSTANCE` wires the full pipeline (NC + AC3 + bounds/value propagation → independent subproblem decomposition → min-conflicts) and supports both satisfaction and optimization. Seeded by `RandomAssignmentFactory`, `GreedyAssignmentFactory`, or `FallbackAssignmentFactory` for hybrid restart strategies
 - **Reification**: `ReifiedConstraint` (`b <-> body`) and `ImplicationConstraint` (`b -> body`) introduce boolean indicator variables that capture constraint satisfaction — enables soft constraints, counting satisfaction, and conditional constraints via `csp.reifyConstraint(b, constraint)` and `csp.impliesConstraint(b, constraint)`
-- **Real-valued variables**: `IntervalDomain` represents a continuous `[min, max]` range of `double`s. `SumConstraint` and `LinearConstraint` (with a `Double` bound) propagate over interval bounds, so many continuous linear-arithmetic problems are solved entirely by propagation
+- **Real-valued variables**: `IntervalDomain` represents a continuous `[min, max]` range of `double`s. `SumConstraint`, `LinearConstraint`, `UnaryComparatorConstraint`, `BinaryComparatorConstraint`, and `BinaryOffsetConstraint` all propagate over interval bounds, so many continuous problems are solved entirely by propagation
 - **Continuous optimization**: `createSolver(csp, objective)` auto-detects `IntervalDomain` variables and explores their feasible region via `BisectionConditioningSolver` — recursively bisecting intervals to within `DEFAULT_BISECTION_EPSILON (1e-3)`, repropagating bounds at each step, then filtering the resulting feasible points by the objective; `getSolution()` returns the global optimum and `getSolutions()` streams improving assignments
 
 ## Usage
@@ -51,7 +51,14 @@ Solver.Factory.INSTANCE.createSolver(csp, objective).getSolutions().forEach(Syst
 
 ### Real-valued variables
 
-`IntervalDomain` models a continuous `[min, max]` range of `double`s. Only `SumConstraint` and `LinearConstraint` (with a `Double` bound) support `IntervalDomain` variables — they propagate over interval bounds using interval arithmetic, so many continuous problems are solved entirely by propagation without backtracking search. Any other constraint type referencing an `IntervalDomain` variable is rejected with `IllegalArgumentException` at build time.
+`IntervalDomain` models a continuous `[min, max]` range of `double`s. The following constraint types support `IntervalDomain` variables and propagate over interval bounds using interval arithmetic:
+
+- `SumConstraint` / `LinearConstraint` (with a `Double` bound) — linear arithmetic propagation
+- `UnaryComparatorConstraint` — clips a single interval variable's bounds (e.g. `x >= 3.0`)
+- `BinaryComparatorConstraint` — clips both variables' bounds relative to each other (e.g. `x <= y`)
+- `BinaryOffsetConstraint` — clips bounds accounting for the offset (e.g. `x + 3.0 == y`)
+
+Mixed discrete/interval pairs are supported for `BinaryComparatorConstraint` and `BinaryOffsetConstraint`: the discrete variable's numeric range is read to clip the interval variable's bounds, while the discrete side is left for AC3 to filter. Any other constraint type referencing an `IntervalDomain` variable is rejected with `IllegalArgumentException` at build time.
 
 ```java
 Variable<Double> rent = F.create("rent");
