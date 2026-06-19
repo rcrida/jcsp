@@ -1,6 +1,7 @@
 package io.github.rcrida.jcsp.constraints.binary;
 
 import io.github.rcrida.jcsp.consistency.Propagatable;
+import io.github.rcrida.jcsp.constraints.NumericBounds;
 import io.github.rcrida.jcsp.constraints.Operator;
 import io.github.rcrida.jcsp.domains.BoundedDomain;
 import io.github.rcrida.jcsp.domains.Domain;
@@ -47,14 +48,17 @@ public class BinaryComparatorConstraint<T extends Comparable<T>> extends BinaryC
     @Override
     @SuppressWarnings({"unchecked", "rawtypes"})
     public Optional<Map<Variable<?>, Domain<?>>> propagate(Map<Variable<?>, Domain<?>> domains) {
-        if (!(domains.get(getLeft()) instanceof BoundedDomain<?> lb)
-                || !(domains.get(getRight()) instanceof BoundedDomain<?> rb)) {
-            return Optional.of(Map.of());
-        }
-        double lMin = lb.getMin().doubleValue(), lMax = lb.getMax().doubleValue();
-        double rMin = rb.getMin().doubleValue(), rMax = rb.getMax().doubleValue();
-        double newLMin = lMin, newLMax = lMax, newRMin = rMin, newRMax = rMax;
         if (operator == Operator.NEQ) return Optional.of(Map.of());
+        Domain<?> lDomain = domains.get(getLeft());
+        Domain<?> rDomain = domains.get(getRight());
+        boolean lBounded = lDomain instanceof BoundedDomain<?>;
+        boolean rBounded = rDomain instanceof BoundedDomain<?>;
+        if (!lBounded && !rBounded) return Optional.of(Map.of());
+        double lMin = NumericBounds.min((Domain<? extends Number>) lDomain);
+        double lMax = NumericBounds.max((Domain<? extends Number>) lDomain);
+        double rMin = NumericBounds.min((Domain<? extends Number>) rDomain);
+        double rMax = NumericBounds.max((Domain<? extends Number>) rDomain);
+        double newLMin = lMin, newLMax = lMax, newRMin = rMin, newRMax = rMax;
         if (operator == Operator.LEQ || operator == Operator.LT) {
             newLMax = Math.min(lMax, rMax);
             newRMin = Math.max(rMin, lMin);
@@ -67,8 +71,8 @@ public class BinaryComparatorConstraint<T extends Comparable<T>> extends BinaryC
         }
         if (newLMin > newLMax) return Optional.empty();
         Map<Variable<?>, Domain<?>> updated = new HashMap<>();
-        if (newLMin != lMin || newLMax != lMax) { BoundedDomain raw = lb; updated.put(getLeft(),  raw.withBounds(newLMin, newLMax)); }
-        if (newRMin != rMin || newRMax != rMax) { BoundedDomain raw = rb; updated.put(getRight(), raw.withBounds(newRMin, newRMax)); }
+        if (lBounded && (newLMin != lMin || newLMax != lMax)) { BoundedDomain raw = (BoundedDomain) lDomain; updated.put(getLeft(),  raw.withBounds(newLMin, newLMax)); }
+        if (rBounded && (newRMin != rMin || newRMax != rMax)) { BoundedDomain raw = (BoundedDomain) rDomain; updated.put(getRight(), raw.withBounds(newRMin, newRMax)); }
         return Optional.of(updated);
     }
 }

@@ -2,6 +2,7 @@ package io.github.rcrida.jcsp.constraints.nary;
 
 import io.github.rcrida.jcsp.assignments.Assignment;
 import io.github.rcrida.jcsp.consistency.Propagatable;
+import io.github.rcrida.jcsp.constraints.NumericBounds;
 import io.github.rcrida.jcsp.constraints.Operator;
 import io.github.rcrida.jcsp.domains.DiscreteDomain;
 import io.github.rcrida.jcsp.domains.Domain;

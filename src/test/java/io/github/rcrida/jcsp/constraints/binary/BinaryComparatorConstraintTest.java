@@ -133,13 +133,30 @@ public class BinaryComparatorConstraintTest {
         assertThat(result.get()).isEmpty();
     }
 
-    @Test void propagate_leftBoundedRightDiscrete_skipped() {
-        // Exercises the second operand of the || check: left IS BoundedDomain, right is NOT.
+    @Test void propagate_leftBounded_rightDiscrete_clipsLeft() {
+        // Left is IntervalDomain, right is discrete {3.0}: L.max clips to 3.
         Variable<Double> il = F.create("il_bd"), ir = F.create("ir_bd");
         var discreteDouble = io.github.rcrida.jcsp.domains.DomainObjectSet.<Double>builder().value(3.0).build();
         var result = BinaryComparatorConstraint.of(il, Operator.LEQ, ir)
-                .propagate(Map.of(il, IntervalDomain.of(0.0, 10.0), ir, discreteDouble));
-        assertThat(result).isPresent();
-        assertThat(result.get()).isEmpty();
+                .propagate(Map.of(il, IntervalDomain.of(0.0, 10.0), ir, discreteDouble)).orElseThrow();
+        assertThat(((IntervalDomain) result.get(il)).getMax()).isEqualTo(3.0);
+        assertThat(result.containsKey(ir)).isFalse();
+    }
+
+    @Test void propagate_leftDiscrete_rightBounded_clipsRight() {
+        // Left is discrete {2.0, 7.0}, right is IntervalDomain[0,8]: R.min clips to lMin=2.
+        var discreteLeft = io.github.rcrida.jcsp.domains.DomainObjectSet.<Double>builder().value(2.0).value(7.0).build();
+        var result = BinaryComparatorConstraint.of(L, Operator.LEQ, R)
+                .propagate(Map.of(L, discreteLeft, R, IntervalDomain.of(0.0, 8.0))).orElseThrow();
+        assertThat(right(result).getMin()).isEqualTo(2.0);
+        assertThat(result.containsKey(L)).isFalse();
+    }
+
+    @Test void propagate_leftDiscrete_rightBounded_infeasible() {
+        // Left discrete {5.0, 10.0}, right=Interval[0,3], L<=R: lMin=5 > rMax=3 → infeasible.
+        var discreteLeft = io.github.rcrida.jcsp.domains.DomainObjectSet.<Double>builder().value(5.0).value(10.0).build();
+        var result = BinaryComparatorConstraint.of(L, Operator.LEQ, R)
+                .propagate(Map.of(L, discreteLeft, R, IntervalDomain.of(0.0, 3.0)));
+        assertThat(result).isEmpty();
     }
 }
