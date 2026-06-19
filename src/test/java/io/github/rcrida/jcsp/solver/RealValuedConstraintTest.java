@@ -87,6 +87,29 @@ public class RealValuedConstraintTest {
     }
 
     @Test
+    void binaryComparatorConstraint_propagatesBetweenIntervals() {
+        // x ∈ [0,10], y ∈ [0,10], x <= y, x + y = 6:
+        // propagation: x.max = min(10, 10) = 10, y.min = max(0, 0) = 0 (no change from comparator alone)
+        // sum propagation: x.max = 6 - y.min = 6, y.max = 6 - x.min = 6
+        // comparator re-runs: x.max = min(6, 6) = 6, y.min = max(0, 0) = 0 — converges
+        // midpoint snap: x snapped to 3.0, sum forces y = 3.0
+        Variable<Double> x = F.create("x_bc");
+        Variable<Double> y = F.create("y_bc");
+        var csp = ConstraintSatisfactionProblem.builder()
+                .variableDomain(x, IntervalDomain.of(0.0, 10.0))
+                .variableDomain(y, IntervalDomain.of(0.0, 10.0))
+                .comparatorConstraint(x, Operator.LEQ, y)
+                .sumConstraint(Set.of(x, y), Operator.EQ, 6.0)
+                .build();
+        var solution = Solver.Factory.INSTANCE.createSolver(csp).getSolution();
+        assertThat(solution).isPresent();
+        double xVal = (Double) solution.get().getValue(x).orElseThrow();
+        double yVal = (Double) solution.get().getValue(y).orElseThrow();
+        assertThat(xVal).isLessThanOrEqualTo(yVal + 1e-9);
+        assertThat(xVal + yVal).isCloseTo(6.0, within(1e-9));
+    }
+
+    @Test
     void infeasibleBudget_returnsNoSolutions() {
         // rent fixed at 60.0, but food can be at most 30.0 → rent + food <= 90.0 < 100.0
         var csp = ConstraintSatisfactionProblem.builder()

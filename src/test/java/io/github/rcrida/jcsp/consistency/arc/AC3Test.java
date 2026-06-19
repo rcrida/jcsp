@@ -2,11 +2,14 @@ package io.github.rcrida.jcsp.consistency.arc;
 
 import lombok.val;
 import io.github.rcrida.jcsp.ConstraintSatisfactionProblem;
+import io.github.rcrida.jcsp.constraints.Operator;
+import io.github.rcrida.jcsp.constraints.binary.BinaryComparatorConstraint;
 import io.github.rcrida.jcsp.constraints.binary.BinaryTuplesConstraint;
 import io.github.rcrida.jcsp.domains.DiscreteDomain;
 import io.github.rcrida.jcsp.domains.DomainObjectSet;
 import io.github.rcrida.jcsp.domains.EnumDomain;
 import io.github.rcrida.jcsp.domains.IntRangeDomain;
+import io.github.rcrida.jcsp.domains.IntervalDomain;
 import io.github.rcrida.jcsp.constraints.binary.BinaryTuple;
 import io.github.rcrida.jcsp.solver.AustraliaMapColouringTest;
 import io.github.rcrida.jcsp.variables.Variable;
@@ -112,6 +115,40 @@ public class AC3Test {
                 .notEqualsConstraint(WA, NT)
                 .build();
         assertThat(AC3.INSTANCE.revise(problem, Arc.of(WA, NT))).isEmpty();
+    }
+
+    @Test
+    void intervalDomain_fromNotDiscrete_skippedByAC3() {
+        // Both IntervalDomain: AC3 skips the arc at the first instanceof check (from is not discrete).
+        Variable<Double> x = Variable.Factory.INSTANCE.create("x_ac3a");
+        Variable<Double> y = Variable.Factory.INSTANCE.create("y_ac3a");
+        var csp = ConstraintSatisfactionProblem.builder()
+                .variableDomain(x, IntervalDomain.of(0.0, 10.0))
+                .variableDomain(y, IntervalDomain.of(0.0, 10.0))
+                .comparatorConstraint(x, Operator.LEQ, y)
+                .build();
+        var result = AC3.INSTANCE.apply(csp);
+        assertThat(result).isPresent();
+        assertThat(result.get().getDomain(x)).isEqualTo(IntervalDomain.of(0.0, 10.0));
+        assertThat(result.get().getDomain(y)).isEqualTo(IntervalDomain.of(0.0, 10.0));
+    }
+
+    @Test
+    void intervalDomain_toNotDiscrete_skippedByAC3() {
+        // Mixed: discrete Double from-variable, IntervalDomain to-variable.
+        // AC3 passes the first instanceof check (from IS discrete) but skips at the second (to is not).
+        Variable<Double> d = Variable.Factory.INSTANCE.create("d_ac3b");
+        Variable<Double> c = Variable.Factory.INSTANCE.create("c_ac3b");
+        var discreteDoubleDomain = DomainObjectSet.<Double>builder().value(2.0).value(5.0).build();
+        var csp = ConstraintSatisfactionProblem.builder()
+                .variableDomain(d, discreteDoubleDomain)
+                .variableDomain(c, IntervalDomain.of(0.0, 10.0))
+                .comparatorConstraint(d, Operator.LEQ, c)
+                .build();
+        var result = AC3.INSTANCE.apply(csp);
+        assertThat(result).isPresent();
+        assertThat(result.get().getDomain(d)).isEqualTo(discreteDoubleDomain);
+        assertThat(result.get().getDomain(c)).isEqualTo(IntervalDomain.of(0.0, 10.0));
     }
 
     @Test

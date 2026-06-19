@@ -86,8 +86,8 @@ public class AC3 implements ConstraintConsistency {
     }
 
     public Optional<DiscreteDomain<?>> revise(ConstraintSatisfactionProblem problem, Arc arc, BinaryConstraint<?, ?> constraint) {
-        val D_i = (DiscreteDomain<?>) problem.getVariableDomains().get(arc.getFrom());
-        val D_j = (DiscreteDomain<?>) problem.getVariableDomains().get(arc.getTo());
+        if (!(problem.getVariableDomains().get(arc.getFrom()) instanceof DiscreteDomain<?> D_i)) return Optional.empty();
+        if (!(problem.getVariableDomains().get(arc.getTo()) instanceof DiscreteDomain<?> D_j)) return Optional.empty();
         val valuesToDelete = D_i.stream()
                 .filter(x -> D_j.stream().noneMatch(y -> constraint.isSatisfiedBy(arc.toAssignment(x, y))))
                 .toList();

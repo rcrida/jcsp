@@ -16,6 +16,7 @@ import io.github.rcrida.jcsp.constraints.nary.InverseConstraint;
 import io.github.rcrida.jcsp.constraints.nary.LexConstraint;
 import io.github.rcrida.jcsp.constraints.nary.LinearConstraint;
 import io.github.rcrida.jcsp.constraints.nary.NaryTuplesConstraint;
+import io.github.rcrida.jcsp.constraints.binary.BinaryComparatorConstraint;
 import io.github.rcrida.jcsp.constraints.nary.SumConstraint;
 import io.github.rcrida.jcsp.constraints.unary.UnaryComparatorConstraint;
 import io.github.rcrida.jcsp.solver.assignmentfactory.InitialAssignmentFactory;
@@ -52,6 +53,7 @@ public interface LocalSolver {
         List<ConstraintConsistency> PREPROCESSORS = List.of(
                 NodeConsistency.INSTANCE,
                 FixpointConsistency.of(UnaryComparatorConstraint.class),
+                FixpointConsistency.of(BinaryComparatorConstraint.class),
                 AC3.INSTANCE,
                 FixpointConsistency.of(SumConstraint.class),
                 FixpointConsistency.of(LinearConstraint.class),
