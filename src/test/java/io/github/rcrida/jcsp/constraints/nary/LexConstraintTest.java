@@ -5,6 +5,7 @@ import io.github.rcrida.jcsp.assignments.Assignment;
 import io.github.rcrida.jcsp.constraints.Operator;
 import io.github.rcrida.jcsp.domains.Domain;
 import io.github.rcrida.jcsp.domains.IntRangeDomain;
+import io.github.rcrida.jcsp.domains.IntervalDomain;
 import io.github.rcrida.jcsp.solver.Solver;
 import io.github.rcrida.jcsp.variables.Variable;
 import org.junit.jupiter.api.BeforeEach;
@@ -232,6 +233,61 @@ public class LexConstraintTest {
         var result = c.propagate(domains);
         assertThat(result).isPresent();
         assertThat(result.get()).isEmpty();
+    }
+
+    // --- propagate() with IntervalDomain ---
+
+    static final Variable<Double> a1 = Variable.Factory.INSTANCE.create("a1");
+    static final Variable<Double> b1 = Variable.Factory.INSTANCE.create("b1");
+
+    @Test
+    void propagate_interval_leq_clipsLesserMax() {
+        // [a1] <= [b1]: a1=[0,10], b1=[3,8] → a1.max clips to 8; b1.min=3 already >= a1.min=0, no change
+        var c = LexConstraint.of(List.of(a1), Operator.LEQ, List.of(b1));
+        var result = c.propagate(Map.of(a1, IntervalDomain.of(0.0, 10.0), b1, IntervalDomain.of(3.0, 8.0))).orElseThrow();
+        assertThat(((IntervalDomain) result.get(a1)).getMax()).isEqualTo(8.0);
+        assertThat(result.containsKey(b1)).isFalse();
+    }
+
+    @Test
+    void propagate_interval_leq_clipsGreaterMin() {
+        // [a1] <= [b1]: a1=[2,7], b1=[0,8] → b1.min clips to 2; a1.max=7 <= b1.max=8, no change to a1
+        var c = LexConstraint.of(List.of(a1), Operator.LEQ, List.of(b1));
+        var result = c.propagate(Map.of(a1, IntervalDomain.of(2.0, 7.0), b1, IntervalDomain.of(0.0, 8.0))).orElseThrow();
+        assertThat(((IntervalDomain) result.get(b1)).getMin()).isEqualTo(2.0);
+        assertThat(result.containsKey(a1)).isFalse();
+    }
+
+    @Test
+    void propagate_interval_noChange() {
+        // [a1] <= [b1]: a1=[0,5], b1=[5,10] → a1.max=5<=b1.max=10 (no clip), b1.min=5>=a1.min=0 (no clip)
+        var c = LexConstraint.of(List.of(a1), Operator.LEQ, List.of(b1));
+        var result = c.propagate(Map.of(a1, IntervalDomain.of(0.0, 5.0), b1, IntervalDomain.of(5.0, 10.0)));
+        assertThat(result).isPresent();
+        assertThat(result.get()).isEmpty();
+    }
+
+    @Test
+    void propagate_interval_infeasible() {
+        // [a1] <= [b1]: a1=[5,10], b1=[0,3] → a1 clips to max 3, but a1.min=5 > 3 → infeasible
+        var c = LexConstraint.of(List.of(a1), Operator.LEQ, List.of(b1));
+        assertThat(c.propagate(Map.of(a1, IntervalDomain.of(5.0, 10.0), b1, IntervalDomain.of(0.0, 3.0)))).isEmpty();
+    }
+
+    static final Variable<Double> a2 = Variable.Factory.INSTANCE.create("a2");
+    static final Variable<Double> b2 = Variable.Factory.INSTANCE.create("b2");
+
+    @Test
+    void propagate_interval_forcedEqual_skipsToNextPosition() {
+        // [a1, a2] <= [b1, b2]: position 0 both singleton [4,4]==[4,4] → skip to position 1 (intervals)
+        // position 1: a2=[0,10], b2=[3,8] → a2.max clips to 8
+        var c = LexConstraint.of(List.of(a1, a2), Operator.LEQ, List.of(b1, b2));
+        var result = c.propagate(Map.of(
+                a1, IntervalDomain.of(4.0, 4.0), b1, IntervalDomain.of(4.0, 4.0),
+                a2, IntervalDomain.of(0.0, 10.0), b2, IntervalDomain.of(3.0, 8.0))).orElseThrow();
+        assertThat(((IntervalDomain) result.get(a2)).getMax()).isEqualTo(8.0);
+        assertThat(result.containsKey(a1)).isFalse();
+        assertThat(result.containsKey(b1)).isFalse();
     }
 
     @Test

@@ -3,6 +3,7 @@ package io.github.rcrida.jcsp.constraints.nary;
 import io.github.rcrida.jcsp.assignments.Assignment;
 import io.github.rcrida.jcsp.consistency.Propagatable;
 import io.github.rcrida.jcsp.constraints.Operator;
+import io.github.rcrida.jcsp.domains.BoundedDomain;
 import io.github.rcrida.jcsp.domains.DiscreteDomain;
 import io.github.rcrida.jcsp.domains.Domain;
 import io.github.rcrida.jcsp.variables.Variable;
@@ -99,32 +100,65 @@ public class LexConstraint<T extends Comparable<T>> extends NaryConstraint imple
             VariablePair<T> pair = variablePairs.get(i);
             Variable<T> lesser  = swapped ? pair.right() : pair.left();
             Variable<T> greater = swapped ? pair.left()  : pair.right();
-            DiscreteDomain<T> lesserDom  = (DiscreteDomain<T>) domains.get(lesser);
-            DiscreteDomain<T> greaterDom = (DiscreteDomain<T>) domains.get(greater);
+            Domain<T> lesserDom  = (Domain<T>) domains.get(lesser);
+            Domain<T> greaterDom = (Domain<T>) domains.get(greater);
 
             if (lesserDom.isSingleton() && greaterDom.isSingleton()
-                    && lesserDom.toList().get(0).equals(greaterDom.toList().get(0))) {
+                    && lesserDom.singleValue().equals(greaterDom.singleValue())) {
                 continue;
             }
 
             boolean strictHere = strict && i == variablePairs.size() - 1;
-            T greaterMax = greaterDom.stream().max(Comparator.naturalOrder()).orElseThrow();
-            T lesserMin  = lesserDom.stream().min(Comparator.naturalOrder()).orElseThrow();
+            T greaterMax = domainMax(greaterDom);
+            T lesserMin  = domainMin(lesserDom);
 
-            Predicate<T> keepLesser  = strictHere ? v -> v.compareTo(greaterMax) < 0 : v -> v.compareTo(greaterMax) <= 0;
-            Predicate<T> keepGreater = strictHere ? v -> v.compareTo(lesserMin) > 0  : v -> v.compareTo(lesserMin) >= 0;
-
-            DiscreteDomain<T> newLesserDom  = prune(lesserDom, keepLesser);
-            DiscreteDomain<T> newGreaterDom = prune(greaterDom, keepGreater);
+            Domain<T> newLesserDom  = clipUpper(lesserDom,  greaterMax, strictHere);
+            Domain<T> newGreaterDom = clipLower(greaterDom, lesserMin,  strictHere);
             if (newLesserDom.isEmpty()) return Optional.empty();
 
             Map<Variable<?>, Domain<?>> updated = new HashMap<>();
-            if (newLesserDom.size() != lesserDom.size()) updated.put(lesser, newLesserDom);
-            if (newGreaterDom.size() != greaterDom.size()) updated.put(greater, newGreaterDom);
+            if (lesserDom  instanceof BoundedDomain<?> ? newLesserDom  != lesserDom  : newLesserDom.size()  != lesserDom.size())  updated.put(lesser,  newLesserDom);
+            if (greaterDom instanceof BoundedDomain<?> ? newGreaterDom != greaterDom : newGreaterDom.size() != greaterDom.size()) updated.put(greater, newGreaterDom);
             return Optional.of(updated);
         }
 
         return operator.compare(0, 0) ? Optional.of(Map.of()) : Optional.empty();
+    }
+
+    @SuppressWarnings("unchecked")
+    private static <T extends Comparable<T>> T domainMax(Domain<T> domain) {
+        if (domain instanceof BoundedDomain<?> bd) return (T) bd.getMax();
+        return ((DiscreteDomain<T>) domain).stream().max(Comparator.naturalOrder()).orElseThrow();
+    }
+
+    @SuppressWarnings("unchecked")
+    private static <T extends Comparable<T>> T domainMin(Domain<T> domain) {
+        if (domain instanceof BoundedDomain<?> bd) return (T) bd.getMin();
+        return ((DiscreteDomain<T>) domain).stream().min(Comparator.naturalOrder()).orElseThrow();
+    }
+
+    @SuppressWarnings({"unchecked", "rawtypes"})
+    private static <T extends Comparable<T>> Domain<T> clipUpper(Domain<T> domain, T max, boolean strict) {
+        if (domain instanceof BoundedDomain<?> bd) {
+            double newMax = ((Number) max).doubleValue();
+            if (newMax >= bd.getMax().doubleValue()) return domain;
+            BoundedDomain raw = bd;
+            return (Domain<T>) raw.withBounds(bd.getMin().doubleValue(), newMax);
+        }
+        Predicate<T> keep = strict ? v -> v.compareTo(max) < 0 : v -> v.compareTo(max) <= 0;
+        return prune((DiscreteDomain<T>) domain, keep);
+    }
+
+    @SuppressWarnings({"unchecked", "rawtypes"})
+    private static <T extends Comparable<T>> Domain<T> clipLower(Domain<T> domain, T min, boolean strict) {
+        if (domain instanceof BoundedDomain<?> bd) {
+            double newMin = ((Number) min).doubleValue();
+            if (newMin <= bd.getMin().doubleValue()) return domain;
+            BoundedDomain raw = bd;
+            return (Domain<T>) raw.withBounds(newMin, bd.getMax().doubleValue());
+        }
+        Predicate<T> keep = strict ? v -> v.compareTo(min) > 0 : v -> v.compareTo(min) >= 0;
+        return prune((DiscreteDomain<T>) domain, keep);
     }
 
     private static <T> DiscreteDomain<T> prune(DiscreteDomain<T> domain, Predicate<T> keep) {
