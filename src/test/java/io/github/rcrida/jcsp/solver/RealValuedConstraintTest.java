@@ -7,6 +7,7 @@ import io.github.rcrida.jcsp.domains.IntervalDomain;
 import io.github.rcrida.jcsp.variables.Variable;
 import org.junit.jupiter.api.Test;
 
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
@@ -154,6 +155,37 @@ public class RealValuedConstraintTest {
                 .variableDomain(x, IntervalDomain.of(5.0, 10.0))
                 .variableDomain(y, IntervalDomain.of(0.0, 3.0))
                 .offsetConstraint(x, 3.0, Operator.LEQ, y)
+                .build();
+        assertThat(Solver.Factory.INSTANCE.createSolver(csp).getSolutions()).isEmpty();
+    }
+
+    @Test
+    void lexConstraint_clipsIntervalAndResolvesWithSum() {
+        // x∈[0,10], y∈[0,4], [x] lex<= [y]: propagation clips x.max to y.max=4 → x∈[0,4].
+        // sum x+y=6 then narrows both to [2,4]; snap x to 3.0, sum forces y=3.0. x<=y ✓
+        Variable<Double> x = F.create("x_lex"), y = F.create("y_lex");
+        var csp = ConstraintSatisfactionProblem.builder()
+                .variableDomain(x, IntervalDomain.of(0.0, 10.0))
+                .variableDomain(y, IntervalDomain.of(0.0, 4.0))
+                .lexConstraint(List.of(x), Operator.LEQ, List.of(y))
+                .sumConstraint(Set.of(x, y), Operator.EQ, 6.0)
+                .build();
+        var solution = Solver.Factory.INSTANCE.createSolver(csp).getSolution();
+        assertThat(solution).isPresent();
+        double xVal = (Double) solution.get().getValue(x).orElseThrow();
+        double yVal = (Double) solution.get().getValue(y).orElseThrow();
+        assertThat(xVal).isLessThanOrEqualTo(yVal + 1e-9);
+        assertThat(xVal + yVal).isCloseTo(6.0, within(1e-9));
+    }
+
+    @Test
+    void lexConstraint_infeasible_returnsNoSolutions() {
+        // x∈[5,10], y∈[0,3], [x] lex<= [y]: x.min=5 > y.max=3 → infeasible
+        Variable<Double> x = F.create("x_linf"), y = F.create("y_linf");
+        var csp = ConstraintSatisfactionProblem.builder()
+                .variableDomain(x, IntervalDomain.of(5.0, 10.0))
+                .variableDomain(y, IntervalDomain.of(0.0, 3.0))
+                .lexConstraint(List.of(x), Operator.LEQ, List.of(y))
                 .build();
         assertThat(Solver.Factory.INSTANCE.createSolver(csp).getSolutions()).isEmpty();
     }
