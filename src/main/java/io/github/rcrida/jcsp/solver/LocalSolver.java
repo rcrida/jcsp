@@ -16,6 +16,7 @@ import io.github.rcrida.jcsp.constraints.nary.InverseConstraint;
 import io.github.rcrida.jcsp.constraints.nary.LexConstraint;
 import io.github.rcrida.jcsp.constraints.nary.LinearConstraint;
 import io.github.rcrida.jcsp.constraints.nary.NaryTuplesConstraint;
+import io.github.rcrida.jcsp.constraints.binary.AbsoluteDifferenceConstraint;
 import io.github.rcrida.jcsp.constraints.binary.BinaryComparatorConstraint;
 import io.github.rcrida.jcsp.constraints.binary.BinaryOffsetConstraint;
 import io.github.rcrida.jcsp.constraints.nary.SumConstraint;
@@ -56,6 +57,7 @@ public interface LocalSolver {
                 FixpointConsistency.of(UnaryComparatorConstraint.class),
                 FixpointConsistency.of(BinaryComparatorConstraint.class),
                 FixpointConsistency.of(BinaryOffsetConstraint.class),
+                FixpointConsistency.of(AbsoluteDifferenceConstraint.class),
                 AC3.INSTANCE,
                 FixpointConsistency.of(SumConstraint.class),
                 FixpointConsistency.of(LinearConstraint.class),

@@ -16,6 +16,7 @@ import io.github.rcrida.jcsp.constraints.binary.BinaryLogicConstraint;
 import io.github.rcrida.jcsp.constraints.LogicOperator;
 import io.github.rcrida.jcsp.constraints.binary.BinaryConstraint;
 import io.github.rcrida.jcsp.constraints.binary.BinaryElementConstraint;
+import io.github.rcrida.jcsp.constraints.binary.AbsoluteDifferenceConstraint;
 import io.github.rcrida.jcsp.constraints.binary.BinaryOffsetConstraint;
 import io.github.rcrida.jcsp.constraints.binary.BinaryPredicateConstraint;
 import io.github.rcrida.jcsp.constraints.binary.BinaryEqualsConstraint;
@@ -84,7 +85,7 @@ public class ConstraintSatisfactionProblem {
      * propagation. Any other constraint type referencing such a variable is rejected at build time.
      */
     private static final Set<Class<? extends Constraint>> CONTINUOUS_COMPATIBLE_CONSTRAINTS =
-            Set.of(SumConstraint.class, LinearConstraint.class, UnaryComparatorConstraint.class, BinaryComparatorConstraint.class, BinaryOffsetConstraint.class, LexConstraint.class, CumulativeConstraint.class);
+            Set.of(SumConstraint.class, LinearConstraint.class, UnaryComparatorConstraint.class, BinaryComparatorConstraint.class, BinaryOffsetConstraint.class, AbsoluteDifferenceConstraint.class, LexConstraint.class, CumulativeConstraint.class);
 
     Map<Variable<?>, Domain<?>> variableDomains;
     @Getter(AccessLevel.NONE) @EqualsAndHashCode.Exclude ConstraintGraph constraintGraph;
@@ -694,6 +695,24 @@ public class ConstraintSatisfactionProblem {
          */
         public <N extends Number> ConstraintSatisfactionProblemBuilder offsetConstraint(@NonNull Variable<N> left, @NonNull N offset, @NonNull Operator operator, @NonNull Variable<N> right) {
             return this.constraint(BinaryOffsetConstraint.of(left, offset, operator, right));
+        }
+
+        /**
+         * Create a binary constraint on numerical variables enforcing {@code |left - right| op bound}.
+         * <p>
+         * Supports {@link io.github.rcrida.jcsp.domains.IntervalDomain} variables via interval-arithmetic
+         * bounds propagation. {@link Operator#LEQ}/{@link Operator#LT} clips both domains symmetrically;
+         * {@link Operator#EQ} adds infeasibility detection; {@link Operator#GEQ}/{@link Operator#GT}
+         * detects infeasibility only.
+         *
+         * @param left     the first variable
+         * @param right    the second variable
+         * @param operator the comparison operator applied to the absolute difference
+         * @param bound    the right-hand side of the comparison, same numeric type as the variables
+         * @return the builder
+         */
+        public <N extends Number> ConstraintSatisfactionProblemBuilder absoluteDifferenceConstraint(@NonNull Variable<N> left, @NonNull Variable<N> right, @NonNull Operator operator, @NonNull N bound) {
+            return this.constraint(AbsoluteDifferenceConstraint.of(left, right, operator, bound));
         }
 
         /**

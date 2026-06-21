@@ -191,6 +191,62 @@ public class RealValuedConstraintTest {
     }
 
     @Test
+    void absoluteDifferenceConstraint_leq_narrowsAndResolves() {
+        // x∈[0,10], y∈[0,10], |x-y|<=2, x+y=12:
+        // proximity: x∈[0-2,10+2]=[0,10] unchanged, y∈[0-2,10+2] unchanged (no narrowing from proximity alone)
+        // sum propagation: x∈[2,10], y∈[2,10]; then proximity re-runs: no further change
+        // snap x to midpoint 6.0, sum forces y=6.0; |6-6|=0 <= 2 ✓
+        Variable<Double> x = F.create("x_ad"), y = F.create("y_ad");
+        var csp = ConstraintSatisfactionProblem.builder()
+                .variableDomain(x, IntervalDomain.of(0.0, 10.0))
+                .variableDomain(y, IntervalDomain.of(0.0, 10.0))
+                .absoluteDifferenceConstraint(x, y, Operator.LEQ, 2.0)
+                .sumConstraint(Set.of(x, y), Operator.EQ, 12.0)
+                .build();
+        var solution = Solver.Factory.INSTANCE.createSolver(csp).getSolution();
+        assertThat(solution).isPresent();
+        double xVal = (Double) solution.get().getValue(x).orElseThrow();
+        double yVal = (Double) solution.get().getValue(y).orElseThrow();
+        assertThat(Math.abs(xVal - yVal)).isLessThanOrEqualTo(2.0 + 1e-9);
+        assertThat(xVal + yVal).isCloseTo(12.0, within(1e-9));
+    }
+
+    @Test
+    void absoluteDifferenceConstraint_leq_infeasible() {
+        // x∈[0,2], y∈[7,10], |x-y|<=3: min dist = 7-2=5 > 3 → infeasible by propagation
+        Variable<Double> x = F.create("x_adinf"), y = F.create("y_adinf");
+        var csp = ConstraintSatisfactionProblem.builder()
+                .variableDomain(x, IntervalDomain.of(0.0, 2.0))
+                .variableDomain(y, IntervalDomain.of(7.0, 10.0))
+                .absoluteDifferenceConstraint(x, y, Operator.LEQ, 3.0)
+                .build();
+        assertThat(Solver.Factory.INSTANCE.createSolver(csp).getSolutions()).isEmpty();
+    }
+
+    @Test
+    void absoluteDifferenceConstraint_leq_clipsProximityThenResolvesWithLinear() {
+        // x∈[0,10], y∈[6,10], |x-y|<=1: x∈[5,10]∩[0,10]=[5,10], y unchanged
+        // linearConstraint: 2x+y=15: y=15-2x; with x∈[5,10] → y∈[-5,5]∩[6,10]=empty? No wait:
+        // Actually x∈[5,10], y∈[6,10], |x-y|<=1 means x∈[5,11]∩[0,10]=[5,10], y∈[4,11]∩[6,10]=[6,10]
+        // linear: 2x+y=15; y=15-2x; x∈[5,10]→y∈[-5,5]∩[6,10]=empty → infeasible.
+        // Let's use x+y=14 instead: x∈[5,10],y∈[6,10]: x=14-y∈[4,8]∩[5,10]=[5,8]; y=14-x∈[6,9]∩[6,10]=[6,9]
+        // snap x=6.5, sum y=7.5; |6.5-7.5|=1<=1 ✓
+        Variable<Double> x = F.create("x_adlin"), y = F.create("y_adlin");
+        var csp = ConstraintSatisfactionProblem.builder()
+                .variableDomain(x, IntervalDomain.of(0.0, 10.0))
+                .variableDomain(y, IntervalDomain.of(6.0, 10.0))
+                .absoluteDifferenceConstraint(x, y, Operator.LEQ, 1.0)
+                .sumConstraint(Set.of(x, y), Operator.EQ, 14.0)
+                .build();
+        var solution = Solver.Factory.INSTANCE.createSolver(csp).getSolution();
+        assertThat(solution).isPresent();
+        double xVal = (Double) solution.get().getValue(x).orElseThrow();
+        double yVal = (Double) solution.get().getValue(y).orElseThrow();
+        assertThat(Math.abs(xVal - yVal)).isLessThanOrEqualTo(1.0 + 1e-9);
+        assertThat(xVal + yVal).isCloseTo(14.0, within(1e-9));
+    }
+
+    @Test
     void infeasibleBudget_returnsNoSolutions() {
         // rent fixed at 60.0, but food can be at most 30.0 → rent + food <= 90.0 < 100.0
         var csp = ConstraintSatisfactionProblem.builder()
