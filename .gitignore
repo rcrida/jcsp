@@ -43,3 +43,4 @@ src/test/**/ignored/
 
 ### Claude Code internals ###
 .claude/
+.omc/

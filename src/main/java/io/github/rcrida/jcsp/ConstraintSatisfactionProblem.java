@@ -84,7 +84,7 @@ public class ConstraintSatisfactionProblem {
      * propagation. Any other constraint type referencing such a variable is rejected at build time.
      */
     private static final Set<Class<? extends Constraint>> CONTINUOUS_COMPATIBLE_CONSTRAINTS =
-            Set.of(SumConstraint.class, LinearConstraint.class, UnaryComparatorConstraint.class, BinaryComparatorConstraint.class, BinaryOffsetConstraint.class, LexConstraint.class);
+            Set.of(SumConstraint.class, LinearConstraint.class, UnaryComparatorConstraint.class, BinaryComparatorConstraint.class, BinaryOffsetConstraint.class, LexConstraint.class, CumulativeConstraint.class);
 
     Map<Variable<?>, Domain<?>> variableDomains;
     @Getter(AccessLevel.NONE) @EqualsAndHashCode.Exclude ConstraintGraph constraintGraph;
@@ -527,6 +527,26 @@ public class ConstraintSatisfactionProblem {
                 @NonNull List<Integer> durations,
                 @NonNull List<Integer> resources,
                 int limit) {
+            return this.constraint(CumulativeConstraint.of(starts, durations, resources, limit));
+        }
+
+        /**
+         * Create a cumulative scheduling constraint with continuous ({@link io.github.rcrida.jcsp.domains.IntervalDomain})
+         * start-time variables: at every point in time, the sum of resources consumed by concurrently
+         * executing tasks must not exceed {@code limit}.
+         * Task {@code i} executes during {@code [starts[i], starts[i] + durations[i])}.
+         *
+         * @param starts    continuous start-time variables (one per task)
+         * @param durations fixed task durations
+         * @param resources fixed resource requirements per task
+         * @param limit     maximum total resource usage at any instant
+         * @return the builder
+         */
+        public ConstraintSatisfactionProblemBuilder cumulativeConstraint(
+                @NonNull List<Variable<Double>> starts,
+                @NonNull List<Double> durations,
+                @NonNull List<Double> resources,
+                double limit) {
             return this.constraint(CumulativeConstraint.of(starts, durations, resources, limit));
         }
 

@@ -200,4 +200,29 @@ public class RealValuedConstraintTest {
                 .build();
         assertThat(Solver.Factory.INSTANCE.createSolver(csp).getSolutions()).isEmpty();
     }
+
+    @Test
+    void cumulativeConstraint_intervalStarts_resolvedByPropagation() {
+        // Three serial tasks (resource=1, limit=1), each duration=2.0.
+        // x1 and x2 are fixed via singleton IntervalDomains, giving them compulsory parts
+        // that fill [0,4). Propagation must then tighten x3 from [0,4] to the singleton [4,4],
+        // making the whole problem fully determined without any search.
+        Variable<Double> x1 = F.create("cx1");
+        Variable<Double> x2 = F.create("cx2");
+        Variable<Double> x3 = F.create("cx3");
+        var csp = ConstraintSatisfactionProblem.builder()
+                .variableDomain(x1, IntervalDomain.of(0.0, 0.0))
+                .variableDomain(x2, IntervalDomain.of(2.0, 2.0))
+                .variableDomain(x3, IntervalDomain.of(0.0, 4.0))
+                .cumulativeConstraint(List.of(x1, x2, x3), List.of(2.0, 2.0, 2.0), List.of(1.0, 1.0, 1.0), 1.0)
+                .build();
+        var solution = Solver.Factory.INSTANCE.createSolver(csp).getSolution();
+        assertThat(solution).isPresent();
+        double s1 = (Double) solution.get().getValue(x1).orElseThrow();
+        double s2 = (Double) solution.get().getValue(x2).orElseThrow();
+        double s3 = (Double) solution.get().getValue(x3).orElseThrow();
+        assertThat(s1).isEqualTo(0.0);
+        assertThat(s2).isEqualTo(2.0);
+        assertThat(s3).isEqualTo(4.0);
+    }
 }

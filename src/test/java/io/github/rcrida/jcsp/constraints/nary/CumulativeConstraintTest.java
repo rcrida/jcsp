@@ -2,6 +2,7 @@ package io.github.rcrida.jcsp.constraints.nary;
 
 import io.github.rcrida.jcsp.ConstraintSatisfactionProblem;
 import io.github.rcrida.jcsp.assignments.Assignment;
+import io.github.rcrida.jcsp.domains.IntervalDomain;
 import io.github.rcrida.jcsp.domains.IntRangeDomain;
 import io.github.rcrida.jcsp.solver.Solver;
 import io.github.rcrida.jcsp.variables.Variable;
@@ -13,6 +14,7 @@ import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.api.Assertions.within;
 
 public class CumulativeConstraintTest {
     static final Variable.Factory F = Variable.Factory.INSTANCE;
@@ -179,5 +181,152 @@ public class CumulativeConstraintTest {
                 .cumulativeConstraint(List.of(s1, s2), List.of(2, 2), List.of(1, 1), 1)
                 .build();
         assertThat(Solver.Factory.INSTANCE.createSolver(csp).getSolutions()).hasSize(6);
+    }
+
+    // --- IntervalDomain (continuous) tests ---
+
+    @Test
+    void isSatisfiedBy_doubleValues_nonOverlapping() {
+        // s1=0.0, s2=2.0: tasks [0,2) and [2,4) — touch but do not overlap
+        Variable<Double> x1 = F.create("x1d");
+        Variable<Double> x2 = F.create("x2d");
+        var c = CumulativeConstraint.of(List.of(x1, x2), List.of(2.0, 2.0), List.of(1.0, 1.0), 1.0);
+        assertThat(c.isSatisfiedBy(Assignment.of(Map.of(x1, 0.0, x2, 2.0)))).isTrue();
+    }
+
+    @Test
+    void isSatisfiedBy_doubleValues_overlapping() {
+        // s1=0.0, s2=1.5: tasks [0,2) and [1.5,3.5) — overlap from 1.5 to 2.0
+        Variable<Double> x1 = F.create("x1do");
+        Variable<Double> x2 = F.create("x2do");
+        var c = CumulativeConstraint.of(List.of(x1, x2), List.of(2.0, 2.0), List.of(1.0, 1.0), 1.0);
+        assertThat(c.isSatisfiedBy(Assignment.of(Map.of(x1, 0.0, x2, 1.5)))).isFalse();
+    }
+
+    @Test
+    void of_double_unequalListLengths_asserts() {
+        Variable<Double> xd = F.create("xd");
+        // starts.size() != durations.size() → short-circuit of &&
+        assertThatThrownBy(() -> CumulativeConstraint.of(List.of(xd), List.of(2.0, 2.0), List.of(1.0), 1.0))
+                .isInstanceOf(AssertionError.class);
+    }
+
+    @Test
+    void of_double_unequalResourcesLength_asserts() {
+        Variable<Double> xd1 = F.create("xd1");
+        Variable<Double> xd2 = F.create("xd2");
+        // starts.size() == durations.size() but != resources.size() → second condition of && fails
+        assertThatThrownBy(() -> CumulativeConstraint.of(List.of(xd1, xd2), List.of(2.0, 2.0), List.of(1.0), 1.0))
+                .isInstanceOf(AssertionError.class);
+    }
+
+    @Test
+    void propagate_intervalDomain_tightensEarliestStart() {
+        // x1 ∈ [0.0, 1.0], d=2.0, r=2.0 → compulsory part [1.0, 2.0): profile P(t)=2 for t∈[1,2)
+        // x2 ∈ [0.0, 3.0], d=2.0, r=2.0, limit=2.0
+        // Exclusive profile for x2: overloaded [1.0, 2.0) (slack = 2-2 = 0, runEx=2>0)
+        // Forbidden starts for x2: (1.0-2.0, 2.0) = (-1.0, 2.0)
+        // newEst: 0.0 > -1.0 and 0.0 < 2.0 → advance to 2.0
+        // Result: x2 tightened from [0.0, 3.0] to [2.0, 3.0]
+        Variable<Double> x1 = F.create("x1id");
+        Variable<Double> x2 = F.create("x2id");
+        var c = CumulativeConstraint.of(List.of(x1, x2), List.of(2.0, 2.0), List.of(2.0, 2.0), 2.0);
+        var domains = Map.<Variable<?>, io.github.rcrida.jcsp.domains.Domain<?>>of(
+                x1, IntervalDomain.of(0.0, 1.0),
+                x2, IntervalDomain.of(0.0, 3.0));
+        var result = c.propagate(domains);
+        assertThat(result).isPresent();
+        assertThat(result.get()).containsKey(x2);
+        assertThat(result.get().get(x2)).isEqualTo(IntervalDomain.of(2.0, 3.0));
+    }
+
+    @Test
+    void propagate_intervalDomain_tightensLatestStart() {
+        // x1 ∈ [2.0, 3.0], d=2.0, r=2.0 → compulsory part [3.0, 4.0): profile P(t)=2 for t∈[3,4)
+        // x2 ∈ [0.0, 3.0], d=2.0, r=2.0, limit=2.0
+        // Exclusive profile for x2: overloaded [3.0, 4.0) (slack=0, runEx=2>0)
+        // Forbidden starts: (3.0-2.0, 4.0) = (1.0, 4.0)
+        // newLst: 3.0 > 1.0 and 3.0 < 4.0 → retreat to 1.0
+        // Result: x2 tightened from [0.0, 3.0] to [0.0, 1.0]
+        Variable<Double> x1 = F.create("x1ilt");
+        Variable<Double> x2 = F.create("x2ilt");
+        var c = CumulativeConstraint.of(List.of(x1, x2), List.of(2.0, 2.0), List.of(2.0, 2.0), 2.0);
+        var domains = Map.<Variable<?>, io.github.rcrida.jcsp.domains.Domain<?>>of(
+                x1, IntervalDomain.of(2.0, 3.0),
+                x2, IntervalDomain.of(0.0, 3.0));
+        var result = c.propagate(domains);
+        assertThat(result).isPresent();
+        assertThat(result.get()).containsKey(x2);
+        assertThat(result.get().get(x2)).isEqualTo(IntervalDomain.of(0.0, 1.0));
+    }
+
+    @Test
+    void propagate_intervalDomain_infeasible_returnsEmpty() {
+        // x1=[1.0,1.0] d=2.0 r=1.0, x2=[1.0,1.0] d=2.0 r=1.0, limit=1.0
+        // Both have compulsory parts [1.0,3.0): global profile = 2 > 1 → infeasible
+        Variable<Double> x1 = F.create("x1iinf");
+        Variable<Double> x2 = F.create("x2iinf");
+        var c = CumulativeConstraint.of(List.of(x1, x2), List.of(2.0, 2.0), List.of(1.0, 1.0), 1.0);
+        var domains = Map.<Variable<?>, io.github.rcrida.jcsp.domains.Domain<?>>of(
+                x1, IntervalDomain.of(1.0, 1.0),
+                x2, IntervalDomain.of(1.0, 1.0));
+        assertThat(c.propagate(domains)).isEmpty();
+    }
+
+    @Test
+    void propagate_intervalDomain_noChange_returnsEmptyMap() {
+        // Wide domains, no compulsory parts → no pruning
+        Variable<Double> x1 = F.create("x1inc");
+        Variable<Double> x2 = F.create("x2inc");
+        var c = CumulativeConstraint.of(List.of(x1, x2), List.of(2.0, 2.0), List.of(1.0, 1.0), 1.0);
+        var domains = Map.<Variable<?>, io.github.rcrida.jcsp.domains.Domain<?>>of(
+                x1, IntervalDomain.of(0.0, 5.0),
+                x2, IntervalDomain.of(0.0, 5.0));
+        var result = c.propagate(domains);
+        assertThat(result).isPresent();
+        assertThat(result.get()).isEmpty();
+    }
+
+    @Test
+    void toString_doubleLimit_displayedAsDecimal() {
+        Variable<Double> xd = F.create("xds");
+        var c = CumulativeConstraint.of(List.of(xd), List.of(1.5), List.of(0.5), 2.5);
+        assertThat(c.toString()).isEqualTo("<(xds), cumulative(limit=2.5, tasks=1)>");
+    }
+
+    @Test
+    void propagate_taskExceedsCapacity_returnsEmpty() {
+        // Task resource=3 > limit=2, no compulsory part (wide domain).
+        // slack = 2-3 = -1 < 0 → exclusive profile is always > slack, covering
+        // the NEGATIVE_INFINITY initialisation and post-loop closure branches.
+        Variable<Integer> x = F.create("x_cap");
+        var c = CumulativeConstraint.of(List.of(x), List.of(1), List.of(3), 2);
+        var result = c.propagate(Map.<Variable<?>, io.github.rcrida.jcsp.domains.Domain<?>>of(
+                x, IntRangeDomain.of(0, 5)));
+        assertThat(result).isEmpty();
+    }
+
+    @Test
+    void propagate_overlappingCompulsoryParts_staysOverloaded() {
+        // xA=[1,1] d=3 r=1 → compulsory [1,4); xB=[2,2] d=3 r=1 → compulsory [2,5).
+        // limit=2, so global profile stays within capacity (max=2 at t∈[2,4)).
+        // For xC (r=2, d=1, limit=2, slack=0): exclusive events are xA's and xB's.
+        // At t=2, profile goes from 1→2 while already overloaded (1>0 is true) — the
+        // "wasOver=true && isOver=true" (stays in overload) branch is exercised.
+        Variable<Integer> xA = F.create("xA_ov");
+        Variable<Integer> xB = F.create("xB_ov");
+        Variable<Integer> xC = F.create("xC_ov");
+        var c = CumulativeConstraint.of(List.of(xA, xB, xC), List.of(3, 3, 1), List.of(1, 1, 2), 2);
+        var domains = Map.<Variable<?>, io.github.rcrida.jcsp.domains.Domain<?>>of(
+                xA, IntRangeDomain.of(1, 1),
+                xB, IntRangeDomain.of(2, 2),
+                xC, IntRangeDomain.of(0, 5));
+        var result = c.propagate(domains);
+        assertThat(result).isPresent();
+        // xC starts at 0 are the only slot not forbidden by overloaded [1,5);
+        // timetabling however only sees the open interval (0,5) as forbidden,
+        // so newEst=0 (boundary, not open-forbidden) and newLst=5 (also boundary):
+        // no tightening is reported by the propagator.
+        assertThat(result.get()).isEmpty();
     }
 }
