@@ -11,8 +11,18 @@ import java.util.Optional;
  * <p>
  * Unlike {@link DomainObjectSet}-based domains, values are not enumerated: {@link #stream()}
  * and {@link #toBuilder()} are unsupported. Narrowing is performed via {@link #withBounds}.
- * Suitable for use with {@link io.github.rcrida.jcsp.constraints.nary.SumConstraint} and
- * {@link io.github.rcrida.jcsp.constraints.nary.LinearConstraint} bounds propagation only.
+ * <p>
+ * Supported by the following constraint types via interval-arithmetic bounds propagation:
+ * {@link io.github.rcrida.jcsp.constraints.unary.UnaryComparatorConstraint},
+ * {@link io.github.rcrida.jcsp.constraints.binary.AbsoluteDifferenceConstraint},
+ * {@link io.github.rcrida.jcsp.constraints.binary.BinaryComparatorConstraint},
+ * {@link io.github.rcrida.jcsp.constraints.binary.BinaryOffsetConstraint},
+ * {@link io.github.rcrida.jcsp.constraints.nary.CumulativeConstraint}.
+ * {@link io.github.rcrida.jcsp.constraints.nary.LexConstraint}, and
+ * {@link io.github.rcrida.jcsp.constraints.nary.LinearConstraint},
+ * {@link io.github.rcrida.jcsp.constraints.nary.SumConstraint},
+ * Any other constraint type referencing an {@code IntervalDomain} variable is rejected at
+ * build time with {@link IllegalArgumentException}.
  */
 @EqualsAndHashCode
 public final class IntervalDomain implements BoundedDomain<Double> {
