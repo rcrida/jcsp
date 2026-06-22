@@ -258,6 +258,74 @@ public class RealValuedConstraintTest {
     }
 
     @Test
+    void maxConstraint_eq_forcedToSingleton() {
+        // x∈[0,10], y∈[0,3], max(x,y)==5: propagation clips x to [0,5], then forces x=[5,5]
+        // (only x can reach 5 after clip); y stays [0,3] and gets snapped to midpoint 1.5
+        Variable<Double> x = F.create("mx_eq_x"), y = F.create("mx_eq_y");
+        var csp = ConstraintSatisfactionProblem.builder()
+                .variableDomain(x, IntervalDomain.of(0.0, 10.0))
+                .variableDomain(y, IntervalDomain.of(0.0, 3.0))
+                .maxConstraint(Set.of(x, y), Operator.EQ, 5.0)
+                .build();
+        var solution = Solver.Factory.INSTANCE.createSolver(csp).getSolution();
+        assertThat(solution).isPresent();
+        double xVal = (Double) solution.get().getValue(x).orElseThrow();
+        double yVal = (Double) solution.get().getValue(y).orElseThrow();
+        assertThat(Math.max(xVal, yVal)).isCloseTo(5.0, within(1e-9));
+    }
+
+    @Test
+    void maxConstraint_leq_clipsAndResolvesWithSum() {
+        // x∈[0,10], y∈[0,10], max(x,y)<=8, x+y=10:
+        // max propagation clips both to [0,8]; sum narrows both to [2,8]; snap x to 5.0, y=5.0
+        Variable<Double> x = F.create("mx_leq_x"), y = F.create("mx_leq_y");
+        var csp = ConstraintSatisfactionProblem.builder()
+                .variableDomain(x, IntervalDomain.of(0.0, 10.0))
+                .variableDomain(y, IntervalDomain.of(0.0, 10.0))
+                .maxConstraint(Set.of(x, y), Operator.LEQ, 8.0)
+                .sumConstraint(Set.of(x, y), Operator.EQ, 10.0)
+                .build();
+        var solution = Solver.Factory.INSTANCE.createSolver(csp).getSolution();
+        assertThat(solution).isPresent();
+        double xVal = (Double) solution.get().getValue(x).orElseThrow();
+        double yVal = (Double) solution.get().getValue(y).orElseThrow();
+        assertThat(Math.max(xVal, yVal)).isLessThanOrEqualTo(8.0 + 1e-9);
+        assertThat(xVal + yVal).isCloseTo(10.0, within(1e-9));
+    }
+
+    @Test
+    void maxConstraint_geq_forcesMinAndResolvesWithSum() {
+        // x∈[0,10], y∈[0,3], max(x,y)>=6, x+y=8:
+        // only x can reach 6; x.min raised to 6; sum: y=8-x∈[8-10,8-6]=[−2,2]∩[0,3]=[0,2]
+        // snap x to 8.0, sum forces y=0.0; max(8,0)=8>=6 ✓
+        Variable<Double> x = F.create("mx_geq_x"), y = F.create("mx_geq_y");
+        var csp = ConstraintSatisfactionProblem.builder()
+                .variableDomain(x, IntervalDomain.of(0.0, 10.0))
+                .variableDomain(y, IntervalDomain.of(0.0, 3.0))
+                .maxConstraint(Set.of(x, y), Operator.GEQ, 6.0)
+                .sumConstraint(Set.of(x, y), Operator.EQ, 8.0)
+                .build();
+        var solution = Solver.Factory.INSTANCE.createSolver(csp).getSolution();
+        assertThat(solution).isPresent();
+        double xVal = (Double) solution.get().getValue(x).orElseThrow();
+        double yVal = (Double) solution.get().getValue(y).orElseThrow();
+        assertThat(Math.max(xVal, yVal)).isGreaterThanOrEqualTo(6.0 - 1e-9);
+        assertThat(xVal + yVal).isCloseTo(8.0, within(1e-9));
+    }
+
+    @Test
+    void maxConstraint_infeasible_returnsNoSolutions() {
+        // x∈[6,10], y∈[7,9], max(x,y)<=5: globalMin=max(6,7)=7 > 5 → infeasible by propagation
+        Variable<Double> x = F.create("mx_inf_x"), y = F.create("mx_inf_y");
+        var csp = ConstraintSatisfactionProblem.builder()
+                .variableDomain(x, IntervalDomain.of(6.0, 10.0))
+                .variableDomain(y, IntervalDomain.of(7.0, 9.0))
+                .maxConstraint(Set.of(x, y), Operator.LEQ, 5.0)
+                .build();
+        assertThat(Solver.Factory.INSTANCE.createSolver(csp).getSolutions()).isEmpty();
+    }
+
+    @Test
     void cumulativeConstraint_intervalStarts_resolvedByPropagation() {
         // Three serial tasks (resource=1, limit=1), each duration=2.0.
         // x1 and x2 are fixed via singleton IntervalDomains, giving them compulsory parts

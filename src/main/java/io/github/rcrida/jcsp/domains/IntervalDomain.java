@@ -18,8 +18,9 @@ import java.util.Optional;
  * {@link io.github.rcrida.jcsp.constraints.binary.BinaryComparatorConstraint},
  * {@link io.github.rcrida.jcsp.constraints.binary.BinaryOffsetConstraint},
  * {@link io.github.rcrida.jcsp.constraints.nary.CumulativeConstraint}.
- * {@link io.github.rcrida.jcsp.constraints.nary.LexConstraint}, and
+ * {@link io.github.rcrida.jcsp.constraints.nary.LexConstraint},
  * {@link io.github.rcrida.jcsp.constraints.nary.LinearConstraint},
+ * {@link io.github.rcrida.jcsp.constraints.nary.MaxConstraint},
  * {@link io.github.rcrida.jcsp.constraints.nary.SumConstraint},
  * Any other constraint type referencing an {@code IntervalDomain} variable is rejected at
  * build time with {@link IllegalArgumentException}.
