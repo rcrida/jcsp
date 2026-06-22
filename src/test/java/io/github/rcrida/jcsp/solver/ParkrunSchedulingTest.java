@@ -31,9 +31,16 @@ import static org.assertj.core.api.Assertions.assertThat;
  * (Carol, Dave, Grace), and three dual-role (Eve, Mark, Henry). Each eligible person
  * volunteers between {@code RD_MIN}/{@code VC_MIN} and {@code RD_MAX}/{@code VC_MAX}
  * times per role, computed from the average slots per eligible person.
+ *
+ * <p>Four couple constraints add social structure: Sarah+Dave and Tom+Carol are
+ * same-weekend partners who want to volunteer together (their assignments must coincide
+ * each week); Frank+Grace and Eve+Mark have children and cannot both be on shift the
+ * same weekend (at most one of them may be scheduled per week).
  */
 public class ParkrunSchedulingTest {
     enum Role { RD, VC }
+    enum CoupleType { SAME_WEEKEND, DIFFERENT_WEEKEND }
+    record Couple(Person a, Person b, CoupleType type) {}
 
     record Person(String name, Set<Role> roles, Set<Integer> preferredWeeks, Set<Integer> unavailableWeeks, int carryOver) {
         boolean canDo(Role role)      { return roles.contains(role); }
@@ -63,6 +70,19 @@ public class ParkrunSchedulingTest {
         new Person("Eve",   Set.of(Role.RD, Role.VC),   ALL_WEEKS,                    Set.of(7, 8),         0),
         new Person("Mark",  Set.of(Role.RD, Role.VC),   Set.of(1,2,3,4,5,6,7),       Set.of(9, 12),        2),
         new Person("Henry", Set.of(Role.RD, Role.VC),   Set.of(5,6,7,8,9,10,11),     Set.of(3, 8, 9),      0)
+    );
+
+    static Person person(String name) {
+        return PEOPLE.stream().filter(p -> p.name().equals(name)).findFirst().orElseThrow();
+    }
+
+    // Same-weekend: partners want to be on shift together (their assignments must coincide each week).
+    // Different-weekend: partners have children and cannot both be on shift the same week.
+    static final List<Couple> COUPLES = List.of(
+        new Couple(person("Sarah"), person("Dave"),  CoupleType.SAME_WEEKEND),
+        new Couple(person("Tom"),   person("Carol"), CoupleType.SAME_WEEKEND),
+        new Couple(person("Frank"), person("Grace"), CoupleType.DIFFERENT_WEEKEND),
+        new Couple(person("Eve"),   person("Mark"),  CoupleType.DIFFERENT_WEEKEND)
     );
 
     // Per-role slot bounds: average = WEEKS / eligible_count.
@@ -155,7 +175,46 @@ public class ParkrunSchedulingTest {
             }
         }
 
+        // Couple constraints per week
+        for (Couple couple : COUPLES) {
+            for (int w = 1; w <= WEEKS; w++) {
+                var aVars = allVarsForWeek(couple.a(), w);
+                var bVars = allVarsForWeek(couple.b(), w);
+                if (aVars.isEmpty() && bVars.isEmpty()) continue;
+                if (couple.type() == CoupleType.SAME_WEEKEND) {
+                    // Both partners must be scheduled the same weeks
+                    if (aVars.isEmpty()) {
+                        bVars.forEach(v -> csp.equalsConstraint(v, false));
+                    } else if (bVars.isEmpty()) {
+                        aVars.forEach(v -> csp.equalsConstraint(v, false));
+                    } else {
+                        // Single-role complementary pairs: direct equality per week
+                        csp.equalsConstraint(aVars.get(0), bVars.get(0));
+                    }
+                } else {
+                    // At most one of the couple may be on shift this week
+                    if (!aVars.isEmpty() && !bVars.isEmpty()) {
+                        var combined = new HashSet<Variable<Boolean>>(aVars);
+                        combined.addAll(bVars);
+                        csp.atMostOneConstraint(combined);
+                    }
+                }
+            }
+        }
+
         return csp.build();
+    }
+
+    /** All variables person {@code p} has in {@code week} across all their eligible roles. */
+    static List<Variable<Boolean>> allVarsForWeek(Person p, int week) {
+        var result = new ArrayList<Variable<Boolean>>();
+        for (Role r : Role.values()) {
+            var weekMap = Z.get(p).get(r);
+            if (weekMap == null) continue;
+            var v = weekMap.get(week);
+            if (v != null) result.add(v);
+        }
+        return result;
     }
 
     static Set<Variable<Boolean>> slotVars(Role role, int week) {
