@@ -321,7 +321,7 @@ public class ParkrunSchedulingTest {
 
     @Test
     void getLocalSolution() {
-        val solver = MinConflictsSolver.of(20, 4000, ParkrunSchedulingTest::initialAssignment);
+        val solver = LocalSolver.Factory.INSTANCE.createLocalSolver(20, 4000, ParkrunSchedulingTest::initialAssignment);
         val solution = solver.getLocalSolution(ROSTER, ParkrunSchedulingTest::cost);
         assertThat(solution).isPresent();
         printRoster(solution.get());
@@ -349,7 +349,8 @@ public class ParkrunSchedulingTest {
             Collections.shuffle(weeks, new Random(ThreadLocalRandom.current().nextLong()));
             for (int w : weeks) {
                 var candidates = PEOPLE.stream()
-                    .filter(p -> p.canDo(r) && Z.get(p).get(r).containsKey(w))
+                    .filter(p -> p.canDo(r) && Z.get(p).get(r).containsKey(w)
+                            && csp.isAllowedValue(Z.get(p).get(r).get(w), true))
                     .toList();
                 if (candidates.isEmpty()) continue;
                 // Prefer preferred+least-loaded; fall back to least-loaded
