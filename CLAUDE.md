@@ -82,7 +82,9 @@ NodeConsistency → UnaryComparatorBounds → BinaryComparatorBounds → OffsetB
 
 Seeded by `RandomAssignmentFactory`, `GreedyAssignmentFactory`, or `FallbackAssignmentFactory`.
 
-`MinConflictsSolver` runs all `maxAttempts` restarts in parallel via `IntStream.parallel()`: the satisfaction path returns the first solution found (unordered, so whichever attempt finishes first wins); the optimization path runs all attempts in parallel and returns the true global minimum across all of them. `IndependentSubproblemLocalSolver` uses `parallelStream()` so disjoint subproblems are also solved concurrently.
+`MinConflictsSolver` and `WalkSATSolver` each run all `maxAttempts` restarts in parallel via `IntStream.parallel()`: the satisfaction path returns the first solution found (unordered); the optimization path runs all attempts in parallel and returns the true global minimum (MinConflicts only — WalkSAT does not support optimization). `IndependentSubproblemLocalSolver` uses `parallelStream()` so disjoint subproblems are also solved concurrently.
+
+`LocalSolver.Factory.INSTANCE` automatically routes to `WalkSATSolver` for satisfaction when all variable domains are `BooleanDomain`, and to `MinConflictsSolver` otherwise. `WalkSATSolver` always falls back to `MinConflictsSolver` for the objective overload.
 
 The preprocessing chain before `MinConflicts` runs all `Propagatable` constraint types (via `PREPROCESSORS` list in `LocalSolver.Factory`) in the same order as `PropagationFixpointSolver.PROPAGATORS` except without the outer fixpoint loop and without AllDiff GAC. Includes `AtLeastNConstraint` and `AtMostNConstraint` propagation — particularly useful for local search where these boolean constraints have no binary decomposition to rely on. This detects infeasibility early (avoiding wasted attempts) and prunes domains to improve initial assignment quality. AllDiff GAC is intentionally excluded — it is expensive and repair-based search does not benefit from that level of arc consistency.
 

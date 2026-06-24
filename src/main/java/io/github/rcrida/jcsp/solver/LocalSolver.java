@@ -6,6 +6,7 @@ import io.github.rcrida.jcsp.consistency.ConstraintConsistency;
 import io.github.rcrida.jcsp.consistency.fixpoint.FixpointConsistency;
 import io.github.rcrida.jcsp.consistency.arc.AC3;
 import io.github.rcrida.jcsp.consistency.node.NodeConsistency;
+import io.github.rcrida.jcsp.domains.BooleanDomain;
 import io.github.rcrida.jcsp.constraints.nary.AmongConstraint;
 import io.github.rcrida.jcsp.constraints.nary.AtLeastNConstraint;
 import io.github.rcrida.jcsp.constraints.nary.AtMostNConstraint;
@@ -75,15 +76,22 @@ public interface LocalSolver {
         );
 
         Factory INSTANCE = (maxAttempts, maxSteps, initialAssignmentFactory) -> {
-            val inner = IndependentSubproblemLocalSolver.builder()
+            val minConflicts = IndependentSubproblemLocalSolver.builder()
                     .delegate(MinConflictsSolver.of(maxAttempts, maxSteps, initialAssignmentFactory))
+                    .build();
+            val walkSat = IndependentSubproblemLocalSolver.builder()
+                    .delegate(WalkSATSolver.of(maxAttempts, maxSteps, initialAssignmentFactory))
                     .build();
             return new LocalSolver() {
                 @Override
                 public Optional<Assignment> getLocalSolution(@NonNull ConstraintSatisfactionProblem csp) {
                     var reduced = Optional.of(csp);
                     for (var p : PREPROCESSORS) reduced = reduced.flatMap(p::apply);
-                    return reduced.flatMap(inner::getLocalSolution);
+                    return reduced.flatMap(r -> {
+                        boolean allBoolean = r.getVariableDomains().values().stream()
+                                .allMatch(BooleanDomain.class::isInstance);
+                        return (allBoolean ? walkSat : minConflicts).getLocalSolution(r);
+                    });
                 }
 
                 @Override
@@ -91,7 +99,7 @@ public interface LocalSolver {
                                                              @NonNull ToDoubleFunction<Assignment> objective) {
                     var reduced = Optional.of(csp);
                     for (var p : PREPROCESSORS) reduced = reduced.flatMap(p::apply);
-                    return reduced.flatMap(r -> inner.getLocalSolution(r, objective));
+                    return reduced.flatMap(r -> minConflicts.getLocalSolution(r, objective));
                 }
             };
         };
