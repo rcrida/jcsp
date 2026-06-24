@@ -16,9 +16,6 @@ import java.util.stream.Stream;
  * in a {@link LazyList}, so they are computed at most once regardless of how many combined solutions are
  * requested. This is efficient for both finding the first solution (only the first element of each
  * sub-problem is computed) and finding all solutions (inner sub-problem solutions are replayed from cache).
- * <p>
- * {@link #getSolution} overrides the default to solve all sub-problems in parallel, finding only the
- * first solution from each — so the common find-first case pays no cost for unreachable solutions.
  */
 @Slf4j
 @SuperBuilder
