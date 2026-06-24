@@ -38,7 +38,7 @@ public class IndependentSubproblemLocalSolver implements LocalSolver {
         return csp.decomposeSubproblems()
                 .map(subproblems -> {
                     log.info("Solving {} independent subproblems", subproblems.size());
-                    return subproblems.stream()
+                    return subproblems.parallelStream()
                             .peek(sub -> log.info("Solving subproblem {}", sub))
                             .map(solver)
                             .reduce((a1, a2) -> a1.flatMap(r1 -> a2.map(r1::merge)))
