@@ -13,7 +13,7 @@ A Java library implementing classic AI algorithms for solving Constraint Satisfa
 - **Boolean domain**: `BooleanDomain` for modelling binary assignment problems (e.g. timetabling as a 0-1 matrix)
 - **Functional style**: immutable value objects, composable solver decorators, and a lazy `Stream<Assignment>` API throughout
 - **Heuristics**: MRV variable selection, LCV value ordering, and Minimum Degree variable elimination for tree decomposition
-- **Local search**: `LocalSolver.Factory.INSTANCE` wires the full pipeline (NC + AC3 + bounds/value propagation → independent subproblem decomposition → min-conflicts) and supports both satisfaction and optimization. All `maxAttempts` restarts run in parallel; independent subproblems are also solved concurrently. Seeded by `RandomAssignmentFactory`, `GreedyAssignmentFactory`, or `FallbackAssignmentFactory` for hybrid restart strategies
+- **Local search**: `LocalSolver.Factory.INSTANCE` wires the full pipeline (NC + AC3 + bounds/value propagation → independent subproblem decomposition → terminal solver) and supports both satisfaction and optimization. Terminal solver is auto-selected: WalkSAT for all-boolean satisfaction CSPs without counting constraints, LargeNeighborhoodSearch for optimization with `ExactlyOneConstraint`s, MinConflicts otherwise. All `maxAttempts` restarts run in parallel; independent subproblems are also solved concurrently. Seeded by `RandomAssignmentFactory`, `GreedyAssignmentFactory`, or `FallbackAssignmentFactory` for hybrid restart strategies
 - **Reification**: `ReifiedConstraint` (`b <-> body`) and `ImplicationConstraint` (`b -> body`) introduce boolean indicator variables that capture constraint satisfaction — enables soft constraints, counting satisfaction, and conditional constraints via `csp.reifyConstraint(b, constraint)` and `csp.impliesConstraint(b, constraint)`
 - **Real-valued variables**: `IntervalDomain` represents a continuous `[min, max]` range of `double`s. `SumConstraint`, `LinearConstraint`, `UnaryComparatorConstraint`, `BinaryComparatorConstraint`, `BinaryOffsetConstraint`, `AbsoluteDifferenceConstraint`, `LexConstraint`, and `CumulativeConstraint` all propagate over interval bounds, so many continuous problems are solved entirely by propagation
 - **Continuous optimization**: `createSolver(csp, objective)` auto-detects `IntervalDomain` variables and explores their feasible region via `BisectionConditioningSolver` — recursively bisecting intervals to within `DEFAULT_BISECTION_EPSILON (1e-3)`, repropagating bounds at each step, then filtering the resulting feasible points by the objective; `getSolution()` returns the global optimum and `getSolutions()` streams improving assignments
@@ -182,8 +182,13 @@ Tree decomposition uses a domain-aware clique size limit (`d^targetTreewidth`, c
 `LocalSolver.Factory.INSTANCE` wires the local search pipeline:
 
 ```
-NodeConsistency → AC3 → SumBounds → LinearBounds → CountValue → InverseArc → AmongValue → AtLeastN/AtMostN → CumulativeTimetable → GlobalCardinalityValue → LexBounds → TuplesGAC → IndependentSubproblems → MinConflicts
+NodeConsistency → AC3 → SumBounds → LinearBounds → CountValue → InverseArc → AmongValue → AtLeastN/AtMostN → CumulativeTimetable → GlobalCardinalityValue → LexBounds → TuplesGAC → IndependentSubproblems → WalkSAT / LNS / MinConflicts
 ```
+
+The terminal solver is chosen automatically after preprocessing:
+- **WalkSAT** — satisfaction only; used when all variable domains are boolean and the CSP has no `ExactlyOneConstraint` or `AtLeastNConstraint`
+- **LargeNeighborhoodSearch** — optimization only; used when the CSP contains any `ExactlyOneConstraint`; enumerates destroy-repair moves over exactly-one slots
+- **MinConflicts** — used otherwise for both satisfaction and optimization
 
 Create a local solver and call `getLocalSolution` for satisfaction, or pass an objective for optimization:
 
