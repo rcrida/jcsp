@@ -6,6 +6,9 @@ import io.github.rcrida.jcsp.constraints.BinaryDecomposable;
 import io.github.rcrida.jcsp.constraints.Constraint;
 import io.github.rcrida.jcsp.constraints.nary.NaryConstraint;
 import io.github.rcrida.jcsp.constraints.unary.UnaryConstraint;
+import io.github.rcrida.jcsp.domains.BooleanDomain;
+import io.github.rcrida.jcsp.domains.DiscreteDomain;
+import io.github.rcrida.jcsp.domains.Domain;
 import io.github.rcrida.jcsp.solver.assignmentfactory.InitialAssignmentFactory;
 import io.github.rcrida.jcsp.variables.Variable;
 import lombok.Builder;
@@ -13,22 +16,25 @@ import lombok.Value;
 import lombok.extern.slf4j.Slf4j;
 import org.jspecify.annotations.NonNull;
 
+import java.util.Comparator;
 import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.ThreadLocalRandom;
+import java.util.function.ToDoubleFunction;
 import java.util.stream.IntStream;
 import java.util.stream.Stream;
 
 /**
- * WalkSAT local search for boolean constraint satisfaction problems.
+ * WalkSAT local search for boolean constraint satisfaction and optimization problems.
  * <p>
  * At each step, picks a random unsatisfied constraint, then either flips a random variable
  * from that constraint (noise walk, probability {@link #noiseParameter}) or flips the variable
  * that minimises the total number of violated constraints (greedy). The noise walk prevents
  * getting stuck in local optima that pure greedy repair cannot escape.
  * <p>
- * Runs all {@code maxAttempts} restarts in parallel; returns the first solution found.
- * Only suitable for satisfaction (no objective). Use {@link MinConflictsSolver} for optimization.
+ * Runs all {@code maxAttempts} restarts in parallel. For satisfaction, returns the first
+ * solution found. For optimization, each attempt stops at its first feasible solution and
+ * all attempts run to completion; the one with the minimum objective value is returned.
  */
 @Slf4j
 @Value
@@ -50,25 +56,39 @@ public class WalkSATSolver implements LocalSolver {
         return IntStream.range(0, maxAttempts)
                 .parallel()
                 .unordered()
-                .mapToObj(attempt -> solveAttempt(csp, constraints, attempt))
+                .mapToObj(attempt -> runAttempt(csp, constraints, attempt))
                 .filter(Optional::isPresent)
                 .findFirst()
                 .orElse(Optional.empty());
     }
 
-    private Optional<Assignment> solveAttempt(@NonNull ConstraintSatisfactionProblem csp,
-                                               @NonNull List<Constraint> constraints, int attempt) {
+    @Override
+    public Optional<Assignment> getLocalSolution(@NonNull ConstraintSatisfactionProblem csp,
+                                                  @NonNull ToDoubleFunction<Assignment> objective) {
+        var constraints = candidates(csp).toList();
+        return IntStream.range(0, maxAttempts)
+                .parallel()
+                .mapToObj(attempt -> runAttempt(csp, constraints, attempt))
+                .filter(Optional::isPresent)
+                .map(Optional::get)
+                .min(Comparator.comparingDouble(objective));
+    }
+
+    private Optional<Assignment> runAttempt(@NonNull ConstraintSatisfactionProblem csp,
+                                             @NonNull List<Constraint> constraints, int attempt) {
         var current = initialAssignmentFactory.getAssignment(csp);
         for (int step = 0; step < maxSteps; step++) {
             if (current.isSolution(csp)) {
                 log.info("WalkSAT solution at attempt {} step {}", attempt, step);
                 return Optional.of(current);
             }
-            var unsatisfied = constraints.stream().filter(c -> !c.isSatisfiedBy(current)).toList();
+            var snapshot = current;
+            var unsatisfied = constraints.stream().filter(c -> !c.isSatisfiedBy(snapshot)).toList();
             if (unsatisfied.isEmpty()) break;
             var constraint = unsatisfied.get(ThreadLocalRandom.current().nextInt(unsatisfied.size()));
             var vars = constraint.getVariables().stream()
                     .filter(v -> csp.getVariableDomains().containsKey(v))
+                    .filter(v -> canFlip(csp.getDomain(v)))
                     .toList();
             if (vars.isEmpty()) continue;
             var toFlip = ThreadLocalRandom.current().nextDouble() < noiseParameter
@@ -92,6 +112,15 @@ public class WalkSATSolver implements LocalSolver {
             }
         }
         return best;
+    }
+
+    static boolean canFlip(@NonNull Domain<?> domain) {
+        if (domain instanceof BooleanDomain) return true;
+        if (domain instanceof DiscreteDomain<?> dd) {
+            var values = dd.toList();
+            return values.contains(Boolean.TRUE) && values.contains(Boolean.FALSE);
+        }
+        return false;
     }
 
     @SuppressWarnings("unchecked")

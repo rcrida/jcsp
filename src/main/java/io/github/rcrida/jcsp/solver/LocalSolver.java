@@ -6,9 +6,9 @@ import io.github.rcrida.jcsp.consistency.ConstraintConsistency;
 import io.github.rcrida.jcsp.consistency.fixpoint.FixpointConsistency;
 import io.github.rcrida.jcsp.consistency.arc.AC3;
 import io.github.rcrida.jcsp.consistency.node.NodeConsistency;
-import io.github.rcrida.jcsp.domains.BooleanDomain;
-import io.github.rcrida.jcsp.constraints.nary.AmongConstraint;
 import io.github.rcrida.jcsp.constraints.nary.AtLeastNConstraint;
+import io.github.rcrida.jcsp.constraints.nary.ExactlyOneConstraint;
+import io.github.rcrida.jcsp.constraints.nary.AmongConstraint;
 import io.github.rcrida.jcsp.constraints.nary.AtMostNConstraint;
 import io.github.rcrida.jcsp.constraints.nary.CountConstraint;
 import io.github.rcrida.jcsp.constraints.nary.CumulativeConstraint;
@@ -89,8 +89,11 @@ public interface LocalSolver {
                     for (var p : PREPROCESSORS) reduced = reduced.flatMap(p::apply);
                     return reduced.flatMap(r -> {
                         boolean allBoolean = r.getVariableDomains().values().stream()
-                                .allMatch(BooleanDomain.class::isInstance);
-                        return (allBoolean ? walkSat : minConflicts).getLocalSolution(r);
+                                .allMatch(d -> d.isSingleton() || WalkSATSolver.canFlip(d));
+                        boolean noCountingConstraints = r.getConstraints().stream()
+                                .noneMatch(c -> c instanceof ExactlyOneConstraint
+                                        || c instanceof AtLeastNConstraint);
+                        return (allBoolean && noCountingConstraints ? walkSat : minConflicts).getLocalSolution(r);
                     });
                 }
 
