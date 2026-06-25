@@ -82,6 +82,9 @@ public interface LocalSolver {
             val walkSat = IndependentSubproblemLocalSolver.builder()
                     .delegate(WalkSATSolver.of(maxAttempts, maxSteps, initialAssignmentFactory))
                     .build();
+            val lns = IndependentSubproblemLocalSolver.builder()
+                    .delegate(LargeNeighborhoodSolver.of(maxAttempts, maxSteps, initialAssignmentFactory))
+                    .build();
             return new LocalSolver() {
                 @Override
                 public Optional<Assignment> getLocalSolution(@NonNull ConstraintSatisfactionProblem csp) {
@@ -102,7 +105,11 @@ public interface LocalSolver {
                                                              @NonNull ToDoubleFunction<Assignment> objective) {
                     var reduced = Optional.of(csp);
                     for (var p : PREPROCESSORS) reduced = reduced.flatMap(p::apply);
-                    return reduced.flatMap(r -> minConflicts.getLocalSolution(r, objective));
+                    return reduced.flatMap(r -> {
+                        boolean hasExactlyOne = r.getConstraints().stream()
+                                .anyMatch(c -> c instanceof ExactlyOneConstraint);
+                        return (hasExactlyOne ? lns : minConflicts).getLocalSolution(r, objective);
+                    });
                 }
             };
         };

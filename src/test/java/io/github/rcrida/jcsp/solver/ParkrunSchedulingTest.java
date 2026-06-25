@@ -321,7 +321,7 @@ public class ParkrunSchedulingTest {
 
     @Test
     void getLocalSolution() {
-        val solver = LocalSolver.Factory.INSTANCE.createLocalSolver(100, 400, ParkrunSchedulingTest::initialAssignment);
+        val solver = LocalSolver.Factory.INSTANCE.createLocalSolver(10, 100, ParkrunSchedulingTest::initialAssignment);
         val solution = solver.getLocalSolution(ROSTER, ParkrunSchedulingTest::cost);
         assertThat(solution).isPresent();
         printRoster(solution.get());
