@@ -68,7 +68,7 @@ Key decorators:
 
 `SolverDecorator.getSolutions()` short-circuits immediately when any preprocessing step reduces all domains to singletons, returning the forced assignment without invoking downstream stages.
 
-`BacktrackingSearch` uses pluggable strategies: `UnassignedVariableSelector` (with `MinimumRemainingValuesSelector`), `DomainValuesOrderer` (with `LeastConstrainingValueOrderer`), and `Inference` (MAC + SumConsistency bounds propagation — detecting sum infeasibility as early as possible during search).
+`BacktrackingSearch` uses pluggable strategies: `UnassignedVariableSelector` (with `MinimumRemainingValuesSelector`), `DomainValuesOrderer` (with `LeastConstrainingValueOrderer`), and `Inference` (`FULL_PROPAGATION_INFERENCE` — chains MAC with `PropagationFixpointSolver.applyFixpoint`, running all 17 propagators including AllDiff GAC, GCC, table GAC, and bounds propagators to global fixpoint at every search node).
 
 `ArcConsistentSolver`, `AllDiffConsistentSolver`, and `CumulativeConsistentSolver` have been deleted — their functionality is covered by `AC3.INSTANCE` and `FixpointConsistency.of(...)` entries in `PROPAGATORS`.
 

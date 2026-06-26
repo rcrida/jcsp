@@ -41,7 +41,7 @@ public final class FixpointConsistency implements ConstraintConsistency {
                 .toList();
         var name = constraintType.getSimpleName();
         if (constraints.isEmpty()) {
-            log.info("{}: fixpoint reached", name);
+            log.debug("{}: fixpoint reached", name);
             return Optional.of(csp);
         }
         var current = csp;
@@ -65,7 +65,7 @@ public final class FixpointConsistency implements ConstraintConsistency {
                 }
             }
         }
-        log.info("{}: fixpoint reached", name);
+        log.debug("{}: fixpoint reached", name);
         return Optional.of(current);
     }
 }

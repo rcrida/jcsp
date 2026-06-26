@@ -80,13 +80,12 @@ public class PropagationFixpointSolver extends SolverDecorator {
     /** When true, snaps non-singleton bounded domains to midpoints after propagation converges. */
     boolean snap;
 
-    @Override
-    protected @NonNull Optional<ConstraintSatisfactionProblem> preprocess(
-            @NonNull ConstraintSatisfactionProblem csp) {
-        return runFixpoint(csp);
-    }
-
-    private @NonNull Optional<ConstraintSatisfactionProblem> runFixpoint(
+    /**
+     * Runs the full propagator fixpoint without snapping bounded domains. Called by
+     * {@link io.github.rcrida.jcsp.solver.Solver.Factory#FULL_PROPAGATION_INFERENCE} to apply
+     * all propagators during backtracking search, not just as a preprocessing pass.
+     */
+    static Optional<ConstraintSatisfactionProblem> applyFixpoint(
             @NonNull ConstraintSatisfactionProblem csp) {
         var current = csp;
         boolean changed = true;
@@ -98,6 +97,25 @@ public class PropagationFixpointSolver extends SolverDecorator {
                 current = after.get();
             }
             changed = domainSum(current) < domainSumBefore;
+        }
+        return Optional.of(current);
+    }
+
+    @Override
+    protected @NonNull Optional<ConstraintSatisfactionProblem> preprocess(
+            @NonNull ConstraintSatisfactionProblem csp) {
+        return runFixpoint(csp);
+    }
+
+    private @NonNull Optional<ConstraintSatisfactionProblem> runFixpoint(
+            @NonNull ConstraintSatisfactionProblem csp) {
+        var current = csp;
+        boolean changed = true;
+        while (changed) {
+            var result = applyFixpoint(current);
+            if (result.isEmpty()) return Optional.empty();
+            changed = domainSum(result.get()) < domainSum(current);
+            current = result.get();
             if (!changed && snap) {
                 var snapTarget = BisectionConditioningSolver.findWidestBounded(current);
                 if (snapTarget != null) {

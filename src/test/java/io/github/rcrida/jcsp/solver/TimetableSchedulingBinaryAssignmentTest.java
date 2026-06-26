@@ -269,7 +269,7 @@ public class TimetableSchedulingBinaryAssignmentTest {
         // The binary formulation requires two variable changes per lesson move (old teacherSlot → false,
         // new teacherSlot → true), so the solver can cycle in the invalid intermediate state where a lesson
         // has no assignment. Restarting with a new random initial assignment escapes these cycles.
-        val solver = LocalSolver.Factory.INSTANCE.createLocalSolver(20, 2000, TimetableSchedulingBinaryAssignmentTest::initialAssignment);
+        val solver = LocalSolver.Factory.INSTANCE.createLocalSolver(20, 1000, TimetableSchedulingBinaryAssignmentTest::initialAssignment);
         val solution = solver.getLocalSolution(problem);
         assertThat(solution).isPresent();
         assertThat(solution.get().isSolution(problem)).isTrue();

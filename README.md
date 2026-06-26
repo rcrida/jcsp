@@ -162,18 +162,18 @@ builder.impliesConstraint(b, constraint)                    // b -> constraint  
 ```
 NodeConsistency → PropagationFixpoint(AC3 ↔ AllDiff GAC ↔ SumBounds ↔ LinearBounds ↔ CountValue ↔ InverseArc ↔ AmongValue ↔ AtLeastN/AtMostN ↔ CumulativeTimetable ↔ GlobalCardinalityValue ↔ LexBounds ↔ TuplesGAC)
     → IndependentSubproblems → TreeDecomposition → CutsetConditioning
-    → TreeSolver / BacktrackingSearch(MAC + SumBounds)
+    → TreeSolver / BacktrackingSearch(MAC + full propagator fixpoint)
 ```
 For problems with `IntervalDomain` variables the fixpoint snaps non-singleton intervals to their midpoints, giving one concrete solution.
 
 **Optimization** (`createSolver(csp, objective)`):
 ```
 NodeConsistency → PropagationFixpoint → BisectionConditioning (continuous only)
-    → BranchAndBound(BacktrackingSearch + MAC + SumBounds)
+    → BranchAndBound(BacktrackingSearch + MAC + full propagator fixpoint)
 ```
 The fixpoint leaves intervals open for bisection. `BisectionConditioningSolver` bisects each non-singleton interval to within `DEFAULT_BISECTION_EPSILON`, repropagating bounds at each step; for purely discrete CSPs it is a passthrough. `BranchAndBound` then handles remaining discrete variables.
 
-`PropagationFixpoint` runs all propagators in a combined fixpoint loop — each can expose new reductions the others exploit. Many highly-constrained problems (e.g. Zebra, Sudoku, MagicSquare) are solved entirely by propagation without any backtracking. SumConstraint bounds propagation is also applied inside the MAC inference during backtracking, detecting sum infeasibility as early as possible.
+`PropagationFixpoint` runs all propagators in a combined fixpoint loop — each can expose new reductions the others exploit. Many highly-constrained problems (e.g. Zebra, Sudoku, MagicSquare) are solved entirely by propagation without any backtracking. During backtracking, `FULL_PROPAGATION_INFERENCE` fires all 17 propagators (including AllDiff GAC, GCC, cumulative timetabling, table GAC, and bounds propagators) to global fixpoint at every search node — not just during preprocessing.
 
 Tree decomposition uses a domain-aware clique size limit (`d^targetTreewidth`, capped at 1,000,000) and is skipped when: the estimated tree complexity exceeds the search space, the constraint graph minimum degree ≥ targetTreewidth (guaranteeing the decomposer would fail), or when preprocessing fully determines the solution. When preprocessing produces all-singleton domains the solver short-circuits and returns the forced assignment directly without invoking any downstream stages. Cutset conditioning applies a practical three-tier complexity guard before conditioning.
 

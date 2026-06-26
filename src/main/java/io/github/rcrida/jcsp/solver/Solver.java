@@ -4,8 +4,6 @@ import io.github.rcrida.jcsp.ConstraintSatisfactionProblem;
 import io.github.rcrida.jcsp.assignments.Assignment;
 import io.github.rcrida.jcsp.consistency.Inference;
 import io.github.rcrida.jcsp.consistency.arc.MAC;
-import io.github.rcrida.jcsp.consistency.fixpoint.FixpointConsistency;
-import io.github.rcrida.jcsp.constraints.nary.SumConstraint;
 import io.github.rcrida.jcsp.domains.BoundedDomain;
 import io.github.rcrida.jcsp.solver.backtrackingsearch.BacktrackingSearch;
 import io.github.rcrida.jcsp.solver.backtrackingsearch.order.DefaultValueOrderer;
@@ -41,10 +39,10 @@ public interface Solver {
     }
 
     interface Factory {
-        /** MAC + SumConstraint bounds propagation used as the {@link Inference} in the solver chain. */
-        Inference MAC_SUM_INFERENCE = (problem, variable, assignment) ->
+        /** MAC followed by the full propagator fixpoint (all 17 propagatable constraint types). */
+        Inference FULL_PROPAGATION_INFERENCE = (problem, variable, assignment) ->
                 MAC.INSTANCE.apply(problem, variable, assignment)
-                        .flatMap(FixpointConsistency.of(SumConstraint.class)::apply);
+                        .flatMap(PropagationFixpointSolver::applyFixpoint);
 
         /** Bisection precision for {@link BisectionConditioningSolver} in the optimization chain. */
         double DEFAULT_BISECTION_EPSILON = 1e-3;
@@ -81,7 +79,7 @@ public interface Solver {
             public BoundSolver createSolver(@NonNull ConstraintSatisfactionProblem csp) {
                 boolean hasContinuous = csp.getVariableDomains().values().stream()
                         .anyMatch(BoundedDomain.class::isInstance);
-                val backtrackingSearch = new BacktrackingSearch(MinimumRemainingValuesSelector.INSTANCE, LeastConstrainingValueOrderer.INSTANCE, MAC_SUM_INFERENCE);
+                val backtrackingSearch = new BacktrackingSearch(MinimumRemainingValuesSelector.INSTANCE, LeastConstrainingValueOrderer.INSTANCE, FULL_PROPAGATION_INFERENCE);
                 val treeSolver = new TreeSolver(BFSTopologicalSorter.INSTANCE, DefaultValueOrderer.INSTANCE, TreeUnassignedVariableSelector.Factory.INSTANCE);
                 val cutsetConditioningSolver = CutsetConditioningSolver.builder()
                         .inner(backtrackingSearch)
@@ -107,13 +105,13 @@ public interface Solver {
                                             @NonNull ToDoubleFunction<Assignment> objective) {
                 boolean hasContinuous = csp.getVariableDomains().values().stream()
                         .anyMatch(BoundedDomain.class::isInstance);
-                val backtrackingSearch = new BacktrackingSearch(MinimumRemainingValuesSelector.INSTANCE, LeastConstrainingValueOrderer.INSTANCE, MAC_SUM_INFERENCE);
+                val backtrackingSearch = new BacktrackingSearch(MinimumRemainingValuesSelector.INSTANCE, LeastConstrainingValueOrderer.INSTANCE, FULL_PROPAGATION_INFERENCE);
                 val branchAndBound = BranchAndBoundSolver.builder()
                         .inner(backtrackingSearch)
                         .objective(objective)
                         .unassignedVariableSelector(MinimumRemainingValuesSelector.INSTANCE)
                         .domainValuesOrderer(LeastConstrainingValueOrderer.INSTANCE)
-                        .inference(MAC_SUM_INFERENCE)
+                        .inference(FULL_PROPAGATION_INFERENCE)
                         .build();
                 Solver terminal = hasContinuous
                         ? BisectionConditioningSolver.builder()
