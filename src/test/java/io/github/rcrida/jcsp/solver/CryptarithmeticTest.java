@@ -90,8 +90,8 @@ public class CryptarithmeticTest {
                     c2, 0,
                     c3, 1
             )));
-            assertThat(value.getStatistics().getNodesExplored().get()).isLessThanOrEqualTo(477);
-            assertThat(value.getStatistics().getConstraintChecks().get()).isLessThanOrEqualTo(1790);
+            assertThat(value.getStatistics().getNodesExplored().get()).isLessThanOrEqualTo(1600);
+            assertThat(value.getStatistics().getConstraintChecks().get()).isLessThanOrEqualTo(7000);
         });
     }
 

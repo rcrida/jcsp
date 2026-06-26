@@ -1,0 +1,213 @@
+package io.github.rcrida.jcsp.solver;
+
+import io.github.rcrida.jcsp.ConstraintSatisfactionProblem;
+import io.github.rcrida.jcsp.assignments.Assignment;
+import io.github.rcrida.jcsp.domains.IntRangeDomain;
+import io.github.rcrida.jcsp.solver.backtrackingsearch.order.LeastConstrainingValueOrderer;
+import io.github.rcrida.jcsp.variables.Variable;
+import org.junit.jupiter.api.Test;
+
+import java.util.List;
+import java.util.Optional;
+import java.util.Set;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+
+class DomWdegLubySearchTest {
+
+    private static final Variable.Factory VF = Variable.Factory.INSTANCE;
+
+    // ── Luby sequence ───────────────────────────────────────────────────────
+
+    @Test
+    void lubySequenceFirst15Terms() {
+        long[] expected = {1, 1, 2, 1, 1, 2, 4, 1, 1, 2, 1, 1, 2, 4, 8};
+        for (int k = 1; k <= 15; k++) {
+            assertThat(DomWdegLubySearch.luby(k))
+                    .as("luby(%d)", k)
+                    .isEqualTo(expected[k - 1]);
+        }
+    }
+
+    @Test
+    void lubyIsPowerOf2AtRunBoundaries() {
+        assertThat(DomWdegLubySearch.luby(1)).isEqualTo(1);
+        assertThat(DomWdegLubySearch.luby(3)).isEqualTo(2);
+        assertThat(DomWdegLubySearch.luby(7)).isEqualTo(4);
+        assertThat(DomWdegLubySearch.luby(15)).isEqualTo(8);
+        assertThat(DomWdegLubySearch.luby(31)).isEqualTo(16);
+    }
+
+    // ── Helpers ──────────────────────────────────────────────────────────────
+
+    private static DomWdegLubySearch solver() {
+        return DomWdegLubySearch.builder()
+                .domainValuesOrderer(LeastConstrainingValueOrderer.INSTANCE)
+                .inference(Solver.Factory.FULL_PROPAGATION_INFERENCE)
+                .build();
+    }
+
+    // ── Solving ─────────────────────────────────────────────────────────────
+
+    @Test
+    void solvesSimpleTwoVariableCSP() {
+        Variable<Integer> x = VF.create("x");
+        Variable<Integer> y = VF.create("y");
+        ConstraintSatisfactionProblem csp = ConstraintSatisfactionProblem.builder()
+                .variableDomain(x, IntRangeDomain.of(1, 3))
+                .variableDomain(y, IntRangeDomain.of(1, 3))
+                .notEqualsConstraint(x, y)
+                .build();
+
+        Optional<Assignment> solution = solver().getSolution(csp);
+
+        assertThat(solution).isPresent();
+        int xv = solution.get().getValue(x).orElseThrow();
+        int yv = solution.get().getValue(y).orElseThrow();
+        assertThat(xv).isNotEqualTo(yv);
+    }
+
+    @Test
+    void returnsEmptyForUnsatisfiableCSP() {
+        Variable<Integer> x = VF.create("x");
+        Variable<Integer> y = VF.create("y");
+        ConstraintSatisfactionProblem csp = ConstraintSatisfactionProblem.builder()
+                .variableDomain(x, IntRangeDomain.of(1, 1))
+                .variableDomain(y, IntRangeDomain.of(1, 1))
+                .notEqualsConstraint(x, y)
+                .build();
+
+        assertThat(solver().getSolution(csp)).isEmpty();
+    }
+
+    @Test
+    void solves4Queens() {
+        int n = 4;
+        @SuppressWarnings("unchecked")
+        Variable<Integer>[] queens = new Variable[n];
+        for (int i = 0; i < n; i++) queens[i] = VF.create("q" + i);
+
+        var builder = ConstraintSatisfactionProblem.builder();
+        for (Variable<Integer> q : queens) builder.variableDomain(q, IntRangeDomain.of(1, n));
+        for (int i = 0; i < n; i++) {
+            for (int j = i + 1; j < n; j++) {
+                final int diff = j - i;
+                builder.notEqualsConstraint(queens[i], queens[j]);
+                builder.biPredicateConstraint(queens[i], queens[j],
+                        (a, b) -> Math.abs((int) a - (int) b) != diff);
+            }
+        }
+
+        Optional<Assignment> solution = solver().getSolution(builder.build());
+
+        assertThat(solution).isPresent();
+        Assignment a = solution.get();
+        List<Integer> placed = List.of(
+                a.getValue(queens[0]).orElseThrow(),
+                a.getValue(queens[1]).orElseThrow(),
+                a.getValue(queens[2]).orElseThrow(),
+                a.getValue(queens[3]).orElseThrow());
+        assertThat(placed).doesNotHaveDuplicates();
+        for (int i = 0; i < n; i++) {
+            for (int j = i + 1; j < n; j++) {
+                assertThat(Math.abs(placed.get(i) - placed.get(j))).isNotEqualTo(j - i);
+            }
+        }
+    }
+
+    @Test
+    void solvesWithTightBudgetViaRestarts() {
+        Variable<Integer> x = VF.create("x");
+        Variable<Integer> y = VF.create("y");
+        ConstraintSatisfactionProblem csp = ConstraintSatisfactionProblem.builder()
+                .variableDomain(x, IntRangeDomain.of(1, 5))
+                .variableDomain(y, IntRangeDomain.of(1, 5))
+                .notEqualsConstraint(x, y)
+                .build();
+
+        DomWdegLubySearch tightSolver = DomWdegLubySearch.builder()
+                .lubyUnit(1)
+                .maxRestarts(512)
+                .domainValuesOrderer(LeastConstrainingValueOrderer.INSTANCE)
+                .inference(Solver.Factory.FULL_PROPAGATION_INFERENCE)
+                .build();
+
+        assertThat(tightSolver.getSolution(csp)).isPresent();
+    }
+
+    @Test
+    void exhaustsAllRestartsWhenBudgetAlwaysExceeded() {
+        // x=1 and y=1 forced, x≠y → every MAC attempt fails immediately.
+        // With lubyUnit=1, maxRestarts=1: first restart exceeds budget on the first inference
+        // failure, the loop exits, and getSolution returns empty after exhausting all restarts.
+        // Covers: BudgetExceeded thrown, catch block, loop exhaustion, log.warn path.
+        Variable<Integer> x = VF.create("x");
+        Variable<Integer> y = VF.create("y");
+        ConstraintSatisfactionProblem csp = ConstraintSatisfactionProblem.builder()
+                .variableDomain(x, IntRangeDomain.of(1, 1))
+                .variableDomain(y, IntRangeDomain.of(1, 1))
+                .notEqualsConstraint(x, y)
+                .build();
+
+        DomWdegLubySearch extremelyTightSolver = DomWdegLubySearch.builder()
+                .lubyUnit(1)
+                .maxRestarts(1)
+                .domainValuesOrderer(LeastConstrainingValueOrderer.INSTANCE)
+                .inference(Solver.Factory.FULL_PROPAGATION_INFERENCE)
+                .build();
+
+        assertThat(extremelyTightSolver.getSolution(csp)).isEmpty();
+    }
+
+    @Test
+    void backtrackingWhenInferenceCannotDetectDeadEnd() {
+        // N-ary predicate constraints are not propagated by MAC/inference, so
+        // searchOne must recurse into dead-end subtrees and backtrack.
+        // Specifically: x=1 leads to a subtree with no solution (1+?+?≠6 for
+        // y,z∈{1,2}), so searchOne returns empty and the outer loop must
+        // continue to x=2 — covering the result.isPresent() → false branch.
+        Variable<Integer> x = VF.create("x");
+        Variable<Integer> y = VF.create("y");
+        Variable<Integer> z = VF.create("z");
+        ConstraintSatisfactionProblem csp = ConstraintSatisfactionProblem.builder()
+                .variableDomain(x, IntRangeDomain.of(1, 2))
+                .variableDomain(y, IntRangeDomain.of(1, 2))
+                .variableDomain(z, IntRangeDomain.of(1, 2))
+                .predicateConstraint(Set.of(x, y, z), a ->
+                        (int) a.getValue(x).orElseThrow()
+                      + (int) a.getValue(y).orElseThrow()
+                      + (int) a.getValue(z).orElseThrow() == 6)
+                .build();
+
+        assertThat(solver().getSolution(csp)).hasValueSatisfying(a -> {
+            assertThat((int) a.getValue(x).orElseThrow()).isEqualTo(2);
+            assertThat((int) a.getValue(y).orElseThrow()).isEqualTo(2);
+            assertThat((int) a.getValue(z).orElseThrow()).isEqualTo(2);
+        });
+    }
+
+    // ── Builder validation ────────────────────────────────────────────────────
+
+    @Test
+    void builderRejectsNonPositiveLubyUnit() {
+        assertThatThrownBy(() -> DomWdegLubySearch.builder()
+                .lubyUnit(0)
+                .domainValuesOrderer(LeastConstrainingValueOrderer.INSTANCE)
+                .inference(Solver.Factory.FULL_PROPAGATION_INFERENCE)
+                .build())
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("lubyUnit");
+    }
+
+    @Test
+    void builderRejectsNonPositiveMaxRestarts() {
+        assertThatThrownBy(() -> DomWdegLubySearch.builder()
+                .maxRestarts(0)
+                .domainValuesOrderer(LeastConstrainingValueOrderer.INSTANCE)
+                .inference(Solver.Factory.FULL_PROPAGATION_INFERENCE)
+                .build())
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("maxRestarts");
+    }
+}

@@ -79,10 +79,13 @@ public interface Solver {
             public BoundSolver createSolver(@NonNull ConstraintSatisfactionProblem csp) {
                 boolean hasContinuous = csp.getVariableDomains().values().stream()
                         .anyMatch(BoundedDomain.class::isInstance);
-                val backtrackingSearch = new BacktrackingSearch(MinimumRemainingValuesSelector.INSTANCE, LeastConstrainingValueOrderer.INSTANCE, FULL_PROPAGATION_INFERENCE);
+                val domWdegLubySearch = DomWdegLubySearch.builder()
+                        .domainValuesOrderer(LeastConstrainingValueOrderer.INSTANCE)
+                        .inference(FULL_PROPAGATION_INFERENCE)
+                        .build();
                 val treeSolver = new TreeSolver(BFSTopologicalSorter.INSTANCE, DefaultValueOrderer.INSTANCE, TreeUnassignedVariableSelector.Factory.INSTANCE);
                 val cutsetConditioningSolver = CutsetConditioningSolver.builder()
-                        .inner(backtrackingSearch)
+                        .inner(domWdegLubySearch)
                         .treeSolver(treeSolver)
                         .build();
                 val treeDecompositionSolver = TreeDecompositionSolver.builder()

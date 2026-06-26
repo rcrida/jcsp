@@ -12,7 +12,7 @@ A Java library implementing classic AI algorithms for solving Constraint Satisfa
 - **Flexible constraint types**: unary, binary (equals, not-equals, offset, comparator, logic, element, predicate, tuples), and n-ary (AllDiff, AtMostOne, AtLeastN, AtMostN, ExactlyOne, Sum, Linear, Count, Among, Inverse, GlobalCardinality, Cumulative, Tuples, Increasing, Decreasing, Lex, predicate)
 - **Boolean domain**: `BooleanDomain` for modelling binary assignment problems (e.g. timetabling as a 0-1 matrix)
 - **Functional style**: immutable value objects, composable solver decorators, and a lazy `Stream<Assignment>` API throughout
-- **Heuristics**: MRV variable selection, LCV value ordering, and Minimum Degree variable elimination for tree decomposition
+- **Heuristics**: dom/wdeg variable ordering with Luby restarts (Boussemart et al. 2004) for the satisfaction terminal solver; MRV variable selection for the optimization chain; LCV value ordering; and Minimum Degree variable elimination for tree decomposition
 - **Local search**: `LocalSolver.Factory.INSTANCE` wires the full pipeline (NC + AC3 + bounds/value propagation → independent subproblem decomposition → terminal solver) and supports both satisfaction and optimization. Terminal solver is auto-selected: WalkSAT for all-boolean satisfaction CSPs without counting constraints, LargeNeighborhoodSearch for optimization with `ExactlyOneConstraint`s, MinConflicts otherwise. All `maxAttempts` restarts run in parallel; independent subproblems are also solved concurrently. Seeded by `RandomAssignmentFactory`, `GreedyAssignmentFactory`, or `FallbackAssignmentFactory` for hybrid restart strategies
 - **Reification**: `ReifiedConstraint` (`b <-> body`) and `ImplicationConstraint` (`b -> body`) introduce boolean indicator variables that capture constraint satisfaction — enables soft constraints, counting satisfaction, and conditional constraints via `csp.reifyConstraint(b, constraint)` and `csp.impliesConstraint(b, constraint)`
 - **Real-valued variables**: `IntervalDomain` represents a continuous `[min, max]` range of `double`s. `SumConstraint`, `LinearConstraint`, `UnaryComparatorConstraint`, `BinaryComparatorConstraint`, `BinaryOffsetConstraint`, `AbsoluteDifferenceConstraint`, `LexConstraint`, and `CumulativeConstraint` all propagate over interval bounds, so many continuous problems are solved entirely by propagation
@@ -162,7 +162,7 @@ builder.impliesConstraint(b, constraint)                    // b -> constraint  
 ```
 NodeConsistency → PropagationFixpoint(AC3 ↔ AllDiff GAC ↔ SumBounds ↔ LinearBounds ↔ CountValue ↔ InverseArc ↔ AmongValue ↔ AtLeastN/AtMostN ↔ CumulativeTimetable ↔ GlobalCardinalityValue ↔ LexBounds ↔ TuplesGAC)
     → IndependentSubproblems → TreeDecomposition → CutsetConditioning
-    → TreeSolver / BacktrackingSearch(MAC + full propagator fixpoint)
+    → TreeSolver / DomWdegLubySearch(dom/wdeg + Luby restarts + MAC)
 ```
 For problems with `IntervalDomain` variables the fixpoint snaps non-singleton intervals to their midpoints, giving one concrete solution.
 
@@ -173,7 +173,9 @@ NodeConsistency → PropagationFixpoint → BisectionConditioning (continuous on
 ```
 The fixpoint leaves intervals open for bisection. `BisectionConditioningSolver` bisects each non-singleton interval to within `DEFAULT_BISECTION_EPSILON`, repropagating bounds at each step; for purely discrete CSPs it is a passthrough. `BranchAndBound` then handles remaining discrete variables.
 
-`PropagationFixpoint` runs all propagators in a combined fixpoint loop — each can expose new reductions the others exploit. Many highly-constrained problems (e.g. Zebra, Sudoku, MagicSquare) are solved entirely by propagation without any backtracking. During backtracking, `FULL_PROPAGATION_INFERENCE` fires all 17 propagators (including AllDiff GAC, GCC, cumulative timetabling, table GAC, and bounds propagators) to global fixpoint at every search node — not just during preprocessing.
+`PropagationFixpoint` runs all propagators in a combined fixpoint loop — each can expose new reductions the others exploit. Many highly-constrained problems (e.g. Zebra, Sudoku, MagicSquare) are solved entirely by propagation without any backtracking. During search, `FULL_PROPAGATION_INFERENCE` fires all 17 propagators (including AllDiff GAC, GCC, cumulative timetabling, table GAC, and bounds propagators) to global fixpoint at every search node — not just during preprocessing.
+
+`DomWdegLubySearch` — the terminal solver for general CSPs — combines **dom/wdeg variable ordering** (Boussemart et al. 2004) with **Luby restarts**. Each constraint starts with weight 1; domain wipeouts during MAC inference increment the weights of active constraints on the failing variable. The selector then picks `argmin(domainSize / weightedDegree)`, steering search away from costly regions. `getSolutions()` returns a lazy stream of all solutions with accumulated weight learning; `getSolution()` applies Luby restarts — the failure budget follows 1, 1, 2, 1, 1, 2, 4, … (×`DEFAULT_LUBY_UNIT = 100`) and weights are preserved across restarts.
 
 Tree decomposition uses a domain-aware clique size limit (`d^targetTreewidth`, capped at 1,000,000) and is skipped when: the estimated tree complexity exceeds the search space, the constraint graph minimum degree ≥ targetTreewidth (guaranteeing the decomposer would fail), or when preprocessing fully determines the solution. When preprocessing produces all-singleton domains the solver short-circuits and returns the forced assignment directly without invoking any downstream stages. Cutset conditioning applies a practical three-tier complexity guard before conditioning.
 

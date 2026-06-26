@@ -52,7 +52,7 @@ This is a Constraint Satisfaction Problem (CSP) solver library implementing clas
 
 `Solver.Factory.INSTANCE` builds two distinct chains, each returning a `BoundSolver` with the CSP already bound:
 
-**Satisfaction** (`createSolver(csp)`): `NodeConsistency → PropagationFixpoint(snap=true) → IndependentSubproblems → TreeDecomposition → CutsetConditioning → TreeSolver / BacktrackingSearch`
+**Satisfaction** (`createSolver(csp)`): `NodeConsistency → PropagationFixpoint(snap=true) → IndependentSubproblems → TreeDecomposition → CutsetConditioning → TreeSolver / DomWdegLubySearch`
 
 **Optimization** (`createSolver(csp, objective)`): `NodeConsistency → PropagationFixpoint(snap=false) → BisectionConditioning (continuous only) → BranchAndBound`
 
@@ -64,11 +64,11 @@ Key decorators:
 4. **`IndependentSubproblemSolver`** — decomposes into independent subproblems and combines solutions (satisfaction chain only)
 5. **`TreeDecompositionSolver`** — applies tree decomposition for near-tree problems; skipped when constraint graph minimum degree ≥ targetTreewidth (exact early exit)
 6. **`CutsetConditioningSolver`** — handles cyclic graphs by conditioning on a cycle cutset
-7. **`TreeSolver`** / **`BacktrackingSearch`** — terminal solvers for tree-structured or general CSPs respectively; `BranchAndBoundSolver` wraps `BacktrackingSearch` in the optimization chain
+7. **`TreeSolver`** / **`DomWdegLubySearch`** — terminal solvers for tree-structured or general CSPs respectively; `BranchAndBoundSolver` wraps `BacktrackingSearch` in the optimization chain
 
 `SolverDecorator.getSolutions()` short-circuits immediately when any preprocessing step reduces all domains to singletons, returning the forced assignment without invoking downstream stages.
 
-`BacktrackingSearch` uses pluggable strategies: `UnassignedVariableSelector` (with `MinimumRemainingValuesSelector`), `DomainValuesOrderer` (with `LeastConstrainingValueOrderer`), and `Inference` (`FULL_PROPAGATION_INFERENCE` — chains MAC with `PropagationFixpointSolver.applyFixpoint`, running all 17 propagators including AllDiff GAC, GCC, table GAC, and bounds propagators to global fixpoint at every search node).
+`DomWdegLubySearch` — the terminal solver in the satisfaction chain — combines two complementary techniques: **dom/wdeg variable ordering** (Boussemart et al. 2004) and **Luby restarts**. Each constraint starts with weight 1; when MAC inference causes a domain wipeout the weights of all active constraints on the failing variable are incremented. The selector picks `argmin(domainSize / weightedDegree)`, where weighted degree is the sum of weights of constraints involving the variable that also involve at least one other unassigned variable (variables with no active constraints get `MAX_VALUE` and are chosen last). `getSolutions()` returns a complete lazy stream of all solutions with dom/wdeg ordering and weight accumulation; `getSolution()` additionally applies Luby restarts — the failure budget per restart follows the sequence 1, 1, 2, 1, 1, 2, 4, … (multiplied by `DEFAULT_LUBY_UNIT = 100`) and weights are preserved across restarts so accumulated failure knowledge guides each new attempt. `BacktrackingSearch` (with `MinimumRemainingValuesSelector`) is retained for the optimization chain inside `BranchAndBoundSolver`.
 
 `ArcConsistentSolver`, `AllDiffConsistentSolver`, and `CumulativeConsistentSolver` have been deleted — their functionality is covered by `AC3.INSTANCE` and `FixpointConsistency.of(...)` entries in `PROPAGATORS`.
 
@@ -174,5 +174,7 @@ Classic CSP problems serve as end-to-end integration tests:
 - `ReificationTest` — soft constraints via `reifyConstraint` / `impliesConstraint`
 - `ParkrunSchedulingTest` / `TimetableSchedulingBinaryAssignmentTest` — real-world scheduling; `ParkrunSchedulingTest` exercises the LNS optimization path via `ExactlyOneConstraint`
 - `LargeNeighborhoodSolverTest` — unit tests for `LargeNeighborhoodSolver` (satisfaction and optimization paths)
+- `DomWdegLubySearchTest` — unit tests for `DomWdegLubySearch`: Luby sequence correctness, dom/wdeg solving, Luby restart budget exhaustion, backtracking through non-propagated constraints, and builder validation
+- `BacktrackingSearchTest` — unit tests for `BacktrackingSearch` (optimization chain terminal solver): backtracking via non-propagated biPredicate constraints and UNSAT inference-failure path
 - `RealValuedConstraintTest` — `IntervalDomain` variables solved by bounds propagation; covers `sumConstraint`, `linearConstraint`, `comparatorConstraint` (unary and binary), `offsetConstraint`, `lexConstraint`, `cumulativeConstraint`, and `maxConstraint` over interval domains
 - `ContinuousOptimizationTest` — continuous optimization via `createSolver(csp, objective).getSolution()` over `IntervalDomain` variables; bisection explores the feasible region down to `DEFAULT_BISECTION_EPSILON`
