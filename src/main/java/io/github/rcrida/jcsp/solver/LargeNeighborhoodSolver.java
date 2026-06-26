@@ -96,6 +96,7 @@ public class LargeNeighborhoodSolver implements LocalSolver {
         var current = initialAssignmentFactory.getAssignment(csp);
         for (int step = 0; step < maxSteps; step++) {
             current = bestNeighbor(csp, current, pickSlots(slots, Math.min(slotsPerStep, slots.size())), null);
+            current.getStatistics().incrementSteps();
             if (current.isSolution(csp)) {
                 log.info("LNS solution at attempt {} step {}", attempt, step);
                 return Optional.of(current);
@@ -112,6 +113,7 @@ public class LargeNeighborhoodSolver implements LocalSolver {
         Assignment bestFeasible = current.isSolution(csp) ? current : null;
         for (int step = 0; step < maxSteps; step++) {
             current = bestNeighbor(csp, current, pickSlots(slots, Math.min(slotsPerStep, slots.size())), objective);
+            current.getStatistics().incrementSteps();
             if (current.isSolution(csp)) {
                 if (bestFeasible == null || objective.applyAsDouble(current) < objective.applyAsDouble(bestFeasible)) {
                     bestFeasible = current;

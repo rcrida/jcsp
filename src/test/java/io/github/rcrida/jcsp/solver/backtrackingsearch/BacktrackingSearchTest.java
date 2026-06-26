@@ -8,6 +8,8 @@ import io.github.rcrida.jcsp.solver.backtrackingsearch.selector.MinimumRemaining
 import io.github.rcrida.jcsp.variables.Variable;
 import org.junit.jupiter.api.Test;
 
+import java.util.Optional;
+
 import static org.assertj.core.api.Assertions.assertThat;
 
 class BacktrackingSearchTest {
@@ -36,6 +38,27 @@ class BacktrackingSearchTest {
 
         // (1,3), (2,2), (3,1) satisfy x+y=4
         assertThat(solver().getSolutions(csp).toList()).hasSize(3);
+    }
+
+    @Test
+    void tracksBacktracksOnConsistencyFailure() {
+        // No-op inference prevents AC3 from pruning values, so the filter's
+        // isConsistent() == false branch is exercised and backtracks are counted.
+        var noInference = new BacktrackingSearch(
+                MinimumRemainingValuesSelector.INSTANCE,
+                LeastConstrainingValueOrderer.INSTANCE,
+                (csp, variable, assignment) -> Optional.of(csp));
+        Variable<Integer> x = VF.create("x");
+        Variable<Integer> y = VF.create("y");
+        ConstraintSatisfactionProblem csp = ConstraintSatisfactionProblem.builder()
+                .variableDomain(x, IntRangeDomain.of(1, 3))
+                .variableDomain(y, IntRangeDomain.of(1, 3))
+                .biPredicateConstraint(x, y, (a, b) -> (int) a + (int) b == 4)
+                .build();
+
+        var solutions = noInference.getSolutions(csp).toList();
+        assertThat(solutions).hasSize(3);
+        assertThat(solutions.get(0).getStatistics().getBacktracks().get()).isPositive();
     }
 
     @Test

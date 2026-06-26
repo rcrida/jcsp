@@ -84,6 +84,7 @@ public class DomWdegLubySearch implements Solver {
                 Optional<Assignment> result = searchOne(csp, Assignment.empty(), selector, failures, budget);
                 if (result.isPresent()) {
                     log.info("dom/wdeg+Luby: solution found at restart {}", k);
+                    result.get().getStatistics().addRestarts(k - 1);
                     return result;
                 }
                 log.info("dom/wdeg+Luby: UNSAT confirmed at restart {}", k);
@@ -105,10 +106,14 @@ public class DomWdegLubySearch implements Solver {
         return domainValuesOrderer.order(csp, variable, assignment)
                 .flatMap(value -> {
                     Assignment next = assignment.withValue((Variable<Object>) variable, value);
-                    if (!next.isConsistent(csp)) return Stream.empty();
+                    if (!next.isConsistent(csp)) {
+                        next.getStatistics().incrementBacktracks();
+                        return Stream.empty();
+                    }
                     Optional<ConstraintSatisfactionProblem> inferred = inference.apply(csp, variable, next);
                     if (inferred.isEmpty()) {
                         selector.incrementWeights(csp, variable, next);
+                        next.getStatistics().incrementBacktracks();
                         return Stream.empty();
                     }
                     return searchStream(inferred.get(), next, selector);
@@ -125,10 +130,14 @@ public class DomWdegLubySearch implements Solver {
         Variable<?> variable = selector.select(csp, assignment);
         for (Object value : domainValuesOrderer.order(csp, variable, assignment).toList()) {
             Assignment next = assignment.withValue((Variable<Object>) variable, value);
-            if (!next.isConsistent(csp)) continue;
+            if (!next.isConsistent(csp)) {
+                next.getStatistics().incrementBacktracks();
+                continue;
+            }
             Optional<ConstraintSatisfactionProblem> inferred = inference.apply(csp, variable, next);
             if (inferred.isEmpty()) {
                 selector.incrementWeights(csp, variable, next);
+                next.getStatistics().incrementBacktracks();
                 if (++failures[0] >= budget) throw BudgetExceeded.INSTANCE;
                 continue;
             }

@@ -95,6 +95,7 @@ public class WalkSATSolver implements LocalSolver {
                     ? vars.get(ThreadLocalRandom.current().nextInt(vars.size()))
                     : greedyFlip(vars, current, constraints);
             current = flip(current, toFlip);
+            current.getStatistics().incrementSteps();
         }
         return Optional.empty();
     }

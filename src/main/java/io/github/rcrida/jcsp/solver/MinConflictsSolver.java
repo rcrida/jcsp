@@ -85,6 +85,7 @@ public class MinConflictsSolver implements LocalSolver {
             }
             val variable = conflictedVariableSelector.select(csp, current);
             current = applyMinConflicts(csp, variable, current, constraintWeights);
+            current.getStatistics().incrementSteps();
             updateWeights(csp, constraintWeights, current);
         }
         return Optional.empty();
@@ -113,6 +114,7 @@ public class MinConflictsSolver implements LocalSolver {
             }
             val variable = conflictedVariableSelector.select(csp, current);
             current = applyMinConflictsAndObjective(csp, variable, current, constraintWeights, objective);
+            current.getStatistics().incrementSteps();
             updateWeights(csp, constraintWeights, current);
         }
         return Optional.empty();

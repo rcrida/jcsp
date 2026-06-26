@@ -52,8 +52,18 @@ public class BacktrackingSearch implements Solver {
         val variable = unassignedVariableSelector.select(csp, assignment);
         return domainValuesOrderer.order(csp, variable, assignment)
                 .map(value -> assignment.withValue(variable, value))
-                .filter(next -> next.isConsistent(csp))
-                .flatMap(next -> inference.apply(csp, variable, next).stream()
-                        .flatMap(c -> searchStream(c, next)));
+                .filter(next -> {
+                    if (next.isConsistent(csp)) return true;
+                    next.getStatistics().incrementBacktracks();
+                    return false;
+                })
+                .flatMap(next -> {
+                    var inferred = inference.apply(csp, variable, next);
+                    if (inferred.isEmpty()) {
+                        next.getStatistics().incrementBacktracks();
+                        return Stream.empty();
+                    }
+                    return searchStream(inferred.get(), next);
+                });
     }
 }

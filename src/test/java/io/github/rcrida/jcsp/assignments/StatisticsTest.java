@@ -28,14 +28,42 @@ public class StatisticsTest {
     }
 
     @Test
+    void incrementBacktracks() {
+        val statistics = new Statistics();
+        statistics.incrementBacktracks();
+        assertThat(statistics.getBacktracks().get()).isEqualTo(1);
+    }
+
+    @Test
+    void addRestarts() {
+        val statistics = new Statistics();
+        statistics.addRestarts(3);
+        assertThat(statistics.getRestarts().get()).isEqualTo(3);
+    }
+
+    @Test
+    void incrementSteps() {
+        val statistics = new Statistics();
+        statistics.incrementSteps();
+        statistics.incrementSteps();
+        assertThat(statistics.getSteps().get()).isEqualTo(2);
+    }
+
+    @Test
     void add() {
         val a = new Statistics();
         a.incrementNodesExplored();
+        a.incrementBacktracks();
+        a.incrementSteps();
         val b = new Statistics();
         b.incrementConstraintChecks();
         b.incrementConstraintChecks();
+        b.addRestarts(2);
         a.add(b);
         assertThat(a.getNodesExplored().get()).isEqualTo(1);
         assertThat(a.getConstraintChecks().get()).isEqualTo(2);
+        assertThat(a.getBacktracks().get()).isEqualTo(1);
+        assertThat(a.getRestarts().get()).isEqualTo(2);
+        assertThat(a.getSteps().get()).isEqualTo(1);
     }
 }
