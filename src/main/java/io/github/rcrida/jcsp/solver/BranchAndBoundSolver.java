@@ -1,11 +1,13 @@
 package io.github.rcrida.jcsp.solver;
 
+import lombok.Builder;
 import lombok.EqualsAndHashCode;
 import lombok.experimental.SuperBuilder;
 import lombok.extern.slf4j.Slf4j;
 import lombok.val;
 import io.github.rcrida.jcsp.ConstraintSatisfactionProblem;
 import io.github.rcrida.jcsp.assignments.Assignment;
+import io.github.rcrida.jcsp.assignments.SolverLimits;
 import io.github.rcrida.jcsp.consistency.Inference;
 import io.github.rcrida.jcsp.solver.backtrackingsearch.order.DomainValuesOrderer;
 import io.github.rcrida.jcsp.solver.backtrackingsearch.selector.UnassignedVariableSelector;
@@ -34,17 +36,21 @@ public class BranchAndBoundSolver extends SolverDecorator {
     @NonNull DomainValuesOrderer domainValuesOrderer;
     @NonNull Inference inference;
     @NonNull ToDoubleFunction<Assignment> objective;
+    @Builder.Default
+    @NonNull SolverLimits limits = SolverLimits.unlimited();
 
     @Override
     public Stream<Assignment> getSolutions(@NonNull ConstraintSatisfactionProblem csp) {
         log.info("Search space before branch-and-bound = {}", csp.getSearchSpace());
         double[] incumbent = {Double.MAX_VALUE};
-        return search(csp, Assignment.empty(), incumbent);
+        long deadline = limits.deadlineNanos();
+        return search(csp, Assignment.empty(), incumbent, deadline);
     }
 
     private Stream<Assignment> search(ConstraintSatisfactionProblem csp,
                                        Assignment assignment,
-                                       double[] incumbent) {
+                                       double[] incumbent,
+                                       long deadline) {
         if (objective.applyAsDouble(assignment) >= incumbent[0]) {
             return Stream.empty();
         }
@@ -55,7 +61,7 @@ public class BranchAndBoundSolver extends SolverDecorator {
             return Stream.of(assignment);
         }
         val variable = unassignedVariableSelector.select(csp, assignment);
-        return searchValues(variable, csp, assignment, incumbent);
+        return searchValues(variable, csp, assignment, incumbent, deadline);
     }
 
     /**
@@ -65,11 +71,19 @@ public class BranchAndBoundSolver extends SolverDecorator {
     private <T> Stream<Assignment> searchValues(Variable<T> variable,
                                                  ConstraintSatisfactionProblem csp,
                                                  Assignment assignment,
-                                                 double[] incumbent) {
+                                                 double[] incumbent,
+                                                 long deadline) {
         return domainValuesOrderer.order(csp, variable, assignment)
                 .map(value -> assignment.withValue(variable, value))
-                .filter(next -> next.isConsistent(csp))
+                .filter(next -> {
+                    if (limits.isNodeLimitExceeded(next.getStatistics().getNodesExplored().get())
+                            || limits.isTimeLimitExceeded(deadline)) {
+                        limits.markLimitReached(next.getStatistics());
+                        return false;
+                    }
+                    return next.isConsistent(csp);
+                })
                 .flatMap(next -> inference.apply(csp, variable, next).stream()
-                        .flatMap(c -> search(c, next, incumbent)));
+                        .flatMap(c -> search(c, next, incumbent, deadline)));
     }
 }

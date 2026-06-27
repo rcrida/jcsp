@@ -2,10 +2,13 @@ package io.github.rcrida.jcsp.solver;
 
 import io.github.rcrida.jcsp.ConstraintSatisfactionProblem;
 import io.github.rcrida.jcsp.assignments.Assignment;
+import io.github.rcrida.jcsp.assignments.SolverLimits;
 import io.github.rcrida.jcsp.domains.IntRangeDomain;
 import io.github.rcrida.jcsp.solver.backtrackingsearch.order.LeastConstrainingValueOrderer;
 import io.github.rcrida.jcsp.variables.Variable;
 import org.junit.jupiter.api.Test;
+
+import java.time.Duration;
 
 import java.util.List;
 import java.util.Optional;
@@ -13,6 +16,8 @@ import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+
+import io.github.rcrida.jcsp.solver.LimitExceededException;
 
 class DomWdegLubySearchTest {
 
@@ -209,5 +214,94 @@ class DomWdegLubySearchTest {
                 .build())
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("maxRestarts");
+    }
+
+    // ── Limits ────────────────────────────────────────────────────────────────
+
+    private static ConstraintSatisfactionProblem fourQueensCsp() {
+        int n = 4;
+        @SuppressWarnings("unchecked")
+        Variable<Integer>[] queens = new Variable[n];
+        for (int i = 0; i < n; i++) queens[i] = VF.create("q" + i);
+        var builder = ConstraintSatisfactionProblem.builder();
+        for (Variable<Integer> q : queens) builder.variableDomain(q, IntRangeDomain.of(1, n));
+        for (int i = 0; i < n; i++) {
+            for (int j = i + 1; j < n; j++) {
+                final int diff = j - i;
+                builder.notEqualsConstraint(queens[i], queens[j]);
+                builder.biPredicateConstraint(queens[i], queens[j],
+                        (a, b) -> Math.abs((int) a - (int) b) != diff);
+            }
+        }
+        return builder.build();
+    }
+
+    @Test
+    void nodeLimitStopsGetSolution() {
+        DomWdegLubySearch limited = DomWdegLubySearch.builder()
+                .domainValuesOrderer(LeastConstrainingValueOrderer.INSTANCE)
+                .inference(Solver.Factory.FULL_PROPAGATION_INFERENCE)
+                .limits(SolverLimits.ofNodes(1))
+                .build();
+
+        assertThatThrownBy(() -> limited.getSolution(fourQueensCsp()))
+                .isInstanceOf(LimitExceededException.class)
+                .extracting(e -> ((LimitExceededException) e).getStatistics())
+                .isNotNull();
+    }
+
+    @Test
+    void timeLimitStopsGetSolution() {
+        DomWdegLubySearch limited = DomWdegLubySearch.builder()
+                .domainValuesOrderer(LeastConstrainingValueOrderer.INSTANCE)
+                .inference(Solver.Factory.FULL_PROPAGATION_INFERENCE)
+                .limits(SolverLimits.ofTime(Duration.ofNanos(1)))
+                .build();
+
+        assertThatThrownBy(() -> limited.getSolution(fourQueensCsp()))
+                .isInstanceOf(LimitExceededException.class)
+                .extracting(e -> ((LimitExceededException) e).getStatistics())
+                .isNotNull();
+    }
+
+    @Test
+    void nodeLimitStopsGetSolutions() {
+        DomWdegLubySearch limited = DomWdegLubySearch.builder()
+                .domainValuesOrderer(LeastConstrainingValueOrderer.INSTANCE)
+                .inference(Solver.Factory.FULL_PROPAGATION_INFERENCE)
+                .limits(SolverLimits.ofNodes(1))
+                .build();
+
+        assertThat(limited.getSolutions(fourQueensCsp()).findFirst()).isEmpty();
+    }
+
+    @Test
+    void timeLimitStopsGetSolutions() {
+        DomWdegLubySearch limited = DomWdegLubySearch.builder()
+                .domainValuesOrderer(LeastConstrainingValueOrderer.INSTANCE)
+                .inference(Solver.Factory.FULL_PROPAGATION_INFERENCE)
+                .limits(SolverLimits.ofTime(Duration.ofNanos(1)))
+                .build();
+
+        assertThat(limited.getSolutions(fourQueensCsp()).findFirst()).isEmpty();
+    }
+
+    @Test
+    void nodeLimitAccumulatesAcrossLubyRestarts() {
+        // lubyUnit=1 forces many restarts (budget sequence 1,1,2,...).
+        // With nodeLimit=2, the cumulative count across restarts hits the limit
+        // after at most 2 node assignments total, so 4-queens (needs many more) throws.
+        DomWdegLubySearch limited = DomWdegLubySearch.builder()
+                .lubyUnit(1)
+                .maxRestarts(512)
+                .domainValuesOrderer(LeastConstrainingValueOrderer.INSTANCE)
+                .inference(Solver.Factory.FULL_PROPAGATION_INFERENCE)
+                .limits(SolverLimits.ofNodes(2))
+                .build();
+
+        assertThatThrownBy(() -> limited.getSolution(fourQueensCsp()))
+                .isInstanceOf(LimitExceededException.class)
+                .extracting(e -> ((LimitExceededException) e).getStatistics())
+                .isNotNull();
     }
 }

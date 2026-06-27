@@ -2,6 +2,8 @@ package io.github.rcrida.jcsp.solver;
 
 import io.github.rcrida.jcsp.ConstraintSatisfactionProblem;
 import io.github.rcrida.jcsp.assignments.Assignment;
+import io.github.rcrida.jcsp.assignments.SolverLimits;
+import io.github.rcrida.jcsp.assignments.Statistics;
 import io.github.rcrida.jcsp.consistency.Inference;
 import io.github.rcrida.jcsp.solver.backtrackingsearch.order.DomainValuesOrderer;
 import io.github.rcrida.jcsp.solver.backtrackingsearch.selector.DomWdegVariableSelector;
@@ -50,16 +52,18 @@ public class DomWdegLubySearch implements Solver {
     int maxRestarts;
     @NonNull DomainValuesOrderer domainValuesOrderer;
     @NonNull Inference inference;
+    @NonNull SolverLimits limits;
 
     /** Partial builder: sets defaults and validates preconditions in {@code build()}. */
     public static class DomWdegLubySearchBuilder {
         private int lubyUnit = DEFAULT_LUBY_UNIT;
         private int maxRestarts = DEFAULT_MAX_RESTARTS;
+        private SolverLimits limits = SolverLimits.unlimited();
 
         public DomWdegLubySearch build() {
             if (lubyUnit <= 0) throw new IllegalArgumentException("lubyUnit must be positive, got: " + lubyUnit);
             if (maxRestarts <= 0) throw new IllegalArgumentException("maxRestarts must be positive, got: " + maxRestarts);
-            return new DomWdegLubySearch(lubyUnit, maxRestarts, domainValuesOrderer, inference);
+            return new DomWdegLubySearch(lubyUnit, maxRestarts, domainValuesOrderer, inference, limits);
         }
     }
 
@@ -68,20 +72,28 @@ public class DomWdegLubySearch implements Solver {
         private BudgetExceeded() { super(null, null, true, false); }
     }
 
+    private static final class LimitsExceeded extends RuntimeException {
+        static final LimitsExceeded INSTANCE = new LimitsExceeded();
+        private LimitsExceeded() { super(null, null, true, false); }
+    }
+
     @Override
     public Stream<Assignment> getSolutions(@NonNull ConstraintSatisfactionProblem csp) {
         var selector = new DomWdegVariableSelector(csp.getConstraints());
-        return searchStream(csp, Assignment.empty(), selector);
+        long deadline = limits.deadlineNanos();
+        return searchStream(csp, Assignment.empty(), selector, deadline);
     }
 
     @Override
     public Optional<Assignment> getSolution(@NonNull ConstraintSatisfactionProblem csp) {
         var selector = new DomWdegVariableSelector(csp.getConstraints());
+        long deadline = limits.deadlineNanos();
+        long[] totalNodes = {0}; // cumulative across restarts for the node limit
         for (int k = 1; k <= maxRestarts; k++) {
             long budget = (long) lubyUnit * luby(k);
             int[] failures = {0};
             try {
-                Optional<Assignment> result = searchOne(csp, Assignment.empty(), selector, failures, budget);
+                Optional<Assignment> result = searchOne(csp, Assignment.empty(), selector, failures, budget, deadline, totalNodes);
                 if (result.isPresent()) {
                     log.info("dom/wdeg+Luby: solution found at restart {}", k);
                     result.get().getStatistics().addRestarts(k - 1);
@@ -91,6 +103,9 @@ public class DomWdegLubySearch implements Solver {
                 return Optional.empty();
             } catch (BudgetExceeded ignored) {
                 log.debug("dom/wdeg+Luby: budget {} exceeded at restart {}, restarting", budget, k);
+            } catch (LimitsExceeded ignored) {
+                log.info("dom/wdeg+Luby: limit exceeded at restart {}", k);
+                throw new LimitExceededException(limits.getLimitHitStatistics());
             }
         }
         log.warn("dom/wdeg+Luby: exhausted {} restarts without solution", maxRestarts);
@@ -100,12 +115,18 @@ public class DomWdegLubySearch implements Solver {
     @SuppressWarnings("unchecked")
     private Stream<Assignment> searchStream(@NonNull ConstraintSatisfactionProblem csp,
                                             @NonNull Assignment assignment,
-                                            @NonNull DomWdegVariableSelector selector) {
+                                            @NonNull DomWdegVariableSelector selector,
+                                            long deadline) {
         if (assignment.isComplete(csp)) return Stream.of(assignment);
         Variable<?> variable = selector.select(csp, assignment);
         return domainValuesOrderer.order(csp, variable, assignment)
                 .flatMap(value -> {
                     Assignment next = assignment.withValue((Variable<Object>) variable, value);
+                    if (limits.isNodeLimitExceeded(next.getStatistics().getNodesExplored().get())
+                            || limits.isTimeLimitExceeded(deadline)) {
+                        limits.markLimitReached(next.getStatistics());
+                        return Stream.empty();
+                    }
                     if (!next.isConsistent(csp)) {
                         next.getStatistics().incrementBacktracks();
                         return Stream.empty();
@@ -116,7 +137,7 @@ public class DomWdegLubySearch implements Solver {
                         next.getStatistics().incrementBacktracks();
                         return Stream.empty();
                     }
-                    return searchStream(inferred.get(), next, selector);
+                    return searchStream(inferred.get(), next, selector, deadline);
                 });
     }
 
@@ -125,11 +146,19 @@ public class DomWdegLubySearch implements Solver {
                                            @NonNull Assignment assignment,
                                            @NonNull DomWdegVariableSelector selector,
                                            int[] failures,
-                                           long budget) {
+                                           long budget,
+                                           long deadline,
+                                           long[] totalNodes) {
         if (assignment.isComplete(csp)) return Optional.of(assignment);
         Variable<?> variable = selector.select(csp, assignment);
         for (Object value : domainValuesOrderer.order(csp, variable, assignment).toList()) {
             Assignment next = assignment.withValue((Variable<Object>) variable, value);
+            if (limits.isNodeLimitExceeded(++totalNodes[0]) || limits.isTimeLimitExceeded(deadline)) {
+                Statistics stats = new Statistics();
+                stats.getNodesExplored().set((int) Math.min(totalNodes[0], Integer.MAX_VALUE));
+                limits.markLimitReached(stats);
+                throw LimitsExceeded.INSTANCE;
+            }
             if (!next.isConsistent(csp)) {
                 next.getStatistics().incrementBacktracks();
                 continue;
@@ -141,7 +170,7 @@ public class DomWdegLubySearch implements Solver {
                 if (++failures[0] >= budget) throw BudgetExceeded.INSTANCE;
                 continue;
             }
-            Optional<Assignment> result = searchOne(inferred.get(), next, selector, failures, budget);
+            Optional<Assignment> result = searchOne(inferred.get(), next, selector, failures, budget, deadline, totalNodes);
             if (result.isPresent()) return result;
         }
         return Optional.empty();

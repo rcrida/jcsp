@@ -12,6 +12,7 @@ A Java library implementing classic AI algorithms for solving Constraint Satisfa
 - **Flexible constraint types**: unary, binary (equals, not-equals, offset, comparator, logic, element, predicate, tuples), and n-ary (AllDiff, AtMostOne, AtLeastN, AtMostN, ExactlyOne, Sum, Linear, Count, Among, Inverse, GlobalCardinality, Cumulative, Tuples, Increasing, Decreasing, Lex, predicate)
 - **Boolean domain**: `BooleanDomain` for modelling binary assignment problems (e.g. timetabling as a 0-1 matrix)
 - **Functional style**: immutable value objects, composable solver decorators, and a lazy `Stream<Assignment>` API throughout
+- **Search limits**: `SolverLimits` caps work by node count and/or wall-clock time; `createSolver(csp, limits)` enforces them during search. `getSolution()` throws `LimitExceededException` (carrying `Statistics`) when a limit is hit — distinguishable from a genuine UNSAT result (`Optional.empty()`). `getSolutions()` truncates the stream silently instead
 - **Heuristics**: dom/wdeg variable ordering with Luby restarts (Boussemart et al. 2004) for the satisfaction terminal solver; MRV variable selection for the optimization chain; LCV value ordering; and Minimum Degree variable elimination for tree decomposition
 - **Local search**: `LocalSolver.Factory.INSTANCE` wires the full pipeline (NC + AC3 + bounds/value propagation → independent subproblem decomposition → terminal solver) and supports both satisfaction and optimization. Terminal solver is auto-selected: WalkSAT for all-boolean satisfaction CSPs without counting constraints, LargeNeighborhoodSearch for optimization with `ExactlyOneConstraint`s, MinConflicts otherwise. All `maxAttempts` restarts run in parallel; independent subproblems are also solved concurrently. Seeded by `RandomAssignmentFactory`, `GreedyAssignmentFactory`, or `FallbackAssignmentFactory` for hybrid restart strategies
 - **Reification**: `ReifiedConstraint` (`b <-> body`) and `ImplicationConstraint` (`b -> body`) introduce boolean indicator variables that capture constraint satisfaction — enables soft constraints, counting satisfaction, and conditional constraints via `csp.reifyConstraint(b, constraint)` and `csp.impliesConstraint(b, constraint)`
@@ -101,6 +102,35 @@ Optional<Assignment> best = Solver.Factory.INSTANCE
 ```
 
 `getSolutions()` on the returned `BoundSolver` gives a lazy stream of improving assignments (each strictly better than the previous); the last element is the global optimum found within the bisection resolution.
+
+### Search limits
+
+Pass a `SolverLimits` to `createSolver` to cap the amount of backtracking search performed:
+
+```java
+// Stop after at most 10,000 node assignments
+BoundSolver solver = Solver.Factory.INSTANCE.createSolver(csp, SolverLimits.ofNodes(10_000));
+
+// Stop after at most 5 seconds of wall-clock time
+BoundSolver solver = Solver.Factory.INSTANCE.createSolver(csp, SolverLimits.ofTime(Duration.ofSeconds(5)));
+
+// Both together
+BoundSolver solver = Solver.Factory.INSTANCE.createSolver(csp, SolverLimits.of(10_000, Duration.ofSeconds(5)));
+```
+
+When a limit is exceeded, `getSolution()` throws `LimitExceededException` containing `Statistics` (nodes explored, backtracks, etc.) so you can distinguish a limit-hit from a genuine UNSAT:
+
+```java
+try {
+    Optional<Assignment> solution = solver.getSolution();
+    // Optional.empty() means genuinely UNSAT
+} catch (LimitExceededException e) {
+    // limit was hit before search completed
+    System.out.println("Explored " + e.getStatistics().getNodesExplored() + " nodes");
+}
+```
+
+`getSolutions()` truncates the stream silently when a limit is hit — useful for anytime search where partial results are acceptable.
 
 ### Constraint builder methods
 

@@ -2,6 +2,7 @@ package io.github.rcrida.jcsp.solver;
 
 import io.github.rcrida.jcsp.ConstraintSatisfactionProblem;
 import io.github.rcrida.jcsp.assignments.Assignment;
+import io.github.rcrida.jcsp.assignments.SolverLimits;
 import io.github.rcrida.jcsp.consistency.Inference;
 import io.github.rcrida.jcsp.consistency.arc.MAC;
 import io.github.rcrida.jcsp.domains.BoundedDomain;
@@ -48,6 +49,18 @@ public interface Solver {
         double DEFAULT_BISECTION_EPSILON = 1e-3;
 
         /**
+         * Builds a solver chain tailored for satisfaction with the given search limits.
+         */
+        BoundSolver createSolver(@NonNull ConstraintSatisfactionProblem csp, @NonNull SolverLimits limits);
+
+        /**
+         * Builds a solver chain tailored for optimization with the given search limits.
+         */
+        BoundSolver createSolver(@NonNull ConstraintSatisfactionProblem csp,
+                                 @NonNull ToDoubleFunction<Assignment> objective,
+                                 @NonNull SolverLimits limits);
+
+        /**
          * Builds a solver chain tailored for satisfaction. The chain is:
          * NodeConsistency → PropagationFixpoint → IndependentSubproblems → TreeDecomposition
          * → CutsetConditioning → BacktrackingSearch.
@@ -55,7 +68,9 @@ public interface Solver {
          * For problems with {@link BoundedDomain} variables, the fixpoint snaps non-singleton
          * intervals to their midpoints, giving one concrete solution for underdetermined continuous systems.
          */
-        BoundSolver createSolver(@NonNull ConstraintSatisfactionProblem csp);
+        default BoundSolver createSolver(@NonNull ConstraintSatisfactionProblem csp) {
+            return createSolver(csp, SolverLimits.unlimited());
+        }
 
         /**
          * Builds a solver chain tailored for optimization.
@@ -71,17 +86,21 @@ public interface Solver {
          * {@link BisectionConditioningSolver} applies the objective only to <em>complete</em>
          * assignments; no lower-bound property is required and {@code getValue(v).orElseThrow()} is safe.
          */
-        BoundSolver createSolver(@NonNull ConstraintSatisfactionProblem csp,
-                                 @NonNull ToDoubleFunction<Assignment> objective);
+        default BoundSolver createSolver(@NonNull ConstraintSatisfactionProblem csp,
+                                         @NonNull ToDoubleFunction<Assignment> objective) {
+            return createSolver(csp, objective, SolverLimits.unlimited());
+        }
 
         Factory INSTANCE = new Factory() {
             @Override
-            public BoundSolver createSolver(@NonNull ConstraintSatisfactionProblem csp) {
+            public BoundSolver createSolver(@NonNull ConstraintSatisfactionProblem csp,
+                                            @NonNull SolverLimits limits) {
                 boolean hasContinuous = csp.getVariableDomains().values().stream()
                         .anyMatch(BoundedDomain.class::isInstance);
                 val domWdegLubySearch = DomWdegLubySearch.builder()
                         .domainValuesOrderer(LeastConstrainingValueOrderer.INSTANCE)
                         .inference(FULL_PROPAGATION_INFERENCE)
+                        .limits(limits)
                         .build();
                 val treeSolver = new TreeSolver(BFSTopologicalSorter.INSTANCE, DefaultValueOrderer.INSTANCE, TreeUnassignedVariableSelector.Factory.INSTANCE);
                 val cutsetConditioningSolver = CutsetConditioningSolver.builder()
@@ -100,21 +119,44 @@ public interface Solver {
                         .snap(hasContinuous)
                         .build();
                 Solver chain = NodeConsistentSolver.builder().inner(propagationFixpointSolver).build();
-                return () -> chain.getSolutions(csp);
+                return new BoundSolver() {
+                    @Override
+                    public Stream<Assignment> getSolutions() {
+                        limits.resetLimitReached();
+                        return chain.getSolutions(csp);
+                    }
+
+                    @Override
+                    public Optional<Assignment> getSolution() {
+                        limits.resetLimitReached();
+                        Optional<Assignment> result = getSolutions().findFirst();
+                        if (result.isEmpty() && limits.isLimitReached()) {
+                            throw new LimitExceededException(limits.getLimitHitStatistics());
+                        }
+                        return result;
+                    }
+                };
             }
 
             @Override
             public BoundSolver createSolver(@NonNull ConstraintSatisfactionProblem csp,
-                                            @NonNull ToDoubleFunction<Assignment> objective) {
+                                            @NonNull ToDoubleFunction<Assignment> objective,
+                                            @NonNull SolverLimits limits) {
                 boolean hasContinuous = csp.getVariableDomains().values().stream()
                         .anyMatch(BoundedDomain.class::isInstance);
-                val backtrackingSearch = new BacktrackingSearch(MinimumRemainingValuesSelector.INSTANCE, LeastConstrainingValueOrderer.INSTANCE, FULL_PROPAGATION_INFERENCE);
+                val backtrackingSearch = BacktrackingSearch.builder()
+                        .unassignedVariableSelector(MinimumRemainingValuesSelector.INSTANCE)
+                        .domainValuesOrderer(LeastConstrainingValueOrderer.INSTANCE)
+                        .inference(FULL_PROPAGATION_INFERENCE)
+                        .limits(limits)
+                        .build();
                 val branchAndBound = BranchAndBoundSolver.builder()
                         .inner(backtrackingSearch)
                         .objective(objective)
                         .unassignedVariableSelector(MinimumRemainingValuesSelector.INSTANCE)
                         .domainValuesOrderer(LeastConstrainingValueOrderer.INSTANCE)
                         .inference(FULL_PROPAGATION_INFERENCE)
+                        .limits(limits)
                         .build();
                 Solver terminal = hasContinuous
                         ? BisectionConditioningSolver.builder()
