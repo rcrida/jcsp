@@ -326,6 +326,72 @@ public class RealValuedConstraintTest {
     }
 
     @Test
+    void minConstraint_eq_forcedToSingleton() {
+        // x∈[0,10], y∈[7,10], min(x,y)==5: raise x.min to 5→[5,10]; only x has min=5 → x=[5,5]
+        Variable<Double> x = F.create("mn_eq_x"), y = F.create("mn_eq_y");
+        var csp = ConstraintSatisfactionProblem.builder()
+                .variableDomain(x, IntervalDomain.of(0.0, 10.0))
+                .variableDomain(y, IntervalDomain.of(7.0, 10.0))
+                .minConstraint(Set.of(x, y), Operator.EQ, 5.0)
+                .build();
+        var solution = Solver.Factory.INSTANCE.createSolver(csp).getSolution();
+        assertThat(solution).isPresent();
+        double xVal = (Double) solution.get().getValue(x).orElseThrow();
+        double yVal = (Double) solution.get().getValue(y).orElseThrow();
+        assertThat(Math.min(xVal, yVal)).isCloseTo(5.0, within(1e-9));
+    }
+
+    @Test
+    void minConstraint_geq_raisesMinAndResolvesWithSum() {
+        // x∈[0,10], y∈[0,10], min(x,y)>=3, x+y=8:
+        // raise both mins to 3; sum narrows both to [3,5]; snap x to 4.0, sum forces y=4.0
+        Variable<Double> x = F.create("mn_geq_x"), y = F.create("mn_geq_y");
+        var csp = ConstraintSatisfactionProblem.builder()
+                .variableDomain(x, IntervalDomain.of(0.0, 10.0))
+                .variableDomain(y, IntervalDomain.of(0.0, 10.0))
+                .minConstraint(Set.of(x, y), Operator.GEQ, 3.0)
+                .sumConstraint(Set.of(x, y), Operator.EQ, 8.0)
+                .build();
+        var solution = Solver.Factory.INSTANCE.createSolver(csp).getSolution();
+        assertThat(solution).isPresent();
+        double xVal = (Double) solution.get().getValue(x).orElseThrow();
+        double yVal = (Double) solution.get().getValue(y).orElseThrow();
+        assertThat(Math.min(xVal, yVal)).isGreaterThanOrEqualTo(3.0 - 1e-9);
+        assertThat(xVal + yVal).isCloseTo(8.0, within(1e-9));
+    }
+
+    @Test
+    void minConstraint_leq_forcesMaxDownAndResolvesWithSum() {
+        // x∈[0,10], y∈[6,10], min(x,y)<=4: only x can reach <=4; x.max clips to 4 → x∈[0,4]
+        // sum x+y=6: x.max=min(4, 6-6)=0; x=[0,0], y=6.0
+        Variable<Double> x = F.create("mn_leq_x"), y = F.create("mn_leq_y");
+        var csp = ConstraintSatisfactionProblem.builder()
+                .variableDomain(x, IntervalDomain.of(0.0, 10.0))
+                .variableDomain(y, IntervalDomain.of(6.0, 10.0))
+                .minConstraint(Set.of(x, y), Operator.LEQ, 4.0)
+                .sumConstraint(Set.of(x, y), Operator.EQ, 6.0)
+                .build();
+        var solution = Solver.Factory.INSTANCE.createSolver(csp).getSolution();
+        assertThat(solution).isPresent();
+        double xVal = (Double) solution.get().getValue(x).orElseThrow();
+        double yVal = (Double) solution.get().getValue(y).orElseThrow();
+        assertThat(Math.min(xVal, yVal)).isLessThanOrEqualTo(4.0 + 1e-9);
+        assertThat(xVal + yVal).isCloseTo(6.0, within(1e-9));
+    }
+
+    @Test
+    void minConstraint_infeasible_returnsNoSolutions() {
+        // x∈[0,3], y∈[0,4], min(x,y)>=5: smallest max=3 < 5 → infeasible by propagation
+        Variable<Double> x = F.create("mn_inf_x"), y = F.create("mn_inf_y");
+        var csp = ConstraintSatisfactionProblem.builder()
+                .variableDomain(x, IntervalDomain.of(0.0, 3.0))
+                .variableDomain(y, IntervalDomain.of(0.0, 4.0))
+                .minConstraint(Set.of(x, y), Operator.GEQ, 5.0)
+                .build();
+        assertThat(Solver.Factory.INSTANCE.createSolver(csp).getSolutions()).isEmpty();
+    }
+
+    @Test
     void cumulativeConstraint_intervalStarts_resolvedByPropagation() {
         // Three serial tasks (resource=1, limit=1), each duration=2.0.
         // x1 and x2 are fixed via singleton IntervalDomains, giving them compulsory parts

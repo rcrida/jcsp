@@ -17,6 +17,7 @@ import io.github.rcrida.jcsp.constraints.nary.InverseConstraint;
 import io.github.rcrida.jcsp.constraints.nary.LexConstraint;
 import io.github.rcrida.jcsp.constraints.nary.LinearConstraint;
 import io.github.rcrida.jcsp.constraints.nary.MaxConstraint;
+import io.github.rcrida.jcsp.constraints.nary.MinConstraint;
 import io.github.rcrida.jcsp.constraints.nary.NaryTuplesConstraint;
 import io.github.rcrida.jcsp.constraints.binary.AbsoluteDifferenceConstraint;
 import io.github.rcrida.jcsp.constraints.binary.BinaryComparatorConstraint;
@@ -72,6 +73,7 @@ public interface LocalSolver {
                 FixpointConsistency.of(GlobalCardinalityConstraint.class),
                 FixpointConsistency.of(LexConstraint.class),
                 FixpointConsistency.of(MaxConstraint.class),
+                FixpointConsistency.of(MinConstraint.class),
                 FixpointConsistency.of(NaryTuplesConstraint.class)
         );
 

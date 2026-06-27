@@ -31,6 +31,7 @@ import io.github.rcrida.jcsp.constraints.nary.CountConstraint;
 import io.github.rcrida.jcsp.constraints.nary.GlobalCardinalityConstraint;
 import io.github.rcrida.jcsp.constraints.nary.LexConstraint;
 import io.github.rcrida.jcsp.constraints.nary.MaxConstraint;
+import io.github.rcrida.jcsp.constraints.nary.MinConstraint;
 import io.github.rcrida.jcsp.constraints.nary.DecreasingConstraint;
 import io.github.rcrida.jcsp.constraints.nary.IncreasingConstraint;
 import io.github.rcrida.jcsp.constraints.nary.LinearConstraint;
@@ -86,7 +87,7 @@ public class ConstraintSatisfactionProblem {
      * propagation. Any other constraint type referencing such a variable is rejected at build time.
      */
     private static final Set<Class<? extends Constraint>> CONTINUOUS_COMPATIBLE_CONSTRAINTS =
-            Set.of(SumConstraint.class, LinearConstraint.class, UnaryComparatorConstraint.class, BinaryComparatorConstraint.class, BinaryOffsetConstraint.class, AbsoluteDifferenceConstraint.class, LexConstraint.class, CumulativeConstraint.class, MaxConstraint.class);
+            Set.of(SumConstraint.class, LinearConstraint.class, UnaryComparatorConstraint.class, BinaryComparatorConstraint.class, BinaryOffsetConstraint.class, AbsoluteDifferenceConstraint.class, LexConstraint.class, CumulativeConstraint.class, MaxConstraint.class, MinConstraint.class);
 
     Map<Variable<?>, Domain<?>> variableDomains;
     @Getter(AccessLevel.NONE) @EqualsAndHashCode.Exclude ConstraintGraph constraintGraph;
@@ -754,6 +755,19 @@ public class ConstraintSatisfactionProblem {
          */
         public <N extends Number> ConstraintSatisfactionProblemBuilder maxConstraint(@NonNull Set<Variable<N>> variables, @NonNull Operator operator, @NonNull N bound) {
             return this.constraint(MaxConstraint.of(variables, operator, bound));
+        }
+
+        /**
+         * Create a constraint that compares the minimum of a set of numeric variables to a fixed bound:
+         * {@code min(v1, v2, ..., vn) op bound}.
+         *
+         * @param variables the numeric variables to take the minimum over
+         * @param operator  the comparison operator (e.g. {@link Operator#EQ}, {@link Operator#GEQ})
+         * @param bound     the value to compare the minimum against
+         * @return the builder
+         */
+        public <N extends Number> ConstraintSatisfactionProblemBuilder minConstraint(@NonNull Set<Variable<N>> variables, @NonNull Operator operator, @NonNull N bound) {
+            return this.constraint(MinConstraint.of(variables, operator, bound));
         }
 
         /**
