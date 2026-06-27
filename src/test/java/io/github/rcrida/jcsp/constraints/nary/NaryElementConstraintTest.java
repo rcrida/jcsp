@@ -9,6 +9,8 @@ import io.github.rcrida.jcsp.variables.Variable;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+import io.github.rcrida.jcsp.domains.IntervalDomain;
+
 import java.util.List;
 import java.util.Map;
 
@@ -178,6 +180,59 @@ public class NaryElementConstraintTest {
                 .elementVariableConstraint(idx, res, List.of(varA, varB))
                 .build();
         assertThat(Solver.Factory.INSTANCE.createSolver(csp).getSolutions()).hasSize(4);
+    }
+
+    @Test
+    void propagate_noOpWhenIndexIsBoundedDomain() {
+        var domains = Map.<Variable<?>, io.github.rcrida.jcsp.domains.Domain<?>>of(
+                INDEX, IntervalDomain.of(1.0, 3.0),
+                RESULT, DomainObjectSet.<String>builder().value("alpha").build(),
+                A, DomainObjectSet.<String>builder().value("alpha").build(),
+                B, DomainObjectSet.<String>builder().value("beta").build(),
+                C, DomainObjectSet.<String>builder().value("gamma").build()
+        );
+        assertThat(constraint.propagate(domains)).isPresent().hasValueSatisfying(m -> assertThat(m).isEmpty());
+    }
+
+    @Test
+    void propagate_noOpWhenResultIsBoundedDomain() {
+        var domains = Map.<Variable<?>, io.github.rcrida.jcsp.domains.Domain<?>>of(
+                INDEX, IntRangeDomain.of(1, 3),
+                RESULT, IntervalDomain.of(0.0, 10.0),
+                A, DomainObjectSet.<String>builder().value("alpha").build(),
+                B, DomainObjectSet.<String>builder().value("beta").build(),
+                C, DomainObjectSet.<String>builder().value("gamma").build()
+        );
+        assertThat(constraint.propagate(domains)).isPresent().hasValueSatisfying(m -> assertThat(m).isEmpty());
+    }
+
+    @Test
+    void propagate_noOpWhenVarIsBoundedDomain() {
+        var domains = Map.<Variable<?>, io.github.rcrida.jcsp.domains.Domain<?>>of(
+                INDEX, IntRangeDomain.of(1, 3),
+                RESULT, DomainObjectSet.<String>builder().value("alpha").build(),
+                A, IntervalDomain.of(0.0, 1.0),
+                B, DomainObjectSet.<String>builder().value("beta").build(),
+                C, DomainObjectSet.<String>builder().value("gamma").build()
+        );
+        assertThat(constraint.propagate(domains)).isPresent().hasValueSatisfying(m -> assertThat(m).isEmpty());
+    }
+
+    @Test
+    void propagate_prunesOutOfBoundsIndices() {
+        // index ∈ {0,1,2,3,4,5} but only 3 vars — 0 (i<1) and 4,5 (i>size) are out of bounds
+        var domains = Map.<Variable<?>, io.github.rcrida.jcsp.domains.Domain<?>>of(
+                INDEX, DomainObjectSet.<Integer>builder().value(0).value(1).value(2).value(3).value(4).value(5).build(),
+                RESULT, DomainObjectSet.<String>builder().value("alpha").value("beta").value("gamma").build(),
+                A, DomainObjectSet.<String>builder().value("alpha").build(),
+                B, DomainObjectSet.<String>builder().value("beta").build(),
+                C, DomainObjectSet.<String>builder().value("gamma").build()
+        );
+        var result = constraint.propagate(domains);
+        assertThat(result).isPresent();
+        assertThat(result.get()).containsKey(INDEX);
+        var newIndex = (io.github.rcrida.jcsp.domains.DiscreteDomain<Integer>) result.get().get(INDEX);
+        assertThat(newIndex.toList()).containsExactlyInAnyOrder(1, 2, 3);
     }
 
     @Test

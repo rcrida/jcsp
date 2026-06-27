@@ -50,7 +50,6 @@ public class NaryElementConstraint<T> extends NaryConstraint implements Propagat
     public static <T> NaryElementConstraint<T> of(@NonNull Variable<Integer> index,
                                                    @NonNull Variable<T> result,
                                                    @NonNull List<Variable<T>> vars) {
-        assert !vars.isEmpty() : "vars must not be empty";
         Set<Variable<?>> allVars = new LinkedHashSet<>();
         allVars.add(index);
         allVars.add(result);
@@ -138,33 +137,29 @@ public class NaryElementConstraint<T> extends NaryConstraint implements Propagat
             }
             if (changed) {
                 DiscreteDomain<T> newResult = (DiscreteDomain<T>) builder.build();
-                if (newResult.isEmpty()) return Optional.empty();
                 updated.put(result, newResult);
                 resultDomain = newResult;
             }
         }
 
-        // Pass 3: if index is singleton {i}, prune vars[i-1] ∩ result.domain
+        // Pass 3: if index is singleton {i}, prune vars[i-1] ∩ result.domain.
+        // Pass 1 guarantees i is in [1, vars.size()], so no bounds check needed here.
         if (indexDomain.isSingleton()) {
             Integer i = indexDomain.singleValue().get();
-            if (i >= 1 && i <= vars.size()) {
-                Variable<T> selectedVar = vars.get(i - 1);
-                DiscreteDomain<T> varDom = updated.containsKey(selectedVar)
-                        ? (DiscreteDomain<T>) updated.get(selectedVar)
-                        : varDomains.get(i - 1);
-                var builder = varDom.toBuilder();
-                boolean changed = false;
-                for (T v : varDom.toList()) {
-                    if (!resultDomain.contains(v)) {
-                        builder.delete(v);
-                        changed = true;
-                    }
+            Variable<T> selectedVar = vars.get(i - 1);
+            DiscreteDomain<T> varDom = updated.containsKey(selectedVar)
+                    ? (DiscreteDomain<T>) updated.get(selectedVar)
+                    : varDomains.get(i - 1);
+            var builder = varDom.toBuilder();
+            boolean changed = false;
+            for (T v : varDom.toList()) {
+                if (!resultDomain.contains(v)) {
+                    builder.delete(v);
+                    changed = true;
                 }
-                if (changed) {
-                    DiscreteDomain<T> narrowed = (DiscreteDomain<T>) builder.build();
-                    if (narrowed.isEmpty()) return Optional.empty();
-                    updated.put(selectedVar, narrowed);
-                }
+            }
+            if (changed) {
+                updated.put(selectedVar, builder.build());
             }
         }
 
