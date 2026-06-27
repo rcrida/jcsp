@@ -35,6 +35,7 @@ import io.github.rcrida.jcsp.constraints.nary.MinConstraint;
 import io.github.rcrida.jcsp.constraints.nary.DecreasingConstraint;
 import io.github.rcrida.jcsp.constraints.nary.IncreasingConstraint;
 import io.github.rcrida.jcsp.constraints.nary.LinearConstraint;
+import io.github.rcrida.jcsp.constraints.nary.NaryElementConstraint;
 import io.github.rcrida.jcsp.constraints.nary.NaryTuplesConstraint;
 import io.github.rcrida.jcsp.constraints.nary.SumConstraint;
 import io.github.rcrida.jcsp.constraints.nary.AtMostOneConstraint;
@@ -729,6 +730,21 @@ public class ConstraintSatisfactionProblem {
          */
         public <T> ConstraintSatisfactionProblemBuilder elementConstraint(@NonNull Variable<Integer> index, @NonNull Variable<T> result, @NonNull List<T> array) {
             return this.constraint(BinaryElementConstraint.of(index, result, array));
+        }
+
+        /**
+         * Create an element constraint over a list of variables: {@code result = vars[index]}.
+         * The index variable is 1-based. Out-of-bounds indices violate the constraint.
+         * Equivalent to MiniZinc's {@code element(index, vars, result)} constraint when {@code vars}
+         * is an array of decision variables rather than fixed values.
+         *
+         * @param index  variable holding the 1-based array index
+         * @param result variable constrained to equal {@code vars[index-1]}
+         * @param vars   list of variables to select from
+         * @return the builder
+         */
+        public <T> ConstraintSatisfactionProblemBuilder elementVariableConstraint(@NonNull Variable<Integer> index, @NonNull Variable<T> result, @NonNull List<Variable<T>> vars) {
+            return this.constraint(NaryElementConstraint.of(index, result, vars));
         }
 
         /**
