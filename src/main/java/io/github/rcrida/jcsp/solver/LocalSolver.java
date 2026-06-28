@@ -19,6 +19,7 @@ import io.github.rcrida.jcsp.constraints.nary.LinearConstraint;
 import io.github.rcrida.jcsp.constraints.nary.MaxConstraint;
 import io.github.rcrida.jcsp.constraints.nary.MinConstraint;
 import io.github.rcrida.jcsp.constraints.nary.NaryElementConstraint;
+import io.github.rcrida.jcsp.constraints.nary.ProductConstraint;
 import io.github.rcrida.jcsp.constraints.nary.NaryTuplesConstraint;
 import io.github.rcrida.jcsp.constraints.binary.AbsoluteDifferenceConstraint;
 import io.github.rcrida.jcsp.constraints.binary.BinaryComparatorConstraint;
@@ -76,7 +77,8 @@ public interface LocalSolver {
                 FixpointConsistency.of(MaxConstraint.class),
                 FixpointConsistency.of(MinConstraint.class),
                 FixpointConsistency.of(NaryElementConstraint.class),
-                FixpointConsistency.of(NaryTuplesConstraint.class)
+                FixpointConsistency.of(NaryTuplesConstraint.class),
+                FixpointConsistency.of(ProductConstraint.class)
         );
 
         Factory INSTANCE = (maxAttempts, maxSteps, initialAssignmentFactory) -> {

@@ -415,4 +415,25 @@ public class RealValuedConstraintTest {
         assertThat(s2).isEqualTo(2.0);
         assertThat(s3).isEqualTo(4.0);
     }
+
+    @Test
+    void productConstraint_intervalDomain_resolvedByPropagation() {
+        // x is fixed at 2.0; y ∈ [1.0, 8.0]; product == 6.0
+        // LEQ clips y.max to k*y.min/productMin = 6*1/2 = 3.0;
+        // GEQ raises y.min to k*y.max/productMax = 6*8/16 = 3.0 → y = [3.0, 3.0]
+        Variable<Double> x = F.create("prx");
+        Variable<Double> y = F.create("pry");
+        var csp = ConstraintSatisfactionProblem.builder()
+                .variableDomain(x, IntervalDomain.of(2.0, 2.0))
+                .variableDomain(y, IntervalDomain.of(1.0, 8.0))
+                .productConstraint(Set.of(x, y), Operator.EQ, 6.0)
+                .build();
+        var solution = Solver.Factory.INSTANCE.createSolver(csp).getSolution();
+        assertThat(solution).isPresent();
+        double xVal = (Double) solution.get().getValue(x).orElseThrow();
+        double yVal = (Double) solution.get().getValue(y).orElseThrow();
+        assertThat(xVal).isCloseTo(2.0, within(1e-9));
+        assertThat(yVal).isCloseTo(3.0, within(1e-9));
+        assertThat(xVal * yVal).isCloseTo(6.0, within(1e-9));
+    }
 }

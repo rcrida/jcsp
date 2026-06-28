@@ -36,6 +36,7 @@ import io.github.rcrida.jcsp.constraints.nary.DecreasingConstraint;
 import io.github.rcrida.jcsp.constraints.nary.IncreasingConstraint;
 import io.github.rcrida.jcsp.constraints.nary.LinearConstraint;
 import io.github.rcrida.jcsp.constraints.nary.NaryElementConstraint;
+import io.github.rcrida.jcsp.constraints.nary.ProductConstraint;
 import io.github.rcrida.jcsp.constraints.nary.NaryTuplesConstraint;
 import io.github.rcrida.jcsp.constraints.nary.SumConstraint;
 import io.github.rcrida.jcsp.constraints.nary.AtMostOneConstraint;
@@ -88,7 +89,7 @@ public class ConstraintSatisfactionProblem {
      * propagation. Any other constraint type referencing such a variable is rejected at build time.
      */
     private static final Set<Class<? extends Constraint>> CONTINUOUS_COMPATIBLE_CONSTRAINTS =
-            Set.of(SumConstraint.class, LinearConstraint.class, UnaryComparatorConstraint.class, BinaryComparatorConstraint.class, BinaryOffsetConstraint.class, AbsoluteDifferenceConstraint.class, LexConstraint.class, CumulativeConstraint.class, MaxConstraint.class, MinConstraint.class);
+            Set.of(SumConstraint.class, LinearConstraint.class, UnaryComparatorConstraint.class, BinaryComparatorConstraint.class, BinaryOffsetConstraint.class, AbsoluteDifferenceConstraint.class, LexConstraint.class, CumulativeConstraint.class, MaxConstraint.class, MinConstraint.class, ProductConstraint.class);
 
     Map<Variable<?>, Domain<?>> variableDomains;
     @Getter(AccessLevel.NONE) @EqualsAndHashCode.Exclude ConstraintGraph constraintGraph;
@@ -784,6 +785,22 @@ public class ConstraintSatisfactionProblem {
          */
         public <N extends Number> ConstraintSatisfactionProblemBuilder minConstraint(@NonNull Set<Variable<N>> variables, @NonNull Operator operator, @NonNull N bound) {
             return this.constraint(MinConstraint.of(variables, operator, bound));
+        }
+
+        /**
+         * Create a constraint that compares the product of a set of numeric variables to a fixed bound:
+         * {@code v1 * v2 * ... * vn op bound}.
+         * <p>
+         * Propagation narrows domains for EQ, LEQ, and GEQ operators when all domains have strictly
+         * positive minimums. Non-positive domains (including zero) receive no narrowing.
+         *
+         * @param variables the numeric variables to multiply
+         * @param operator  the comparison operator (e.g. {@link Operator#EQ}, {@link Operator#LEQ})
+         * @param bound     the value to compare the product against
+         * @return the builder
+         */
+        public <N extends Number> ConstraintSatisfactionProblemBuilder productConstraint(@NonNull Set<Variable<N>> variables, @NonNull Operator operator, @NonNull N bound) {
+            return this.constraint(ProductConstraint.of(variables, operator, bound));
         }
 
         /**
