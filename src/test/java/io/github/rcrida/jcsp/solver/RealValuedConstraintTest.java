@@ -417,6 +417,28 @@ public class RealValuedConstraintTest {
     }
 
     @Test
+    void divisionConstraint_intervalDomain_resolvedByPropagation() {
+        // x is fixed at 6.0; y ∈ [1.0, 8.0]; x/y == 3.0
+        // LEQ: newXMax=3*8=24>=6 no change; newYMin=6/3=2>1 → y.min raised to 2
+        // GEQ: newXMin=3*2=6 no change (using updated yMin); newYMax=6/3=2 < 8 → y.max clipped to 2
+        // → y = [2.0, 2.0]
+        Variable<Double> x = F.create("dvx");
+        Variable<Double> y = F.create("dvy");
+        var csp = ConstraintSatisfactionProblem.builder()
+                .variableDomain(x, IntervalDomain.of(6.0, 6.0))
+                .variableDomain(y, IntervalDomain.of(1.0, 8.0))
+                .divisionConstraint(x, y, Operator.EQ, 3.0)
+                .build();
+        var solution = Solver.Factory.INSTANCE.createSolver(csp).getSolution();
+        assertThat(solution).isPresent();
+        double xVal = (Double) solution.get().getValue(x).orElseThrow();
+        double yVal = (Double) solution.get().getValue(y).orElseThrow();
+        assertThat(xVal).isCloseTo(6.0, within(1e-9));
+        assertThat(yVal).isCloseTo(2.0, within(1e-9));
+        assertThat(xVal / yVal).isCloseTo(3.0, within(1e-9));
+    }
+
+    @Test
     void productConstraint_intervalDomain_resolvedByPropagation() {
         // x is fixed at 2.0; y ∈ [1.0, 8.0]; product == 6.0
         // LEQ clips y.max to k*y.min/productMin = 6*1/2 = 3.0;

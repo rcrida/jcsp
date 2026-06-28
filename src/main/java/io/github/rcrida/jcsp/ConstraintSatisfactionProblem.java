@@ -17,6 +17,7 @@ import io.github.rcrida.jcsp.constraints.LogicOperator;
 import io.github.rcrida.jcsp.constraints.binary.BinaryConstraint;
 import io.github.rcrida.jcsp.constraints.binary.BinaryElementConstraint;
 import io.github.rcrida.jcsp.constraints.binary.AbsoluteDifferenceConstraint;
+import io.github.rcrida.jcsp.constraints.binary.DivisionConstraint;
 import io.github.rcrida.jcsp.constraints.binary.BinaryOffsetConstraint;
 import io.github.rcrida.jcsp.constraints.binary.BinaryPredicateConstraint;
 import io.github.rcrida.jcsp.constraints.binary.BinaryEqualsConstraint;
@@ -89,7 +90,7 @@ public class ConstraintSatisfactionProblem {
      * propagation. Any other constraint type referencing such a variable is rejected at build time.
      */
     private static final Set<Class<? extends Constraint>> CONTINUOUS_COMPATIBLE_CONSTRAINTS =
-            Set.of(SumConstraint.class, LinearConstraint.class, UnaryComparatorConstraint.class, BinaryComparatorConstraint.class, BinaryOffsetConstraint.class, AbsoluteDifferenceConstraint.class, LexConstraint.class, CumulativeConstraint.class, MaxConstraint.class, MinConstraint.class, ProductConstraint.class);
+            Set.of(SumConstraint.class, LinearConstraint.class, UnaryComparatorConstraint.class, BinaryComparatorConstraint.class, BinaryOffsetConstraint.class, AbsoluteDifferenceConstraint.class, DivisionConstraint.class, LexConstraint.class, CumulativeConstraint.class, MaxConstraint.class, MinConstraint.class, ProductConstraint.class);
 
     Map<Variable<?>, Domain<?>> variableDomains;
     @Getter(AccessLevel.NONE) @EqualsAndHashCode.Exclude ConstraintGraph constraintGraph;
@@ -801,6 +802,22 @@ public class ConstraintSatisfactionProblem {
          */
         public <N extends Number> ConstraintSatisfactionProblemBuilder productConstraint(@NonNull Set<Variable<N>> variables, @NonNull Operator operator, @NonNull N bound) {
             return this.constraint(ProductConstraint.of(variables, operator, bound));
+        }
+
+        /**
+         * Create a binary constraint enforcing {@code dividend / divisor op bound} (real-valued division).
+         * <p>
+         * Propagation narrows domains for EQ, LEQ, and GEQ operators when both domains have strictly
+         * positive minimums. Non-positive domains (including zero) receive no narrowing.
+         *
+         * @param dividend the variable in the numerator
+         * @param divisor  the variable in the denominator (must not include zero)
+         * @param operator the comparison operator (e.g. {@link Operator#EQ}, {@link Operator#LEQ})
+         * @param bound    the value to compare the quotient against
+         * @return the builder
+         */
+        public <N extends Number> ConstraintSatisfactionProblemBuilder divisionConstraint(@NonNull Variable<N> dividend, @NonNull Variable<N> divisor, @NonNull Operator operator, @NonNull N bound) {
+            return this.constraint(DivisionConstraint.of(dividend, divisor, operator, bound));
         }
 
         /**
