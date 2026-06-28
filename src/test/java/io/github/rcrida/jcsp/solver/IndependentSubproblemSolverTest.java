@@ -9,6 +9,7 @@ import org.junit.jupiter.api.Test;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 public class IndependentSubproblemSolverTest {
     static Variable.Factory FACTORY = Variable.Factory.INSTANCE;
@@ -56,6 +57,43 @@ public class IndependentSubproblemSolverTest {
         counting.getSolutions(TWO_SUBPROBLEM_CSP).toList();
 
         assertThat(callCount.get()).isEqualTo(2);
+    }
+
+    @Test
+    void getSolution_independentSubproblems() {
+        assertThat(solver.getSolution(TWO_SUBPROBLEM_CSP)).isPresent();
+    }
+
+    @Test
+    void getSolution_singleSubproblem() {
+        val csp = ConstraintSatisfactionProblem.builder()
+                .variableDomain(V1, IntRangeDomain.of(1, 2))
+                .variableDomain(V2, IntRangeDomain.of(1, 2))
+                .notEqualsConstraint(V1, V2)
+                .build();
+        assertThat(solver.getSolution(csp)).isPresent();
+    }
+
+    @Test
+    void getSolution_unsatSubproblem() {
+        val csp = ConstraintSatisfactionProblem.builder()
+                .variableDomain(V1, IntRangeDomain.of(1, 3))
+                .variableDomain(V2, IntRangeDomain.of(1, 3))
+                .variableDomain(V3, IntRangeDomain.of(1, 1))
+                .variableDomain(V4, IntRangeDomain.of(1, 1))
+                .notEqualsConstraint(V1, V2)
+                .notEqualsConstraint(V3, V4)
+                .build();
+        assertThat(solver.getSolution(csp)).isEmpty();
+    }
+
+    @Test
+    void getSolution_propagatesRuntimeExceptionFromSubproblem() {
+        var boom = new RuntimeException("boom");
+        var throwing = IndependentSubproblemSolver.builder()
+                .inner(csp -> { throw boom; })
+                .build();
+        assertThatThrownBy(() -> throwing.getSolution(TWO_SUBPROBLEM_CSP)).isSameAs(boom);
     }
 
     @Test

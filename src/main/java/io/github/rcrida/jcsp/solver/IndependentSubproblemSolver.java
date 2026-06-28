@@ -41,8 +41,7 @@ public class IndependentSubproblemSolver extends SolverDecorator {
                                     try {
                                         return f.join();
                                     } catch (CompletionException e) {
-                                        if (e.getCause() instanceof RuntimeException re) throw re;
-                                        throw e;
+                                        throw (RuntimeException) e.getCause();
                                     }
                                 })
                                 .reduce((a1, a2) -> a1.flatMap(r1 -> a2.map(r1::merge)))
