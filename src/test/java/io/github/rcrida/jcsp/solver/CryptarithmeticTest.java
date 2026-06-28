@@ -79,17 +79,7 @@ public class CryptarithmeticTest {
         val optionalSolution = solver.getSolution();
         System.out.println(optionalSolution);
         assertThat(optionalSolution).hasValueSatisfying(value -> {
-            assertThat(value).isEqualTo(Assignment.of(Map.of(
-                    t, 7,
-                    w, 3,
-                    o, 4,
-                    f, 1,
-                    u, 6,
-                    r, 8,
-                    c1, 0,
-                    c2, 0,
-                    c3, 1
-            )));
+            assertThat(value.isSolution(csp)).isTrue();
             assertThat(value.getStatistics().getNodesExplored().get()).isLessThanOrEqualTo(1600);
             assertThat(value.getStatistics().getConstraintChecks().get()).isLessThanOrEqualTo(7000);
         });

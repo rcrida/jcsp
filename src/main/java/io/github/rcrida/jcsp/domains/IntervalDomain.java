@@ -1,6 +1,5 @@
 package io.github.rcrida.jcsp.domains;
 
-import lombok.EqualsAndHashCode;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 
@@ -25,15 +24,7 @@ import java.util.Optional;
  * Any other constraint type referencing an {@code IntervalDomain} variable is rejected at
  * build time with {@link IllegalArgumentException}.
  */
-@EqualsAndHashCode
-public final class IntervalDomain implements BoundedDomain<Double> {
-    private final double min;
-    private final double max;
-
-    private IntervalDomain(double min, double max) {
-        this.min = min;
-        this.max = max;
-    }
+public record IntervalDomain(double min, double max) implements BoundedDomain<Double> {
 
     public static IntervalDomain of(double min, double max) {
         assert min <= max : String.format("min (%s) must be less than or equal to max (%s)", min, max);

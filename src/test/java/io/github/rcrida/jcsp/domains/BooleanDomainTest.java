@@ -48,4 +48,24 @@ public class BooleanDomainTest {
     void toListContainsBothValues() {
         assertThat(BooleanDomain.INSTANCE.toList()).containsExactlyInAnyOrder(true, false);
     }
+
+    @Test
+    void equals_sameInstance() {
+        assertThat(BooleanDomain.INSTANCE.equals(BooleanDomain.INSTANCE)).isTrue();
+    }
+
+    @Test
+    void equals_equivalentInstance() {
+        assertThat(BooleanDomain.INSTANCE.equals(new BooleanDomain())).isTrue();
+    }
+
+    @Test
+    void equals_differentType() {
+        assertThat(BooleanDomain.INSTANCE.equals("not a domain")).isFalse();
+    }
+
+    @Test
+    void hashCode_consistent() {
+        assertThat(BooleanDomain.INSTANCE.hashCode()).isEqualTo(new BooleanDomain().hashCode());
+    }
 }

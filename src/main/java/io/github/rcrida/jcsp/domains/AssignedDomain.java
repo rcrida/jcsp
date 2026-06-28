@@ -5,12 +5,18 @@ import org.jspecify.annotations.NonNull;
 import java.util.Set;
 
 /**
- * Represents a domain that is assigned a single value, encapsulated as a set. This is used during
- * solution search when a variable has been assigned a value to indicate that it cannot take other
- * values, thus limiting the remaining search space.
+ * Represents a domain assigned to a single value, used during search when a variable has been
+ * assigned to limit the remaining search space.
  */
-public class AssignedDomain extends DomainObjectSet<Object> {
-    public AssignedDomain(@NonNull Object value) {
-        super(Set.of(value));
+public record AssignedDomain(@NonNull Object value) implements SetDomain<Object> {
+    @Override
+    public Set<Object> values() {
+        return Set.of(value);
     }
+
+    @Override
+    public boolean equals(Object o) { return SetDomain.domainEquals(this, o); }
+
+    @Override
+    public int hashCode() { return SetDomain.domainHashCode(this); }
 }

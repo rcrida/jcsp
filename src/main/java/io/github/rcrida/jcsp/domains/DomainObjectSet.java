@@ -1,56 +1,23 @@
 package io.github.rcrida.jcsp.domains;
 
-import lombok.*;
-import lombok.experimental.NonFinal;
+import lombok.Builder;
+import lombok.Singular;
 import org.jspecify.annotations.NonNull;
-import org.jspecify.annotations.Nullable;
 
-import java.util.List;
 import java.util.Set;
 import java.util.stream.Collectors;
-import java.util.stream.Stream;
 
 /**
- * Represents a set-based implementation of the {@link Domain} interface.
+ * Represents a set-based implementation of the {@link SetDomain} interface.
  */
-@Value
-@NonFinal
 @Builder(toBuilder = true)
-public class DomainObjectSet<T> implements DiscreteDomain<T> {
-    @Singular
-    Set<T> values;
+public record DomainObjectSet<T>(@Singular Set<T> values) implements SetDomain<T> {
 
     @Override
-    public boolean contains(@Nullable Object value) {
-        return value != null && values.contains(value);
-    }
+    public boolean equals(Object o) { return SetDomain.domainEquals(this, o); }
 
     @Override
-    public boolean isEmpty() {
-        return values.isEmpty();
-    }
-
-    @Override
-    public int size() {
-        return values.size();
-    }
-
-    @Override
-    public Stream<T> stream() {
-        return values.stream();
-    }
-
-    @Override
-    public List<T> toList() {
-        return List.copyOf(values);
-    }
-
-    @Override
-    public String toString() {
-        return "{" +
-                values.stream().map(Object::toString).collect(Collectors.joining(", ")) +
-                '}';
-    }
+    public int hashCode() { return SetDomain.domainHashCode(this); }
 
     public static class DomainObjectSetBuilder<T> implements DiscreteDomain.Builder<T> {
         @Override
