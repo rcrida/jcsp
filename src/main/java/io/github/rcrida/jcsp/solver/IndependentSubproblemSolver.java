@@ -8,6 +8,11 @@ import io.github.rcrida.jcsp.assignments.Assignment;
 import org.jspecify.annotations.NonNull;
 
 import java.util.Comparator;
+import java.util.List;
+import java.util.Optional;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionException;
+import java.util.concurrent.Executors;
 import java.util.stream.Stream;
 
 /**
@@ -21,6 +26,32 @@ import java.util.stream.Stream;
 @SuperBuilder
 @EqualsAndHashCode(callSuper = true)
 public class IndependentSubproblemSolver extends SolverDecorator {
+    @Override
+    public Optional<Assignment> getSolution(@NonNull ConstraintSatisfactionProblem csp) {
+        return csp.decomposeSubproblems()
+                .map(subproblems -> {
+                    log.info("Solving {} independent subproblems in parallel", subproblems.size());
+                    try (var exec = Executors.newVirtualThreadPerTaskExecutor()) {
+                        List<CompletableFuture<Optional<Assignment>>> futures = subproblems.stream()
+                                .map(sub -> CompletableFuture.supplyAsync(
+                                        () -> getInner().getSolution(sub), exec))
+                                .toList();
+                        return futures.stream()
+                                .map(f -> {
+                                    try {
+                                        return f.join();
+                                    } catch (CompletionException e) {
+                                        if (e.getCause() instanceof RuntimeException re) throw re;
+                                        throw e;
+                                    }
+                                })
+                                .reduce((a1, a2) -> a1.flatMap(r1 -> a2.map(r1::merge)))
+                                .orElse(Optional.empty());
+                    }
+                })
+                .orElseGet(() -> getInner().getSolution(csp));
+    }
+
     @Override
     public Stream<Assignment> getSolutions(@NonNull ConstraintSatisfactionProblem csp) {
         return csp.decomposeSubproblems()
