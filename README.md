@@ -4,11 +4,35 @@
 
 A Java library implementing classic AI algorithms for solving Constraint Satisfaction Problems (CSPs).
 
+## 🧠 Why `jcsp`?
+
+Traditional Java constraint satisfaction problem (CSP) solvers were designed over two decades ago. While powerful for single-threaded tasks, they rely heavily on **global mutable state**, **in-place arrays**, and **imperative trailing stacks**. This legacy architecture makes multi-threading dangerous, cloud integration clunky, and debugging a nightmare.
+
+`jcsp` is built from scratch for **Modern Java (21+)**, reimagining constraint solving through a pure functional and immutable lens.
+
+### 🚀 Key Architectural Advantages
+
+* **Immutable Core Objects:** Variables, domains, solver assignments, and constraint objects are deeply immutable — safe to share across threads. Each `getSolutions()` stream must be consumed sequentially; for concurrent search, create independent solver instances per thread or use the built-in parallel local search restarts.
+* **Parallel Local Search:** All local search restart attempts run concurrently via parallel streams, so increasing `maxAttempts` automatically exploits multiple CPU cores. Independent subproblems are also solved concurrently during both systematic and local search.
+* **Lazy Streaming API:** `jcsp` exposes solutions as a native, lazy `Stream<Assignment>` rather than callbacks or blocking calls. Map, filter, limit, and collect solutions incrementally using standard Java Stream pipelines.
+* **Isolated State Architecture:** Traditional solvers anchor their search to a single, mutable global state. In `jcsp`, the search engine passes lightweight, isolated state objects down the execution path, making search logic predictable and easy to test.
+* **100% Instruction and Branch Coverage:** Every production code path is executed and every branch is covered by the test suite — enforced as a build gate by JaCoCo.
+
+### 🛠️ The Architecture at a Glance
+
+| Feature | Traditional Java Solvers | `jcsp` Solver |
+| :--- | :--- | :--- |
+| **State Model** | Stateful & Mutable (Trailing) | **Deeply Immutable Value Objects** |
+| **Concurrency** | Dangerous / Requires Wrappers | **Immutable Core; Parallel Local Search Restarts** |
+| **API Paradigm** | Imperative / Event Observers | **Functional / Lazy Streams** |
+| **Java Baseline** | Legacy Compatibility (JDK 8/11) | **Modern Java Baseline (JDK 21+)** |
+| **Best For** | Heavy, Monolithic CPU Grinds | **Cloud Microservices, Streaming APIs, Parallel Search** |
+
 ## Features
 
 - **Multiple solving strategies**: backtracking search, tree solver, cutset conditioning, tree decomposition, and independent subproblem decomposition
 - **Optimization**: branch-and-bound search via `createSolver(csp, objective)` — returns a `BoundSolver` whose `getSolution()` finds the global optimum and `getSolutions()` streams improving assignments
-- **Consistency preprocessing**: AC3 arc consistency, node consistency, AllDiff GAC (Régin 1994), SumConstraint and LinearConstraint bounds propagation, CountConstraint and AmongConstraint value-set propagation, InverseConstraint arc consistency, AtLeastN/AtMostN boolean forcing, CumulativeConstraint timetabling propagation, GlobalCardinalityConstraint value propagation, LexConstraint bounds propagation, MaxConstraint and MinConstraint bounds propagation, DivisionConstraint bounds propagation, NaryElementConstraint domain filtering, and NaryTuplesConstraint table GAC — all run in a combined fixpoint loop so each propagator benefits from the others' reductions
+- **Consistency preprocessing**: AC3 arc consistency, node consistency, AllDiff GAC (Régin 1994), SumConstraint and LinearConstraint bounds propagation, CountConstraint and AmongConstraint value-set propagation, InverseConstraint arc consistency, AtLeastN/AtMostN boolean forcing, CumulativeConstraint timetabling propagation, GlobalCardinalityConstraint value propagation, LexConstraint bounds propagation, MaxConstraint and MinConstraint bounds propagation, ProductConstraint bounds propagation, DivisionConstraint bounds propagation, NaryElementConstraint domain filtering, and NaryTuplesConstraint table GAC — all run in a combined fixpoint loop so each propagator benefits from the others' reductions
 - **Flexible constraint types**: unary, binary (equals, not-equals, offset, comparator, logic, element over fixed array, absolute-difference, division, predicate, tuples), and n-ary (AllDiff, AtMostOne, AtLeastN, AtMostN, ExactlyOne, Sum, Product, Linear, Count, Among, Inverse, GlobalCardinality, Cumulative, Max, Min, Element over variables, Tuples, Increasing, Decreasing, Lex, predicate)
 - **Boolean domain**: `BooleanDomain` for modelling binary assignment problems (e.g. timetabling as a 0-1 matrix)
 - **Functional style**: immutable value objects, composable solver decorators, and a lazy `Stream<Assignment>` API throughout
@@ -160,6 +184,8 @@ builder.biPredicateConstraint(v1, v2, biPredicate)          // biPredicate.test(
 ```java
 builder.sumConstraint(Set.of(v1, v2, v3), Operator.EQ, 10)          // v1 + v2 + v3 == 10  (also LEQ, GEQ, etc.)
 builder.maxConstraint(Set.of(v1, v2, v3), Operator.LEQ, 10)         // max(v1, v2, v3) <= 10  (also EQ, GEQ, LT, GT)
+builder.productConstraint(Set.of(v1, v2, v3), Operator.EQ, 24)      // v1*v2*v3 == 24  (also LEQ, GEQ; requires strictly positive domain mins)
+builder.divisionConstraint(dividend, divisor, Operator.EQ, 3)        // dividend/divisor == 3  (also LEQ, GEQ; requires strictly positive domain mins for both)
 builder.linearConstraint(Map.of(v1, 2, v2, 3), Operator.LEQ, 10)    // 2*v1 + 3*v2 <= 10  (weighted sum / linear)
 builder.countConstraint(Set.of(v1, v2, v3), value, Operator.EQ, 2)                    // number of variables equal to value == 2  (also LEQ, GEQ, etc.)
 builder.amongConstraint(Set.of(v1, v2, v3), Set.of(a, b), Operator.EQ, 2)             // number of variables with value in {a,b} == 2  (MiniZinc among)
@@ -191,7 +217,7 @@ builder.impliesConstraint(b, constraint)                    // b -> constraint  
 
 **Satisfaction** (`createSolver(csp)`):
 ```
-NodeConsistency → PropagationFixpoint(AC3 ↔ AllDiff GAC ↔ SumBounds ↔ LinearBounds ↔ CountValue ↔ InverseArc ↔ AmongValue ↔ AtLeastN/AtMostN ↔ CumulativeTimetable ↔ GlobalCardinalityValue ↔ LexBounds ↔ MaxBounds ↔ MinBounds ↔ ElementDomains ↔ TuplesGAC)
+NodeConsistency → PropagationFixpoint(AC3 ↔ AllDiff GAC ↔ SumBounds ↔ LinearBounds ↔ CountValue ↔ InverseArc ↔ AmongValue ↔ AtLeastN/AtMostN ↔ CumulativeTimetable ↔ GlobalCardinalityValue ↔ LexBounds ↔ MaxBounds ↔ MinBounds ↔ ElementDomains ↔ TuplesGAC ↔ ProductBounds ↔ DivisionBounds)
     → IndependentSubproblems → TreeDecomposition → CutsetConditioning
     → TreeSolver / DomWdegLubySearch(dom/wdeg + Luby restarts + MAC)
 ```
@@ -204,7 +230,7 @@ NodeConsistency → PropagationFixpoint → BisectionConditioning (continuous on
 ```
 The fixpoint leaves intervals open for bisection. `BisectionConditioningSolver` bisects each non-singleton interval to within `DEFAULT_BISECTION_EPSILON`, repropagating bounds at each step; for purely discrete CSPs it is a passthrough. `BranchAndBound` then handles remaining discrete variables.
 
-`PropagationFixpoint` runs all propagators in a combined fixpoint loop — each can expose new reductions the others exploit. Many highly-constrained problems (e.g. Zebra, Sudoku, MagicSquare) are solved entirely by propagation without any backtracking. During search, `FULL_PROPAGATION_INFERENCE` fires all 20 propagators (including AllDiff GAC, GCC, cumulative timetabling, table GAC, element domain filtering, and bounds propagators) to global fixpoint at every search node — not just during preprocessing.
+`PropagationFixpoint` runs all propagators in a combined fixpoint loop — each can expose new reductions the others exploit. Many highly-constrained problems (e.g. Zebra, Sudoku, MagicSquare) are solved entirely by propagation without any backtracking. During search, `FULL_PROPAGATION_INFERENCE` fires all propagators (including AllDiff GAC, GCC, cumulative timetabling, table GAC, element domain filtering, and bounds propagators) to global fixpoint at every search node — not just during preprocessing.
 
 `DomWdegLubySearch` — the terminal solver for general CSPs — combines **dom/wdeg variable ordering** (Boussemart et al. 2004) with **Luby restarts**. Each constraint starts with weight 1; domain wipeouts during MAC inference increment the weights of active constraints on the failing variable. The selector then picks `argmin(domainSize / weightedDegree)`, steering search away from costly regions. `getSolutions()` returns a lazy stream of all solutions with accumulated weight learning; `getSolution()` applies Luby restarts — the failure budget follows 1, 1, 2, 1, 1, 2, 4, … (×`DEFAULT_LUBY_UNIT = 100`) and weights are preserved across restarts.
 
@@ -215,7 +241,7 @@ Tree decomposition uses a domain-aware clique size limit (`d^targetTreewidth`, c
 `LocalSolver.Factory.INSTANCE` wires the local search pipeline:
 
 ```
-NodeConsistency → AC3 → SumBounds → LinearBounds → CountValue → InverseArc → AmongValue → AtLeastN/AtMostN → CumulativeTimetable → GlobalCardinalityValue → LexBounds → MaxBounds → MinBounds → ElementDomains → TuplesGAC → IndependentSubproblems → WalkSAT / LNS / MinConflicts
+NodeConsistency → AC3 → SumBounds → LinearBounds → CountValue → InverseArc → AmongValue → AtLeastN/AtMostN → CumulativeTimetable → GlobalCardinalityValue → LexBounds → MaxBounds → MinBounds → ElementDomains → TuplesGAC → ProductBounds → DivisionBounds → IndependentSubproblems → WalkSAT / LNS / MinConflicts
 ```
 
 The terminal solver is chosen automatically after preprocessing:
