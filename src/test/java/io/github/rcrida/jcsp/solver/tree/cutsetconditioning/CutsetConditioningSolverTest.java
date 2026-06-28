@@ -16,11 +16,14 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static io.github.rcrida.jcsp.solver.tree.TreeSolverTest.AUSTRALIA_WITHOUT_SA;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -147,5 +150,86 @@ public class CutsetConditioningSolverTest {
         val assignment = Assignment.of(Map.of(a, 1, b, 2, c, 3));
         when(cycleCutsetSolver.getSolutions(csp)).thenReturn(Stream.of(assignment));
         assertThat(cutsetConditioningSolver.getSolutions(csp)).containsExactly(assignment);
+    }
+
+    @Test
+    void getSolution_treeProblem() {
+        val treeCsp = AUSTRALIA_WITHOUT_SA;
+        when(treeSolver.getSolution(treeCsp)).thenReturn(Optional.of(ASSIGNMENT));
+        assertThat(cutsetConditioningSolver.getSolution(treeCsp)).contains(ASSIGNMENT);
+    }
+
+    @Test
+    void getSolution_complexityImprovement() {
+        val cutset = ConstraintSatisfactionProblem.builder()
+                .variableDomain(C, DOMAIN)
+                .build();
+        val cutsetAssignment = Assignment.builder().value(C, 1).build();
+        // cutset is a tree so CutsetConditioningSolver.getSolutions() routes to treeSolver.getSolutions()
+        when(treeSolver.getSolutions(cutset)).thenReturn(Stream.of(cutsetAssignment));
+
+        val tree = ConstraintSatisfactionProblem.builder()
+                .variableDomain(T1, CONSTRAINED_DOMAIN)
+                .variableDomain(T2, CONSTRAINED_DOMAIN)
+                .variableDomain(T3, CONSTRAINED_DOMAIN)
+                .variableDomain(T4, CONSTRAINED_DOMAIN)
+                .notEqualsConstraint(T1, T2)
+                .notEqualsConstraint(T2, T3)
+                .notEqualsConstraint(T3, T4)
+                .build();
+        val treeAssignment = Assignment.of(Map.of(T1, 2, T2, 3, T3, 4, T4, 5));
+        // the parallel path calls treeSolver.getSolution() (not getSolutions()) on the conditioned tree
+        when(treeSolver.getSolution(tree)).thenReturn(Optional.of(treeAssignment));
+        assertThat(cutsetConditioningSolver.getSolution(CUTSET_CONDITIONING_PROBLEM))
+                .contains(cutsetAssignment.merge(treeAssignment));
+    }
+
+    @Test
+    void getSolution_domainBecomesEmpty() {
+        val cutset = ConstraintSatisfactionProblem.builder()
+                .variableDomain(C, DOMAIN)
+                .build();
+        val cutsetAssignment = Assignment.builder().value(C, 1).build();
+        when(treeSolver.getSolutions(cutset)).thenReturn(Stream.of(cutsetAssignment));
+
+        val smallDomain = IntRangeDomain.of(1, 1);
+        assertThat(cutsetConditioningSolver.getSolution(
+                CUTSET_CONDITIONING_PROBLEM.toBuilder().variableDomain(T1, smallDomain).build())).isEmpty();
+    }
+
+    @Test
+    void getSolution_noTreeAtAll() {
+        Variable<Integer> a = VARIABLE_FACTORY.create("A");
+        Variable<Integer> b = VARIABLE_FACTORY.create("B");
+        Variable<Integer> c = VARIABLE_FACTORY.create("C");
+        Variable<Integer> d = VARIABLE_FACTORY.create("D");
+        val csp = ConstraintSatisfactionProblem.builder()
+                .variableDomain(a, DOMAIN)
+                .variableDomain(b, DOMAIN)
+                .variableDomain(c, DOMAIN)
+                .variableDomain(d, DOMAIN)
+                .notEqualsConstraint(c, d)
+                .constraint(PredicateConstraint.builder().variables(Set.of(a, b, c)).predicate(assignment -> {
+                    val A = (int) assignment.getValue(a).get();
+                    val B = (int) assignment.getValue(b).get();
+                    val C = (int) assignment.getValue(c).get();
+                    return A + B == C;
+                }).build())
+                .build();
+        val assignment = Assignment.of(Map.of(a, 1, b, 2, c, 3));
+        when(cycleCutsetSolver.getSolution(csp)).thenReturn(Optional.of(assignment));
+        assertThat(cutsetConditioningSolver.getSolution(csp)).contains(assignment);
+    }
+
+    @Test
+    void getSolution_propagatesRuntimeExceptionFromTreeSolver() {
+        val cutset = ConstraintSatisfactionProblem.builder()
+                .variableDomain(C, DOMAIN)
+                .build();
+        val cutsetAssignment = Assignment.builder().value(C, 1).build();
+        when(treeSolver.getSolutions(cutset)).thenReturn(Stream.of(cutsetAssignment));
+        var boom = new RuntimeException("boom");
+        when(treeSolver.getSolution(any())).thenThrow(boom);
+        assertThatThrownBy(() -> cutsetConditioningSolver.getSolution(CUTSET_CONDITIONING_PROBLEM)).isSameAs(boom);
     }
 }
