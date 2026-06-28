@@ -155,6 +155,18 @@ public class AssignmentTest {
     }
 
     @Test
+    void equalsSameReference() {
+        val assignment = Assignment.of(Map.of(variable, value));
+        assertThat(assignment.equals(assignment)).isTrue();
+    }
+
+    @Test
+    void equalsNotAssignment() {
+        val assignment = Assignment.of(Map.of(variable, value));
+        assertThat(assignment.equals(new Object())).isFalse();
+    }
+
+    @Test
     void testToString() {
         val assignment = Assignment.of(Map.of(variable, value));
         assertThat(assignment).asString().isEqualTo("{variable=value}");

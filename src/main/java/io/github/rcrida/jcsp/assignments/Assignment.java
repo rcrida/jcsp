@@ -1,9 +1,7 @@
 package io.github.rcrida.jcsp.assignments;
 
 import lombok.Builder;
-import lombok.EqualsAndHashCode;
 import lombok.Singular;
-import lombok.Value;
 import lombok.extern.slf4j.Slf4j;
 import lombok.val;
 import io.github.rcrida.jcsp.ConstraintSatisfactionProblem;
@@ -11,24 +9,30 @@ import io.github.rcrida.jcsp.variables.Variable;
 import org.jspecify.annotations.NonNull;
 
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 
 @Slf4j
-@Value
 @Builder(toBuilder = true)
-public class Assignment {
+public record Assignment(@Singular Map<Variable<?>, Object> values, Statistics statistics) {
+
+    public Assignment {
+        if (statistics == null) statistics = new Statistics();
+    }
+
     public static Assignment empty() {
         return Assignment.builder().build();
     }
 
-    @Singular
-    Map<Variable<?>, Object> values;
+    public Map<Variable<?>, Object> getValues() {
+        return values;
+    }
 
-    @EqualsAndHashCode.Exclude
-    @Builder.Default
-    Statistics statistics = new Statistics();
+    public Statistics getStatistics() {
+        return statistics;
+    }
 
     public static Assignment of(Map<? extends Variable<?>, ?> values) {
         return Assignment.builder().values(values).build();
@@ -84,6 +88,18 @@ public class Assignment {
         for (Map.Entry<Variable<?>, Object> entry : values.entrySet()) {
             assert csp.isAllowedValue(entry.getKey(), entry.getValue()) : String.format("Invalid assigned value for variable '%s': %s", entry.getKey(), entry.getValue());
         }
+    }
+
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) return true;
+        if (!(o instanceof Assignment a)) return false;
+        return Objects.equals(values, a.values);
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(values);
     }
 
     @Override
