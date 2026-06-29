@@ -25,6 +25,10 @@ import io.github.rcrida.jcsp.constraints.binary.BinaryNotEqualsConstraint;
 import io.github.rcrida.jcsp.constraints.Operator;
 import io.github.rcrida.jcsp.constraints.nary.AllDiffConstraint;
 import io.github.rcrida.jcsp.constraints.nary.AmongConstraint;
+import io.github.rcrida.jcsp.constraints.nary.Automaton;
+import io.github.rcrida.jcsp.constraints.nary.CircuitConstraint;
+import io.github.rcrida.jcsp.constraints.nary.DiffnConstraint;
+import io.github.rcrida.jcsp.constraints.nary.RegularConstraint;
 import io.github.rcrida.jcsp.constraints.nary.AtLeastNConstraint;
 import io.github.rcrida.jcsp.constraints.nary.AtMostNConstraint;
 import io.github.rcrida.jcsp.constraints.nary.CumulativeConstraint;
@@ -90,7 +94,7 @@ public class ConstraintSatisfactionProblem {
      * propagation. Any other constraint type referencing such a variable is rejected at build time.
      */
     private static final Set<Class<? extends Constraint>> CONTINUOUS_COMPATIBLE_CONSTRAINTS =
-            Set.of(SumConstraint.class, LinearConstraint.class, UnaryComparatorConstraint.class, BinaryComparatorConstraint.class, BinaryOffsetConstraint.class, AbsoluteDifferenceConstraint.class, DivisionConstraint.class, LexConstraint.class, CumulativeConstraint.class, MaxConstraint.class, MinConstraint.class, ProductConstraint.class);
+            Set.of(SumConstraint.class, LinearConstraint.class, UnaryComparatorConstraint.class, BinaryComparatorConstraint.class, BinaryOffsetConstraint.class, AbsoluteDifferenceConstraint.class, DivisionConstraint.class, LexConstraint.class, CumulativeConstraint.class, MaxConstraint.class, MinConstraint.class, ProductConstraint.class, DiffnConstraint.class);
 
     Map<Variable<?>, Domain<?>> variableDomains;
     @Getter(AccessLevel.NONE) @EqualsAndHashCode.Exclude ConstraintGraph constraintGraph;
@@ -554,6 +558,57 @@ public class ConstraintSatisfactionProblem {
                 @NonNull List<Double> resources,
                 double limit) {
             return this.constraint(CumulativeConstraint.of(starts, durations, resources, limit));
+        }
+
+        /**
+         * Enforce that the integer successor variables form a single Hamiltonian circuit through
+         * all {@code n} nodes. {@code successors.get(i)} represents node {@code i+1}; its value
+         * {@code j ∈ {1..n}} means "the successor of node {@code i+1} is node {@code j}".
+         * Equivalent to MiniZinc's {@code circuit(successors)}.
+         *
+         * @param successors ordered list of successor variables (one per node, 1-indexed values)
+         * @return the builder
+         */
+        public ConstraintSatisfactionProblemBuilder circuitConstraint(
+                @NonNull List<Variable<Integer>> successors) {
+            return this.constraint(CircuitConstraint.of(successors));
+        }
+
+        /**
+         * Enforce that {@code n} axis-aligned rectangles do not overlap. Rectangle {@code i}
+         * occupies {@code [xs[i], xs[i]+widths[i]) × [ys[i], ys[i]+heights[i])}. Origin
+         * variables may be integer ({@link io.github.rcrida.jcsp.domains.IntRangeDomain}) or
+         * continuous ({@link io.github.rcrida.jcsp.domains.IntervalDomain}).
+         * Equivalent to MiniZinc's {@code diffn(x, y, dx, dy)}.
+         *
+         * @param xs      x-origin variables (one per rectangle)
+         * @param ys      y-origin variables (one per rectangle)
+         * @param widths  fixed rectangle widths
+         * @param heights fixed rectangle heights
+         * @return the builder
+         */
+        public ConstraintSatisfactionProblemBuilder diffnConstraint(
+                @NonNull List<Variable<?>> xs,
+                @NonNull List<Variable<?>> ys,
+                @NonNull List<Double> widths,
+                @NonNull List<Double> heights) {
+            return this.constraint(DiffnConstraint.of(xs, ys, widths, heights));
+        }
+
+        /**
+         * Enforce that the sequence of values assigned to {@code sequence} is a word accepted
+         * by {@code automaton}. Uses forward-backward DP propagation to prune values not on
+         * any accepting path. Equivalent to MiniZinc's {@code regular(sequence, automaton)}.
+         *
+         * @param sequence  ordered list of variables forming the word
+         * @param automaton the finite automaton defining the accepted language
+         * @param <T>       the value type shared by the sequence variables and automaton alphabet
+         * @return the builder
+         */
+        public <T> ConstraintSatisfactionProblemBuilder regularConstraint(
+                @NonNull List<Variable<T>> sequence,
+                @NonNull Automaton<T> automaton) {
+            return this.constraint(RegularConstraint.of(sequence, automaton));
         }
 
         /**

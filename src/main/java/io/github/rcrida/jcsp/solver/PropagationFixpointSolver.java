@@ -16,7 +16,9 @@ import io.github.rcrida.jcsp.constraints.nary.AmongConstraint;
 import io.github.rcrida.jcsp.constraints.nary.AtLeastNConstraint;
 import io.github.rcrida.jcsp.constraints.nary.AtMostNConstraint;
 import io.github.rcrida.jcsp.constraints.nary.CountConstraint;
+import io.github.rcrida.jcsp.constraints.nary.CircuitConstraint;
 import io.github.rcrida.jcsp.constraints.nary.CumulativeConstraint;
+import io.github.rcrida.jcsp.constraints.nary.DiffnConstraint;
 import io.github.rcrida.jcsp.constraints.nary.GlobalCardinalityConstraint;
 import io.github.rcrida.jcsp.constraints.nary.InverseConstraint;
 import io.github.rcrida.jcsp.constraints.nary.LexConstraint;
@@ -26,6 +28,7 @@ import io.github.rcrida.jcsp.constraints.nary.MinConstraint;
 import io.github.rcrida.jcsp.constraints.nary.NaryElementConstraint;
 import io.github.rcrida.jcsp.constraints.nary.ProductConstraint;
 import io.github.rcrida.jcsp.constraints.nary.NaryTuplesConstraint;
+import io.github.rcrida.jcsp.constraints.nary.RegularConstraint;
 import io.github.rcrida.jcsp.constraints.nary.SumConstraint;
 import io.github.rcrida.jcsp.constraints.unary.UnaryComparatorConstraint;
 import io.github.rcrida.jcsp.domains.BoundedDomain;
@@ -82,7 +85,10 @@ public class PropagationFixpointSolver extends SolverDecorator {
             FixpointConsistency.of(NaryElementConstraint.class),
             FixpointConsistency.of(NaryTuplesConstraint.class),
             FixpointConsistency.of(ProductConstraint.class),
-            FixpointConsistency.of(DivisionConstraint.class)
+            FixpointConsistency.of(DivisionConstraint.class),
+            FixpointConsistency.of(CircuitConstraint.class),
+            FixpointConsistency.of(DiffnConstraint.class),
+            FixpointConsistency.of(RegularConstraint.class)
     );
 
     /** When true, snaps non-singleton bounded domains to midpoints after propagation converges. */

@@ -28,7 +28,7 @@ When creating a new release: bump the version in `pom.xml`, update `README.md` (
 mvn compile                          # Compile sources
 mvn test                             # Run all tests
 mvn test -Dtest=ClassName            # Run a single test class
-mvn verify                           # Build with JaCoCo coverage report
+mvn clean verify                     # Build with JaCoCo coverage report
 ```
 
 Coverage report is generated at `target/site/jacoco/index.html`. **100% instruction and branch coverage is enforced** — the build fails if any code is not covered.
