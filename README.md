@@ -288,7 +288,7 @@ InitialAssignmentFactory factory = FallbackAssignmentFactory.builder()
 <dependency>
     <groupId>io.github.rcrida</groupId>
     <artifactId>jcsp</artifactId>
-    <version>2.28.0</version>
+    <version>2.29.0</version>
 </dependency>
 ```
 
