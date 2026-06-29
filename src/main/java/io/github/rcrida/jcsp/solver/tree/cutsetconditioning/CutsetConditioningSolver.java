@@ -18,13 +18,9 @@ import java.util.ArrayDeque;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
-import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.CompletionException;
-import java.util.concurrent.Executors;
 import java.util.function.Predicate;
 import java.util.stream.Stream;
 
@@ -109,30 +105,12 @@ public class CutsetConditioningSolver extends SolverDecorator {
             return treeSolver.getSolution(csp);
         }
         return decomposeCsp(csp)
-                .map(decomposition -> {
-                    List<Assignment> cutsetAssignments = getSolutions(decomposition.cycleCutset).toList();
-                    log.info("Solving {} cutset assignments in parallel", cutsetAssignments.size());
-                    try (var exec = Executors.newVirtualThreadPerTaskExecutor()) {
-                        List<CompletableFuture<Optional<Assignment>>> futures = cutsetAssignments.stream()
-                                .map(ca -> CompletableFuture.supplyAsync(
-                                        () -> decomposition.constrainTree(ca)
-                                                .flatMap(treeSolver::getSolution)
-                                                .map(ca::merge),
-                                        exec))
-                                .toList();
-                        return futures.stream()
-                                .map(f -> {
-                                    try {
-                                        return f.join();
-                                    } catch (CompletionException e) {
-                                        throw (RuntimeException) e.getCause();
-                                    }
-                                })
-                                .filter(Optional::isPresent)
-                                .findFirst()
-                                .flatMap(opt -> opt);
-                    }
-                })
+                .map(decomposition -> getSolutions(decomposition.cycleCutset)
+                        .parallel()
+                        .flatMap(cutsetAssignment -> decomposition.constrainTree(cutsetAssignment).stream()
+                                .flatMap(treeSolver::getSolutions)
+                                .map(cutsetAssignment::merge))
+                        .findAny())
                 .orElseGet(() -> getInner().getSolution(csp));
     }
 

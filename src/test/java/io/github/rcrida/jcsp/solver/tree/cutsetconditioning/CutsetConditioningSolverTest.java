@@ -24,6 +24,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static io.github.rcrida.jcsp.solver.tree.TreeSolverTest.AUSTRALIA_WITHOUT_SA;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doReturn;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -178,8 +180,7 @@ public class CutsetConditioningSolverTest {
                 .notEqualsConstraint(T3, T4)
                 .build();
         val treeAssignment = Assignment.of(Map.of(T1, 2, T2, 3, T3, 4, T4, 5));
-        // the parallel path calls treeSolver.getSolution() (not getSolutions()) on the conditioned tree
-        when(treeSolver.getSolution(tree)).thenReturn(Optional.of(treeAssignment));
+        when(treeSolver.getSolutions(tree)).thenReturn(Stream.of(treeAssignment));
         assertThat(cutsetConditioningSolver.getSolution(CUTSET_CONDITIONING_PROBLEM))
                 .contains(cutsetAssignment.merge(treeAssignment));
     }
@@ -227,9 +228,9 @@ public class CutsetConditioningSolverTest {
                 .variableDomain(C, DOMAIN)
                 .build();
         val cutsetAssignment = Assignment.builder().value(C, 1).build();
-        when(treeSolver.getSolutions(cutset)).thenReturn(Stream.of(cutsetAssignment));
         var boom = new RuntimeException("boom");
-        when(treeSolver.getSolution(any())).thenThrow(boom);
+        doThrow(boom).when(treeSolver).getSolutions(any());
+        doReturn(Stream.of(cutsetAssignment)).when(treeSolver).getSolutions(cutset);
         assertThatThrownBy(() -> cutsetConditioningSolver.getSolution(CUTSET_CONDITIONING_PROBLEM)).isSameAs(boom);
     }
 }
