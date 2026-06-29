@@ -32,15 +32,15 @@ Traditional Java constraint satisfaction problem (CSP) solvers were designed ove
 
 - **Multiple solving strategies**: backtracking search, tree solver, cutset conditioning, tree decomposition, and independent subproblem decomposition
 - **Optimization**: branch-and-bound search via `createSolver(csp, objective)` — returns a `BoundSolver` whose `getSolution()` finds the global optimum and `getSolutions()` streams improving assignments
-- **Consistency preprocessing**: AC3 arc consistency, node consistency, AllDiff GAC (Régin 1994), SumConstraint and LinearConstraint bounds propagation, CountConstraint and AmongConstraint value-set propagation, InverseConstraint arc consistency, AtLeastN/AtMostN boolean forcing, CumulativeConstraint timetabling propagation, GlobalCardinalityConstraint value propagation, LexConstraint bounds propagation, MaxConstraint and MinConstraint bounds propagation, ProductConstraint bounds propagation, DivisionConstraint bounds propagation, NaryElementConstraint domain filtering, and NaryTuplesConstraint table GAC — all run in a combined fixpoint loop so each propagator benefits from the others' reductions
-- **Flexible constraint types**: unary, binary (equals, not-equals, offset, comparator, logic, element over fixed array, absolute-difference, division, predicate, tuples), and n-ary (AllDiff, AtMostOne, AtLeastN, AtMostN, ExactlyOne, Sum, Product, Linear, Count, Among, Inverse, GlobalCardinality, Cumulative, Max, Min, Element over variables, Tuples, Increasing, Decreasing, Lex, predicate)
+- **Consistency preprocessing**: AC3 arc consistency, node consistency, AllDiff GAC (Régin 1994), SumConstraint and LinearConstraint bounds propagation, CountConstraint and AmongConstraint value-set propagation, InverseConstraint arc consistency, AtLeastN/AtMostN boolean forcing, CumulativeConstraint timetabling propagation, GlobalCardinalityConstraint value propagation, LexConstraint bounds propagation, MaxConstraint and MinConstraint bounds propagation, ProductConstraint bounds propagation, DivisionConstraint bounds propagation, NaryElementConstraint domain filtering, NaryTuplesConstraint table GAC, CircuitConstraint Hamiltonian propagation, DiffnConstraint compulsory-part propagation, and RegularConstraint forward-backward DP propagation — all run in a combined fixpoint loop so each propagator benefits from the others' reductions
+- **Flexible constraint types**: unary, binary (equals, not-equals, offset, comparator, logic, element over fixed array, absolute-difference, division, predicate, tuples), and n-ary (AllDiff, AtMostOne, AtLeastN, AtMostN, ExactlyOne, Sum, Product, Linear, Count, Among, Inverse, GlobalCardinality, Cumulative, Max, Min, Element over variables, Tuples, Increasing, Decreasing, Lex, predicate, Circuit, Diffn, Regular)
 - **Boolean domain**: `BooleanDomain` for modelling binary assignment problems (e.g. timetabling as a 0-1 matrix)
 - **Functional style**: immutable value objects, composable solver decorators, and a lazy `Stream<Assignment>` API throughout
 - **Search limits**: `SolverLimits` caps work by node count and/or wall-clock time; `createSolver(csp, limits)` enforces them during search. `getSolution()` throws `LimitExceededException` (carrying `Statistics`) when a limit is hit — distinguishable from a genuine UNSAT result (`Optional.empty()`). `getSolutions()` truncates the stream silently instead
 - **Heuristics**: dom/wdeg variable ordering with Luby restarts (Boussemart et al. 2004) for the satisfaction terminal solver; MRV variable selection for the optimization chain; LCV value ordering; and Minimum Degree variable elimination for tree decomposition
 - **Local search**: `LocalSolver.Factory.INSTANCE` wires the full pipeline (NC + AC3 + bounds/value propagation → independent subproblem decomposition → terminal solver) and supports both satisfaction and optimization. Terminal solver is auto-selected: WalkSAT for all-boolean satisfaction CSPs without counting constraints, LargeNeighborhoodSearch for optimization with `ExactlyOneConstraint`s, MinConflicts otherwise. All `maxAttempts` restarts run in parallel; independent subproblems are also solved concurrently. Seeded by `RandomAssignmentFactory`, `GreedyAssignmentFactory`, or `FallbackAssignmentFactory` for hybrid restart strategies
 - **Reification**: `ReifiedConstraint` (`b <-> body`) and `ImplicationConstraint` (`b -> body`) introduce boolean indicator variables that capture constraint satisfaction — enables soft constraints, counting satisfaction, and conditional constraints via `csp.reifyConstraint(b, constraint)` and `csp.impliesConstraint(b, constraint)`
-- **Real-valued variables**: `IntervalDomain` represents a continuous `[min, max]` range of `double`s. `SumConstraint`, `LinearConstraint`, `UnaryComparatorConstraint`, `BinaryComparatorConstraint`, `BinaryOffsetConstraint`, `AbsoluteDifferenceConstraint`, `DivisionConstraint`, `ProductConstraint`, `LexConstraint`, `MaxConstraint`, `MinConstraint`, and `CumulativeConstraint` all propagate over interval bounds, so many continuous problems are solved entirely by propagation
+- **Real-valued variables**: `IntervalDomain` represents a continuous `[min, max]` range of `double`s. `SumConstraint`, `LinearConstraint`, `UnaryComparatorConstraint`, `BinaryComparatorConstraint`, `BinaryOffsetConstraint`, `AbsoluteDifferenceConstraint`, `DivisionConstraint`, `ProductConstraint`, `LexConstraint`, `MaxConstraint`, `MinConstraint`, `CumulativeConstraint`, and `DiffnConstraint` (origin variables) all propagate over interval bounds, so many continuous problems are solved entirely by propagation
 - **Continuous optimization**: `createSolver(csp, objective)` auto-detects `IntervalDomain` variables and explores their feasible region via `BisectionConditioningSolver` — recursively bisecting intervals to within `DEFAULT_BISECTION_EPSILON (1e-3)`, repropagating bounds at each step, then filtering the resulting feasible points by the objective; `getSolution()` returns the global optimum and `getSolutions()` streams improving assignments
 
 ## Usage
@@ -203,6 +203,9 @@ builder.atLeastNConstraint(Set.of(b1, b2, b3), n)                   // at least 
 builder.atLeastNConstraintWithCounting(Set.of(b1, b2, b3), n)       // at least n booleans are true via carry-chain  (prefer for backtracking)
 builder.exactlyOneConstraint(Set.of(b1, b2, b3))                    // exactly one boolean is true
 builder.predicateConstraint(Set.of(v1, v2, v3), predicate)          // predicate.test(assignment) over a set of variables
+builder.circuitConstraint(List.of(s0, s1, s2))                      // Hamiltonian circuit: successors[i] is the 1-indexed next node after node i+1 (MiniZinc circuit)
+builder.diffnConstraint(xs, ys, widths, heights)                     // pairwise non-overlapping 2D rectangles; origin variables accept IntRangeDomain or IntervalDomain (MiniZinc diffn)
+builder.regularConstraint(sequence, automaton)                       // sequence values must be accepted by the given DFA (MiniZinc regular); build the automaton with Automaton.of(numStates, initialState, acceptingStates, transitions)
 ```
 
 **Reification**
@@ -217,7 +220,7 @@ builder.impliesConstraint(b, constraint)                    // b -> constraint  
 
 **Satisfaction** (`createSolver(csp)`):
 ```
-NodeConsistency → PropagationFixpoint(AC3 ↔ AllDiff GAC ↔ SumBounds ↔ LinearBounds ↔ CountValue ↔ InverseArc ↔ AmongValue ↔ AtLeastN/AtMostN ↔ CumulativeTimetable ↔ GlobalCardinalityValue ↔ LexBounds ↔ MaxBounds ↔ MinBounds ↔ ElementDomains ↔ TuplesGAC ↔ ProductBounds ↔ DivisionBounds)
+NodeConsistency → PropagationFixpoint(AC3 ↔ AllDiff GAC ↔ SumBounds ↔ LinearBounds ↔ CountValue ↔ InverseArc ↔ AmongValue ↔ AtLeastN/AtMostN ↔ CumulativeTimetable ↔ GlobalCardinalityValue ↔ LexBounds ↔ MaxBounds ↔ MinBounds ↔ ElementDomains ↔ TuplesGAC ↔ ProductBounds ↔ DivisionBounds ↔ CircuitPropagation ↔ DiffnCompulsoryParts ↔ RegularDP)
     → IndependentSubproblems → TreeDecomposition → CutsetConditioning
     → TreeSolver / DomWdegLubySearch(dom/wdeg + Luby restarts + MAC)
 ```
@@ -241,7 +244,7 @@ Tree decomposition uses a domain-aware clique size limit (`d^targetTreewidth`, c
 `LocalSolver.Factory.INSTANCE` wires the local search pipeline:
 
 ```
-NodeConsistency → AC3 → SumBounds → LinearBounds → CountValue → InverseArc → AmongValue → AtLeastN/AtMostN → CumulativeTimetable → GlobalCardinalityValue → LexBounds → MaxBounds → MinBounds → ElementDomains → TuplesGAC → ProductBounds → DivisionBounds → IndependentSubproblems → WalkSAT / LNS / MinConflicts
+NodeConsistency → AC3 → SumBounds → LinearBounds → CountValue → InverseArc → AmongValue → AtLeastN/AtMostN → CumulativeTimetable → GlobalCardinalityValue → LexBounds → MaxBounds → MinBounds → ElementDomains → TuplesGAC → ProductBounds → DivisionBounds → CircuitPropagation → DiffnCompulsoryParts → RegularDP → IndependentSubproblems → WalkSAT / LNS / MinConflicts
 ```
 
 The terminal solver is chosen automatically after preprocessing:
