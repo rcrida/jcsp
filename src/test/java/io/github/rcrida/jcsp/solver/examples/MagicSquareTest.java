@@ -1,4 +1,5 @@
-package io.github.rcrida.jcsp.solver;
+package io.github.rcrida.jcsp.solver.examples;
+import io.github.rcrida.jcsp.solver.Solver;
 
 import lombok.val;
 import io.github.rcrida.jcsp.ConstraintSatisfactionProblem;

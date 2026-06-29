@@ -9,7 +9,7 @@ import io.github.rcrida.jcsp.constraints.unary.UnaryValueConstraint;
 import io.github.rcrida.jcsp.domains.BooleanDomain;
 import io.github.rcrida.jcsp.domains.Domain;
 import io.github.rcrida.jcsp.domains.IntRangeDomain;
-import io.github.rcrida.jcsp.solver.AustraliaMapColouringTest;
+import io.github.rcrida.jcsp.solver.examples.AustraliaMapColouringTest;
 import io.github.rcrida.jcsp.variables.Variable;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -22,14 +22,14 @@ import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static io.github.rcrida.jcsp.solver.AustraliaMapColouringTest.NSW;
-import static io.github.rcrida.jcsp.solver.AustraliaMapColouringTest.NT;
-import static io.github.rcrida.jcsp.solver.AustraliaMapColouringTest.Q;
-import static io.github.rcrida.jcsp.solver.AustraliaMapColouringTest.SA;
-import static io.github.rcrida.jcsp.solver.AustraliaMapColouringTest.T;
-import static io.github.rcrida.jcsp.solver.AustraliaMapColouringTest.V;
-import static io.github.rcrida.jcsp.solver.AustraliaMapColouringTest.WA;
-import static io.github.rcrida.jcsp.solver.AustraliaMapColouringTest.DOMAIN;
+import static io.github.rcrida.jcsp.solver.examples.AustraliaMapColouringTest.NSW;
+import static io.github.rcrida.jcsp.solver.examples.AustraliaMapColouringTest.NT;
+import static io.github.rcrida.jcsp.solver.examples.AustraliaMapColouringTest.Q;
+import static io.github.rcrida.jcsp.solver.examples.AustraliaMapColouringTest.SA;
+import static io.github.rcrida.jcsp.solver.examples.AustraliaMapColouringTest.T;
+import static io.github.rcrida.jcsp.solver.examples.AustraliaMapColouringTest.V;
+import static io.github.rcrida.jcsp.solver.examples.AustraliaMapColouringTest.WA;
+import static io.github.rcrida.jcsp.solver.examples.AustraliaMapColouringTest.DOMAIN;
 
 @ExtendWith(MockitoExtension.class)
 public class ConstraintSatisfactionProblemTest {

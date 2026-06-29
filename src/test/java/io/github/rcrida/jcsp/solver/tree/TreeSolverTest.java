@@ -19,13 +19,13 @@ import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static io.github.rcrida.jcsp.solver.AustraliaMapColouringTest.Colour.GREEN;
-import static io.github.rcrida.jcsp.solver.AustraliaMapColouringTest.Colour.RED;
-import static io.github.rcrida.jcsp.solver.AustraliaMapColouringTest.NSW;
-import static io.github.rcrida.jcsp.solver.AustraliaMapColouringTest.NT;
-import static io.github.rcrida.jcsp.solver.AustraliaMapColouringTest.Q;
-import static io.github.rcrida.jcsp.solver.AustraliaMapColouringTest.V;
-import static io.github.rcrida.jcsp.solver.AustraliaMapColouringTest.WA;
+import static io.github.rcrida.jcsp.solver.examples.AustraliaMapColouringTest.Colour.GREEN;
+import static io.github.rcrida.jcsp.solver.examples.AustraliaMapColouringTest.Colour.RED;
+import static io.github.rcrida.jcsp.solver.examples.AustraliaMapColouringTest.NSW;
+import static io.github.rcrida.jcsp.solver.examples.AustraliaMapColouringTest.NT;
+import static io.github.rcrida.jcsp.solver.examples.AustraliaMapColouringTest.Q;
+import static io.github.rcrida.jcsp.solver.examples.AustraliaMapColouringTest.V;
+import static io.github.rcrida.jcsp.solver.examples.AustraliaMapColouringTest.WA;
 
 public class TreeSolverTest {
 

@@ -1,4 +1,5 @@
-package io.github.rcrida.jcsp.solver;
+package io.github.rcrida.jcsp.solver.examples;
+import io.github.rcrida.jcsp.solver.Solver;
 
 import io.github.rcrida.jcsp.ConstraintSatisfactionProblem;
 import io.github.rcrida.jcsp.domains.DomainObjectSet;

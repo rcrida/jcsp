@@ -174,7 +174,7 @@ csp.impliesConstraint(b, constraint)  // b -> constraint
 
 ### Integration Tests
 
-Classic CSP problems serve as end-to-end integration tests:
+Classic CSP problems serve as end-to-end integration tests in `io.github.rcrida.jcsp.solver.examples`:
 - `AustraliaMapColouringTest` — graph coloring; also demonstrates `countConstraint` and `globalCardinalityConstraint`
 - `NQueensTest` — N-Queens placement; also demonstrates `increasingConstraint` for symmetry breaking
 - `MagicSquareTest` — magic square; demonstrates `sumConstraint` and `lexConstraint` for symmetry breaking
@@ -183,22 +183,14 @@ Classic CSP problems serve as end-to-end integration tests:
 - `ZebraPuzzleTest` — Einstein's Zebra puzzle
 - `TwoSumTest` — two-sum via `elementConstraint` (fixed array)
 - `PermutationSquareTest` — involution puzzle: find all permutations of {1..4} satisfying p(p(i))=i, modelled via `elementVariableConstraint`; 10 solutions
-- `NaryElementConstraintTest` — unit tests for `NaryElementConstraint`: satisfaction, partial assignment optimism, propagation (index pruning, result pruning, var pruning on singleton index), infeasibility, and solver integration
 - `KnapsackTest` — binary knapsack via `linearConstraint` (feasibility + optimisation)
 - `MenuCombinationTest` — extensional constraints via `tuplesConstraint`
 - `SprintSchedulingTest` — resource-constrained scheduling via `cumulativeConstraint`
 - `ReificationTest` — soft constraints via `reifyConstraint` / `impliesConstraint`
-- `ParkrunSchedulingTest` / `TimetableSchedulingBinaryAssignmentTest` — real-world scheduling; `ParkrunSchedulingTest` exercises the LNS optimization path via `ExactlyOneConstraint`
-- `LargeNeighborhoodSolverTest` — unit tests for `LargeNeighborhoodSolver` (satisfaction and optimization paths)
-- `DomWdegLubySearchTest` — unit tests for `DomWdegLubySearch`: Luby sequence correctness, dom/wdeg solving, Luby restart budget exhaustion, backtracking through non-propagated constraints, builder validation, and `SolverLimits` enforcement (node/time limits truncate `getSolutions()`; `getSolution()` throws `LimitExceededException`; cumulative node count across Luby restarts)
-- `BacktrackingSearchTest` — unit tests for `BacktrackingSearch` (optimization chain terminal solver): backtracking via non-propagated biPredicate constraints and UNSAT inference-failure path
-- `SolverLimitsTest` — unit tests for `SolverLimits`: factory methods, node/time limit checking, `markLimitReached`/`isLimitReached`/`getLimitHitStatistics`/`resetLimitReached` lifecycle, CAS idempotency (first-wins)
-- `BoundSolverLimitsTest` — integration tests for factory `BoundSolver.getSolution()` limit behavior; uses 8-queens CSP (min constraint-graph degree = 7 ≥ targetTreewidth so `TreeDecompositionSolver` early-exits and `DomWdegLubySearch.getSolutions()` is the terminal path where limits apply); covers: `getSolution()` throws on node/time limit, `getSolution()` returns empty for genuine UNSAT, `getSolutions()` truncates silently on node limit, reset allows repeated limit detection
+- `ParkrunSchedulingTest` / `TimetableSchedulingBinaryAssignmentTest` / `TimetableSchedulingViaColouringTest` — real-world scheduling; `ParkrunSchedulingTest` exercises the LNS optimization path via `ExactlyOneConstraint`
+- `TaskAssignmentInverseTest` — task-to-person assignment modelled via `inverseConstraint`
+- `MealPlanningTest` — menu planning via `countConstraint`, `sumConstraint`, and `globalCardinalityConstraint`
 - `RealValuedConstraintTest` — `IntervalDomain` variables solved by bounds propagation; covers `sumConstraint`, `linearConstraint`, `comparatorConstraint` (unary and binary), `offsetConstraint`, `lexConstraint`, `cumulativeConstraint`, `maxConstraint`, `minConstraint`, `productConstraint`, and `divisionConstraint` over interval domains
-- `ProductConstraintTest` — unit tests for `ProductConstraint`: all operators, propagation (LEQ/GEQ/EQ bounds narrowing, non-positive domain skip, infeasibility), discrete-gap infeasibility via EQ two-pass interaction, and solver integration (factor pairs)
-- `DivisionConstraintTest` — unit tests for `DivisionConstraint`: all operators, propagation (LEQ/GEQ/EQ bounds narrowing for dividend and divisor, non-positive domain skip, infeasibility), discrete-gap infeasibility when LEQ pre-clip forces GEQ x-raise empty, and solver integration (quotient pairs)
 - `ContinuousOptimizationTest` — continuous optimization via `createSolver(csp, objective).getSolution()` over `IntervalDomain` variables; bisection explores the feasible region down to `DEFAULT_BISECTION_EPSILON`
-- `AssignedDomainTest` — unit tests for `AssignedDomain` record: `values()`, `contains`, `isSingleton`, `equals`/`hashCode` (same value, same instance, different value, different type)
-- `CircuitConstraintTest` — unit tests for `CircuitConstraint`: factory validation, `isSatisfiedBy` (valid circuit, sub-tour, revisit, partial, out-of-range values), `getAsBinaryConstraints`, `propagate` (self-loop removal, singleton propagation, sub-tour elimination, premature cycle infeasibility, full circuit no-change), `toString`, equality, CSP builder method, solver integration (3-node Hamiltonian circuits)
-- `DiffnConstraintTest` — unit tests for `DiffnConstraint`: factory validation (size mismatches), `isSatisfiedBy` (x-separated, y-separated, overlapping, partial), `propagate` (mandatory x-overlap forces y-separation, mandatory y-overlap forces x-separation with infeasibility, no-change when already separated), CSP builder method, solver integration
-- `RegularConstraintTest` — unit tests for `RegularConstraint`: `Automaton.of` validation (out-of-range initial/accepting states, negative states, out-of-range/negative transition targets), `transition` with missing keys returns -1, factory assertion on empty sequence, `isSatisfiedBy` (valid, consecutive-ones rejected, partial optimistic, missing-transition false), `propagate` (no change, forced value prunes neighbours, forward wipeout, no accepting reachable, missing transitions prune unsupported values), `toString`, CSP builder method, solver integration (length-4 no-double-one sequences)
+- `PythagoreanTriplesTest` — enumerates Pythagorean triples via `productConstraint` and `sumConstraint`
+- `TravelingSalesmanTest` — TSP modelled via `circuitConstraint` with optimization

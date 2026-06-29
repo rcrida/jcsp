@@ -11,7 +11,7 @@ import io.github.rcrida.jcsp.domains.EnumDomain;
 import io.github.rcrida.jcsp.domains.IntRangeDomain;
 import io.github.rcrida.jcsp.domains.IntervalDomain;
 import io.github.rcrida.jcsp.constraints.binary.BinaryTuple;
-import io.github.rcrida.jcsp.solver.AustraliaMapColouringTest;
+import io.github.rcrida.jcsp.solver.examples.AustraliaMapColouringTest;
 import io.github.rcrida.jcsp.variables.Variable;
 import org.junit.jupiter.api.Test;
 
@@ -20,10 +20,10 @@ import java.util.List;
 import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static io.github.rcrida.jcsp.solver.AustraliaMapColouringTest.Colour.GREEN;
-import static io.github.rcrida.jcsp.solver.AustraliaMapColouringTest.Colour.RED;
-import static io.github.rcrida.jcsp.solver.AustraliaMapColouringTest.NT;
-import static io.github.rcrida.jcsp.solver.AustraliaMapColouringTest.WA;
+import static io.github.rcrida.jcsp.solver.examples.AustraliaMapColouringTest.Colour.GREEN;
+import static io.github.rcrida.jcsp.solver.examples.AustraliaMapColouringTest.Colour.RED;
+import static io.github.rcrida.jcsp.solver.examples.AustraliaMapColouringTest.NT;
+import static io.github.rcrida.jcsp.solver.examples.AustraliaMapColouringTest.WA;
 
 public class AC3Test {
     @Test

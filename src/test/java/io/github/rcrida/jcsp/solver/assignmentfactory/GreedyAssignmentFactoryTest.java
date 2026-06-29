@@ -2,7 +2,7 @@ package io.github.rcrida.jcsp.solver.assignmentfactory;
 
 import lombok.val;
 import io.github.rcrida.jcsp.solver.MinConflictsSolver;
-import io.github.rcrida.jcsp.solver.NQueensTest;
+import io.github.rcrida.jcsp.solver.examples.NQueensTest;
 import org.junit.jupiter.api.Test;
 
 import java.util.stream.IntStream;

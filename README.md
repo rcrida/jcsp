@@ -302,3 +302,5 @@ mvn verify        # run tests + generate coverage report (target/site/jacoco/ind
 ```
 
 100% instruction and branch coverage is enforced.
+
+End-to-end integration tests (classic CSP problems and real-world scheduling examples) live in `io.github.rcrida.jcsp.solver.examples`.
