@@ -194,3 +194,5 @@ Classic CSP problems serve as end-to-end integration tests in `io.github.rcrida.
 - `ContinuousOptimizationTest` — continuous optimization via `createSolver(csp, objective).getSolution()` over `IntervalDomain` variables; bisection explores the feasible region down to `DEFAULT_BISECTION_EPSILON`
 - `PythagoreanTriplesTest` — enumerates Pythagorean triples via `productConstraint` and `sumConstraint`
 - `TravelingSalesmanTest` — TSP modelled via `circuitConstraint` with optimization
+- `RectanglePackingTest` — packs four rectangles into a 3×3 bounding box via `diffnConstraint`; 12 solutions
+- `NurseSchedulingTest` — 5-day nurse shift schedule (Day/Night/Rest) with DFA-encoded rules (no work after Night, ≤2 consecutive work days) via `regularConstraint`; 79 solutions
