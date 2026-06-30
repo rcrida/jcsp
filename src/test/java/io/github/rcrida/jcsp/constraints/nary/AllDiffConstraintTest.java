@@ -154,4 +154,29 @@ public class AllDiffConstraintTest {
         assertThat(result).isPresent();
         assertThat(result.get()).isEmpty();
     }
+
+    @Test
+    void propagateWithReasons_infeasible_returnsNonEmptyReason() {
+        Variable<Integer> x1 = F.create("wr_x1"), x2 = F.create("wr_x2"), x3 = F.create("wr_x3");
+        var c = AllDiffConstraint.<Integer>builder().variables(Set.of(x1, x2, x3)).build();
+        var domains = Map.<Variable<?>, Domain<?>>of(
+                x1, IntRangeDomain.of(1, 2),
+                x2, IntRangeDomain.of(1, 2),
+                x3, IntRangeDomain.of(1, 2));
+        var result = c.propagateWithReasons(domains);
+        assertThat(result.isInfeasible()).isTrue();
+        assertThat(result.reason()).isNotEmpty();
+    }
+
+    @Test
+    void propagateWithReasons_feasible_returnsEmptyReason() {
+        Variable<Integer> x1 = F.create("wr_f1"), x2 = F.create("wr_f2");
+        var c = AllDiffConstraint.<Integer>builder().variables(Set.of(x1, x2)).build();
+        var domains = Map.<Variable<?>, Domain<?>>of(
+                x1, IntRangeDomain.of(1, 5),
+                x2, IntRangeDomain.of(1, 5));
+        var result = c.propagateWithReasons(domains);
+        assertThat(result.isInfeasible()).isFalse();
+        assertThat(result.reason()).isEmpty();
+    }
 }

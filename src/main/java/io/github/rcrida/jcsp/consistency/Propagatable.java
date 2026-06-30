@@ -19,4 +19,17 @@ public interface Propagatable {
      *         or {@link Optional#empty()} if the constraint is provably infeasible
      */
     Optional<Map<Variable<?>, Domain<?>>> propagate(Map<Variable<?>, Domain<?>> domains);
+
+    /**
+     * Propagates domain reductions and returns the reason for each change: the variable-value
+     * pairs from the current state that caused the pruning.
+     * <p>
+     * The default implementation delegates to {@link #propagate} and returns an empty reason map,
+     * meaning no explanation is provided. Constraints override this to return tighter nogoods.
+     */
+    default PropagationResult propagateWithReasons(Map<Variable<?>, Domain<?>> domains) {
+        return propagate(domains)
+                .map(updated -> PropagationResult.feasible(updated, Map.of()))
+                .orElse(PropagationResult.infeasible(Map.of()));
+    }
 }

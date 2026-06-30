@@ -2,6 +2,7 @@ package io.github.rcrida.jcsp.solver;
 
 import io.github.rcrida.jcsp.ConstraintSatisfactionProblem;
 import io.github.rcrida.jcsp.assignments.Assignment;
+import io.github.rcrida.jcsp.assignments.NogoodStore;
 import io.github.rcrida.jcsp.assignments.SolverLimits;
 import io.github.rcrida.jcsp.consistency.Inference;
 import io.github.rcrida.jcsp.consistency.arc.MAC;
@@ -97,10 +98,13 @@ public interface Solver {
                                             @NonNull SolverLimits limits) {
                 boolean hasContinuous = csp.getVariableDomains().values().stream()
                         .anyMatch(BoundedDomain.class::isInstance);
+                val nogoodStore = new NogoodStore();
                 val domWdegLubySearch = DomWdegLubySearch.builder()
                         .domainValuesOrderer(LeastConstrainingValueOrderer.INSTANCE)
                         .inference(FULL_PROPAGATION_INFERENCE)
                         .limits(limits)
+                        .nogoodStore(nogoodStore)
+                        .conflictExplainer(MacAndFixpointConflictExplainer.INSTANCE)
                         .build();
                 val treeSolver = new TreeSolver(BFSTopologicalSorter.INSTANCE, DefaultValueOrderer.INSTANCE, TreeUnassignedVariableSelector.Factory.INSTANCE);
                 val cutsetConditioningSolver = CutsetConditioningSolver.builder()

@@ -2,6 +2,7 @@ package io.github.rcrida.jcsp.solver;
 
 import io.github.rcrida.jcsp.ConstraintSatisfactionProblem;
 import io.github.rcrida.jcsp.assignments.Assignment;
+import io.github.rcrida.jcsp.assignments.NogoodStore;
 import io.github.rcrida.jcsp.assignments.SolverLimits;
 import io.github.rcrida.jcsp.domains.IntRangeDomain;
 import io.github.rcrida.jcsp.solver.backtrackingsearch.order.LeastConstrainingValueOrderer;
@@ -190,6 +191,83 @@ class DomWdegLubySearchTest {
             assertThat((int) a.getValue(y).orElseThrow()).isEqualTo(2);
             assertThat((int) a.getValue(z).orElseThrow()).isEqualTo(2);
         });
+    }
+
+    // ── Nogood learning ───────────────────────────────────────────────────────
+
+    @Test
+    void prepopulatedNogoodPrunesBranchDuringGetSolutions() {
+        // x ∈ {1,2}, y ∈ {1,2}, x≠y → two solutions: (1,2) and (2,1).
+        // Pre-loading nogood {x=1} prunes the x=1 branch entirely, leaving only (2,1).
+        Variable<Integer> x = VF.create("x");
+        Variable<Integer> y = VF.create("y");
+        ConstraintSatisfactionProblem csp = ConstraintSatisfactionProblem.builder()
+                .variableDomain(x, IntRangeDomain.of(1, 2))
+                .variableDomain(y, IntRangeDomain.of(1, 2))
+                .notEqualsConstraint(x, y)
+                .build();
+
+        NogoodStore store = new NogoodStore();
+        store.record(java.util.Map.of(x, 1));
+
+        DomWdegLubySearch solver = DomWdegLubySearch.builder()
+                .domainValuesOrderer(LeastConstrainingValueOrderer.INSTANCE)
+                .inference(Solver.Factory.FULL_PROPAGATION_INFERENCE)
+                .nogoodStore(store)
+                .build();
+
+        List<Assignment> solutions = solver.getSolutions(csp).toList();
+        assertThat(solutions).hasSize(1);
+        assertThat(solutions.get(0).getValue(x).orElseThrow()).isEqualTo(2);
+    }
+
+    @Test
+    void prepopulatedNogoodsBlockAllBranchesDuringGetSolution() {
+        // x ∈ {1,2}, y ∈ {1,2}, x≠y — nogoods blocking both root choices make problem
+        // appear unsolvable even though the CSP itself is satisfiable.
+        Variable<Integer> x = VF.create("x");
+        Variable<Integer> y = VF.create("y");
+        ConstraintSatisfactionProblem csp = ConstraintSatisfactionProblem.builder()
+                .variableDomain(x, IntRangeDomain.of(1, 2))
+                .variableDomain(y, IntRangeDomain.of(1, 2))
+                .notEqualsConstraint(x, y)
+                .build();
+
+        NogoodStore store = new NogoodStore();
+        store.record(java.util.Map.of(x, 1));
+        store.record(java.util.Map.of(x, 2));
+
+        DomWdegLubySearch solver = DomWdegLubySearch.builder()
+                .domainValuesOrderer(LeastConstrainingValueOrderer.INSTANCE)
+                .inference(Solver.Factory.FULL_PROPAGATION_INFERENCE)
+                .nogoodStore(store)
+                .build();
+
+        assertThat(solver.getSolution(csp)).isEmpty();
+    }
+
+    @Test
+    void nogoodsAreRecordedDuringSearch() {
+        // x∈{1}, y∈{1}, x≠y: assigning x=1 passes isConsistent (y is unassigned)
+        // but MAC then wipes out y's domain (removes 1 via x≠y) → inference failure
+        // → one nogood is recorded covering the current assignment.
+        Variable<Integer> x = VF.create("x");
+        Variable<Integer> y = VF.create("y");
+        ConstraintSatisfactionProblem csp = ConstraintSatisfactionProblem.builder()
+                .variableDomain(x, IntRangeDomain.of(1, 1))
+                .variableDomain(y, IntRangeDomain.of(1, 1))
+                .notEqualsConstraint(x, y)
+                .build();
+
+        NogoodStore store = new NogoodStore();
+        DomWdegLubySearch solver = DomWdegLubySearch.builder()
+                .domainValuesOrderer(LeastConstrainingValueOrderer.INSTANCE)
+                .inference(Solver.Factory.FULL_PROPAGATION_INFERENCE)
+                .nogoodStore(store)
+                .build();
+
+        solver.getSolutions(csp).toList();
+        assertThat(store.size()).isGreaterThan(0);
     }
 
     // ── Builder validation ────────────────────────────────────────────────────

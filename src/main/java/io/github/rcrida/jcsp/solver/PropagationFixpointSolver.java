@@ -32,9 +32,12 @@ import io.github.rcrida.jcsp.constraints.nary.RegularConstraint;
 import io.github.rcrida.jcsp.constraints.nary.SumConstraint;
 import io.github.rcrida.jcsp.constraints.unary.UnaryComparatorConstraint;
 import io.github.rcrida.jcsp.domains.BoundedDomain;
+import io.github.rcrida.jcsp.variables.Variable;
 import org.jspecify.annotations.NonNull;
 
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 /**
@@ -113,6 +116,29 @@ public class PropagationFixpointSolver extends SolverDecorator {
             changed = domainSum(current) < domainSumBefore;
         }
         return Optional.of(current);
+    }
+
+    /**
+     * Re-runs the propagation fixpoint to explain a conflict. Applies each propagator in order;
+     * when one signals infeasibility, calls its {@link ConstraintConsistency#explainConflict}
+     * to obtain the reason. Returns an empty map when no explanation is available.
+     * Only called after {@link #applyFixpoint} has already returned empty for the same CSP.
+     */
+    static Map<Variable<?>, Object> explainConflict(@NonNull ConstraintSatisfactionProblem csp) {
+        var current = csp;
+        boolean changed = true;
+        while (changed) {
+            double domainSumBefore = domainSum(current);
+            for (var propagator : PROPAGATORS) {
+                var after = propagator.apply(current);
+                if (after.isEmpty()) {
+                    return propagator.explainConflict(current).orElse(Map.of());
+                }
+                current = after.get();
+            }
+            changed = domainSum(current) < domainSumBefore;
+        }
+        return Map.of();
     }
 
     @Override

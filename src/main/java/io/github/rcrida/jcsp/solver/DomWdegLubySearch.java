@@ -2,6 +2,7 @@ package io.github.rcrida.jcsp.solver;
 
 import io.github.rcrida.jcsp.ConstraintSatisfactionProblem;
 import io.github.rcrida.jcsp.assignments.Assignment;
+import io.github.rcrida.jcsp.assignments.NogoodStore;
 import io.github.rcrida.jcsp.assignments.SolverLimits;
 import io.github.rcrida.jcsp.assignments.Statistics;
 import io.github.rcrida.jcsp.consistency.Inference;
@@ -53,17 +54,21 @@ public class DomWdegLubySearch implements Solver {
     @NonNull DomainValuesOrderer domainValuesOrderer;
     @NonNull Inference inference;
     @NonNull SolverLimits limits;
+    @NonNull NogoodStore nogoodStore;
+    @NonNull ConflictExplainer conflictExplainer;
 
     /** Partial builder: sets defaults and validates preconditions in {@code build()}. */
     public static class DomWdegLubySearchBuilder {
         private int lubyUnit = DEFAULT_LUBY_UNIT;
         private int maxRestarts = DEFAULT_MAX_RESTARTS;
         private SolverLimits limits = SolverLimits.unlimited();
+        private NogoodStore nogoodStore = new NogoodStore();
+        private ConflictExplainer conflictExplainer = (csp, variable, assignment) -> assignment.getValues();
 
         public DomWdegLubySearch build() {
             if (lubyUnit <= 0) throw new IllegalArgumentException("lubyUnit must be positive, got: " + lubyUnit);
             if (maxRestarts <= 0) throw new IllegalArgumentException("maxRestarts must be positive, got: " + maxRestarts);
-            return new DomWdegLubySearch(lubyUnit, maxRestarts, domainValuesOrderer, inference, limits);
+            return new DomWdegLubySearch(lubyUnit, maxRestarts, domainValuesOrderer, inference, limits, nogoodStore, conflictExplainer);
         }
     }
 
@@ -127,6 +132,7 @@ public class DomWdegLubySearch implements Solver {
                         limits.markLimitReached(next.getStatistics());
                         return Stream.empty();
                     }
+                    if (nogoodStore.isViolated(next)) return Stream.empty();
                     if (!next.isConsistent(csp)) {
                         next.getStatistics().incrementBacktracks();
                         return Stream.empty();
@@ -134,6 +140,7 @@ public class DomWdegLubySearch implements Solver {
                     Optional<ConstraintSatisfactionProblem> inferred = inference.apply(csp, variable, next);
                     if (inferred.isEmpty()) {
                         selector.incrementWeights(csp, variable, next);
+                        nogoodStore.record(conflictExplainer.explain(csp, variable, next));
                         next.getStatistics().incrementBacktracks();
                         return Stream.empty();
                     }
@@ -159,6 +166,7 @@ public class DomWdegLubySearch implements Solver {
                 limits.markLimitReached(stats);
                 throw LimitsExceeded.INSTANCE;
             }
+            if (nogoodStore.isViolated(next)) continue;
             if (!next.isConsistent(csp)) {
                 next.getStatistics().incrementBacktracks();
                 continue;
@@ -166,6 +174,7 @@ public class DomWdegLubySearch implements Solver {
             Optional<ConstraintSatisfactionProblem> inferred = inference.apply(csp, variable, next);
             if (inferred.isEmpty()) {
                 selector.incrementWeights(csp, variable, next);
+                nogoodStore.record(next.getValues());
                 next.getStatistics().incrementBacktracks();
                 if (++failures[0] >= budget) throw BudgetExceeded.INSTANCE;
                 continue;

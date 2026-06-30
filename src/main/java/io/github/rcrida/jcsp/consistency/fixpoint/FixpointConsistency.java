@@ -3,12 +3,15 @@ package io.github.rcrida.jcsp.consistency.fixpoint;
 import io.github.rcrida.jcsp.ConstraintSatisfactionProblem;
 import io.github.rcrida.jcsp.consistency.ConstraintConsistency;
 import io.github.rcrida.jcsp.consistency.Propagatable;
+import io.github.rcrida.jcsp.consistency.PropagationResult;
 import io.github.rcrida.jcsp.domains.Domain;
 import io.github.rcrida.jcsp.variables.Variable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 /**
@@ -67,5 +70,43 @@ public final class FixpointConsistency implements ConstraintConsistency {
         }
         log.debug("{}: fixpoint reached", name);
         return Optional.of(current);
+    }
+
+    /**
+     * Re-runs the fixpoint using {@link Propagatable#propagateWithReasons} and returns the
+     * accumulated reason when a domain wipeout is detected, or {@link Optional#empty()} if this
+     * constraint type caused no conflict (the conflict is in a different {@link FixpointConsistency}).
+     */
+    @Override
+    @SuppressWarnings({"unchecked", "rawtypes"})
+    public Optional<Map<Variable<?>, Object>> explainConflict(ConstraintSatisfactionProblem csp) {
+        List<Propagatable> constraints = (List) csp.getConstraints().stream()
+                .filter(constraintType::isInstance)
+                .toList();
+        if (constraints.isEmpty()) return Optional.empty();
+        var current = csp;
+        Map<Variable<?>, Object> accumulated = new HashMap<>();
+        boolean changed = true;
+        while (changed) {
+            changed = false;
+            for (Propagatable constraint : constraints) {
+                PropagationResult result = constraint.propagateWithReasons(current.getVariableDomains());
+                if (result.isInfeasible()) {
+                    accumulated.putAll(result.reason());
+                    return Optional.of(Map.copyOf(accumulated));
+                }
+                var updates = result.updatedDomains();
+                if (!updates.isEmpty()) {
+                    var builder = current.toBuilder();
+                    for (var entry : updates.entrySet()) {
+                        builder.variableDomainEntry((Variable) entry.getKey(), (Domain) entry.getValue());
+                    }
+                    current = builder.build();
+                    accumulated.putAll(result.reason());
+                    changed = true;
+                }
+            }
+        }
+        return Optional.empty();
     }
 }

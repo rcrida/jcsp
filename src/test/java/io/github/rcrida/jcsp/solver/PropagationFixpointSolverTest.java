@@ -95,4 +95,37 @@ public class PropagationFixpointSolverTest {
                 .build();
         assertThat(solverWith(c -> Stream.empty()).getSolutions(csp)).isEmpty();
     }
+
+    @Test
+    void explainConflict_feasibleCsp_returnsEmptyMap() {
+        // SumConstraint reduces domains in first pass (changed=true branch) but doesn't fail.
+        // Second pass: no further progress (changed=false branch) → while exits → Map.of().
+        Variable<Integer> x = F.create("ecx"), y = F.create("ecy");
+        var csp = ConstraintSatisfactionProblem.builder()
+                .variableDomain(x, IntRangeDomain.of(1, 5))
+                .variableDomain(y, IntRangeDomain.of(1, 5))
+                .sumConstraint(Set.of(x, y), Operator.LEQ, 3)
+                .build();
+        assertThat(PropagationFixpointSolver.explainConflict(csp)).isEmpty();
+    }
+
+    @Test
+    void fullChain_macFailureDuringSearch_coversPostMacEmptyBranch() {
+        // biPredicateConstraint(a==b) contradicts notEqualsConstraint(a,b).
+        // Top-level AC3 misses the contradiction (each value has separate support in the other constraint).
+        // When DomWdeg assigns a=v, MAC propagates b=v (biPredicate) and b≠v (notEquals)
+        // simultaneously, emptying b's domain → postMac.isEmpty()=true in ConflictExplainer.
+        Variable<Integer> a = F.create("a"), b = F.create("b"), c = F.create("c");
+        var csp = ConstraintSatisfactionProblem.builder()
+                .variableDomain(a, IntRangeDomain.of(1, 2))
+                .variableDomain(b, IntRangeDomain.of(1, 2))
+                .variableDomain(c, IntRangeDomain.of(1, 2))
+                .biPredicateConstraint(a, b, (x, y) -> x.equals(y))
+                .notEqualsConstraint(a, b)
+                .notEqualsConstraint(a, c)
+                .notEqualsConstraint(b, c)
+                .build();
+        assertThat(Solver.Factory.INSTANCE.createSolver(csp).getSolutions().toList()).isEmpty();
+    }
+
 }
