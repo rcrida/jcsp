@@ -1,6 +1,7 @@
 package io.github.rcrida.jcsp.constraints.nary;
 
 import io.github.rcrida.jcsp.consistency.Propagatable;
+import io.github.rcrida.jcsp.consistency.PropagationResult;
 import io.github.rcrida.jcsp.constraints.NumericBounds;
 import io.github.rcrida.jcsp.constraints.Operator;
 import io.github.rcrida.jcsp.domains.Domain;
@@ -145,5 +146,68 @@ public class MaxConstraint<N extends Number> extends UniformNaryConstraint<N> im
                 .sorted()
                 .collect(Collectors.joining(", "));
         return "max(" + varNames + ") " + operator.symbol + " " + bound;
+    }
+
+    /**
+     * On infeasibility, tries two independent, always-sound explanations — neither replicates
+     * {@link #propagate}'s internal branch order; each is checked directly against the current
+     * domains and is valid regardless of which of {@code propagate}'s branches actually detected
+     * the conflict (including the discrete-gap corner case, which falls back to an empty reason):
+     * <ul>
+     *   <li><b>Single culprit</b> (violates the upper bound, EQ/LEQ/LT): any one singleton
+     *       variable whose value already exceeds {@code bound} makes {@code max(vars) op bound}
+     *       infeasible by itself, regardless of every other variable — attributed alone as soon
+     *       as found.</li>
+     *   <li><b>Collective</b> (violates the lower bound, EQ/GEQ/GT): {@code max(vars) >= bound}
+     *       needs at least one variable to reach {@code bound}; only attributable when every
+     *       variable is singleton, since a partial subset can't rule out an unlisted open-domain
+     *       variable also being unable to reach {@code bound}. Whenever every variable is
+     *       singleton and the single-culprit check above found nothing, every one of them is
+     *       guaranteed to individually fall short of {@code bound} (otherwise the single-culprit
+     *       check — or {@code propagate()} itself — would already have resolved the conflict), so
+     *       the full set of singleton values is always a sound, self-contained explanation as
+     *       soon as it's reached.</li>
+     * </ul>
+     */
+    @Override
+    public PropagationResult propagateWithReasons(@NonNull Map<Variable<?>, Domain<?>> domains) {
+        return propagate(domains)
+                .map(updated -> PropagationResult.feasible(updated, Map.of()))
+                .orElseGet(() -> PropagationResult.infeasible(explainInfeasible(domains)));
+    }
+
+    @SuppressWarnings("unchecked")
+    private Map<Variable<?>, Object> explainInfeasible(@NonNull Map<Variable<?>, Domain<?>> domains) {
+        double k = bound.doubleValue();
+        boolean upperStrict = operator == Operator.LT;
+
+        if (operator == Operator.EQ || operator == Operator.LEQ || operator == Operator.LT) {
+            for (Variable<?> var : getVariables()) {
+                Domain<N> dom = (Domain<N>) domains.get(var);
+                if (!dom.isSingleton()) continue;
+                N value = dom.singleValue().orElseThrow();
+                boolean exceeds = upperStrict ? value.doubleValue() >= k : value.doubleValue() > k;
+                if (exceeds) {
+                    Map<Variable<?>, Object> reason = new HashMap<>();
+                    reason.put(var, value);
+                    return reason;
+                }
+            }
+        }
+
+        if (operator == Operator.EQ || operator == Operator.GEQ || operator == Operator.GT) {
+            boolean allSingleton = getVariables().stream()
+                    .allMatch(var -> ((Domain<N>) domains.get(var)).isSingleton());
+            if (allSingleton) {
+                Map<Variable<?>, Object> reason = new HashMap<>();
+                for (Variable<?> var : getVariables()) {
+                    Domain<N> dom = (Domain<N>) domains.get(var);
+                    reason.put(var, dom.singleValue().orElseThrow());
+                }
+                return reason;
+            }
+        }
+
+        return Map.of();
     }
 }

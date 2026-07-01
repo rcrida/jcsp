@@ -1,6 +1,7 @@
 package io.github.rcrida.jcsp.constraints.nary;
 
 import io.github.rcrida.jcsp.consistency.Propagatable;
+import io.github.rcrida.jcsp.consistency.PropagationResult;
 import io.github.rcrida.jcsp.constraints.NumericBounds;
 import io.github.rcrida.jcsp.constraints.Operator;
 import io.github.rcrida.jcsp.domains.Domain;
@@ -145,5 +146,69 @@ public class MinConstraint<N extends Number> extends UniformNaryConstraint<N> im
                 .sorted()
                 .collect(Collectors.joining(", "));
         return "min(" + varNames + ") " + operator.symbol + " " + bound;
+    }
+
+    /**
+     * On infeasibility, tries two independent, always-sound explanations — the dual of
+     * {@link MaxConstraint#propagateWithReasons}. Neither replicates {@link #propagate}'s
+     * internal branch order; each is checked directly against the current domains and is valid
+     * regardless of which branch actually detected the conflict (including the discrete-gap
+     * corner case, which falls back to an empty reason):
+     * <ul>
+     *   <li><b>Single culprit</b> (violates the lower bound, EQ/GEQ/GT): any one singleton
+     *       variable whose value already falls below {@code bound} makes
+     *       {@code min(vars) op bound} infeasible by itself, regardless of every other
+     *       variable — attributed alone as soon as found.</li>
+     *   <li><b>Collective</b> (violates the upper bound, EQ/LEQ/LT): {@code min(vars) <= bound}
+     *       needs at least one variable to reach {@code bound}; only attributable when every
+     *       variable is singleton, since a partial subset can't rule out an unlisted open-domain
+     *       variable also being unable to reach {@code bound}. Whenever every variable is
+     *       singleton and the single-culprit check above found nothing, every one of them is
+     *       guaranteed to individually stay above {@code bound} (otherwise the single-culprit
+     *       check — or {@code propagate()} itself — would already have resolved the conflict), so
+     *       the full set of singleton values is always a sound, self-contained explanation as
+     *       soon as it's reached.</li>
+     * </ul>
+     */
+    @Override
+    public PropagationResult propagateWithReasons(@NonNull Map<Variable<?>, Domain<?>> domains) {
+        return propagate(domains)
+                .map(updated -> PropagationResult.feasible(updated, Map.of()))
+                .orElseGet(() -> PropagationResult.infeasible(explainInfeasible(domains)));
+    }
+
+    @SuppressWarnings("unchecked")
+    private Map<Variable<?>, Object> explainInfeasible(@NonNull Map<Variable<?>, Domain<?>> domains) {
+        double k = bound.doubleValue();
+        boolean lowerStrict = operator == Operator.GT;
+
+        if (operator == Operator.EQ || operator == Operator.GEQ || operator == Operator.GT) {
+            for (Variable<?> var : getVariables()) {
+                Domain<N> dom = (Domain<N>) domains.get(var);
+                if (!dom.isSingleton()) continue;
+                N value = dom.singleValue().orElseThrow();
+                boolean fallsBelow = lowerStrict ? value.doubleValue() <= k : value.doubleValue() < k;
+                if (fallsBelow) {
+                    Map<Variable<?>, Object> reason = new HashMap<>();
+                    reason.put(var, value);
+                    return reason;
+                }
+            }
+        }
+
+        if (operator == Operator.EQ || operator == Operator.LEQ || operator == Operator.LT) {
+            boolean allSingleton = getVariables().stream()
+                    .allMatch(var -> ((Domain<N>) domains.get(var)).isSingleton());
+            if (allSingleton) {
+                Map<Variable<?>, Object> reason = new HashMap<>();
+                for (Variable<?> var : getVariables()) {
+                    Domain<N> dom = (Domain<N>) domains.get(var);
+                    reason.put(var, dom.singleValue().orElseThrow());
+                }
+                return reason;
+            }
+        }
+
+        return Map.of();
     }
 }

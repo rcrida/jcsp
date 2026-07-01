@@ -289,4 +289,93 @@ public class MinConstraintTest {
         var domains = Map.<Variable<?>, Domain<?>>of(a, domA, b, domB);
         assertThat(MinConstraint.of(Set.of(a, b), Operator.EQ, 3).propagate(domains)).isEmpty();
     }
+
+    // --- propagateWithReasons() ---
+
+    @Test void propagateWithReasons_feasible_returnsEmptyReason() {
+        var result = MinConstraint.of(Set.of(X, Y), Operator.GEQ, 5.0).propagateWithReasons(intervals(5, 10, 7, 8));
+        assertThat(result.isInfeasible()).isFalse();
+        assertThat(result.reason()).isEmpty();
+    }
+
+    @Test void propagateWithReasons_geq_singleCulprit_attributesSingleton() {
+        // X=[2,2] (singleton, falls below 5), Y=[7,9]: min>=5 infeasible; X alone is a sufficient
+        // culprit regardless of Y.
+        var result = MinConstraint.of(Set.of(X, Y), Operator.GEQ, 5.0).propagateWithReasons(intervals(2, 2, 7, 9));
+        assertThat(result.isInfeasible()).isTrue();
+        assertThat(result.reason()).containsExactly(Map.entry(X, 2.0));
+    }
+
+    @Test void propagateWithReasons_geq_noSingletonCulprit_bothOpen_returnsEmptyReason() {
+        // X=[0,4], Y=[0,3]: min>=5 infeasible (smallest max=3<5), but neither side is pinned, so
+        // nothing can be blamed.
+        var result = MinConstraint.of(Set.of(X, Y), Operator.GEQ, 5.0).propagateWithReasons(intervals(0, 4, 0, 3));
+        assertThat(result.isInfeasible()).isTrue();
+        assertThat(result.reason()).isEmpty();
+    }
+
+    @Test void propagateWithReasons_geq_singletonDoesNotFallBelow_openVariableIsTrueCulprit_returnsEmptyReason() {
+        // X=[6,6] (singleton, does not fall below 5), Y=[0,3] (open, the real culprit):
+        // infeasible, but Y isn't pinned to a value so nothing can be blamed.
+        var result = MinConstraint.of(Set.of(X, Y), Operator.GEQ, 5.0).propagateWithReasons(intervals(6, 6, 0, 3));
+        assertThat(result.isInfeasible()).isTrue();
+        assertThat(result.reason()).isEmpty();
+    }
+
+    @Test void propagateWithReasons_gt_singleCulprit_strictAttributesSingleton() {
+        // X=[5,5] (singleton, at bound), Y=[7,9]: min>5 infeasible (smallest max=5<=5); X's value
+        // pinned exactly at the bound already violates the strict comparison.
+        var result = MinConstraint.of(Set.of(X, Y), Operator.GT, 5.0).propagateWithReasons(intervals(5, 5, 7, 9));
+        assertThat(result.isInfeasible()).isTrue();
+        assertThat(result.reason()).containsExactly(Map.entry(X, 5.0));
+    }
+
+    @Test void propagateWithReasons_gt_singletonDoesNotFallBelowStrictly_openVariableIsTrueCulprit_returnsEmptyReason() {
+        // X=[7,7] (singleton, doesn't fall below the strict bound), Y=[0,5] (open, the real
+        // culprit under the strict comparison): infeasible, but Y isn't pinned so nothing can be
+        // blamed.
+        var result = MinConstraint.of(Set.of(X, Y), Operator.GT, 5.0).propagateWithReasons(intervals(7, 7, 0, 5));
+        assertThat(result.isInfeasible()).isTrue();
+        assertThat(result.reason()).isEmpty();
+    }
+
+    @Test void propagateWithReasons_leq_collective_allSingleton_attributesBoth() {
+        // X=[7,7], Y=[8,8]: min<=5 infeasible (smallest min=7>5); neither individually reaches,
+        // but both are pinned, so the full pair is a sound, self-contained explanation.
+        var result = MinConstraint.of(Set.of(X, Y), Operator.LEQ, 5.0).propagateWithReasons(intervals(7, 7, 8, 8));
+        assertThat(result.isInfeasible()).isTrue();
+        assertThat(result.reason()).containsOnly(Map.entry(X, 7.0), Map.entry(Y, 8.0));
+    }
+
+    @Test void propagateWithReasons_leq_collective_notAllSingleton_returnsEmptyReason() {
+        // X=[6,10], Y=[7,9]: min<=5 infeasible (smallest min=6>5), but neither is pinned, so an
+        // unlisted open variable can't be ruled out — falls back to empty.
+        var result = MinConstraint.of(Set.of(X, Y), Operator.LEQ, 5.0).propagateWithReasons(intervals(6, 10, 7, 9));
+        assertThat(result.isInfeasible()).isTrue();
+        assertThat(result.reason()).isEmpty();
+    }
+
+    @Test void propagateWithReasons_lt_collective_allSingleton_attributesBoth() {
+        // X=[5,5], Y=[6,6]: min<5 infeasible (smallest min=5>=5); both pinned, sound explanation.
+        var result = MinConstraint.of(Set.of(X, Y), Operator.LT, 5.0).propagateWithReasons(intervals(5, 5, 6, 6));
+        assertThat(result.isInfeasible()).isTrue();
+        assertThat(result.reason()).containsOnly(Map.entry(X, 5.0), Map.entry(Y, 6.0));
+    }
+
+    @Test void propagateWithReasons_eq_singleCulpritFoundBeforeCollective() {
+        // X=[2,2] (singleton, falls below 5), Y=[7,9], min==5: infeasible via the lower-bound
+        // check; the single-culprit search finds X before ever considering the collective
+        // explanation.
+        var result = MinConstraint.of(Set.of(X, Y), Operator.EQ, 5.0).propagateWithReasons(intervals(2, 2, 7, 9));
+        assertThat(result.isInfeasible()).isTrue();
+        assertThat(result.reason()).containsExactly(Map.entry(X, 2.0));
+    }
+
+    @Test void propagateWithReasons_eq_collectiveFoundAfterSingleCulpritMisses() {
+        // X=[7,7], Y=[8,8], min==5: lower-bound check passes (neither falls below 5), but the
+        // collective upper-bound explanation succeeds since both are pinned and neither reaches 5.
+        var result = MinConstraint.of(Set.of(X, Y), Operator.EQ, 5.0).propagateWithReasons(intervals(7, 7, 8, 8));
+        assertThat(result.isInfeasible()).isTrue();
+        assertThat(result.reason()).containsOnly(Map.entry(X, 7.0), Map.entry(Y, 8.0));
+    }
 }
