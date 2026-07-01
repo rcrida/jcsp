@@ -213,4 +213,35 @@ public class BinaryOffsetConstraintTest {
         assertThat(((IntervalDomain) result.get(R)).getMax()).isEqualTo(8.0);
         assertThat(result.containsKey(L)).isFalse();
     }
+
+    // propagateWithReasons() tests
+
+    @Test void propagateWithReasons_feasible_returnsEmptyReason() {
+        var result = BinaryOffsetConstraint.of(L, O, Operator.LEQ, R).propagateWithReasons(domains(0, 10, 3, 8));
+        assertThat(result.isInfeasible()).isFalse();
+        assertThat(result.reason()).isEmpty();
+    }
+
+    @Test void propagateWithReasons_infeasible_leftSingleton_attributesLeft() {
+        // L=[5,5] (singleton), R=[0,3], L+3<=R is infeasible. Only L can be blamed on a specific
+        // value; R is a genuine open range with nothing to pin the conflict on.
+        var result = BinaryOffsetConstraint.of(L, O, Operator.LEQ, R).propagateWithReasons(domains(5, 5, 0, 3));
+        assertThat(result.isInfeasible()).isTrue();
+        assertThat(result.reason()).containsExactly(Map.entry(L, 5.0));
+    }
+
+    @Test void propagateWithReasons_infeasible_bothSingleton_attributesBoth() {
+        // L=[5,5], R=[1,1]: L+3<=R is infeasible with both sides pinned to a concrete value.
+        var result = BinaryOffsetConstraint.of(L, O, Operator.LEQ, R).propagateWithReasons(domains(5, 5, 1, 1));
+        assertThat(result.isInfeasible()).isTrue();
+        assertThat(result.reason()).containsOnly(Map.entry(L, 5.0), Map.entry(R, 1.0));
+    }
+
+    @Test void propagateWithReasons_infeasible_neitherSingleton_returnsEmptyReason() {
+        // L=[5,10], R=[0,3]: infeasible, but neither side is pinned to a single value, so no
+        // variable-value pair can be blamed — matches propagate_infeasible() above.
+        var result = BinaryOffsetConstraint.of(L, O, Operator.LEQ, R).propagateWithReasons(domains(5, 10, 0, 3));
+        assertThat(result.isInfeasible()).isTrue();
+        assertThat(result.reason()).isEmpty();
+    }
 }

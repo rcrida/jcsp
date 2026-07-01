@@ -2,6 +2,7 @@ package io.github.rcrida.jcsp.consistency;
 
 import io.github.rcrida.jcsp.domains.Domain;
 import io.github.rcrida.jcsp.variables.Variable;
+import org.jspecify.annotations.NonNull;
 
 import java.util.Map;
 import java.util.Optional;
@@ -31,5 +32,17 @@ public interface Propagatable {
         return propagate(domains)
                 .map(updated -> PropagationResult.feasible(updated, Map.of()))
                 .orElse(PropagationResult.infeasible(Map.of()));
+    }
+
+    /**
+     * If {@code domain} is a singleton, records its sole value against {@code variable} in
+     * {@code reason}. Shared by {@code propagateWithReasons} overrides that attribute an
+     * infeasible narrowing to whichever side of a binary constraint already holds a pinned
+     * value — a non-singleton side is left unblamed since no single value can be cited for it.
+     */
+    static void addIfSingleton(@NonNull Domain<?> domain, Variable<?> variable, Map<Variable<?>, Object> reason) {
+        if (domain.isSingleton()) {
+            domain.singleValue().ifPresent(value -> reason.put(variable, value));
+        }
     }
 }

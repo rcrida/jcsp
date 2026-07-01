@@ -110,15 +110,9 @@ public class BinaryComparatorConstraint<T extends Comparable<T>> extends BinaryC
                 .map(updated -> PropagationResult.feasible(updated, Map.of()))
                 .orElseGet(() -> {
                     Map<Variable<?>, Object> reason = new HashMap<>();
-                    addIfSingleton(domains.get(getLeft()), getLeft(), reason);
-                    addIfSingleton(domains.get(getRight()), getRight(), reason);
+                    Propagatable.addIfSingleton(domains.get(getLeft()), getLeft(), reason);
+                    Propagatable.addIfSingleton(domains.get(getRight()), getRight(), reason);
                     return PropagationResult.infeasible(reason);
                 });
-    }
-
-    private static void addIfSingleton(@NonNull Domain<?> domain, Variable<?> variable, Map<Variable<?>, Object> reason) {
-        if (domain.isSingleton()) {
-            domain.singleValue().ifPresent(value -> reason.put(variable, value));
-        }
     }
 }
