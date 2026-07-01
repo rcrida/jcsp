@@ -35,8 +35,16 @@ public class NogoodStore {
 
     /**
      * Records a nogood. The map is copied defensively so callers may reuse their map.
+     * <p>
+     * An empty map is ignored rather than recorded: {@link #isViolated} treats a nogood as
+     * matched when every one of its entries is present in the candidate assignment, which is
+     * vacuously true for an empty nogood — recording one would prune every future assignment.
+     * Per {@link io.github.rcrida.jcsp.solver.ConflictExplainer}, an empty map means "no
+     * explanation available"; callers are expected to substitute the full assignment in that
+     * case, but this guards against a caller that doesn't.
      */
     public void record(Map<Variable<?>, Object> nogood) {
+        if (nogood.isEmpty()) return;
         nogoods.add(Map.copyOf(nogood));
     }
 

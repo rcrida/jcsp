@@ -1,6 +1,7 @@
 package io.github.rcrida.jcsp.constraints.binary;
 
 import io.github.rcrida.jcsp.consistency.Propagatable;
+import io.github.rcrida.jcsp.consistency.PropagationResult;
 import io.github.rcrida.jcsp.constraints.NumericBounds;
 import io.github.rcrida.jcsp.constraints.Operator;
 import io.github.rcrida.jcsp.domains.BoundedDomain;
@@ -74,5 +75,29 @@ public class BinaryComparatorConstraint<T extends Comparable<T>> extends BinaryC
         if (lBounded && (newLMin != lMin || newLMax != lMax)) { BoundedDomain raw = (BoundedDomain) lDomain; updated.put(getLeft(),  raw.withBounds(newLMin, newLMax)); }
         if (rBounded && (newRMin != rMin || newRMax != rMax)) { BoundedDomain raw = (BoundedDomain) rDomain; updated.put(getRight(), raw.withBounds(newRMin, newRMax)); }
         return Optional.of(updated);
+    }
+
+    /**
+     * When bounds narrowing empties the feasible range, attributes the conflict to whichever
+     * side already holds a singleton domain (a value pinned by earlier propagation) — the other
+     * side is omitted since no single value can be blamed for it. Empty when neither side is
+     * singleton, e.g. two open ranges with no overlap; callers fall back to the full assignment.
+     */
+    @Override
+    public PropagationResult propagateWithReasons(@NonNull Map<Variable<?>, Domain<?>> domains) {
+        return propagate(domains)
+                .map(updated -> PropagationResult.feasible(updated, Map.of()))
+                .orElseGet(() -> {
+                    Map<Variable<?>, Object> reason = new HashMap<>();
+                    addIfSingleton(domains.get(getLeft()), getLeft(), reason);
+                    addIfSingleton(domains.get(getRight()), getRight(), reason);
+                    return PropagationResult.infeasible(Map.copyOf(reason));
+                });
+    }
+
+    private static void addIfSingleton(@NonNull Domain<?> domain, Variable<?> variable, Map<Variable<?>, Object> reason) {
+        if (domain.isSingleton()) {
+            domain.singleValue().ifPresent(value -> reason.put(variable, value));
+        }
     }
 }

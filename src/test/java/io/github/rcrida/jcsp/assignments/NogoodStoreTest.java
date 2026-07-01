@@ -70,6 +70,17 @@ class NogoodStoreTest {
     }
 
     @Test
+    void emptyNogoodIsIgnoredNotRecorded() {
+        // An empty nogood would vacuously match every assignment (allMatch on an empty stream
+        // is true), pruning the entire search tree. record() must ignore it rather than store it.
+        NogoodStore store = new NogoodStore();
+        store.record(Map.of());
+        assertThat(store.size()).isZero();
+        assertThat(store.isViolated(Assignment.of(Map.of(X, 1)))).isFalse();
+        assertThat(store.isViolated(Assignment.of(Map.of()))).isFalse();
+    }
+
+    @Test
     void equalsAndHashCodeExcludeMutableList() {
         NogoodStore a = new NogoodStore();
         NogoodStore b = new NogoodStore();

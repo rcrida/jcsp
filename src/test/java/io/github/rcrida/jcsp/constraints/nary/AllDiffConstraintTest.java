@@ -156,7 +156,12 @@ public class AllDiffConstraintTest {
     }
 
     @Test
-    void propagateWithReasons_infeasible_returnsNonEmptyReason() {
+    void propagateWithReasons_infeasible_returnsEmptyReason() {
+        // AllDiffConstraint does not override propagateWithReasons, so a Hall violation
+        // (3 variables confined to 2 values) resolves via the Propagatable default: infeasible,
+        // with an empty reason. Callers (e.g. MacAndFixpointConflictExplainer) fall back to the
+        // full assignment when no finer explanation is available. Per-propagator explanation for
+        // AllDiff's Hall-set violations is deferred future work.
         Variable<Integer> x1 = F.create("wr_x1"), x2 = F.create("wr_x2"), x3 = F.create("wr_x3");
         var c = AllDiffConstraint.<Integer>builder().variables(Set.of(x1, x2, x3)).build();
         var domains = Map.<Variable<?>, Domain<?>>of(
@@ -165,7 +170,7 @@ public class AllDiffConstraintTest {
                 x3, IntRangeDomain.of(1, 2));
         var result = c.propagateWithReasons(domains);
         assertThat(result.isInfeasible()).isTrue();
-        assertThat(result.reason()).isNotEmpty();
+        assertThat(result.reason()).isEmpty();
     }
 
     @Test

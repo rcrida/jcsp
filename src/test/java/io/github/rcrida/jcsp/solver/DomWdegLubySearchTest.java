@@ -270,6 +270,33 @@ class DomWdegLubySearchTest {
         assertThat(store.size()).isGreaterThan(0);
     }
 
+    @Test
+    void getSolutionUsesConflictExplainerNotRawAssignment() {
+        // Same setup as nogoodsAreRecordedDuringSearch, but via getSolution() (the Luby-restart
+        // path). A custom conflictExplainer always reports the sentinel {x=99} instead of the
+        // real assigned value. If searchOne recorded next.getValues() directly (the pre-fix
+        // behaviour) the store would hold {x=1}, not {x=99}.
+        Variable<Integer> x = VF.create("x");
+        Variable<Integer> y = VF.create("y");
+        ConstraintSatisfactionProblem csp = ConstraintSatisfactionProblem.builder()
+                .variableDomain(x, IntRangeDomain.of(1, 1))
+                .variableDomain(y, IntRangeDomain.of(1, 1))
+                .notEqualsConstraint(x, y)
+                .build();
+
+        NogoodStore store = new NogoodStore();
+        DomWdegLubySearch solver = DomWdegLubySearch.builder()
+                .domainValuesOrderer(LeastConstrainingValueOrderer.INSTANCE)
+                .inference(Solver.Factory.FULL_PROPAGATION_INFERENCE)
+                .nogoodStore(store)
+                .conflictExplainer((c, variable, assignment) -> java.util.Map.of(x, 99))
+                .build();
+
+        assertThat(solver.getSolution(csp)).isEmpty();
+        assertThat(store.isViolated(Assignment.of(java.util.Map.of(x, 99)))).isTrue();
+        assertThat(store.isViolated(Assignment.of(java.util.Map.of(x, 1)))).isFalse();
+    }
+
     // ── Builder validation ────────────────────────────────────────────────────
 
     @Test

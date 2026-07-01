@@ -174,7 +174,7 @@ public class DomWdegLubySearch implements Solver {
             Optional<ConstraintSatisfactionProblem> inferred = inference.apply(csp, variable, next);
             if (inferred.isEmpty()) {
                 selector.incrementWeights(csp, variable, next);
-                nogoodStore.record(next.getValues());
+                nogoodStore.record(conflictExplainer.explain(csp, variable, next));
                 next.getStatistics().incrementBacktracks();
                 if (++failures[0] >= budget) throw BudgetExceeded.INSTANCE;
                 continue;

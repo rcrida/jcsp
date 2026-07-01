@@ -3,7 +3,6 @@ package io.github.rcrida.jcsp.constraints.nary;
 import lombok.experimental.SuperBuilder;
 import lombok.val;
 import io.github.rcrida.jcsp.consistency.Propagatable;
-import io.github.rcrida.jcsp.consistency.PropagationResult;
 import io.github.rcrida.jcsp.constraints.BinaryDecomposable;
 import io.github.rcrida.jcsp.constraints.binary.BinaryConstraint;
 import io.github.rcrida.jcsp.constraints.binary.BinaryNotEqualsConstraint;
@@ -147,18 +146,6 @@ public class AllDiffConstraint<T> extends UniformNaryConstraint<T> implements Pr
             }
         }
         return Optional.of(updates);
-    }
-
-    @Override
-    @SuppressWarnings("unchecked")
-    public PropagationResult propagateWithReasons(@NonNull Map<Variable<?>, Domain<?>> domains) {
-        return propagate(domains)
-                .map(updated -> PropagationResult.feasible(updated, Map.of()))
-                .orElseGet(() -> PropagationResult.infeasible(
-                    (Map<Variable<?>, Object>) (Map<?, ?>) getVariables().stream()
-                        .filter(domains::containsKey)
-                        .collect(java.util.stream.Collectors.toMap(v -> v, domains::get))
-                ));
     }
 
     private boolean augment(int u, List<List<Integer>> adj, int[] matchVar, int[] matchVal,
