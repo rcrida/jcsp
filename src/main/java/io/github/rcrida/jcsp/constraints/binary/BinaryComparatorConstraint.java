@@ -82,6 +82,27 @@ public class BinaryComparatorConstraint<T extends Comparable<T>> extends BinaryC
      * side already holds a singleton domain (a value pinned by earlier propagation) — the other
      * side is omitted since no single value can be blamed for it. Empty when neither side is
      * singleton, e.g. two open ranges with no overlap; callers fall back to the full assignment.
+     * <p>
+     * This is the reference implementation of {@link Propagatable#propagateWithReasons} and its
+     * benefit is narrow, since {@code propagate()} itself only acts when at least one side is a
+     * {@link BoundedDomain} — see the class javadoc.
+     * <ul>
+     *     <li>Discrete/discrete pairs: no benefit. {@code propagate()} is a no-op for these
+     *     (delegates entirely to AC3), so this method's infeasible branch is unreachable.</li>
+     *     <li>Bounded/bounded pairs: usually no benefit either. A conflict between two intervals
+     *     is typically caught during preprocessing — {@code PropagationFixpointSolver}'s
+     *     snap-then-reconverge loop, run once before search — which reports the CSP UNSAT
+     *     directly from the solver-decorator chain without ever invoking
+     *     {@code MacAndFixpointConflictExplainer} (that only runs inside
+     *     {@code DomWdegLubySearch}'s search loop).</li>
+     *     <li>Mixed discrete/bounded pairs: the one case with real payoff. By the time search
+     *     runs, the bounded side is already snapped to a singleton; if a live discrete variable's
+     *     search-time assignment then conflicts with it, MAC wraps that assignment in a singleton
+     *     {@code AssignedDomain} before this method runs, so it attributes the conflict to
+     *     {@code {discreteVar: assignedValue}} (plus the bounded side) instead of the caller
+     *     falling back to the entire accumulated partial assignment — a nogood that prunes that
+     *     discrete choice across branches and Luby restarts, not just the one search path.</li>
+     * </ul>
      */
     @Override
     public PropagationResult propagateWithReasons(@NonNull Map<Variable<?>, Domain<?>> domains) {
