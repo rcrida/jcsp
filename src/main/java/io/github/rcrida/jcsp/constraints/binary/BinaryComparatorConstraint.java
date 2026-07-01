@@ -112,7 +112,7 @@ public class BinaryComparatorConstraint<T extends Comparable<T>> extends BinaryC
                     Map<Variable<?>, Object> reason = new HashMap<>();
                     addIfSingleton(domains.get(getLeft()), getLeft(), reason);
                     addIfSingleton(domains.get(getRight()), getRight(), reason);
-                    return PropagationResult.infeasible(Map.copyOf(reason));
+                    return PropagationResult.infeasible(reason);
                 });
     }
 

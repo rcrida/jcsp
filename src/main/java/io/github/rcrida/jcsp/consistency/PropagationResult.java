@@ -20,6 +20,11 @@ public record PropagationResult(
         @Nullable Map<Variable<?>, Domain<?>> updatedDomains,
         Map<Variable<?>, Object> reason) {
 
+    public PropagationResult {
+        updatedDomains = updatedDomains == null ? null : Map.copyOf(updatedDomains);
+        reason = Map.copyOf(reason);
+    }
+
     public static PropagationResult feasible(Map<Variable<?>, Domain<?>> domains,
                                              Map<Variable<?>, Object> reason) {
         return new PropagationResult(domains, reason);
