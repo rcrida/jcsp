@@ -118,4 +118,49 @@ public class AtLeastNConstraintTest {
         assertThat(result).isPresent();
         assertThat(result.get()).isEmpty();
     }
+
+    // --- propagateWithReasons() ---
+
+    @Test
+    void propagateWithReasons_feasible_returnsEmptyReason() {
+        Variable<Boolean> a = F.create("a"), b = F.create("b"), c = F.create("c");
+        var constraint = AtLeastNConstraint.builder().variables(Set.of(a, b, c)).n(2).build();
+        var result = constraint.propagateWithReasons(Map.of(a, TRUE, b, BOTH, c, FALSE));
+        assertThat(result.isInfeasible()).isFalse();
+        assertThat(result.reason()).isEmpty();
+    }
+
+    @Test
+    void propagateWithReasons_infeasible_attributesForcedFalseVariables() {
+        // atLeast(3): a={true}, b={false}, c={false} → maxCount=1 < n=3 → infeasible;
+        // b and c are forced false and jointly explain why the count falls short.
+        Variable<Boolean> a = F.create("a"), b = F.create("b"), c = F.create("c");
+        var constraint = AtLeastNConstraint.builder().variables(Set.of(a, b, c)).n(3).build();
+        var result = constraint.propagateWithReasons(Map.of(a, TRUE, b, FALSE, c, FALSE));
+        assertThat(result.isInfeasible()).isTrue();
+        assertThat(result.reason()).containsOnly(Map.entry(b, false), Map.entry(c, false));
+    }
+
+    @Test
+    void propagateWithReasons_infeasible_allForcedFalse_attributesBoth() {
+        // atLeast(1): a={false}, b={false} → maxCount=0 < n=1 → infeasible;
+        // no variable was ever possibly-true, so both are forced false and both are blamed.
+        Variable<Boolean> a = F.create("a"), b = F.create("b");
+        var constraint = AtLeastNConstraint.builder().variables(Set.of(a, b)).n(1).build();
+        var result = constraint.propagateWithReasons(Map.of(a, FALSE, b, FALSE));
+        assertThat(result.isInfeasible()).isTrue();
+        assertThat(result.reason()).containsOnly(Map.entry(a, false), Map.entry(b, false));
+    }
+
+    @Test
+    void propagateWithReasons_infeasible_nExceedsVariableCount_returnsEmptyReason() {
+        // atLeast(3) over only two variables, both still open → maxCount=2 < n=3 → infeasible,
+        // but no variable is forced false, so nothing can be blamed; caller falls back to the
+        // full assignment.
+        Variable<Boolean> a = F.create("a"), b = F.create("b");
+        var constraint = AtLeastNConstraint.builder().variables(Set.of(a, b)).n(3).build();
+        var result = constraint.propagateWithReasons(Map.of(a, BOTH, b, BOTH));
+        assertThat(result.isInfeasible()).isTrue();
+        assertThat(result.reason()).isEmpty();
+    }
 }

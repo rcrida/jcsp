@@ -111,4 +111,36 @@ public class AtMostNConstraintTest {
         assertThat(result).isPresent();
         assertThat(result.get()).isEmpty();
     }
+
+    // --- propagateWithReasons() ---
+
+    @Test
+    void propagateWithReasons_feasible_returnsEmptyReason() {
+        Variable<Boolean> a = F.create("a"), b = F.create("b"), c = F.create("c");
+        var constraint = AtMostNConstraint.builder().variables(Set.of(a, b, c)).n(2).build();
+        var result = constraint.propagateWithReasons(Map.of(a, TRUE, b, BOTH, c, FALSE));
+        assertThat(result.isInfeasible()).isFalse();
+        assertThat(result.reason()).isEmpty();
+    }
+
+    @Test
+    void propagateWithReasons_infeasible_attributesForcedTrueVariables() {
+        // atMost(1): a={true}, b={true}, c={false} → definite=2 > n=1 → infeasible;
+        // a and b are forced true and jointly explain why the count exceeds n.
+        Variable<Boolean> a = F.create("a"), b = F.create("b"), c = F.create("c");
+        var constraint = AtMostNConstraint.builder().variables(Set.of(a, b, c)).n(1).build();
+        var result = constraint.propagateWithReasons(Map.of(a, TRUE, b, TRUE, c, FALSE));
+        assertThat(result.isInfeasible()).isTrue();
+        assertThat(result.reason()).containsOnly(Map.entry(a, true), Map.entry(b, true));
+    }
+
+    @Test
+    void propagateWithReasons_infeasible_allForcedTrue_attributesBoth() {
+        // atMost(0): a={true}, b={true} → definite=2 > n=0 → infeasible; both are forced true.
+        Variable<Boolean> a = F.create("a"), b = F.create("b");
+        var constraint = AtMostNConstraint.builder().variables(Set.of(a, b)).n(0).build();
+        var result = constraint.propagateWithReasons(Map.of(a, TRUE, b, TRUE));
+        assertThat(result.isInfeasible()).isTrue();
+        assertThat(result.reason()).containsOnly(Map.entry(a, true), Map.entry(b, true));
+    }
 }
