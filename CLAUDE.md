@@ -25,10 +25,10 @@ When creating a new release: bump the version in `pom.xml`, update `README.md` (
 ## Build & Test Commands
 
 ```bash
-mvn compile                          # Compile sources
-mvn test                             # Run all tests
-mvn test -Dtest=ClassName            # Run a single test class
-mvn clean verify                     # Build with JaCoCo coverage report
+mvn compile                                                                        # Compile sources
+mvn test -Dorg.slf4j.simpleLogger.log.io.github.rcrida.jcsp=error                  # Run all tests
+mvn test -Dtest=ClassName -Dorg.slf4j.simpleLogger.log.io.github.rcrida.jcsp=error # Run a single test class
+mvn clean verify -Dorg.slf4j.simpleLogger.log.io.github.rcrida.jcsp=error          # Build with JaCoCo coverage report
 ```
 
 Coverage report is generated at `target/site/jacoco/index.html`. **100% instruction and branch coverage is enforced** — the build fails if any code is not covered.
