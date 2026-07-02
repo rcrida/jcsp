@@ -221,4 +221,58 @@ public class AbsoluteDifferenceConstraintTest {
         assertThat(((IntervalDomain) result.get(R)).getMax()).isEqualTo(8.0);
         assertThat(result.containsKey(L)).isFalse();
     }
+
+    // --- propagateWithReasons() ---
+
+    @Test void propagateWithReasons_feasible_returnsEmptyReason() {
+        var result = AbsoluteDifferenceConstraint.of(L, R, Operator.LEQ, 3.0).propagateWithReasons(intervals(0, 10, 0, 4));
+        assertThat(result.isInfeasible()).isFalse();
+        assertThat(result.reason()).isEmpty();
+    }
+
+    @Test void propagateWithReasons_leq_infeasible_leftSingleton_attributesLeft() {
+        // L=[8,8] (singleton), R=[0,3], |L-R|<=3 is infeasible (min dist 5 > 3). Only L can be
+        // blamed on a specific value; R is a genuine open range with nothing to pin the conflict on.
+        var result = AbsoluteDifferenceConstraint.of(L, R, Operator.LEQ, 3.0).propagateWithReasons(intervals(8, 8, 0, 3));
+        assertThat(result.isInfeasible()).isTrue();
+        assertThat(result.reason()).containsExactly(Map.entry(L, 8.0));
+    }
+
+    @Test void propagateWithReasons_leq_infeasible_bothSingleton_attributesBoth() {
+        // L=[8,8], R=[0,0]: |L-R|<=3 is infeasible with both sides pinned to a concrete value.
+        var result = AbsoluteDifferenceConstraint.of(L, R, Operator.LEQ, 3.0).propagateWithReasons(intervals(8, 8, 0, 0));
+        assertThat(result.isInfeasible()).isTrue();
+        assertThat(result.reason()).containsOnly(Map.entry(L, 8.0), Map.entry(R, 0.0));
+    }
+
+    @Test void propagateWithReasons_leq_infeasible_neitherSingleton_returnsEmptyReason() {
+        // L=[8,10], R=[0,3]: infeasible, but neither side is pinned to a single value, so no
+        // variable-value pair can be blamed — matches propagate_leq_infeasible() above.
+        var result = AbsoluteDifferenceConstraint.of(L, R, Operator.LEQ, 3.0).propagateWithReasons(intervals(8, 10, 0, 3));
+        assertThat(result.isInfeasible()).isTrue();
+        assertThat(result.reason()).isEmpty();
+    }
+
+    @Test void propagateWithReasons_geq_infeasible_bothSingleton_attributesBoth() {
+        // L=[5,5], R=[5,5]: |L-R|>=3 is infeasible (max dist 0 < 3), both sides singleton.
+        var result = AbsoluteDifferenceConstraint.of(L, R, Operator.GEQ, 3.0).propagateWithReasons(intervals(5, 5, 5, 5));
+        assertThat(result.isInfeasible()).isTrue();
+        assertThat(result.reason()).containsOnly(Map.entry(L, 5.0), Map.entry(R, 5.0));
+    }
+
+    @Test void propagateWithReasons_geq_infeasible_neitherSingleton_returnsEmptyReason() {
+        // L=[4,6], R=[4,6]: infeasible (max dist 2 < 5), matches propagate_geq_infeasible() above.
+        var result = AbsoluteDifferenceConstraint.of(L, R, Operator.GEQ, 5.0).propagateWithReasons(intervals(4, 6, 4, 6));
+        assertThat(result.isInfeasible()).isTrue();
+        assertThat(result.reason()).isEmpty();
+    }
+
+    @Test void propagateWithReasons_eq_infeasible_tooFar_attributesSingletons() {
+        // L=[0,0], R=[9,9], |L-R|==3: proximity narrowing crosses (newLMin=6 > newLMax=0),
+        // matching propagate_eq_infeasible_tooFar() above. Both sides are singleton so both
+        // are attributed.
+        var result = AbsoluteDifferenceConstraint.of(L, R, Operator.EQ, 3.0).propagateWithReasons(intervals(0, 0, 9, 9));
+        assertThat(result.isInfeasible()).isTrue();
+        assertThat(result.reason()).containsOnly(Map.entry(L, 0.0), Map.entry(R, 9.0));
+    }
 }
