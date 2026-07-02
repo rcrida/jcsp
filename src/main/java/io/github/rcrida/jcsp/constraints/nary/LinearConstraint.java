@@ -185,6 +185,18 @@ public class LinearConstraint<N extends Number> extends NaryConstraint implement
         return Optional.of(updated);
     }
 
+    /**
+     * On infeasibility, the weighted sum's violation depends on the combined contribution of
+     * every variable, not any single variable in isolation — unlike {@link MaxConstraint}/
+     * {@link MinConstraint}, a weighted sum has no monotonic "one value alone already breaks the
+     * bound" case. See {@link Propagatable#allSingletonReason} for why the fully collective
+     * explanation is the only sound, self-contained one.
+     */
+    @Override
+    public Map<Variable<?>, Object> explainInfeasible(@NonNull Map<Variable<?>, Domain<?>> domains) {
+        return Propagatable.allSingletonReason(getVariables(), domains);
+    }
+
     @SuppressWarnings("unchecked")
     private N weightedSum(Assignment assignment) {
         return switch (bound) {

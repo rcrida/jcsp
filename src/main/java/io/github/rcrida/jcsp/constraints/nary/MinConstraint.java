@@ -1,7 +1,6 @@
 package io.github.rcrida.jcsp.constraints.nary;
 
 import io.github.rcrida.jcsp.consistency.Propagatable;
-import io.github.rcrida.jcsp.consistency.PropagationResult;
 import io.github.rcrida.jcsp.constraints.NumericBounds;
 import io.github.rcrida.jcsp.constraints.Operator;
 import io.github.rcrida.jcsp.domains.Domain;
@@ -171,14 +170,8 @@ public class MinConstraint<N extends Number> extends UniformNaryConstraint<N> im
      * </ul>
      */
     @Override
-    public PropagationResult propagateWithReasons(@NonNull Map<Variable<?>, Domain<?>> domains) {
-        return propagate(domains)
-                .map(updated -> PropagationResult.feasible(updated, Map.of()))
-                .orElseGet(() -> PropagationResult.infeasible(explainInfeasible(domains)));
-    }
-
     @SuppressWarnings("unchecked")
-    private Map<Variable<?>, Object> explainInfeasible(@NonNull Map<Variable<?>, Domain<?>> domains) {
+    public Map<Variable<?>, Object> explainInfeasible(@NonNull Map<Variable<?>, Domain<?>> domains) {
         double k = bound.doubleValue();
         boolean lowerStrict = operator == Operator.GT;
 
@@ -197,16 +190,8 @@ public class MinConstraint<N extends Number> extends UniformNaryConstraint<N> im
         }
 
         if (operator == Operator.EQ || operator == Operator.LEQ || operator == Operator.LT) {
-            boolean allSingleton = getVariables().stream()
-                    .allMatch(var -> ((Domain<N>) domains.get(var)).isSingleton());
-            if (allSingleton) {
-                Map<Variable<?>, Object> reason = new HashMap<>();
-                for (Variable<?> var : getVariables()) {
-                    Domain<N> dom = (Domain<N>) domains.get(var);
-                    reason.put(var, dom.singleValue().orElseThrow());
-                }
-                return reason;
-            }
+            Map<Variable<?>, Object> reason = Propagatable.allSingletonReason(getVariables(), domains);
+            if (!reason.isEmpty()) return reason;
         }
 
         return Map.of();

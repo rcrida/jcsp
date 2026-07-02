@@ -535,4 +535,56 @@ public class LinearConstraintTest {
                 dy, IntervalDomain.of(9.2, 9.8));
         assertThat(c.propagate(domains)).isEmpty();
     }
+
+    // --- propagateWithReasons() ---
+
+    @Test
+    void propagateWithReasons_feasible_returnsEmptyReason() {
+        var domains = Map.<Variable<?>, Domain<?>>of(
+                x, IntRangeDomain.of(0, 9),
+                y, IntRangeDomain.of(0, 9));
+        var result = eq12.propagateWithReasons(domains);
+        assertThat(result.isInfeasible()).isFalse();
+        assertThat(result.reason()).isEmpty();
+    }
+
+    @Test
+    void propagateWithReasons_allSingleton_infeasible_attributesAll() {
+        // x=5, y=5 (both singleton): 2*5 + 3*5 = 35 != 12 → infeasible; both concrete values are
+        // a sound, self-contained explanation.
+        var domains = Map.<Variable<?>, Domain<?>>of(
+                x, IntRangeDomain.of(5, 5),
+                y, IntRangeDomain.of(5, 5));
+        var result = eq12.propagateWithReasons(domains);
+        assertThat(result.isInfeasible()).isTrue();
+        assertThat(result.reason()).containsOnly(Map.entry(x, 5), Map.entry(y, 5));
+    }
+
+    @Test
+    void propagateWithReasons_notAllSingleton_initialCheckInfeasible_returnsEmptyReason() {
+        // 2*x + 3*y == 12, both domains {5..9}: min weighted sum = 25 > 12 → infeasible, but
+        // neither is pinned, so an unlisted open-domain variable can't be ruled out.
+        var domains = Map.<Variable<?>, Domain<?>>of(
+                x, IntRangeDomain.of(5, 9),
+                y, IntRangeDomain.of(5, 9));
+        var result = eq12.propagateWithReasons(domains);
+        assertThat(result.isInfeasible()).isTrue();
+        assertThat(result.reason()).isEmpty();
+    }
+
+    @Test
+    void propagateWithReasons_onePinned_perVariablePrunedToEmpty_returnsEmptyReason() {
+        // 2*x + 3*y == 7, x∈{0,4} (gapped), y∈{1} (singleton): x must equal 2, which is absent
+        // from {0,4} → infeasible; x has no singleton value to blame, so even though y is
+        // pinned, the explanation can't be sound without x.
+        Variable<Integer> nx = F.create("nx");
+        Variable<Integer> ny = F.create("ny");
+        var c = LinearConstraint.of(Map.of(nx, 2, ny, 3), Operator.EQ, 7);
+        var domains = Map.<Variable<?>, Domain<?>>of(
+                nx, DomainObjectSet.<Integer>builder().value(0).value(4).build(),
+                ny, DomainObjectSet.<Integer>builder().value(1).build());
+        var result = c.propagateWithReasons(domains);
+        assertThat(result.isInfeasible()).isTrue();
+        assertThat(result.reason()).isEmpty();
+    }
 }

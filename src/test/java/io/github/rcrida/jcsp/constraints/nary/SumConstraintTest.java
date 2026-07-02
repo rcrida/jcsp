@@ -3,6 +3,7 @@ package io.github.rcrida.jcsp.constraints.nary;
 import io.github.rcrida.jcsp.assignments.Assignment;
 import io.github.rcrida.jcsp.constraints.Operator;
 import io.github.rcrida.jcsp.domains.DiscreteDomain;
+import io.github.rcrida.jcsp.domains.Domain;
 import io.github.rcrida.jcsp.domains.IntRangeDomain;
 import io.github.rcrida.jcsp.domains.IntervalDomain;
 import io.github.rcrida.jcsp.variables.Variable;
@@ -385,6 +386,61 @@ public class SumConstraintTest {
         @SuppressWarnings("unchecked")
         DiscreteDomain<Float> f1Result = (DiscreteDomain<Float>) result.get().get(f1);
         assertThat(f1Result.toList()).containsExactly(3.0f);
+    }
+
+    // --- propagateWithReasons() ---
+
+    @Test
+    void propagateWithReasons_feasible_returnsEmptyReason() {
+        var domains = Map.<Variable<?>, Domain<?>>of(
+                v1, IntRangeDomain.of(1, 9),
+                v2, IntRangeDomain.of(1, 9),
+                v3, IntRangeDomain.of(1, 9));
+        var result = eq10.propagateWithReasons(domains);
+        assertThat(result.isInfeasible()).isFalse();
+        assertThat(result.reason()).isEmpty();
+    }
+
+    @Test
+    void propagateWithReasons_allSingleton_infeasible_attributesAll() {
+        // v1=v2=v3=3 (all singleton), sum=9 < 10 → infeasible; every value is a concrete fact,
+        // so the full set is a sound, self-contained explanation.
+        var domains = Map.<Variable<?>, Domain<?>>of(
+                v1, IntRangeDomain.of(3, 3),
+                v2, IntRangeDomain.of(3, 3),
+                v3, IntRangeDomain.of(3, 3));
+        var result = eq10.propagateWithReasons(domains);
+        assertThat(result.isInfeasible()).isTrue();
+        assertThat(result.reason()).containsOnly(Map.entry(v1, 3), Map.entry(v2, 3), Map.entry(v3, 3));
+    }
+
+    @Test
+    void propagateWithReasons_notAllSingleton_initialCheckInfeasible_returnsEmptyReason() {
+        // v1,v2∈{1..3}, EQ 10: max sum = 6 < 10 → infeasible, but neither is pinned, so an
+        // unlisted open-domain variable can't be ruled out — falls back to empty.
+        var c = SumConstraint.of(Set.of(v1, v2), Operator.EQ, 10);
+        var domains = Map.<Variable<?>, Domain<?>>of(
+                v1, IntRangeDomain.of(1, 3),
+                v2, IntRangeDomain.of(1, 3));
+        var result = c.propagateWithReasons(domains);
+        assertThat(result.isInfeasible()).isTrue();
+        assertThat(result.reason()).isEmpty();
+    }
+
+    @Test
+    void propagateWithReasons_onePinned_perVariablePrunedToEmpty_returnsEmptyReason() {
+        // v1 enumerable {0,1}, v2∈{9..9} (singleton); v1 + v2 == 10.
+        // Globally feasible (totalMin=9, totalMax=10), but v1 must narrow to {1}, which is
+        // present — use a domain where the required value is absent instead.
+        var c = SumConstraint.of(Set.of(v1, v2), Operator.EQ, 10);
+        var domains = Map.<Variable<?>, Domain<?>>of(
+                v1, io.github.rcrida.jcsp.domains.DomainObjectSet.<Integer>builder().value(0).value(4).build(),
+                v2, IntRangeDomain.of(9, 9));
+        // v1 must equal 1 (10-9), which is absent from {0,4} → infeasible; v1 has no singleton
+        // value to blame, so even though v2 is pinned, the explanation can't be sound without v1.
+        var result = c.propagateWithReasons(domains);
+        assertThat(result.isInfeasible()).isTrue();
+        assertThat(result.reason()).isEmpty();
     }
 
     @Test

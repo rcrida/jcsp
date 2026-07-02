@@ -83,7 +83,7 @@ public class BinaryComparatorConstraint<T extends Comparable<T>> extends BinaryC
      * side is omitted since no single value can be blamed for it. Empty when neither side is
      * singleton, e.g. two open ranges with no overlap; callers fall back to the full assignment.
      * <p>
-     * This is the reference implementation of {@link Propagatable#propagateWithReasons} and its
+     * This is the reference implementation of {@link Propagatable#explainInfeasible} and its
      * benefit is narrow, since {@code propagate()} itself only acts when at least one side is a
      * {@link BoundedDomain} — see the class javadoc.
      * <ul>
@@ -105,14 +105,10 @@ public class BinaryComparatorConstraint<T extends Comparable<T>> extends BinaryC
      * </ul>
      */
     @Override
-    public PropagationResult propagateWithReasons(@NonNull Map<Variable<?>, Domain<?>> domains) {
-        return propagate(domains)
-                .map(updated -> PropagationResult.feasible(updated, Map.of()))
-                .orElseGet(() -> {
-                    Map<Variable<?>, Object> reason = new HashMap<>();
-                    Propagatable.addIfSingleton(domains.get(getLeft()), getLeft(), reason);
-                    Propagatable.addIfSingleton(domains.get(getRight()), getRight(), reason);
-                    return PropagationResult.infeasible(reason);
-                });
+    public Map<Variable<?>, Object> explainInfeasible(@NonNull Map<Variable<?>, Domain<?>> domains) {
+        Map<Variable<?>, Object> reason = new HashMap<>();
+        Propagatable.addIfSingleton(domains.get(getLeft()), getLeft(), reason);
+        Propagatable.addIfSingleton(domains.get(getRight()), getRight(), reason);
+        return reason;
     }
 }

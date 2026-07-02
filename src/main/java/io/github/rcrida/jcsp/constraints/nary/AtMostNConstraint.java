@@ -1,7 +1,6 @@
 package io.github.rcrida.jcsp.constraints.nary;
 
 import io.github.rcrida.jcsp.consistency.Propagatable;
-import io.github.rcrida.jcsp.consistency.PropagationResult;
 import io.github.rcrida.jcsp.domains.DiscreteDomain;
 import io.github.rcrida.jcsp.domains.Domain;
 import io.github.rcrida.jcsp.variables.Variable;
@@ -70,16 +69,12 @@ public class AtMostNConstraint extends UniformNaryConstraint<Boolean> implements
      */
     @Override
     @SuppressWarnings("unchecked")
-    public PropagationResult propagateWithReasons(@NonNull Map<Variable<?>, Domain<?>> domains) {
-        return propagate(domains)
-                .map(updated -> PropagationResult.feasible(updated, Map.of()))
-                .orElseGet(() -> {
-                    Map<Variable<?>, Object> reason = new HashMap<>();
-                    for (Variable<?> var : getVariables()) {
-                        Domain<Boolean> dom = (Domain<Boolean>) domains.get(var);
-                        if (!dom.contains(Boolean.FALSE)) reason.put(var, Boolean.TRUE);
-                    }
-                    return PropagationResult.infeasible(reason);
-                });
+    public Map<Variable<?>, Object> explainInfeasible(@NonNull Map<Variable<?>, Domain<?>> domains) {
+        Map<Variable<?>, Object> reason = new HashMap<>();
+        for (Variable<?> var : getVariables()) {
+            Domain<Boolean> dom = (Domain<Boolean>) domains.get(var);
+            if (!dom.contains(Boolean.FALSE)) reason.put(var, Boolean.TRUE);
+        }
+        return reason;
     }
 }

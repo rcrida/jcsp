@@ -1,7 +1,6 @@
 package io.github.rcrida.jcsp.constraints.binary;
 
 import io.github.rcrida.jcsp.consistency.Propagatable;
-import io.github.rcrida.jcsp.consistency.PropagationResult;
 import io.github.rcrida.jcsp.constraints.NumericBounds;
 import io.github.rcrida.jcsp.constraints.Operator;
 import io.github.rcrida.jcsp.domains.BoundedDomain;
@@ -122,18 +121,14 @@ public class BinaryOffsetConstraint<N extends Number> extends BinaryConstraint<N
      * When bounds narrowing empties the feasible range, attributes the conflict to whichever
      * side already holds a singleton domain — the other side is omitted since no single value
      * can be blamed for it. Empty when neither side is singleton. Mirrors
-     * {@link BinaryComparatorConstraint#propagateWithReasons}; see its javadoc for the narrow
+     * {@link BinaryComparatorConstraint#explainInfeasible}; see its javadoc for the narrow
      * scope of this benefit (mixed discrete/bounded pairs during search).
      */
     @Override
-    public PropagationResult propagateWithReasons(@NonNull Map<Variable<?>, Domain<?>> domains) {
-        return propagate(domains)
-                .map(updated -> PropagationResult.feasible(updated, Map.of()))
-                .orElseGet(() -> {
-                    Map<Variable<?>, Object> reason = new HashMap<>();
-                    Propagatable.addIfSingleton(domains.get(getLeft()), getLeft(), reason);
-                    Propagatable.addIfSingleton(domains.get(getRight()), getRight(), reason);
-                    return PropagationResult.infeasible(reason);
-                });
+    public Map<Variable<?>, Object> explainInfeasible(@NonNull Map<Variable<?>, Domain<?>> domains) {
+        Map<Variable<?>, Object> reason = new HashMap<>();
+        Propagatable.addIfSingleton(domains.get(getLeft()), getLeft(), reason);
+        Propagatable.addIfSingleton(domains.get(getRight()), getRight(), reason);
+        return reason;
     }
 }
