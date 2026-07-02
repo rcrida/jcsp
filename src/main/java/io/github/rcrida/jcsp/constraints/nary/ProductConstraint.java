@@ -118,6 +118,22 @@ public class ProductConstraint<N extends Number> extends UniformNaryConstraint<N
         return Optional.of(updated);
     }
 
+    /**
+     * On infeasibility, the product's violation depends on the combined product of every
+     * variable, not any single variable in isolation — like {@link SumConstraint}/
+     * {@link LinearConstraint} and unlike {@link MaxConstraint}/{@link MinConstraint}, a product
+     * has no monotonic "one value alone already breaks the bound" case (a single large factor
+     * says nothing about the bound without knowing the other factors too). See
+     * {@link Propagatable#allSingletonReason} for why the fully collective explanation is the
+     * only sound, self-contained one — this also covers the discrete-gap corner case in the
+     * lower-bound pass ({@code raised.isEmpty()}), which falls back to an empty reason the same
+     * way.
+     */
+    @Override
+    public Map<Variable<?>, Object> explainInfeasible(@NonNull Map<Variable<?>, Domain<?>> domains) {
+        return Propagatable.allSingletonReason(getVariables(), domains);
+    }
+
     @Override
     public String getRelation() {
         String varProduct = getVariables().stream()

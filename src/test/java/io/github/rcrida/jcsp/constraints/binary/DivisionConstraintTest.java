@@ -287,6 +287,44 @@ public class DivisionConstraintTest {
         assertThat(DivisionConstraint.of(a, b, Operator.EQ, 3).propagate(Map.of(a, domA, b, domB))).isEmpty();
     }
 
+    // --- propagateWithReasons ---
+
+    @Test void propagateWithReasons_feasible_returnsEmptyReason() {
+        var result = DivisionConstraint.of(X, Y, Operator.GEQ, 4.0).propagateWithReasons(intervals(1, 10, 1, 3));
+        assertThat(result.isInfeasible()).isFalse();
+        assertThat(result.reason()).isEmpty();
+    }
+
+    @Test void propagateWithReasons_leq_infeasible_leftSingleton_attributesLeft() {
+        // X=[6,6] (singleton), Y=[1,2], xMin/yMax=3.0 > 2.0 (LEQ) → infeasible. Only X can be
+        // blamed on a specific value; Y is a genuine open range with nothing to pin the conflict on.
+        var result = DivisionConstraint.of(X, Y, Operator.LEQ, 2.0).propagateWithReasons(intervals(6, 6, 1, 2));
+        assertThat(result.isInfeasible()).isTrue();
+        assertThat(result.reason()).containsExactly(Map.entry(X, 6.0));
+    }
+
+    @Test void propagateWithReasons_leq_infeasible_bothSingleton_attributesBoth() {
+        // X=[6,6], Y=[2,2]: xMin/yMax=3.0 > 2.0 (LEQ) → infeasible, both sides pinned.
+        var result = DivisionConstraint.of(X, Y, Operator.LEQ, 2.0).propagateWithReasons(intervals(6, 6, 2, 2));
+        assertThat(result.isInfeasible()).isTrue();
+        assertThat(result.reason()).containsOnly(Map.entry(X, 6.0), Map.entry(Y, 2.0));
+    }
+
+    @Test void propagateWithReasons_leq_infeasible_neitherSingleton_returnsEmptyReason() {
+        // X∈[6,10], Y∈[1,2]: infeasible, matches propagate_leq_infeasible_minRatioAboveBound()
+        // above, but neither side is pinned to a single value.
+        var result = DivisionConstraint.of(X, Y, Operator.LEQ, 2.0).propagateWithReasons(intervals(6, 10, 1, 2));
+        assertThat(result.isInfeasible()).isTrue();
+        assertThat(result.reason()).isEmpty();
+    }
+
+    @Test void propagateWithReasons_geq_infeasible_bothSingleton_attributesBoth() {
+        // X=[4,4], Y=[2,2]: xMax/yMin=2.0 < 3.0 (GEQ) → infeasible, both sides pinned.
+        var result = DivisionConstraint.of(X, Y, Operator.GEQ, 3.0).propagateWithReasons(intervals(4, 4, 2, 2));
+        assertThat(result.isInfeasible()).isTrue();
+        assertThat(result.reason()).containsOnly(Map.entry(X, 4.0), Map.entry(Y, 2.0));
+    }
+
     // --- solver integration ---
 
     @Test void solver_quotientPairsOf3() {

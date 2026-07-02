@@ -127,4 +127,22 @@ public class DivisionConstraint<N extends Number> extends BinaryConstraint<N, N>
 
         return Optional.of(updated);
     }
+
+    /**
+     * When bounds narrowing empties the feasible range, attributes the conflict to whichever
+     * side already holds a singleton domain — the other side is omitted since no single value
+     * can be blamed for it. Empty when neither side is singleton. Mirrors
+     * {@link BinaryComparatorConstraint#explainInfeasible}; see its javadoc for the narrow
+     * scope of this benefit (mixed discrete/bounded pairs during search). Applies uniformly to
+     * all three infeasibility paths in {@link #propagate} (the two early ratio-bound checks and
+     * the inner discrete-gap narrowing), since each depends only on the current dividend/divisor
+     * bounds.
+     */
+    @Override
+    public Map<Variable<?>, Object> explainInfeasible(@NonNull Map<Variable<?>, Domain<?>> domains) {
+        Map<Variable<?>, Object> reason = new HashMap<>();
+        Propagatable.addIfSingleton(domains.get(getLeft()), getLeft(), reason);
+        Propagatable.addIfSingleton(domains.get(getRight()), getRight(), reason);
+        return reason;
+    }
 }
