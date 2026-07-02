@@ -44,3 +44,6 @@ src/test/**/ignored/
 ### Claude Code internals ###
 .claude/
 .omc/
+
+### Local-only SDK version pin ###
+.sdkmanrc
