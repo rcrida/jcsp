@@ -120,6 +120,52 @@ public class AmongConstraint<T> extends UniformNaryConstraint<T> implements Prop
         return Optional.of(updated);
     }
 
+    /**
+     * On infeasibility, tries two independent, always-sound explanations — mirrors
+     * {@link CountConstraint#explainInfeasible} generalised from a single value to a set;
+     * neither replicates {@link #propagate}'s internal branch order:
+     * <ul>
+     *   <li><b>Definite-count violation</b> (EQ/LEQ): {@code definiteCount > n}. Unlike
+     *       {@link CountConstraint}, a <em>definite</em> variable here only needs its domain
+     *       entirely inside {@code S} — it need not be singleton (e.g. domain {@code {a,b}} with
+     *       {@code S = {a,b,c}}) — so citing it requires the same singleton gating as the
+     *       collective case: only attributable when every definite variable is singleton, via
+     *       {@link Propagatable#allSingletonReason}.</li>
+     *   <li><b>Max-reachable-count violation</b> (EQ/GEQ): {@code maxCount < n}. Depends on every
+     *       <em>impossible</em> variable (domain disjoint from {@code S}) categorically excluding
+     *       {@code S}, regardless of its actual value — only attributable when every impossible
+     *       variable is singleton, for the same reason as {@link CountConstraint}.</li>
+     * </ul>
+     */
+    @Override
+    @SuppressWarnings("unchecked")
+    public Map<Variable<?>, Object> explainInfeasible(@NonNull Map<Variable<?>, Domain<?>> domains) {
+        boolean applyUpper = operator == Operator.EQ || operator == Operator.LEQ;
+        boolean applyLower = operator == Operator.EQ || operator == Operator.GEQ;
+
+        List<Variable<?>> definite = new ArrayList<>();
+        List<Variable<?>> impossible = new ArrayList<>();
+        int possibleCount = 0;
+        for (Variable<?> var : getVariables()) {
+            DiscreteDomain<T> dom = (DiscreteDomain<T>) domains.get(var);
+            boolean hasInS = dom.stream().anyMatch(values::contains);
+            if (!hasInS) { impossible.add(var); continue; }
+            if (dom.stream().allMatch(values::contains)) definite.add(var); else possibleCount++;
+        }
+
+        if (applyUpper && definite.size() > n) {
+            Map<Variable<?>, Object> reason = Propagatable.allSingletonReason(definite, domains);
+            if (!reason.isEmpty()) return reason;
+        }
+
+        if (applyLower && definite.size() + possibleCount < n) {
+            Map<Variable<?>, Object> reason = Propagatable.allSingletonReason(impossible, domains);
+            if (!reason.isEmpty()) return reason;
+        }
+
+        return Map.of();
+    }
+
     @Override
     public String getRelation() {
         return "among(" + values.stream().map(Objects::toString).sorted().collect(Collectors.joining(", ")) + ") " + operator.symbol + " " + n;

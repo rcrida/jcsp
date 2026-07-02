@@ -171,6 +171,102 @@ public class AmongConstraintTest {
         assertThat(result.get()).isEmpty();
     }
 
+    // --- propagateWithReasons() ---
+
+    static final Domain<Color> RED_ONLY   = DomainObjectSet.<Color>builder().value(Color.RED).build();
+    static final Domain<Color> GREEN_ONLY = DomainObjectSet.<Color>builder().value(Color.GREEN).build();
+
+    @Test
+    void propagateWithReasons_feasible_returnsEmptyReason() {
+        var c = AmongConstraint.of(Set.of(v1, v2, v3), S, Operator.EQ, 2);
+        var domains = Map.<Variable<?>, Domain<?>>of(v1, IN_S, v2, MIXED, v3, OUT_S);
+        var result = c.propagateWithReasons(domains);
+        assertThat(result.isInfeasible()).isFalse();
+        assertThat(result.reason()).isEmpty();
+    }
+
+    @Test
+    void propagateWithReasons_eq_infeasible_tooManyDefinites_allSingleton_attributesThem() {
+        // among(S)==1: v1={RED}, v2={GREEN} → both singleton and ⊆ S → definiteCount=2 > n=1.
+        var c = AmongConstraint.of(Set.of(v1, v2), S, Operator.EQ, 1);
+        var domains = Map.<Variable<?>, Domain<?>>of(v1, RED_ONLY, v2, GREEN_ONLY);
+        var result = c.propagateWithReasons(domains);
+        assertThat(result.isInfeasible()).isTrue();
+        assertThat(result.reason()).containsOnly(Map.entry(v1, Color.RED), Map.entry(v2, Color.GREEN));
+    }
+
+    @Test
+    void propagateWithReasons_eq_infeasible_tooManyDefinites_notAllSingleton_returnsEmptyReason() {
+        // among(S)==1: v1={RED,GREEN}, v2={RED,GREEN} → both ⊆ S (definite) but neither singleton,
+        // matches propagate_eq_infeasible_tooManyDefinites() above — unlike CountConstraint, a
+        // definite Among variable need not be pinned to one value, so no reason can be formed.
+        var c = AmongConstraint.of(Set.of(v1, v2), S, Operator.EQ, 1);
+        var domains = Map.<Variable<?>, Domain<?>>of(v1, IN_S, v2, IN_S);
+        var result = c.propagateWithReasons(domains);
+        assertThat(result.isInfeasible()).isTrue();
+        assertThat(result.reason()).isEmpty();
+    }
+
+    @Test
+    void propagateWithReasons_eq_infeasible_tooFewPossible_allSingleton_attributesThem() {
+        // among(S)==2: v1={BLUE}, v2={BLUE} → both singleton and disjoint from S → maxCount=0 < 2.
+        var c = AmongConstraint.of(Set.of(v1, v2), S, Operator.EQ, 2);
+        var domains = Map.<Variable<?>, Domain<?>>of(v1, OUT_S, v2, OUT_S);
+        var result = c.propagateWithReasons(domains);
+        assertThat(result.isInfeasible()).isTrue();
+        assertThat(result.reason()).containsOnly(Map.entry(v1, Color.BLUE), Map.entry(v2, Color.BLUE));
+    }
+
+    @Test
+    void propagateWithReasons_eq_infeasible_tooFewPossible_notAllSingleton_returnsEmptyReason() {
+        // among({1,2})==2 over integer vars: i1,i2 ∈ {3,4} (disjoint from S, non-singleton) →
+        // maxCount=0 < 2, but neither impossible variable is pinned to a specific value.
+        Variable<Integer> i1 = F.create("i1_among"), i2 = F.create("i2_among");
+        var sInt = Set.of(1, 2);
+        var outS = DomainObjectSet.<Integer>builder().value(3).value(4).build();
+        var c = AmongConstraint.of(Set.of(i1, i2), sInt, Operator.EQ, 2);
+        var result = c.propagateWithReasons(Map.of(i1, outS, i2, outS));
+        assertThat(result.isInfeasible()).isTrue();
+        assertThat(result.reason()).isEmpty();
+    }
+
+    @Test
+    void propagateWithReasons_leq_infeasible_tooManyDefinites_allSingleton_attributesThem() {
+        // among(S)<=1: v1={RED}, v2={GREEN} → both singleton and ⊆ S → definiteCount=2 > n=1
+        // (matches propagate_leq_infeasible() above). Exercises the LEQ-only operator path
+        // (applyUpper true, applyLower false).
+        var c = AmongConstraint.of(Set.of(v1, v2), S, Operator.LEQ, 1);
+        var domains = Map.<Variable<?>, Domain<?>>of(v1, RED_ONLY, v2, GREEN_ONLY);
+        var result = c.propagateWithReasons(domains);
+        assertThat(result.isInfeasible()).isTrue();
+        assertThat(result.reason()).containsOnly(Map.entry(v1, Color.RED), Map.entry(v2, Color.GREEN));
+    }
+
+    @Test
+    void propagateWithReasons_geq_infeasible_tooFewPossible_withPossibleVariable_attributesImpossible() {
+        // among(S)>=3: v1={BLUE}, v2={BLUE} (impossible, singleton), v3={R,G,B} (possible: has
+        // values in S but isn't entirely within S) → maxCount=0+1=1 < n=3. Exercises the GEQ-only
+        // operator path (applyUpper false, applyLower true) and the "possible" classification
+        // branch left untouched by the other tests above.
+        var c = AmongConstraint.of(Set.of(v1, v2, v3), S, Operator.GEQ, 3);
+        var domains = Map.<Variable<?>, Domain<?>>of(v1, OUT_S, v2, OUT_S, v3, MIXED);
+        var result = c.propagateWithReasons(domains);
+        assertThat(result.isInfeasible()).isTrue();
+        assertThat(result.reason()).containsOnly(Map.entry(v1, Color.BLUE), Map.entry(v2, Color.BLUE));
+    }
+
+    @Test
+    void explainInfeasible_leqOperator_lowerCheckNeverApplies_returnsEmptyReason() {
+        // Direct unit test: LEQ never sets applyLower, so once the upper check also fails to fire
+        // (definiteCount=1 does not exceed n=5), the method must still reach its terminal
+        // fallback rather than assume applyLower is always true — a case the earlier LEQ
+        // propagateWithReasons test can't reach, since there the upper check fires first and
+        // returns before this line is ever executed.
+        var c = AmongConstraint.of(Set.of(v1, v2), S, Operator.LEQ, 5);
+        var domains = Map.<Variable<?>, Domain<?>>of(v1, RED_ONLY, v2, MIXED);
+        assertThat(c.explainInfeasible(domains)).isEmpty();
+    }
+
     @Test
     void solver_infeasibleAmongConstraint_returnsNoSolutions() {
         // among({RED,GREEN})==3 but only 2 variables → infeasible

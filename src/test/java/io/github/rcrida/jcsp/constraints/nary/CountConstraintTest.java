@@ -194,6 +194,102 @@ public class CountConstraintTest {
         assertThat(result.get()).isEmpty();
     }
 
+    // --- propagateWithReasons() ---
+
+    static final Domain<Color> GREEN_ONLY = DomainObjectSet.<Color>builder().value(Color.GREEN).build();
+    static final Domain<Color> BLUE_ONLY  = DomainObjectSet.<Color>builder().value(Color.BLUE).build();
+
+    @Test
+    void propagateWithReasons_feasible_returnsEmptyReason() {
+        var constraint = CountConstraint.of(Set.of(a, b, c), Color.RED, Operator.EQ, 2);
+        var domains = Map.<Variable<?>, Domain<?>>of(a, RED_ONLY, b, ALL_COLORS, c, NOT_RED);
+        var result = constraint.propagateWithReasons(domains);
+        assertThat(result.isInfeasible()).isFalse();
+        assertThat(result.reason()).isEmpty();
+    }
+
+    @Test
+    void propagateWithReasons_eq_infeasible_tooManyDefinites_attributesDefiniteVars() {
+        // count(RED)==1, a={RED}, b={RED} → definiteCount=2 > n=1. Every definite variable is
+        // trivially singleton by construction, so both are attributed directly.
+        var constraint = CountConstraint.of(Set.of(a, b), Color.RED, Operator.EQ, 1);
+        var domains = Map.<Variable<?>, Domain<?>>of(a, RED_ONLY, b, RED_ONLY);
+        var result = constraint.propagateWithReasons(domains);
+        assertThat(result.isInfeasible()).isTrue();
+        assertThat(result.reason()).containsOnly(Map.entry(a, Color.RED), Map.entry(b, Color.RED));
+    }
+
+    @Test
+    void propagateWithReasons_eq_infeasible_tooFewPossible_allImpossibleSingleton_attributesThem() {
+        // count(RED)==3, a={GREEN}, b={BLUE}, c={GREEN} → maxCount=0 < n=3; every impossible
+        // variable happens to be singleton, so all three are attributed.
+        var constraint = CountConstraint.of(Set.of(a, b, c), Color.RED, Operator.EQ, 3);
+        var domains = Map.<Variable<?>, Domain<?>>of(a, GREEN_ONLY, b, BLUE_ONLY, c, GREEN_ONLY);
+        var result = constraint.propagateWithReasons(domains);
+        assertThat(result.isInfeasible()).isTrue();
+        assertThat(result.reason()).containsOnly(
+                Map.entry(a, Color.GREEN), Map.entry(b, Color.BLUE), Map.entry(c, Color.GREEN));
+    }
+
+    @Test
+    void propagateWithReasons_eq_infeasible_tooFewPossible_notAllSingleton_returnsEmptyReason() {
+        // count(RED)==3, a={G,B}, b={G,B}, c={G,B} → maxCount=0 < n=3, matches
+        // propagate_eq_infeasible_tooFewPossible() above, but none of the impossible variables
+        // are pinned to a specific value, so no sound reason can be formed.
+        var constraint = CountConstraint.of(Set.of(a, b, c), Color.RED, Operator.EQ, 3);
+        var domains = Map.<Variable<?>, Domain<?>>of(a, NOT_RED, b, NOT_RED, c, NOT_RED);
+        var result = constraint.propagateWithReasons(domains);
+        assertThat(result.isInfeasible()).isTrue();
+        assertThat(result.reason()).isEmpty();
+    }
+
+    @Test
+    void propagateWithReasons_leq_infeasible_tooManyDefinites_attributesDefiniteVars() {
+        // count(RED)<=1, a={RED}, b={RED} → definiteCount=2 > n=1 (matches propagate_leq_infeasible()
+        // above). Exercises the LEQ-only operator path (applyUpper true, applyLower false).
+        var constraint = CountConstraint.of(Set.of(a, b), Color.RED, Operator.LEQ, 1);
+        var domains = Map.<Variable<?>, Domain<?>>of(a, RED_ONLY, b, RED_ONLY);
+        var result = constraint.propagateWithReasons(domains);
+        assertThat(result.isInfeasible()).isTrue();
+        assertThat(result.reason()).containsOnly(Map.entry(a, Color.RED), Map.entry(b, Color.RED));
+    }
+
+    @Test
+    void propagateWithReasons_geq_infeasible_tooFewPossible_withPossibleVariable_attributesImpossible() {
+        // count(RED)>=3, a={GREEN}, b={BLUE} (impossible, singleton), c={R,G,B} (possible, not
+        // singleton) → maxCount=0+1=1 < n=3. Exercises the GEQ-only operator path (applyUpper
+        // false, applyLower true) and the "possible" classification branch left untouched by the
+        // other tests above.
+        var constraint = CountConstraint.of(Set.of(a, b, c), Color.RED, Operator.GEQ, 3);
+        var domains = Map.<Variable<?>, Domain<?>>of(a, GREEN_ONLY, b, BLUE_ONLY, c, ALL_COLORS);
+        var result = constraint.propagateWithReasons(domains);
+        assertThat(result.isInfeasible()).isTrue();
+        assertThat(result.reason()).containsOnly(Map.entry(a, Color.GREEN), Map.entry(b, Color.BLUE));
+    }
+
+    @Test
+    void explainInfeasible_neitherConditionHolds_returnsEmptyReason() {
+        // Direct unit test of the terminal fallback: propagate() would never actually call this
+        // with domains satisfying neither infeasibility condition (definiteCount=1 is not > n=1;
+        // maxCount=3 is not < n=1), but explainInfeasible's own contract must still fall back to
+        // an empty reason rather than assume one of the two conditions always holds.
+        var constraint = CountConstraint.of(Set.of(a, b, c), Color.RED, Operator.EQ, 1);
+        var domains = Map.<Variable<?>, Domain<?>>of(a, RED_ONLY, b, ALL_COLORS, c, ALL_COLORS);
+        assertThat(constraint.explainInfeasible(domains)).isEmpty();
+    }
+
+    @Test
+    void explainInfeasible_leqOperator_lowerCheckNeverApplies_returnsEmptyReason() {
+        // Direct unit test: LEQ never sets applyLower, so once the upper check also fails to fire
+        // (definiteCount=1 does not exceed n=5), the method must still reach its terminal
+        // fallback rather than assume applyLower is always true — a case the earlier LEQ
+        // propagateWithReasons test can't reach, since there the upper check fires first and
+        // returns before this line is ever executed.
+        var constraint = CountConstraint.of(Set.of(a, b), Color.RED, Operator.LEQ, 5);
+        var domains = Map.<Variable<?>, Domain<?>>of(a, RED_ONLY, b, ALL_COLORS);
+        assertThat(constraint.explainInfeasible(domains)).isEmpty();
+    }
+
     @Test
     void solver_infeasibleCountConstraint_returnsNoSolutions() {
         // count(RED)==3 but only 2 variables → infeasible detected by propagation

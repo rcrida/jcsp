@@ -111,6 +111,56 @@ public class CountConstraint<T> extends UniformNaryConstraint<T> implements Prop
         return Optional.of(updated);
     }
 
+    /**
+     * On infeasibility, tries two independent, always-sound explanations — neither replicates
+     * {@link #propagate}'s internal branch order; each is checked directly against the current
+     * domains and is valid regardless of which branch actually detected the conflict:
+     * <ul>
+     *   <li><b>Definite-count violation</b> (EQ/LEQ): {@code definiteCount > n}. Every
+     *       <em>definite</em> variable is, by construction, already a singleton {@code {value}}
+     *       domain, so citing all of them with {@code value} is directly sound — no further
+     *       singleton gating needed, unlike the collective case below.</li>
+     *   <li><b>Max-reachable-count violation</b> (EQ/GEQ): {@code maxCount < n}. This depends on
+     *       every <em>impossible</em> variable (domain excludes {@code value}) categorically
+     *       excluding {@code value}, regardless of what value each one actually takes — but a
+     *       nogood can only cite concrete variable-value pairs, so it's only attributable when
+     *       every impossible variable is singleton (via {@link Propagatable#allSingletonReason}):
+     *       a non-singleton impossible variable's domain could still shrink differently along
+     *       another search path, so omitting it wouldn't be sound.</li>
+     * </ul>
+     */
+    @Override
+    @SuppressWarnings("unchecked")
+    public Map<Variable<?>, Object> explainInfeasible(@NonNull Map<Variable<?>, Domain<?>> domains) {
+        boolean applyUpper = operator == Operator.EQ || operator == Operator.LEQ;
+        boolean applyLower = operator == Operator.EQ || operator == Operator.GEQ;
+
+        List<Variable<?>> definite = new ArrayList<>();
+        List<Variable<?>> impossible = new ArrayList<>();
+        int possibleCount = 0;
+        for (Variable<?> var : getVariables()) {
+            DiscreteDomain<T> dom = (DiscreteDomain<T>) domains.get(var);
+            if (dom.stream().anyMatch(value::equals)) {
+                if (dom.isSingleton()) definite.add(var); else possibleCount++;
+            } else {
+                impossible.add(var);
+            }
+        }
+
+        if (applyUpper && definite.size() > n) {
+            Map<Variable<?>, Object> reason = new HashMap<>();
+            for (Variable<?> var : definite) reason.put(var, value);
+            return reason;
+        }
+
+        if (applyLower && definite.size() + possibleCount < n) {
+            Map<Variable<?>, Object> reason = Propagatable.allSingletonReason(impossible, domains);
+            if (!reason.isEmpty()) return reason;
+        }
+
+        return Map.of();
+    }
+
     @Override
     public String getRelation() {
         return "count(" + value + ") " + operator.symbol + " " + n;
