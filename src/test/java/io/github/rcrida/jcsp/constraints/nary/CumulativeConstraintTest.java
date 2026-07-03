@@ -166,6 +166,69 @@ public class CumulativeConstraintTest {
         assertThat(result.get()).isEmpty();
     }
 
+    // --- explainInfeasible ---
+
+    @Test
+    void explainInfeasible_globalOverload_allSingleton_attributesAll() {
+        // Same domains as propagate_infeasible_returnsEmpty: both tasks fixed, both contribute
+        // compulsory-part events to the global overload check.
+        Variable<Integer> x1 = F.create("gx1");
+        Variable<Integer> x2 = F.create("gx2");
+        var c = CumulativeConstraint.of(List.of(x1, x2), List.of(2, 2), List.of(1, 1), 1);
+        var domains = Map.<Variable<?>, io.github.rcrida.jcsp.domains.Domain<?>>of(
+                x1, IntRangeDomain.of(1, 1),
+                x2, IntRangeDomain.of(1, 1));
+        assertThat(c.propagate(domains)).isEmpty();
+        assertThat(c.explainInfeasible(domains)).containsOnly(Map.entry(x1, 1), Map.entry(x2, 1));
+    }
+
+    @Test
+    void explainInfeasible_perTaskZeroDurationFailure_allSingleton_attributesAll() {
+        // A: fixed at 0, duration 2, resource 2 -> compulsory part [0,2), global profile max = 2,
+        // which does NOT exceed limit=2 (global check only fires on strictly-greater), so the
+        // global overload check passes. B: fixed at 1, duration 0, resource 1 -> B has NO
+        // compulsory part of its own (lst < compEnd is false when duration=0), so B contributes no
+        // events to the global check. But B's own per-task exclusive-profile scan (checking B's
+        // placement against A's mandatory usage alone) finds that landing at 1 (strictly inside
+        // A's [0,2) window) would push the total to 2+1=3 > limit — infeasible, independent of the
+        // global check. Both A and B are singleton, so both are cited.
+        Variable<Integer> a = F.create("cza");
+        Variable<Integer> b = F.create("czb");
+        var c = CumulativeConstraint.of(List.of(a, b), List.of(2, 0), List.of(2, 1), 2);
+        var domains = Map.<Variable<?>, io.github.rcrida.jcsp.domains.Domain<?>>of(
+                a, IntRangeDomain.of(0, 0),
+                b, IntRangeDomain.of(1, 1));
+        assertThat(c.propagate(domains)).isEmpty();
+        assertThat(c.explainInfeasible(domains)).containsOnly(Map.entry(a, 0), Map.entry(b, 1));
+    }
+
+    @Test
+    void explainInfeasible_exclusiveProfileFailure_taskNotSingleton_returnsEmpty() {
+        // Same domains as propagate_infeasibleViaExclusiveProfile: x3's own domain [0,1] is not
+        // singleton, so even though x1 and x2 (the other compulsory-part contributors) are
+        // singleton, the full culprit set {x1, x2, x3} isn't — citing only x1/x2 would be unsound
+        // since a different x3 placement isn't excluded by this reason alone. Empty is correct.
+        Variable<Integer> x1 = F.create("ex1");
+        Variable<Integer> x2 = F.create("ex2");
+        Variable<Integer> x3 = F.create("ex3");
+        var c = CumulativeConstraint.of(
+                List.of(x1, x2, x3), List.of(1, 1, 1), List.of(1, 1, 2), 2);
+        var domains = Map.<Variable<?>, io.github.rcrida.jcsp.domains.Domain<?>>of(
+                x1, IntRangeDomain.of(0, 0),
+                x2, IntRangeDomain.of(1, 1),
+                x3, IntRangeDomain.of(0, 1));
+        assertThat(c.propagate(domains)).isEmpty();
+        assertThat(c.explainInfeasible(domains)).isEmpty();
+    }
+
+    @Test
+    void explainInfeasible_feasible_returnsEmptyReason() {
+        var domains = Map.<Variable<?>, io.github.rcrida.jcsp.domains.Domain<?>>of(
+                s1, IntRangeDomain.of(0, 5),
+                s2, IntRangeDomain.of(0, 5));
+        assertThat(constraint.explainInfeasible(domains)).isEmpty();
+    }
+
     @Test
     void testToString() {
         assertThat(constraint.toString()).isEqualTo("<(s1, s2), cumulative(limit=1, tasks=2)>");

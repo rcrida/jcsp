@@ -15,9 +15,11 @@ import org.jspecify.annotations.NonNull;
 
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 
 /**
  * An n-ary constraint that bounds resource usage over time: at every instant, the sum of
@@ -116,27 +118,12 @@ public class CumulativeConstraint extends NaryConstraint implements Propagatable
         int n = starts.size();
         double[] est = new double[n];
         double[] lst = new double[n];
-
         for (int i = 0; i < n; i++) {
             var dom = (Domain<Number>) (Domain<?>) domains.get(starts.get(i));
             est[i] = NumericBounds.min(dom);
             lst[i] = NumericBounds.max(dom);
         }
-
-        // Build compulsory-part events: [time, delta_resource, task_index].
-        // Task i has compulsory part [lst[i], est[i]+d[i]) when lst[i] < est[i]+d[i].
-        List<double[]> events = new ArrayList<>();
-        for (int i = 0; i < n; i++) {
-            double compEnd = est[i] + durations.get(i);
-            if (lst[i] < compEnd) {
-                events.add(new double[]{lst[i],    +resources.get(i), i});
-                events.add(new double[]{compEnd,   -resources.get(i), i});
-            }
-        }
-        events.sort((a, b) -> {
-            int cmp = Double.compare(a[0], b[0]);
-            return cmp != 0 ? cmp : Double.compare(a[1], b[1]); // releases before claims at same time
-        });
+        List<double[]> events = buildEvents(est, lst);
 
         // Global overload check
         double running = 0;
@@ -148,66 +135,10 @@ public class CumulativeConstraint extends NaryConstraint implements Propagatable
         // Tighten each task's start window
         Map<Variable<?>, Domain<?>> updated = new HashMap<>();
         for (int i = 0; i < n; i++) {
-            double di = durations.get(i);
-            double ri = resources.get(i);
-            double slack = limit - ri; // exclusive profile must not exceed this
-
-            // Exclusive event list: all events except task i's own compulsory contribution
-            List<double[]> exEvents = new ArrayList<>(events.size());
-            for (double[] e : events) {
-                if ((int) e[2] != i) exEvents.add(e);
-            }
-
-            // Walk exclusive profile to find intervals [a, b) where runEx > slack.
-            // Initialize overload state before any events (handles slack < 0 case where ri > limit).
-            List<double[]> overloaded = new ArrayList<>();
-            double runEx = 0;
-            double overloadStart = runEx > slack ? Double.NEGATIVE_INFINITY : Double.NaN;
-            for (double[] e : exEvents) {
-                boolean wasOver = runEx > slack;
-                runEx += e[1];
-                boolean isOver = runEx > slack;
-                if (!wasOver && isOver) {
-                    overloadStart = e[0];
-                } else if (wasOver && !isOver) {
-                    overloaded.add(new double[]{overloadStart, e[0]});
-                    overloadStart = Double.NaN;
-                }
-            }
-            if (!Double.isNaN(overloadStart)) {
-                // Profile still overloaded after all events (e.g. ri > limit)
-                overloaded.add(new double[]{overloadStart, Double.POSITIVE_INFINITY});
-            }
-
-            // Task at s occupies [s, s+d). It conflicts with overloaded [a, b) iff
-            // s+d > a and s < b, i.e., s > a-d and s < b → forbidden start range: (a-d, b).
-
-            // Forward scan: find new EST by advancing past forbidden start windows
-            double newEst = est[i];
-            boolean changed = true;
-            while (changed) {
-                changed = false;
-                for (double[] ov : overloaded) {
-                    if (newEst > ov[0] - di && newEst < ov[1]) {
-                        newEst = ov[1];
-                        changed = true;
-                    }
-                }
-            }
-            if (newEst > lst[i]) return Optional.empty();
-
-            // Backward scan: find new LST by retreating before forbidden start windows
-            double newLst = lst[i];
-            changed = true;
-            while (changed) {
-                changed = false;
-                for (double[] ov : overloaded) {
-                    if (newLst > ov[0] - di && newLst < ov[1]) {
-                        newLst = ov[0] - di;
-                        changed = true;
-                    }
-                }
-            }
+            var window = taskWindow(i, est, lst, events);
+            if (!window.feasible()) return Optional.empty();
+            double newEst = window.newEst();
+            double newLst = window.newLst();
             if (newEst != est[i] || newLst != lst[i]) {
                 var dom = domains.get(starts.get(i));
                 if (dom instanceof BoundedDomain<?>) {
@@ -218,6 +149,155 @@ public class CumulativeConstraint extends NaryConstraint implements Propagatable
             }
         }
         return Optional.of(updated);
+    }
+
+    /**
+     * Builds compulsory-part events {@code [time, delta_resource, task_index]}, sorted with
+     * releases before claims at the same time. Task {@code i} has a compulsory part
+     * {@code [lst[i], est[i]+d[i])} — and so contributes events — only when
+     * {@code lst[i] < est[i]+d[i]}.
+     */
+    private List<double[]> buildEvents(double[] est, double[] lst) {
+        List<double[]> events = new ArrayList<>();
+        for (int i = 0; i < est.length; i++) {
+            double compEnd = est[i] + durations.get(i);
+            if (lst[i] < compEnd) {
+                events.add(new double[]{lst[i],  +resources.get(i), i});
+                events.add(new double[]{compEnd, -resources.get(i), i});
+            }
+        }
+        events.sort((a, b) -> {
+            int cmp = Double.compare(a[0], b[0]);
+            return cmp != 0 ? cmp : Double.compare(a[1], b[1]); // releases before claims at same time
+        });
+        return events;
+    }
+
+    /** The tightened start-time window computed for one task, or {@code feasible=false} when none exists. */
+    private record TaskWindow(boolean feasible, double newEst, double newLst) {}
+
+    /**
+     * Builds task {@code i}'s exclusive resource profile (every other task's compulsory-part
+     * events) and walks it to find the tightened {@code [newEst, newLst]} start window, exactly as
+     * {@link #propagate} did inline. Returns {@code feasible=false} when the forward scan advances
+     * {@code newEst} past {@code lst[i]} — no start remains that keeps task {@code i} within
+     * capacity given everyone else's mandatory usage.
+     */
+    private TaskWindow taskWindow(int i, double[] est, double[] lst, List<double[]> events) {
+        double di = durations.get(i);
+        double ri = resources.get(i);
+        double slack = limit - ri; // exclusive profile must not exceed this
+
+        // Exclusive event list: all events except task i's own compulsory contribution
+        List<double[]> exEvents = new ArrayList<>(events.size());
+        for (double[] e : events) {
+            if ((int) e[2] != i) exEvents.add(e);
+        }
+
+        // Walk exclusive profile to find intervals [a, b) where runEx > slack.
+        // Initialize overload state before any events (handles slack < 0 case where ri > limit).
+        List<double[]> overloaded = new ArrayList<>();
+        double runEx = 0;
+        double overloadStart = runEx > slack ? Double.NEGATIVE_INFINITY : Double.NaN;
+        for (double[] e : exEvents) {
+            boolean wasOver = runEx > slack;
+            runEx += e[1];
+            boolean isOver = runEx > slack;
+            if (!wasOver && isOver) {
+                overloadStart = e[0];
+            } else if (wasOver && !isOver) {
+                overloaded.add(new double[]{overloadStart, e[0]});
+                overloadStart = Double.NaN;
+            }
+        }
+        if (!Double.isNaN(overloadStart)) {
+            // Profile still overloaded after all events (e.g. ri > limit)
+            overloaded.add(new double[]{overloadStart, Double.POSITIVE_INFINITY});
+        }
+
+        // Task at s occupies [s, s+d). It conflicts with overloaded [a, b) iff
+        // s+d > a and s < b, i.e., s > a-d and s < b → forbidden start range: (a-d, b).
+
+        // Forward scan: find new EST by advancing past forbidden start windows
+        double newEst = est[i];
+        boolean changed = true;
+        while (changed) {
+            changed = false;
+            for (double[] ov : overloaded) {
+                if (newEst > ov[0] - di && newEst < ov[1]) {
+                    newEst = ov[1];
+                    changed = true;
+                }
+            }
+        }
+        if (newEst > lst[i]) return new TaskWindow(false, newEst, lst[i]);
+
+        // Backward scan: find new LST by retreating before forbidden start windows
+        double newLst = lst[i];
+        changed = true;
+        while (changed) {
+            changed = false;
+            for (double[] ov : overloaded) {
+                if (newLst > ov[0] - di && newLst < ov[1]) {
+                    newLst = ov[0] - di;
+                    changed = true;
+                }
+            }
+        }
+        return new TaskWindow(true, newEst, newLst);
+    }
+
+    /**
+     * On infeasibility, rebuilds the same bounds and events as {@link #propagate} (no threading
+     * needed: unlike {@link DiffnConstraint} or {@link GlobalCardinalityConstraint}, every task's
+     * {@code est}/{@code lst} is read once from the given {@code domains} and never narrowed
+     * mid-computation) to find the same failing check, then attributes the conflict to every task
+     * whose compulsory part contributed to it, via {@link Propagatable#allSingletonReason}:
+     * <ul>
+     *   <li><b>Global overload</b>: every task with a non-empty compulsory part contributed an
+     *       event to the running-sum check, so all of them are cited together.</li>
+     *   <li><b>Per-task exclusive-profile failure</b> (task {@code i} has no feasible start left):
+     *       task {@code i} itself, plus every <em>other</em> task with a non-empty compulsory part
+     *       (exactly the tasks whose events built the exclusive profile {@code i} was checked
+     *       against).</li>
+     * </ul>
+     * Citing only a subset (e.g. skipping a non-singleton compulsory-part task) would be unsound:
+     * that task could still narrow to a different value within its current domain and avoid the
+     * conflict, so the full set must be singleton before any reason is returned — the same
+     * lesson learned from {@link DiffnConstraint}'s joint mandatory-overlap condition.
+     */
+    @Override
+    @SuppressWarnings("unchecked")
+    public Map<Variable<?>, Object> explainInfeasible(@NonNull Map<Variable<?>, Domain<?>> domains) {
+        int n = starts.size();
+        double[] est = new double[n];
+        double[] lst = new double[n];
+        for (int i = 0; i < n; i++) {
+            var dom = (Domain<Number>) (Domain<?>) domains.get(starts.get(i));
+            est[i] = NumericBounds.min(dom);
+            lst[i] = NumericBounds.max(dom);
+        }
+        List<double[]> events = buildEvents(est, lst);
+
+        Set<Variable<?>> compulsoryVars = new HashSet<>();
+        for (double[] e : events) compulsoryVars.add(starts.get((int) e[2]));
+
+        double running = 0;
+        for (double[] e : events) {
+            running += e[1];
+            if (running > limit) {
+                return Propagatable.allSingletonReason(compulsoryVars, domains);
+            }
+        }
+
+        for (int i = 0; i < n; i++) {
+            if (!taskWindow(i, est, lst, events).feasible()) {
+                Set<Variable<?>> culprits = new HashSet<>(compulsoryVars);
+                culprits.add(starts.get(i));
+                return Propagatable.allSingletonReason(culprits, domains);
+            }
+        }
+        return Map.of();
     }
 
     @Override
