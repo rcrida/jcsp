@@ -348,6 +348,55 @@ public class DiffnConstraintTest {
         assertThat(c.propagate(d).orElseThrow()).isEmpty();
     }
 
+    // --- explainInfeasible ---
+
+    @Test
+    void explainInfeasible_bothCasesImpossible_allFourSingleton_attributesAll() {
+        // Same domains as propagate_bothCasesImpossible_infeasible: identical rectangles, all
+        // four origins fixed, so every variable in the failing pair's four is singleton.
+        Variable<Integer> x0 = F.create("ex0a"), y0 = F.create("ey0a");
+        Variable<Integer> x1 = F.create("ex1a"), y1 = F.create("ey1a");
+        var c = xOverlapConstraint(x0, y0, x1, y1, 2.0, 2.0);
+        var d = domains(
+                x0, IntRangeDomain.of(0, 0), x1, IntRangeDomain.of(2, 2),
+                y0, IntRangeDomain.of(2, 2), y1, IntRangeDomain.of(2, 2));
+        assertThat(c.propagate(d)).isEmpty();
+        assertThat(c.explainInfeasible(d)).containsOnly(
+                Map.entry(x0, 0), Map.entry(x1, 2), Map.entry(y0, 2), Map.entry(y1, 2));
+    }
+
+    @Test
+    void explainInfeasible_notAllFourSingleton_returnsEmptyReason() {
+        // Same domains as propagate_mandatoryYOverlap_xInfeasible: mandatory overlap is on y
+        // (both y0, y1 singleton), but the x-axis separation check involves x0=[0,3] (not
+        // singleton) and x1=0 (singleton). Unlike a binary comparator, no partial subset of the
+        // four responsible variables is a sound nogood here — a different x0 within [0,3] could
+        // still fail to separate, but the joint condition depends on x0's exact bounds, so citing
+        // {y0, y1, x1} alone would incorrectly generalise to configurations where x0 makes
+        // separation possible. Since x0 isn't singleton, the method must fall back to empty.
+        Variable<Integer> x0 = F.create("ex0b"), y0 = F.create("ey0b");
+        Variable<Integer> x1 = F.create("ex1b"), y1 = F.create("ey1b");
+        var c = DiffnConstraint.of(List.of(x0, x1), List.of(y0, y1),
+                List.of(2.0, 5.0), List.of(5.0, 5.0));
+        var d = domains(
+                x0, IntRangeDomain.of(0, 3), x1, IntRangeDomain.of(0, 0),
+                y0, IntRangeDomain.of(0, 0), y1, IntRangeDomain.of(2, 2));
+        assertThat(c.propagate(d)).isEmpty();
+        assertThat(c.explainInfeasible(d)).isEmpty();
+    }
+
+    @Test
+    void explainInfeasible_feasible_returnsEmptyReason() {
+        Variable<Integer> x0 = F.create("ex0c"), y0 = F.create("ey0c");
+        Variable<Integer> x1 = F.create("ex1c"), y1 = F.create("ey1c");
+        var c = DiffnConstraint.of(List.of(x0, x1), List.of(y0, y1),
+                List.of(2.0, 2.0), List.of(2.0, 2.0));
+        var d = domains(
+                x0, IntRangeDomain.of(0, 5), x1, IntRangeDomain.of(0, 5),
+                y0, IntRangeDomain.of(0, 5), y1, IntRangeDomain.of(0, 5));
+        assertThat(c.explainInfeasible(d)).isEmpty();
+    }
+
     // --- misc ---
 
     @Test

@@ -97,11 +97,11 @@ public class DiffnConstraint extends NaryConstraint implements Propagatable {
         for (int i = 0; i < n; i++) {
             for (int j = i + 1; j < n; j++) {
                 // Mandatory x-overlap forces separation on y.
-                if (!separateOnOverlap(i, j, xOrigins, widths, yOrigins, heights, domains, updated)) {
+                if (separateOnOverlap(i, j, xOrigins, widths, yOrigins, heights, domains, updated).isPresent()) {
                     return Optional.empty();
                 }
                 // Mandatory y-overlap forces separation on x.
-                if (!separateOnOverlap(i, j, yOrigins, heights, xOrigins, widths, domains, updated)) {
+                if (separateOnOverlap(i, j, yOrigins, heights, xOrigins, widths, domains, updated).isPresent()) {
                     return Optional.empty();
                 }
             }
@@ -110,12 +110,21 @@ public class DiffnConstraint extends NaryConstraint implements Propagatable {
     }
 
     /**
+     * The four origin variables whose current bounds jointly proved a pair of rectangles cannot be
+     * separated on either axis: {@code p1}/{@code p2} on the primary axis (their mandatory-overlap
+     * check) and {@code s1}/{@code s2} on the secondary axis (their no-separation check).
+     */
+    private record Failure(Variable<?> p1, Variable<?> p2, Variable<?> s1, Variable<?> s2) {}
+
+    /**
      * If rectangles {@code i} and {@code j} have overlapping compulsory parts on the primary axis,
      * tighten their origin domains on the secondary axis so they remain separated there.
      *
-     * @return {@code false} when no separation is possible on the secondary axis (infeasible)
+     * @return the four variables responsible when no separation is possible on the secondary axis
+     *         (infeasible), or {@link Optional#empty()} when {@code i} and {@code j} are already
+     *         separated or have been narrowed to remain separable
      */
-    private boolean separateOnOverlap(int i, int j,
+    private Optional<Failure> separateOnOverlap(int i, int j,
             List<Variable<?>> pOrigins, List<Double> pSizes,
             List<Variable<?>> sOrigins, List<Double> sSizes,
             Map<Variable<?>, Domain<?>> domains, Map<Variable<?>, Domain<?>> updated) {
@@ -132,7 +141,7 @@ public class DiffnConstraint extends NaryConstraint implements Propagatable {
                 && pjMax < pjMin + wj
                 && piMax < pjMin + wj
                 && pjMax < piMin + wi;
-        if (!mandatoryOverlap) return true;
+        if (!mandatoryOverlap) return Optional.empty();
 
         double siMin = boundMin(sOrigins.get(i), domains, updated);
         double siMax = boundMax(sOrigins.get(i), domains, updated);
@@ -143,7 +152,9 @@ public class DiffnConstraint extends NaryConstraint implements Propagatable {
 
         boolean caseA = siMin + hi <= sjMax; // i precedes j on the secondary axis
         boolean caseB = sjMin + hj <= siMax; // j precedes i on the secondary axis
-        if (!caseA && !caseB) return false;
+        if (!caseA && !caseB) {
+            return Optional.of(new Failure(pOrigins.get(i), pOrigins.get(j), sOrigins.get(i), sOrigins.get(j)));
+        }
 
         if (!caseA) {
             // Only B possible: s[i] >= s[j] + hj.
@@ -155,7 +166,43 @@ public class DiffnConstraint extends NaryConstraint implements Propagatable {
             applyBound(sOrigins.get(i), siMin, Math.min(siMax, sjMax - hi), domains, updated);
             applyBound(sOrigins.get(j), Math.max(sjMin, siMin + hi), sjMax, domains, updated);
         }
-        return true;
+        return Optional.empty();
+    }
+
+    /**
+     * On infeasibility, replays {@link #propagate}'s pairwise scan (threading the same narrowed
+     * {@code current} domains across pairs, since separating an earlier pair can change a later
+     * pair's compulsory-part bounds) until the same failing pair and axis order is found, then
+     * attributes the conflict to the four responsible origin variables — the primary axis pair
+     * whose compulsory parts were forced to overlap, and the secondary axis pair that could not be
+     * separated. Unlike {@link io.github.rcrida.jcsp.constraints.binary.BinaryComparatorConstraint},
+     * no single variable (or subset) here is independently sufficient: the mandatory-overlap and
+     * no-separation checks are joint conditions over all four bounds, so a partial citation would
+     * be unsound — a different configuration of the omitted variables could still separate the
+     * pair. The reason is therefore only ever the fully collective set, via
+     * {@link Propagatable#allSingletonReason}: non-empty solely when all four are singleton.
+     */
+    @Override
+    public Map<Variable<?>, Object> explainInfeasible(@NonNull Map<Variable<?>, Domain<?>> domains) {
+        int n = xOrigins.size();
+        Map<Variable<?>, Domain<?>> updated = new HashMap<>();
+        for (int i = 0; i < n; i++) {
+            for (int j = i + 1; j < n; j++) {
+                var failure = separateOnOverlap(i, j, xOrigins, widths, yOrigins, heights, domains, updated);
+                if (failure.isPresent()) return buildReason(failure.get(), domains, updated);
+                failure = separateOnOverlap(i, j, yOrigins, heights, xOrigins, widths, domains, updated);
+                if (failure.isPresent()) return buildReason(failure.get(), domains, updated);
+            }
+        }
+        return Map.of();
+    }
+
+    private Map<Variable<?>, Object> buildReason(Failure failure,
+            Map<Variable<?>, Domain<?>> domains, Map<Variable<?>, Domain<?>> updated) {
+        Map<Variable<?>, Domain<?>> current = new HashMap<>(domains);
+        current.putAll(updated);
+        return Propagatable.allSingletonReason(
+                List.of(failure.p1(), failure.p2(), failure.s1(), failure.s2()), current);
     }
 
     @SuppressWarnings("unchecked")
