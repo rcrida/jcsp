@@ -125,6 +125,64 @@ public class LexConstraint<T extends Comparable<T>> extends NaryConstraint imple
         return operator.compare(0, 0) ? Optional.of(Map.of()) : Optional.empty();
     }
 
+    /**
+     * On infeasibility, replays {@link #propagate}'s left-to-right scan (no domain threading
+     * needed: {@code propagate} returns as soon as it finds the first non-forced-equal position,
+     * so at most one position is ever examined) to find the same failing point, then attributes
+     * the conflict to every variable involved:
+     * <ul>
+     *   <li><b>Out-of-order position</b>: {@code lesserMin > greaterMax} (or {@code >=} when
+     *       strict) depends on <em>both</em> {@code lesser} and {@code greater}'s current bounds
+     *       jointly — neither alone proves the position fails, since a wider domain on the omitted
+     *       side could still satisfy the ordering. Both must be singleton before citing either,
+     *       via {@link Propagatable#allSingletonReason} — the same lesson as
+     *       {@link DiffnConstraint}'s joint mandatory-overlap condition.</li>
+     *   <li><b>Every position forced equal</b>: reaching the final {@code 0 <op> 0} check requires
+     *       every position's pair to already be singleton-and-equal (that is the loop's own
+     *       {@code continue} condition), so citing every variable across every position is always
+     *       available here — {@code allSingletonReason} degrades to a plain confirmation, never to
+     *       {@code Map.of()}.</li>
+     * </ul>
+     */
+    @Override
+    @SuppressWarnings("unchecked")
+    public Map<Variable<?>, Object> explainInfeasible(@NonNull Map<Variable<?>, Domain<?>> domains) {
+        if (!PROPAGATING_OPERATORS.contains(operator)) {
+            return Map.of();
+        }
+
+        boolean swapped = operator == Operator.GEQ || operator == Operator.GT;
+        boolean strict = operator == Operator.LT || operator == Operator.GT;
+
+        for (int i = 0; i < variablePairs.size(); i++) {
+            VariablePair<T> pair = variablePairs.get(i);
+            Variable<T> lesser  = swapped ? pair.right() : pair.left();
+            Variable<T> greater = swapped ? pair.left()  : pair.right();
+            Domain<T> lesserDom  = (Domain<T>) domains.get(lesser);
+            Domain<T> greaterDom = (Domain<T>) domains.get(greater);
+
+            if (lesserDom.isSingleton() && greaterDom.isSingleton()
+                    && lesserDom.singleValue().equals(greaterDom.singleValue())) {
+                continue;
+            }
+
+            boolean strictHere = strict && i == variablePairs.size() - 1;
+            T greaterMax = domainMax(greaterDom);
+            T lesserMin  = domainMin(lesserDom);
+            boolean infeasible = strictHere
+                    ? lesserMin.compareTo(greaterMax) >= 0
+                    : lesserMin.compareTo(greaterMax) > 0;
+            if (!infeasible) return Map.of(); // propagate() would narrow, not fail, at this position
+            return Propagatable.allSingletonReason(List.of(lesser, greater), domains);
+        }
+
+        if (operator.compare(0, 0)) return Map.of();
+        List<Variable<T>> allVars = variablePairs.stream()
+                .flatMap(pair -> Stream.of(pair.left(), pair.right()))
+                .toList();
+        return Propagatable.allSingletonReason(allVars, domains);
+    }
+
     @SuppressWarnings("unchecked")
     private static <T extends Comparable<T>> T domainMax(Domain<T> domain) {
         if (domain instanceof BoundedDomain<?> bd) return (T) bd.getMax();

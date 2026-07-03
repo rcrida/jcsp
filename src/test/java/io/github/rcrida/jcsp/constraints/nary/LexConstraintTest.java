@@ -290,6 +290,128 @@ public class LexConstraintTest {
         assertThat(result.containsKey(b1)).isFalse();
     }
 
+    // --- explainInfeasible ---
+
+    @Test
+    void explainInfeasible_otherOperator_returnsEmptyReason() {
+        var c = LexConstraint.of(List.of(x1), Operator.EQ, List.of(y1));
+        var domains = Map.<Variable<?>, Domain<?>>of(x1, IntRangeDomain.of(1, 5), y1, IntRangeDomain.of(1, 5));
+        assertThat(c.explainInfeasible(domains)).isEmpty();
+    }
+
+    @Test
+    void explainInfeasible_bothSingletonWrongOrder_attributesBoth() {
+        // [x1] <= [y1]: x1={5}, y1={3} — both singleton, non-strict, last position: 5 > 3 → infeasible
+        var c = LexConstraint.of(List.of(x1), Operator.LEQ, List.of(y1));
+        var domains = Map.<Variable<?>, Domain<?>>of(x1, IntRangeDomain.of(5, 5), y1, IntRangeDomain.of(3, 3));
+        assertThat(c.propagate(domains)).isEmpty();
+        assertThat(c.explainInfeasible(domains)).containsOnly(Map.entry(x1, 5), Map.entry(y1, 3));
+    }
+
+    @Test
+    void explainInfeasible_lesserSingletonGreaterNotSingleton_returnsEmpty() {
+        // Same domains as propagate_infeasible_pruneEmptiesDomain: x1={5} is singleton but
+        // y1=[1,5] is not — citing only x1 would be unsound, since a wider y1 domain (a value > 5)
+        // could still satisfy x1 < y1 in a different branch/restart.
+        var c = LexConstraint.of(List.of(x1), Operator.LT, List.of(y1));
+        var domains = Map.<Variable<?>, Domain<?>>of(x1, IntRangeDomain.of(5, 5), y1, IntRangeDomain.of(1, 5));
+        assertThat(c.propagate(domains)).isEmpty();
+        assertThat(c.explainInfeasible(domains)).isEmpty();
+    }
+
+    @Test
+    void explainInfeasible_notInfeasibleAtPosition_returnsEmptyReason() {
+        // Same domains as propagate_firstPosition_notLast_prunesLesserOnly: not forced equal at
+        // position 0, but the position isn't actually infeasible (propagate() would narrow, not
+        // fail) — direct unit test of that early-return branch.
+        var c = LexConstraint.of(List.of(x1, x2), Operator.LEQ, List.of(y1, y2));
+        var domains = Map.<Variable<?>, Domain<?>>of(
+                x1, IntRangeDomain.of(1, 5), y1, IntRangeDomain.of(3, 4),
+                x2, IntRangeDomain.of(0, 9), y2, IntRangeDomain.of(0, 9));
+        assertThat(c.explainInfeasible(domains)).isEmpty();
+    }
+
+    @Test
+    void explainInfeasible_strictOperator_notLastPosition_isNonStrict() {
+        // [x1,x2] < [y1,y2]: strict operator, but position 0 (not last) is the decision point, so
+        // strictHere is false there — covers the strict=true/i!=last combination of strictHere's
+        // short-circuit, distinct from the single-position (i==last) strict tests above.
+        // x1={5}, y1={3}, both singleton, unequal: lesserMin(5) > greaterMax(3) → infeasible.
+        var c = LexConstraint.of(List.of(x1, x2), Operator.LT, List.of(y1, y2));
+        var domains = Map.<Variable<?>, Domain<?>>of(
+                x1, IntRangeDomain.of(5, 5), y1, IntRangeDomain.of(3, 3),
+                x2, IntRangeDomain.of(0, 9), y2, IntRangeDomain.of(0, 9));
+        assertThat(c.propagate(domains)).isEmpty();
+        assertThat(c.explainInfeasible(domains)).containsOnly(Map.entry(x1, 5), Map.entry(y1, 3));
+    }
+
+    @Test
+    void explainInfeasible_strictOperator_notInfeasibleAtPosition_returnsEmptyReason() {
+        // [x1] < [y1]: strict, last position, but not infeasible — lesserMin(1) < greaterMax(8),
+        // so the strict comparison's false outcome is exercised (distinct from the strict+infeasible
+        // tests above, which only cover the true outcome of this comparison).
+        var c = LexConstraint.of(List.of(x1), Operator.LT, List.of(y1));
+        var domains = Map.<Variable<?>, Domain<?>>of(x1, IntRangeDomain.of(1, 3), y1, IntRangeDomain.of(5, 8));
+        assertThat(c.explainInfeasible(domains)).isEmpty();
+    }
+
+    @Test
+    void explainInfeasible_forcedEqualThenInfeasible_skipsToNextPosition() {
+        // [x1,x2] <= [y1,y2]: position 0 forced equal (x1=y1=2, both singleton) → skipped via
+        // continue; position 1 (last, non-strict) has x2={5}, y2={3}, both singleton, wrong order.
+        var c = LexConstraint.of(List.of(x1, x2), Operator.LEQ, List.of(y1, y2));
+        var domains = Map.<Variable<?>, Domain<?>>of(
+                x1, IntRangeDomain.of(2, 2), y1, IntRangeDomain.of(2, 2),
+                x2, IntRangeDomain.of(5, 5), y2, IntRangeDomain.of(3, 3));
+        assertThat(c.propagate(domains)).isEmpty();
+        assertThat(c.explainInfeasible(domains)).containsOnly(Map.entry(x2, 5), Map.entry(y2, 3));
+    }
+
+    @Test
+    void explainInfeasible_allForcedEqual_lt_attributesAll() {
+        // Same domains as propagate_allForcedEqual_lt_infeasible: every position forced equal,
+        // so reaching the terminal 0 < 0 check requires all four variables already singleton.
+        var c = LexConstraint.of(List.of(x1, x2), Operator.LT, List.of(y1, y2));
+        var domains = Map.<Variable<?>, Domain<?>>of(
+                x1, IntRangeDomain.of(2, 2), y1, IntRangeDomain.of(2, 2),
+                x2, IntRangeDomain.of(3, 3), y2, IntRangeDomain.of(3, 3));
+        assertThat(c.propagate(domains)).isEmpty();
+        assertThat(c.explainInfeasible(domains)).containsOnly(
+                Map.entry(x1, 2), Map.entry(y1, 2), Map.entry(x2, 3), Map.entry(y2, 3));
+    }
+
+    @Test
+    void explainInfeasible_allForcedEqual_leq_returnsEmptyReason() {
+        // Same domains as propagate_allForcedEqual_leq_noChange: every position forced equal,
+        // 0 <= 0 is true → feasible, terminal branch returns empty.
+        var c = LexConstraint.of(List.of(x1, x2), Operator.LEQ, List.of(y1, y2));
+        var domains = Map.<Variable<?>, Domain<?>>of(
+                x1, IntRangeDomain.of(2, 2), y1, IntRangeDomain.of(2, 2),
+                x2, IntRangeDomain.of(3, 3), y2, IntRangeDomain.of(3, 3));
+        assertThat(c.explainInfeasible(domains)).isEmpty();
+    }
+
+    @Test
+    void explainInfeasible_geqSwapsPairRoles_bothSingleton_attributesBoth() {
+        // [x1] >= [y1]: swapped so lesser=y1, greater=x1. x1={2}, y1={4} → lesser=4, greater=2:
+        // lesserMin(4) > greaterMax(2) → infeasible.
+        var c = LexConstraint.of(List.of(x1), Operator.GEQ, List.of(y1));
+        var domains = Map.<Variable<?>, Domain<?>>of(x1, IntRangeDomain.of(2, 2), y1, IntRangeDomain.of(4, 4));
+        assertThat(c.propagate(domains)).isEmpty();
+        assertThat(c.explainInfeasible(domains)).containsOnly(Map.entry(x1, 2), Map.entry(y1, 4));
+    }
+
+    @Test
+    void explainInfeasible_gtSwapsPairRoles_strict_bothSingleton_attributesBoth() {
+        // [x1] > [y1]: swapped so lesser=y1, greater=x1, strict, last position.
+        // x1={2}, y1={5} (unequal, so not skipped as forced-equal) → lesser=y1(5), greater=x1(2):
+        // lesserMin(5) >= greaterMax(2) → infeasible (strict).
+        var c = LexConstraint.of(List.of(x1), Operator.GT, List.of(y1));
+        var domains = Map.<Variable<?>, Domain<?>>of(x1, IntRangeDomain.of(2, 2), y1, IntRangeDomain.of(5, 5));
+        assertThat(c.propagate(domains)).isEmpty();
+        assertThat(c.explainInfeasible(domains)).containsOnly(Map.entry(x1, 2), Map.entry(y1, 5));
+    }
+
     @Test
     void solver_lexLeq_solutionCount() {
         // [a,b] leq [c,d] over domain {1,2,3}: there are 9 possible (a,b) pairs and 9 (c,d) pairs.
