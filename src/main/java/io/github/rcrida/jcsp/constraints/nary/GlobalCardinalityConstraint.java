@@ -71,7 +71,6 @@ public class GlobalCardinalityConstraint<T> extends UniformNaryConstraint<T> imp
      * from one tracked value feed into the classification of the next.
      */
     @Override
-    @SuppressWarnings("unchecked")
     public Optional<Map<Variable<?>, Domain<?>>> propagate(@NonNull Map<Variable<?>, Domain<?>> domains) {
         Map<Variable<?>, Domain<?>> current = new HashMap<>(domains);
         Map<Variable<?>, Domain<?>> updated = new HashMap<>();
@@ -80,42 +79,103 @@ public class GlobalCardinalityConstraint<T> extends UniformNaryConstraint<T> imp
             T value = entry.getKey();
             int n = entry.getValue();
 
-            List<Variable<T>> possibleVars = new ArrayList<>();
-            int definiteCount = 0;
-            for (Variable<?> var : getVariables()) {
-                DiscreteDomain<T> dom = (DiscreteDomain<T>) current.get(var);
-                if (dom.stream().anyMatch(value::equals)) {
-                    if (dom.isSingleton()) definiteCount++;
-                    else possibleVars.add((Variable<T>) var);
-                }
-            }
-            int maxCount = definiteCount + possibleVars.size();
+            Classification<T> c = classify(value, current);
+            int definiteCount = c.definite().size();
+            int maxCount = definiteCount + c.possible().size();
 
             if (definiteCount > n) return Optional.empty();
             if (maxCount < n) return Optional.empty();
 
-            if (definiteCount == n) {
-                for (Variable<T> var : possibleVars) {
-                    Domain<T> newDom = ((DiscreteDomain<T>) current.get(var)).toBuilder().delete(value).build();
-                    current.put(var, newDom);
-                    updated.put(var, newDom);
-                }
-            } else if (maxCount == n) {
-                for (Variable<T> var : possibleVars) {
-                    DiscreteDomain<T> dom = (DiscreteDomain<T>) current.get(var);
-                    DiscreteDomain.Builder<T> builder = dom.toBuilder();
-                    for (T v : dom.toList()) {
-                        if (!value.equals(v)) builder.delete(v);
-                    }
-                    DiscreteDomain<T> newDom = builder.build();
-                    current.put(var, newDom);
-                    updated.put(var, newDom);
-                }
-            }
+            if (definiteCount == n) narrow(value, c.possible(), true, current, updated);
+            else if (maxCount == n) narrow(value, c.possible(), false, current, updated);
         }
 
         return Optional.of(updated);
     }
+
+    /**
+     * On infeasibility, replays the same per-value classification (and, where a value's quota is
+     * already met, the same domain narrowing) as {@link #propagate} so that later tracked values
+     * are judged against the domains as they stood at the point of failure — narrowing from one
+     * value can change another's classification, so the explanation must track {@code current}
+     * exactly like propagation does rather than reasoning from the original {@code domains} alone.
+     * For the value whose quota is violated, mirrors {@link CountConstraint#explainInfeasible}:
+     * <ul>
+     *   <li><b>Too many definites</b> ({@code definiteCount > n}): every definite variable is, by
+     *       construction, already a singleton {@code {value}} domain, so citing all of them is
+     *       directly sound.</li>
+     *   <li><b>Too few reachable</b> ({@code maxCount < n}): depends on every impossible variable
+     *       categorically excluding {@code value} — only attributable when every impossible
+     *       variable is singleton, via {@link Propagatable#allSingletonReason}.</li>
+     * </ul>
+     */
+    @Override
+    public Map<Variable<?>, Object> explainInfeasible(@NonNull Map<Variable<?>, Domain<?>> domains) {
+        Map<Variable<?>, Domain<?>> current = new HashMap<>(domains);
+
+        for (var entry : cardinalities.entrySet()) {
+            T value = entry.getKey();
+            int n = entry.getValue();
+
+            Classification<T> c = classify(value, current);
+            int definiteCount = c.definite().size();
+            int maxCount = definiteCount + c.possible().size();
+
+            if (definiteCount > n) {
+                Map<Variable<?>, Object> reason = new HashMap<>();
+                for (Variable<?> var : c.definite()) reason.put(var, value);
+                return reason;
+            }
+            if (maxCount < n) {
+                return Propagatable.allSingletonReason(c.impossible(), current);
+            }
+
+            if (definiteCount == n) narrow(value, c.possible(), true, current, new HashMap<>());
+            else if (maxCount == n) narrow(value, c.possible(), false, current, new HashMap<>());
+        }
+
+        return Map.of();
+    }
+
+    @SuppressWarnings("unchecked")
+    private Classification<T> classify(T value, @NonNull Map<Variable<?>, Domain<?>> current) {
+        List<Variable<T>> possible = new ArrayList<>();
+        List<Variable<?>> definite = new ArrayList<>();
+        List<Variable<?>> impossible = new ArrayList<>();
+        for (Variable<?> var : getVariables()) {
+            DiscreteDomain<T> dom = (DiscreteDomain<T>) current.get(var);
+            if (dom.stream().anyMatch(value::equals)) {
+                if (dom.isSingleton()) definite.add(var);
+                else possible.add((Variable<T>) var);
+            } else {
+                impossible.add(var);
+            }
+        }
+        return new Classification<>(possible, definite, impossible);
+    }
+
+    @SuppressWarnings("unchecked")
+    private void narrow(T value, @NonNull List<Variable<T>> possibleVars, boolean removeValue,
+                        @NonNull Map<Variable<?>, Domain<?>> current, @NonNull Map<Variable<?>, Domain<?>> updated) {
+        for (Variable<T> var : possibleVars) {
+            DiscreteDomain<T> dom = (DiscreteDomain<T>) current.get(var);
+            Domain<T> newDom;
+            if (removeValue) {
+                newDom = dom.toBuilder().delete(value).build();
+            } else {
+                DiscreteDomain.Builder<T> builder = dom.toBuilder();
+                for (T v : dom.toList()) {
+                    if (!value.equals(v)) builder.delete(v);
+                }
+                newDom = builder.build();
+            }
+            current.put(var, newDom);
+            updated.put(var, newDom);
+        }
+    }
+
+    private record Classification<T>(List<Variable<T>> possible, List<Variable<?>> definite,
+                                     List<Variable<?>> impossible) {}
 
     @Override
     public String getRelation() {

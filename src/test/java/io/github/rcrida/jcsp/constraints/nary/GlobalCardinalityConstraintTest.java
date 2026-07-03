@@ -92,6 +92,7 @@ public class GlobalCardinalityConstraintTest {
     // --- propagate() ---
 
     static final Domain<Color> RED_ONLY    = EnumDomain.of(Color.RED);
+    static final Domain<Color> GREEN_ONLY  = EnumDomain.of(Color.GREEN);
     static final Domain<Color> ALL         = EnumDomain.allOf(Color.class); // RED, GREEN, BLUE
     static final Domain<Color> RED_GREEN   = EnumDomain.of(Color.RED, Color.GREEN);
     static final Domain<Color> GREEN_BLUE  = EnumDomain.of(Color.GREEN, Color.BLUE);
@@ -163,6 +164,103 @@ public class GlobalCardinalityConstraintTest {
         assertThat(result).isPresent();
         assertThat(result.get().get(v3)).isEqualTo(GREEN_BLUE);
         assertThat(result.get().get(v4)).isEqualTo(GREEN_BLUE);
+    }
+
+    // --- propagateWithReasons() / explainInfeasible() ---
+
+    @Test
+    void propagateWithReasons_feasible_returnsEmptyReason() {
+        var c = GlobalCardinalityConstraint.of(Set.of(v1, v2, v3), Map.of(Color.RED, 2));
+        var domains = Map.<Variable<?>, Domain<?>>of(v1, RED_ONLY, v2, RED_GREEN, v3, ALL);
+        var result = c.propagateWithReasons(domains);
+        assertThat(result.isInfeasible()).isFalse();
+        assertThat(result.reason()).isEmpty();
+    }
+
+    @Test
+    void propagateWithReasons_tooManyDefinites_attributesDefiniteVars() {
+        // RED==1: v1, v2 both definite RED → definiteCount=2 > n=1. Every definite variable is
+        // trivially singleton by construction, so both are attributed directly.
+        var c = GlobalCardinalityConstraint.of(Set.of(v1, v2), Map.of(Color.RED, 1));
+        var domains = Map.<Variable<?>, Domain<?>>of(v1, RED_ONLY, v2, RED_ONLY);
+        var result = c.propagateWithReasons(domains);
+        assertThat(result.isInfeasible()).isTrue();
+        assertThat(result.reason()).containsOnly(Map.entry(v1, Color.RED), Map.entry(v2, Color.RED));
+    }
+
+    @Test
+    void propagateWithReasons_tooFewPossible_allImpossibleSingleton_attributesThem() {
+        // RED==2: v1={GREEN}, v2={BLUE} → maxCount=0 < n=2; both impossible variables are
+        // singleton, so both are attributed.
+        var c = GlobalCardinalityConstraint.of(Set.of(v1, v2), Map.of(Color.RED, 2));
+        var domains = Map.<Variable<?>, Domain<?>>of(v1, GREEN_ONLY, v2, EnumDomain.of(Color.BLUE));
+        var result = c.propagateWithReasons(domains);
+        assertThat(result.isInfeasible()).isTrue();
+        assertThat(result.reason()).containsOnly(Map.entry(v1, Color.GREEN), Map.entry(v2, Color.BLUE));
+    }
+
+    @Test
+    void propagateWithReasons_tooFewPossible_notAllSingleton_returnsEmptyReason() {
+        // RED==2: v1, v2 both {GREEN,BLUE} → maxCount=0 < n=2, but neither impossible variable
+        // is pinned to a specific value, so no sound reason can be formed.
+        var c = GlobalCardinalityConstraint.of(Set.of(v1, v2), Map.of(Color.RED, 2));
+        var domains = Map.<Variable<?>, Domain<?>>of(v1, GREEN_BLUE, v2, GREEN_BLUE);
+        var result = c.propagateWithReasons(domains);
+        assertThat(result.isInfeasible()).isTrue();
+        assertThat(result.reason()).isEmpty();
+    }
+
+    @Test
+    void explainInfeasible_maxCountEqualsNButNotDefiniteCount_narrowsThenReturnsEmpty() {
+        // RED==2: v1 definite RED (definiteCount=1), v2 possible {RED,GREEN}, v3 impossible
+        // {GREEN,BLUE} → maxCount=1+1=2==n, but definiteCount=1!=n=2, so this exercises the
+        // "else if (maxCount == n)" narrowing branch (forcing v2 to {RED}) rather than the
+        // "if (definiteCount == n)" branch exercised by the other explainInfeasible tests. No
+        // infeasibility is ever found for this single tracked value, so the terminal fallback
+        // returns an empty reason.
+        var c = GlobalCardinalityConstraint.of(Set.of(v1, v2, v3), Map.of(Color.RED, 2));
+        var domains = Map.<Variable<?>, Domain<?>>of(v1, RED_ONLY, v2, RED_GREEN, v3, GREEN_BLUE);
+        assertThat(c.explainInfeasible(domains)).isEmpty();
+    }
+
+    @Test
+    void explainInfeasible_neitherNarrowingConditionMet_fallsThroughUnchanged() {
+        // RED==2: v1 definite RED (definiteCount=1), v2 and v3 both possible {RED,GREEN}
+        // (maxCount=1+2=3). Neither definiteCount==n(2) nor maxCount==n(2) holds — 1!=2 and
+        // 3!=2 — so this value falls through without narrowing anything, exercising the case
+        // where neither of propagate()'s two narrowing conditions fires.
+        var c = GlobalCardinalityConstraint.of(Set.of(v1, v2, v3), Map.of(Color.RED, 2));
+        var domains = Map.<Variable<?>, Domain<?>>of(v1, RED_ONLY, v2, RED_GREEN, v3, RED_GREEN);
+        assertThat(c.explainInfeasible(domains)).isEmpty();
+    }
+
+    @Test
+    void explainInfeasible_neitherConditionHolds_returnsEmptyReason() {
+        // Direct unit test of the terminal fallback: propagate() would never actually call this
+        // with domains satisfying neither infeasibility condition (definiteCount=1 is not > n=1;
+        // maxCount=2 is not < n=1), but explainInfeasible's own contract must still fall back to
+        // an empty reason rather than assume one of the two conditions always holds.
+        var c = GlobalCardinalityConstraint.of(Set.of(v1, v2), Map.of(Color.RED, 1));
+        var domains = Map.<Variable<?>, Domain<?>>of(v1, RED_ONLY, v2, RED_GREEN);
+        assertThat(c.explainInfeasible(domains)).isEmpty();
+    }
+
+    @Test
+    void explainInfeasible_multipleValues_narrowingFromEarlierValueFeedsIntoLater_attributesBoth() {
+        // RED==1, GREEN==1 (LinkedHashMap fixes iteration order: RED before GREEN).
+        // v1={RED} (definite RED), v2={RED,GREEN} (possible for RED), v3={GREEN} (definite GREEN).
+        // Processing RED first: definiteCount(RED)=1==n → v2 is narrowed to {GREEN}, becoming
+        // definite for GREEN. Only then does GREEN's definiteCount reach 2 > n=1 — the explanation
+        // must replay RED's narrowing rather than judging GREEN against the original domains,
+        // where v2 was still merely possible (and so wouldn't have been attributed).
+        var cardinalities = new java.util.LinkedHashMap<Color, Integer>();
+        cardinalities.put(Color.RED, 1);
+        cardinalities.put(Color.GREEN, 1);
+        var c = GlobalCardinalityConstraint.of(Set.of(v1, v2, v3), cardinalities);
+        var domains = Map.<Variable<?>, Domain<?>>of(v1, RED_ONLY, v2, RED_GREEN, v3, GREEN_ONLY);
+        assertThat(c.propagate(domains)).isEmpty();
+        assertThat(c.explainInfeasible(domains)).containsOnly(
+                Map.entry(v2, Color.GREEN), Map.entry(v3, Color.GREEN));
     }
 
     @Test
