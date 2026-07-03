@@ -219,6 +219,7 @@ class DomWdegLubySearchTest {
         List<Assignment> solutions = solver.getSolutions(csp).toList();
         assertThat(solutions).hasSize(1);
         assertThat(solutions.get(0).getValue(x).orElseThrow()).isEqualTo(2);
+        assertThat(solutions.get(0).getStatistics().getNogoodPrunes().get()).isGreaterThan(0);
     }
 
     @Test
@@ -268,6 +269,40 @@ class DomWdegLubySearchTest {
 
         solver.getSolutions(csp).toList();
         assertThat(store.size()).isGreaterThan(0);
+    }
+
+    @Test
+    void nogoodsLearnedStatisticIncrementsOnFailedBranch() {
+        // x ∈ {1,2} is weighted (via two extra constraints against singleton dummies w1,w2) so
+        // dom/wdeg selects x before the singleton y ∈ {1}. With ascending value order, x=1 is
+        // tried first — it passes isConsistent but MAC wipes out y's domain (only value 1 removed
+        // by x≠y) → nogood recorded, backtrack to x=2 → solution (2,1,5,6). The failed x=1 branch
+        // and the successful x=2 branch share the same root Statistics.
+        Variable<Integer> x = VF.create("x");
+        Variable<Integer> y = VF.create("y");
+        Variable<Integer> w1 = VF.create("w1");
+        Variable<Integer> w2 = VF.create("w2");
+        ConstraintSatisfactionProblem csp = ConstraintSatisfactionProblem.builder()
+                .variableDomain(x, IntRangeDomain.of(1, 2))
+                .variableDomain(y, IntRangeDomain.of(1, 1))
+                .variableDomain(w1, IntRangeDomain.of(5, 5))
+                .variableDomain(w2, IntRangeDomain.of(6, 6))
+                .notEqualsConstraint(x, y)
+                .notEqualsConstraint(x, w1)
+                .notEqualsConstraint(x, w2)
+                .build();
+
+        NogoodStore store = new NogoodStore();
+        DomWdegLubySearch solver = DomWdegLubySearch.builder()
+                .domainValuesOrderer(io.github.rcrida.jcsp.solver.backtrackingsearch.order.DefaultValueOrderer.INSTANCE)
+                .inference(Solver.Factory.FULL_PROPAGATION_INFERENCE)
+                .nogoodStore(store)
+                .build();
+
+        List<Assignment> solutions = solver.getSolutions(csp).toList();
+        assertThat(solutions).hasSize(1);
+        assertThat(solutions.get(0).getValue(x).orElseThrow()).isEqualTo(2);
+        assertThat(solutions.get(0).getStatistics().getNogoodsLearned().get()).isGreaterThan(0);
     }
 
     @Test

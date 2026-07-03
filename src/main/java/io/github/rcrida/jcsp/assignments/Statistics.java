@@ -15,6 +15,8 @@ import java.util.concurrent.atomic.AtomicInteger;
  *   <li>{@code backtracks} — times tree search reversed a value assignment due to inconsistency or domain wipeout</li>
  *   <li>{@code restarts} — completed Luby restarts before a solution was found (backtracking search only)</li>
  *   <li>{@code steps} — local search moves taken to reach the solution (local search solvers only)</li>
+ *   <li>{@code nogoodsLearned} — nogoods recorded after a domain-wipeout during search (backtracking search only)</li>
+ *   <li>{@code nogoodPrunes} — candidate assignments skipped because a learned nogood subsumed them (backtracking search only)</li>
  * </ul>
  */
 @Value
@@ -24,6 +26,8 @@ public class Statistics {
     AtomicInteger backtracks = new AtomicInteger();
     AtomicInteger restarts = new AtomicInteger();
     AtomicInteger steps = new AtomicInteger();
+    AtomicInteger nogoodsLearned = new AtomicInteger();
+    AtomicInteger nogoodPrunes = new AtomicInteger();
 
     void incrementNodesExplored() {
         nodesExplored.incrementAndGet();
@@ -45,11 +49,21 @@ public class Statistics {
         steps.incrementAndGet();
     }
 
+    public void incrementNogoodsLearned() {
+        nogoodsLearned.incrementAndGet();
+    }
+
+    public void incrementNogoodPrunes() {
+        nogoodPrunes.incrementAndGet();
+    }
+
     void add(Statistics other) {
         nodesExplored.addAndGet(other.nodesExplored.get());
         constraintChecks.addAndGet(other.constraintChecks.get());
         backtracks.addAndGet(other.backtracks.get());
         restarts.addAndGet(other.restarts.get());
         steps.addAndGet(other.steps.get());
+        nogoodsLearned.addAndGet(other.nogoodsLearned.get());
+        nogoodPrunes.addAndGet(other.nogoodPrunes.get());
     }
 }

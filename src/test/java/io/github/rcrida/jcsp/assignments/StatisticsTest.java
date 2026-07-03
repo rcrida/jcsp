@@ -50,20 +50,38 @@ public class StatisticsTest {
     }
 
     @Test
+    void incrementNogoodsLearned() {
+        val statistics = new Statistics();
+        statistics.incrementNogoodsLearned();
+        assertThat(statistics.getNogoodsLearned().get()).isEqualTo(1);
+    }
+
+    @Test
+    void incrementNogoodPrunes() {
+        val statistics = new Statistics();
+        statistics.incrementNogoodPrunes();
+        assertThat(statistics.getNogoodPrunes().get()).isEqualTo(1);
+    }
+
+    @Test
     void add() {
         val a = new Statistics();
         a.incrementNodesExplored();
         a.incrementBacktracks();
         a.incrementSteps();
+        a.incrementNogoodsLearned();
         val b = new Statistics();
         b.incrementConstraintChecks();
         b.incrementConstraintChecks();
         b.addRestarts(2);
+        b.incrementNogoodPrunes();
         a.add(b);
         assertThat(a.getNodesExplored().get()).isEqualTo(1);
         assertThat(a.getConstraintChecks().get()).isEqualTo(2);
         assertThat(a.getBacktracks().get()).isEqualTo(1);
         assertThat(a.getRestarts().get()).isEqualTo(2);
         assertThat(a.getSteps().get()).isEqualTo(1);
+        assertThat(a.getNogoodsLearned().get()).isEqualTo(1);
+        assertThat(a.getNogoodPrunes().get()).isEqualTo(1);
     }
 }

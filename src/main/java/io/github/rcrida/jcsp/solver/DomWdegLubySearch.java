@@ -132,7 +132,10 @@ public class DomWdegLubySearch implements Solver {
                         limits.markLimitReached(next.getStatistics());
                         return Stream.empty();
                     }
-                    if (nogoodStore.isViolated(next)) return Stream.empty();
+                    if (nogoodStore.isViolated(next)) {
+                        next.getStatistics().incrementNogoodPrunes();
+                        return Stream.empty();
+                    }
                     if (!next.isConsistent(csp)) {
                         next.getStatistics().incrementBacktracks();
                         return Stream.empty();
@@ -142,6 +145,7 @@ public class DomWdegLubySearch implements Solver {
                         selector.incrementWeights(csp, variable, next);
                         nogoodStore.record(conflictExplainer.explain(csp, variable, next));
                         next.getStatistics().incrementBacktracks();
+                        next.getStatistics().incrementNogoodsLearned();
                         return Stream.empty();
                     }
                     return searchStream(inferred.get(), next, selector, deadline);
@@ -166,7 +170,10 @@ public class DomWdegLubySearch implements Solver {
                 limits.markLimitReached(stats);
                 throw LimitsExceeded.INSTANCE;
             }
-            if (nogoodStore.isViolated(next)) continue;
+            if (nogoodStore.isViolated(next)) {
+                next.getStatistics().incrementNogoodPrunes();
+                continue;
+            }
             if (!next.isConsistent(csp)) {
                 next.getStatistics().incrementBacktracks();
                 continue;
@@ -176,6 +183,7 @@ public class DomWdegLubySearch implements Solver {
                 selector.incrementWeights(csp, variable, next);
                 nogoodStore.record(conflictExplainer.explain(csp, variable, next));
                 next.getStatistics().incrementBacktracks();
+                next.getStatistics().incrementNogoodsLearned();
                 if (++failures[0] >= budget) throw BudgetExceeded.INSTANCE;
                 continue;
             }
