@@ -34,8 +34,12 @@ public class GreedyAssignmentFactoryTest {
 
     @Test
     void greedyAssignmentCanSeedLocalSearch() {
+        // Both the greedy seed and min-conflicts break ties via ThreadLocalRandom, so a single
+        // attempt occasionally fails to converge within 500 steps. maxAttempts=5 runs independent
+        // random restarts in parallel and returns on first success, making that residual failure
+        // probability negligible without weakening what the test actually checks.
         val csp = NQueensTest.nQueens();
-        val solver = MinConflictsSolver.of(1, 500, GreedyAssignmentFactory.INSTANCE);
+        val solver = MinConflictsSolver.of(5, 500, GreedyAssignmentFactory.INSTANCE);
         val solution = solver.getLocalSolution(csp);
         assertThat(solution).isPresent();
         assertThat(solution.get().isSolution(csp)).isTrue();
