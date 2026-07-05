@@ -1,5 +1,8 @@
 package io.github.rcrida.jcsp.assignments;
 
+import io.github.rcrida.jcsp.ConstraintSatisfactionProblem;
+import io.github.rcrida.jcsp.constraints.nary.NogoodConstraint;
+import io.github.rcrida.jcsp.domains.IntRangeDomain;
 import io.github.rcrida.jcsp.variables.Variable;
 import org.junit.jupiter.api.Test;
 
@@ -12,13 +15,19 @@ class NogoodStoreTest {
     private static final Variable.Factory VF = Variable.Factory.INSTANCE;
     private static final Variable<Integer> X = VF.create("x");
     private static final Variable<Integer> Y = VF.create("y");
-    private static final Variable<Integer> Z = VF.create("z");
+
+    private static ConstraintSatisfactionProblem csp() {
+        return ConstraintSatisfactionProblem.builder()
+                .variableDomain(X, IntRangeDomain.of(1, 3))
+                .variableDomain(Y, IntRangeDomain.of(1, 3))
+                .build();
+    }
 
     @Test
-    void emptyStoreIsNeverViolated() {
+    void emptyStoreAppliesToCspUnchanged() {
         NogoodStore store = new NogoodStore();
-        Assignment a = Assignment.of(Map.of(X, 1, Y, 2));
-        assertThat(store.isViolated(a)).isFalse();
+        var csp = csp();
+        assertThat(store.apply(csp)).isSameAs(csp);
     }
 
     @Test
@@ -32,56 +41,50 @@ class NogoodStoreTest {
     }
 
     @Test
-    void exactMatchIsViolated() {
+    void recordingTheSameNogoodTwiceDoesNotGrowSize() {
+        // NogoodConstraint has value-based equality on its forbidden map, and the store is
+        // Set-backed, so re-deriving the same nogood (e.g. independently in two branches) collapses
+        // into one entry.
         NogoodStore store = new NogoodStore();
         store.record(Map.of(X, 1, Y, 2));
-        assertThat(store.isViolated(Assignment.of(Map.of(X, 1, Y, 2)))).isTrue();
+        store.record(Map.of(X, 1, Y, 2));
+        assertThat(store.size()).isEqualTo(1);
     }
 
     @Test
-    void supersetOfNogoodIsViolated() {
-        NogoodStore store = new NogoodStore();
-        store.record(Map.of(X, 1));
-        // assignment with extra variable still subsumes the nogood
-        assertThat(store.isViolated(Assignment.of(Map.of(X, 1, Y, 2)))).isTrue();
-    }
-
-    @Test
-    void wrongValueIsNotViolated() {
+    void applyAddsNogoodConstraintToCsp() {
         NogoodStore store = new NogoodStore();
         store.record(Map.of(X, 1, Y, 2));
-        assertThat(store.isViolated(Assignment.of(Map.of(X, 1, Y, 3)))).isFalse();
+        var augmented = store.apply(csp());
+        assertThat(augmented.getConstraints()).contains(NogoodConstraint.of(Map.of(X, 1, Y, 2)));
     }
 
     @Test
-    void partialSubsetIsNotViolated() {
-        NogoodStore store = new NogoodStore();
-        store.record(Map.of(X, 1, Y, 2, Z, 3));
-        // only two of three nogood vars assigned — not fully subsumed
-        assertThat(store.isViolated(Assignment.of(Map.of(X, 1, Y, 2)))).isFalse();
-    }
-
-    @Test
-    void secondNogoodCanTriggerViolation() {
+    void applyIsIdempotentAcrossRepeatedCalls() {
+        // Simulates re-applying at every search node without needing to track what's already
+        // present: applying twice in a row must not throw or duplicate anything visible.
         NogoodStore store = new NogoodStore();
         store.record(Map.of(X, 1));
-        store.record(Map.of(Y, 5));
-        assertThat(store.isViolated(Assignment.of(Map.of(X, 2, Y, 5)))).isTrue();
+        var csp = csp();
+        var once = store.apply(csp);
+        var twice = store.apply(once);
+        assertThat(twice.getConstraints()).isEqualTo(once.getConstraints());
     }
 
     @Test
     void emptyNogoodIsIgnoredNotRecorded() {
-        // An empty nogood would vacuously match every assignment (allMatch on an empty stream
-        // is true), pruning the entire search tree. record() must ignore it rather than store it.
+        // An empty nogood would vacuously match every assignment (isSatisfiedBy returns false
+        // whenever every one of its own entries matches, which is trivially true for zero
+        // entries), pruning the entire search tree. record() must ignore it rather than store it.
         NogoodStore store = new NogoodStore();
         store.record(Map.of());
         assertThat(store.size()).isZero();
-        assertThat(store.isViolated(Assignment.of(Map.of(X, 1)))).isFalse();
-        assertThat(store.isViolated(Assignment.of(Map.of()))).isFalse();
+        var csp = csp();
+        assertThat(store.apply(csp)).isSameAs(csp);
     }
 
     @Test
-    void equalsAndHashCodeExcludeMutableList() {
+    void equalsAndHashCodeExcludeMutableSet() {
         NogoodStore a = new NogoodStore();
         NogoodStore b = new NogoodStore();
         a.record(Map.of(X, 1));

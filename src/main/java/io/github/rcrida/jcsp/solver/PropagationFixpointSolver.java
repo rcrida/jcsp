@@ -26,6 +26,7 @@ import io.github.rcrida.jcsp.constraints.nary.LinearConstraint;
 import io.github.rcrida.jcsp.constraints.nary.MaxConstraint;
 import io.github.rcrida.jcsp.constraints.nary.MinConstraint;
 import io.github.rcrida.jcsp.constraints.nary.NaryElementConstraint;
+import io.github.rcrida.jcsp.constraints.nary.NogoodConstraint;
 import io.github.rcrida.jcsp.constraints.nary.ProductConstraint;
 import io.github.rcrida.jcsp.constraints.nary.NaryTuplesConstraint;
 import io.github.rcrida.jcsp.constraints.nary.RegularConstraint;
@@ -72,6 +73,7 @@ public class PropagationFixpointSolver extends SolverDecorator {
             FixpointConsistency.of(BinaryOffsetConstraint.class),
             FixpointConsistency.of(AbsoluteDifferenceConstraint.class),
             AC3.INSTANCE,
+            FixpointConsistency.of(NogoodConstraint.class),
             FixpointConsistency.of(AllDiffConstraint.class),
             FixpointConsistency.of(SumConstraint.class),
             FixpointConsistency.of(LinearConstraint.class),

@@ -41,6 +41,7 @@ import io.github.rcrida.jcsp.constraints.nary.DecreasingConstraint;
 import io.github.rcrida.jcsp.constraints.nary.IncreasingConstraint;
 import io.github.rcrida.jcsp.constraints.nary.LinearConstraint;
 import io.github.rcrida.jcsp.constraints.nary.NaryElementConstraint;
+import io.github.rcrida.jcsp.constraints.nary.NogoodConstraint;
 import io.github.rcrida.jcsp.constraints.nary.ProductConstraint;
 import io.github.rcrida.jcsp.constraints.nary.NaryTuplesConstraint;
 import io.github.rcrida.jcsp.constraints.nary.SumConstraint;
@@ -94,7 +95,7 @@ public class ConstraintSatisfactionProblem {
      * propagation. Any other constraint type referencing such a variable is rejected at build time.
      */
     private static final Set<Class<? extends Constraint>> CONTINUOUS_COMPATIBLE_CONSTRAINTS =
-            Set.of(SumConstraint.class, LinearConstraint.class, UnaryComparatorConstraint.class, BinaryComparatorConstraint.class, BinaryOffsetConstraint.class, AbsoluteDifferenceConstraint.class, DivisionConstraint.class, LexConstraint.class, CumulativeConstraint.class, MaxConstraint.class, MinConstraint.class, ProductConstraint.class, DiffnConstraint.class);
+            Set.of(SumConstraint.class, LinearConstraint.class, UnaryComparatorConstraint.class, BinaryComparatorConstraint.class, BinaryOffsetConstraint.class, AbsoluteDifferenceConstraint.class, DivisionConstraint.class, LexConstraint.class, CumulativeConstraint.class, MaxConstraint.class, MinConstraint.class, ProductConstraint.class, DiffnConstraint.class, NogoodConstraint.class);
 
     Map<Variable<?>, Domain<?>> variableDomains;
     @Getter(AccessLevel.NONE) @EqualsAndHashCode.Exclude ConstraintGraph constraintGraph;

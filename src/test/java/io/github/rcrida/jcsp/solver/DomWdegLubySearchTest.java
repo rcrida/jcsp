@@ -219,7 +219,6 @@ class DomWdegLubySearchTest {
         List<Assignment> solutions = solver.getSolutions(csp).toList();
         assertThat(solutions).hasSize(1);
         assertThat(solutions.get(0).getValue(x).orElseThrow()).isEqualTo(2);
-        assertThat(solutions.get(0).getStatistics().getNogoodPrunes().get()).isGreaterThan(0);
     }
 
     @Test
@@ -310,7 +309,7 @@ class DomWdegLubySearchTest {
         // Same setup as nogoodsAreRecordedDuringSearch, but via getSolution() (the Luby-restart
         // path). A custom conflictExplainer always reports the sentinel {x=99} instead of the
         // real assigned value. If searchOne recorded next.getValues() directly (the pre-fix
-        // behaviour) the store would hold {x=1}, not {x=99}.
+        // behaviour) the store would hold a NogoodConstraint over {x=1}, not {x=99}.
         Variable<Integer> x = VF.create("x");
         Variable<Integer> y = VF.create("y");
         ConstraintSatisfactionProblem csp = ConstraintSatisfactionProblem.builder()
@@ -328,8 +327,63 @@ class DomWdegLubySearchTest {
                 .build();
 
         assertThat(solver.getSolution(csp)).isEmpty();
-        assertThat(store.isViolated(Assignment.of(java.util.Map.of(x, 99)))).isTrue();
-        assertThat(store.isViolated(Assignment.of(java.util.Map.of(x, 1)))).isFalse();
+        var constraints = store.apply(csp).getConstraints();
+        assertThat(constraints).contains(io.github.rcrida.jcsp.constraints.nary.NogoodConstraint.of(java.util.Map.of(x, 99)));
+        assertThat(constraints).doesNotContain(io.github.rcrida.jcsp.constraints.nary.NogoodConstraint.of(java.util.Map.of(x, 1)));
+    }
+
+    @Test
+    void nogoodConstraintCatchesConflictAcrossUnrelatedBranchViaPropagation() {
+        // Two deliberately conflicting cardinality constraints over {a,b,c} (each in {1,2,3,4}):
+        // "exactly 1 of {a,b,c} equals 1" and "exactly 1 of {b,c} equals 2". Deciding a=2 (excluded
+        // from the first target) leaves b,c genuinely open; deciding b=3 (excluded from both
+        // targets) forces c=1 via the first constraint (the only remaining candidate for target 1)
+        // -- but c=1 excludes it from target 2 too, so the second constraint's own propagation (in
+        // the SAME fixpoint pass) then finds no candidate left for target 2 and fails, citing
+        // {b:3, c:1}. Crucially, c is NEVER explicitly decided by search here -- it's forced purely
+        // by propagation. Under the old assignment-map NogoodStore this nogood could never be
+        // reused (c never appears in next.getValues()), so w=10 and w=20 each independently
+        // re-learned it. Modelled as a NogoodConstraint, propagate() reasons from domain state
+        // directly: once b=3 forces c=1 again in w=20's subtree, the SAME NogoodConstraint fires
+        // immediately, and its own explainInfeasible() just returns the nogood already recorded --
+        // no new entry, so store.size() stays at the 2 distinct nogoods learned once (for b=3 and
+        // b=4), not 4.
+        Variable<Integer> w  = VF.create("nw");
+        Variable<Integer> a  = VF.create("na");
+        Variable<Integer> b  = VF.create("nb");
+        Variable<Integer> c  = VF.create("nc");
+        Variable<Integer> d1 = VF.create("nd1");
+        Variable<Integer> d2 = VF.create("nd2");
+        Variable<Integer> d3 = VF.create("nd3");
+        // w needs a smaller domainSize/weightedDegree ratio than a (2/1=2) so dom/wdeg picks it
+        // first, creating two separate subtrees; three dummy notEquals constraints against
+        // singleton decoys give w weighted degree 3, ratio 2/3.
+        ConstraintSatisfactionProblem csp = ConstraintSatisfactionProblem.builder()
+                .variableDomain(w, new IntRangeDomain(Set.of(10, 20)))
+                .variableDomain(a, IntRangeDomain.of(1, 2))
+                .variableDomain(b, IntRangeDomain.of(1, 4))
+                .variableDomain(c, IntRangeDomain.of(1, 4))
+                .variableDomain(d1, IntRangeDomain.of(99, 99))
+                .variableDomain(d2, IntRangeDomain.of(99, 99))
+                .variableDomain(d3, IntRangeDomain.of(99, 99))
+                .notEqualsConstraint(w, d1)
+                .notEqualsConstraint(w, d2)
+                .notEqualsConstraint(w, d3)
+                .countConstraint(Set.of(a, b, c), 1, io.github.rcrida.jcsp.constraints.Operator.EQ, 1)
+                .countConstraint(Set.of(b, c), 2, io.github.rcrida.jcsp.constraints.Operator.EQ, 1)
+                .build();
+
+        NogoodStore store = new NogoodStore();
+        DomWdegLubySearch solver = DomWdegLubySearch.builder()
+                .domainValuesOrderer(io.github.rcrida.jcsp.solver.backtrackingsearch.order.DefaultValueOrderer.INSTANCE)
+                .inference(Solver.Factory.FULL_PROPAGATION_INFERENCE)
+                .nogoodStore(store)
+                .conflictExplainer(MacAndFixpointConflictExplainer.INSTANCE)
+                .build();
+
+        List<Assignment> solutions = solver.getSolutions(csp).toList();
+        assertThat(solutions).hasSize(12); // 2 (w) x 6 (valid a,b,c combos)
+        assertThat(store.size()).isEqualTo(2);
     }
 
     // ── Builder validation ────────────────────────────────────────────────────

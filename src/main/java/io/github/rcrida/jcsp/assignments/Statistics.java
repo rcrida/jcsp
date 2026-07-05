@@ -16,8 +16,13 @@ import java.util.concurrent.atomic.AtomicInteger;
  *   <li>{@code restarts} — completed Luby restarts before a solution was found (backtracking search only)</li>
  *   <li>{@code steps} — local search moves taken to reach the solution (local search solvers only)</li>
  *   <li>{@code nogoodsLearned} — nogoods recorded after a domain-wipeout during search (backtracking search only)</li>
- *   <li>{@code nogoodPrunes} — candidate assignments skipped because a learned nogood subsumed them (backtracking search only)</li>
  * </ul>
+ *
+ * <p>There is deliberately no separate "nogood prunes" counter: nogoods are modelled as ordinary
+ * {@link io.github.rcrida.jcsp.constraints.nary.NogoodConstraint}s that join the same propagation
+ * fixpoint as every other constraint (see {@link io.github.rcrida.jcsp.assignments.NogoodStore}),
+ * so a candidate rejected because of a learned nogood is architecturally indistinguishable from
+ * one rejected by any other constraint — it's simply counted under {@code backtracks}.
  */
 @Value
 public class Statistics {
@@ -27,7 +32,6 @@ public class Statistics {
     AtomicInteger restarts = new AtomicInteger();
     AtomicInteger steps = new AtomicInteger();
     AtomicInteger nogoodsLearned = new AtomicInteger();
-    AtomicInteger nogoodPrunes = new AtomicInteger();
 
     void incrementNodesExplored() {
         nodesExplored.incrementAndGet();
@@ -53,10 +57,6 @@ public class Statistics {
         nogoodsLearned.incrementAndGet();
     }
 
-    public void incrementNogoodPrunes() {
-        nogoodPrunes.incrementAndGet();
-    }
-
     void add(Statistics other) {
         nodesExplored.addAndGet(other.nodesExplored.get());
         constraintChecks.addAndGet(other.constraintChecks.get());
@@ -64,6 +64,5 @@ public class Statistics {
         restarts.addAndGet(other.restarts.get());
         steps.addAndGet(other.steps.get());
         nogoodsLearned.addAndGet(other.nogoodsLearned.get());
-        nogoodPrunes.addAndGet(other.nogoodPrunes.get());
     }
 }

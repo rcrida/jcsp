@@ -132,18 +132,15 @@ public class DomWdegLubySearch implements Solver {
                         limits.markLimitReached(next.getStatistics());
                         return Stream.empty();
                     }
-                    if (nogoodStore.isViolated(next)) {
-                        next.getStatistics().incrementNogoodPrunes();
-                        return Stream.empty();
-                    }
-                    if (!next.isConsistent(csp)) {
+                    ConstraintSatisfactionProblem cspWithNogoods = nogoodStore.apply(csp);
+                    if (!next.isConsistent(cspWithNogoods)) {
                         next.getStatistics().incrementBacktracks();
                         return Stream.empty();
                     }
-                    Optional<ConstraintSatisfactionProblem> inferred = inference.apply(csp, variable, next);
+                    Optional<ConstraintSatisfactionProblem> inferred = inference.apply(cspWithNogoods, variable, next);
                     if (inferred.isEmpty()) {
-                        selector.incrementWeights(csp, variable, next);
-                        nogoodStore.record(conflictExplainer.explain(csp, variable, next));
+                        selector.incrementWeights(cspWithNogoods, variable, next);
+                        nogoodStore.record(conflictExplainer.explain(cspWithNogoods, variable, next));
                         next.getStatistics().incrementBacktracks();
                         next.getStatistics().incrementNogoodsLearned();
                         return Stream.empty();
@@ -170,18 +167,15 @@ public class DomWdegLubySearch implements Solver {
                 limits.markLimitReached(stats);
                 throw LimitsExceeded.INSTANCE;
             }
-            if (nogoodStore.isViolated(next)) {
-                next.getStatistics().incrementNogoodPrunes();
-                continue;
-            }
-            if (!next.isConsistent(csp)) {
+            ConstraintSatisfactionProblem cspWithNogoods = nogoodStore.apply(csp);
+            if (!next.isConsistent(cspWithNogoods)) {
                 next.getStatistics().incrementBacktracks();
                 continue;
             }
-            Optional<ConstraintSatisfactionProblem> inferred = inference.apply(csp, variable, next);
+            Optional<ConstraintSatisfactionProblem> inferred = inference.apply(cspWithNogoods, variable, next);
             if (inferred.isEmpty()) {
-                selector.incrementWeights(csp, variable, next);
-                nogoodStore.record(conflictExplainer.explain(csp, variable, next));
+                selector.incrementWeights(cspWithNogoods, variable, next);
+                nogoodStore.record(conflictExplainer.explain(cspWithNogoods, variable, next));
                 next.getStatistics().incrementBacktracks();
                 next.getStatistics().incrementNogoodsLearned();
                 if (++failures[0] >= budget) throw BudgetExceeded.INSTANCE;
