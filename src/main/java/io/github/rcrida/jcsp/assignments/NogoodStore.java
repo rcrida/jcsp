@@ -12,6 +12,7 @@ import lombok.Value;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicReference;
 
 /**
  * Accumulates learned nogoods during backtracking search, as actual {@link NogoodConstraint}s
@@ -31,9 +32,21 @@ import java.util.concurrent.ConcurrentHashMap;
  * <p>
  * Follows the same mutable-runtime-state-inside-@Value pattern as {@link SolverLimits}: the store
  * is immutable as a configuration object but accumulates nogoods during search. The internal set
- * is excluded from {@code equals}/{@code hashCode}/{@code toString}. A single {@code NogoodStore}
- * instance is shared across Luby restarts so learned nogoods survive and benefit every subsequent
- * restart.
+ * (and the cached augmented CSP described below) are excluded from
+ * {@code equals}/{@code hashCode}/{@code toString}. A single {@code NogoodStore} instance is shared
+ * across Luby restarts so learned nogoods survive and benefit every subsequent restart.
+ * <p>
+ * <b>Graph caching.</b> {@link #apply} augments a CSP with the recorded nogoods. Building a CSP
+ * whose constraint set has grown forces {@link ConstraintSatisfactionProblem} to recompute its
+ * constraint graph (neighbours, binary decomposition, cycle/connectivity analysis) — and
+ * {@code apply} is called for every candidate at every search node. Since a search's base
+ * constraints and variable set are fixed and only domains change between nodes, the augmented graph
+ * depends solely on the nogood set. {@code apply} therefore caches the last augmented CSP and, while
+ * the nogood set is unchanged, serves subsequent nodes by swapping only the domains into that cached
+ * CSP via {@link ConstraintSatisfactionProblem#toBuilder()} — whose constraint-set-equality reuse
+ * path returns the cached graph untouched. {@link #record} invalidates the cache whenever it adds a
+ * genuinely new nogood, so the graph is rebuilt at most once per distinct learned nogood rather than
+ * once per node.
  */
 @Value
 public class NogoodStore {
@@ -42,6 +55,16 @@ public class NogoodStore {
     @ToString.Exclude
     @Getter(AccessLevel.NONE)
     Set<NogoodConstraint> nogoods = ConcurrentHashMap.newKeySet();
+
+    /**
+     * The last CSP produced by {@link #apply}, reused as a graph template while the nogood set is
+     * unchanged. Holds a final reference to mutable runtime state (same pattern as the
+     * {@code nogoods} set); {@code null} means "rebuild on next {@link #apply}".
+     */
+    @EqualsAndHashCode.Exclude
+    @ToString.Exclude
+    @Getter(AccessLevel.NONE)
+    AtomicReference<ConstraintSatisfactionProblem> cachedAugmented = new AtomicReference<>();
 
     public NogoodStore() {}
 
@@ -57,7 +80,9 @@ public class NogoodStore {
      */
     public void record(Map<Variable<?>, Object> nogood) {
         if (nogood.isEmpty()) return;
-        nogoods.add(NogoodConstraint.of(nogood));
+        if (nogoods.add(NogoodConstraint.of(nogood))) {
+            cachedAugmented.set(null); // nogood set grew: the cached augmented graph is now stale
+        }
     }
 
     /**
@@ -69,7 +94,19 @@ public class NogoodStore {
      */
     public ConstraintSatisfactionProblem apply(ConstraintSatisfactionProblem csp) {
         if (nogoods.isEmpty()) return csp;
-        return csp.toBuilder().constraints(nogoods).build();
+        ConstraintSatisfactionProblem cached = cachedAugmented.get();
+        if (cached != null) {
+            // Reuse the cached augmented graph; only the domains differ between search nodes.
+            // toBuilder() carries the cached constraints + graph, so swapping domains hits the
+            // constructor's constraint-set-equality reuse path (no graph recomputation).
+            return cached.toBuilder()
+                    .clearVariableDomains()
+                    .variableDomains(csp.getVariableDomains())
+                    .build();
+        }
+        ConstraintSatisfactionProblem built = csp.toBuilder().constraints(nogoods).build();
+        cachedAugmented.set(built);
+        return built;
     }
 
     public int size() {
