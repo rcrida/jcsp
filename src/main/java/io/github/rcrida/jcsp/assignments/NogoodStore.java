@@ -47,6 +47,12 @@ import java.util.concurrent.atomic.AtomicReference;
  * path returns the cached graph untouched. {@link #record} invalidates the cache whenever it adds a
  * genuinely new nogood, so the graph is rebuilt at most once per distinct learned nogood rather than
  * once per node.
+ * <p>
+ * <b>No forgetting policy.</b> The nogood set is deduplicated but never pruned — it grows
+ * monotonically for the lifetime of a search (and across its Luby restarts). This is intentional
+ * for the problem sizes this solver targets; a very long search would eventually want a
+ * relevance-bounded nogood database (evicting low-utility nogoods) to cap the per-node propagation
+ * and memory cost, which is not implemented here.
  */
 @Value
 public class NogoodStore {
@@ -80,6 +86,10 @@ public class NogoodStore {
      */
     public void record(Map<Variable<?>, Object> nogood) {
         if (nogood.isEmpty()) return;
+        // TODO: implement a forgetting policy. The set is deduplicated but never pruned, so it grows
+        //  monotonically across a search and its Luby restarts, capping per-node propagation and
+        //  memory cost only by the number of distinct nogoods learned. A relevance-bounded database
+        //  (e.g. evict low-activity nogoods past a size threshold) would bound both for long searches.
         if (nogoods.add(NogoodConstraint.of(nogood))) {
             cachedAugmented.set(null); // nogood set grew: the cached augmented graph is now stale
         }

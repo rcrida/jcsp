@@ -33,6 +33,9 @@ public class NogoodConstraint extends NaryConstraint implements Propagatable {
     @NonNull private final Map<Variable<?>, Object> forbidden;
 
     public static NogoodConstraint of(@NonNull Map<Variable<?>, Object> forbidden) {
+        // An empty forbidden map is the empty clause: propagate() would report infeasible for every
+        // state (undeterminedCount == 0), pruning the whole search. Callers must not record one.
+        assert !forbidden.isEmpty() : "NogoodConstraint requires at least one forbidden assignment";
         return NogoodConstraint.builder()
                 .variables(forbidden.keySet())
                 .forbidden(Map.copyOf(forbidden))

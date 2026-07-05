@@ -10,6 +10,7 @@ import org.junit.jupiter.api.Test;
 import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 public class NogoodConstraintTest {
     static final Variable.Factory F = Variable.Factory.INSTANCE;
@@ -28,6 +29,12 @@ public class NogoodConstraintTest {
         Variable<Integer> x = F.create("x"), y = F.create("y");
         var c = NogoodConstraint.of(Map.of(x, 1, y, 2));
         assertThat(c.getVariables()).containsExactlyInAnyOrder(x, y);
+    }
+
+    @Test
+    void of_emptyForbidden_asserts() {
+        assertThatThrownBy(() -> NogoodConstraint.of(Map.of()))
+                .isInstanceOf(AssertionError.class);
     }
 
     // --- isSatisfiedBy ---
