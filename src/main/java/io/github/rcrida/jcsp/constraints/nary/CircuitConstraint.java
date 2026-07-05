@@ -154,6 +154,90 @@ public class CircuitConstraint extends NaryConstraint implements Propagatable, B
         return (DiscreteDomain<Integer>) updated.getOrDefault(v, domains.get(v));
     }
 
+    /**
+     * Replays {@link #propagate}'s three passes (threading the same narrowed domains, since a
+     * self-loop or singleton-propagation prune in an earlier pass can change a later pass's
+     * findings) until the same failing check is found, then attributes the conflict:
+     * <ul>
+     *     <li>self-loop removal — the domain that was already pinned to its own self-loop value
+     *     is sufficient on its own, via {@link Propagatable#addIfSingleton};</li>
+     *     <li>duplicate-successor pruning — both nodes forced to the same successor value are
+     *     jointly responsible, since neither singleton alone explains the conflict without the
+     *     other;</li>
+     *     <li>sub-tour closure — every node on the closed chain is cited via
+     *     {@link Propagatable#allSingletonReason}, since each is a singleton by construction
+     *     (only assigned nodes are followed) and the closure is a joint property of the whole
+     *     chain, not any single link.</li>
+     * </ul>
+     */
+    @Override
+    public Map<Variable<?>, Object> explainInfeasible(@NonNull Map<Variable<?>, Domain<?>> domains) {
+        int n = successors.size();
+        Map<Variable<?>, Domain<?>> updated = new HashMap<>();
+
+        if (n > 1) {
+            for (int i = 0; i < n; i++) {
+                DiscreteDomain<Integer> dom = currentDomain(i, domains, updated);
+                int self = i + 1;
+                if (dom.contains(self)) {
+                    DiscreteDomain<Integer> pruned = dom.toBuilder().delete(self).build();
+                    if (pruned.isEmpty()) {
+                        Map<Variable<?>, Object> reason = new HashMap<>();
+                        Propagatable.addIfSingleton(dom, successors.get(i), reason);
+                        return reason;
+                    }
+                    updated.put(successors.get(i), pruned);
+                }
+            }
+        }
+
+        for (int i = 0; i < n; i++) {
+            DiscreteDomain<Integer> domI = currentDomain(i, domains, updated);
+            if (domI.isSingleton()) {
+                int j = domI.singleValue().orElseThrow();
+                for (int k = 0; k < n; k++) {
+                    if (k == i) continue;
+                    DiscreteDomain<Integer> domK = currentDomain(k, domains, updated);
+                    if (domK.contains(j)) {
+                        DiscreteDomain<Integer> pruned = domK.toBuilder().delete(j).build();
+                        if (pruned.isEmpty()) {
+                            Map<Variable<?>, Object> reason = new HashMap<>();
+                            Propagatable.addIfSingleton(domI, successors.get(i), reason);
+                            Propagatable.addIfSingleton(domK, successors.get(k), reason);
+                            return reason;
+                        }
+                        updated.put(successors.get(k), pruned);
+                    }
+                }
+            }
+        }
+
+        Map<Integer, Integer> assigned = new HashMap<>();
+        for (int i = 0; i < n; i++) {
+            DiscreteDomain<Integer> dom = currentDomain(i, domains, updated);
+            if (dom.isSingleton()) {
+                assigned.put(i, dom.singleValue().orElseThrow() - 1);
+            }
+        }
+        for (int start = 0; start < n; start++) {
+            if (!assigned.containsKey(start)) continue;
+            Set<Integer> visited = new LinkedHashSet<>();
+            int current = start;
+            while (assigned.containsKey(current) && !visited.contains(current)) {
+                visited.add(current);
+                current = assigned.get(current);
+            }
+            if (visited.contains(current) && visited.size() < n) {
+                List<Variable<Integer>> chainVars = visited.stream().map(successors::get).toList();
+                Map<Variable<?>, Domain<?>> currentDomains = new HashMap<>(domains);
+                currentDomains.putAll(updated);
+                return Propagatable.allSingletonReason(chainVars, currentDomains);
+            }
+        }
+
+        return Map.of();
+    }
+
     @Override
     public String getRelation() {
         return "circuit(n=" + successors.size() + ")";

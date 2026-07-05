@@ -180,6 +180,82 @@ public class CircuitConstraintTest {
         assertThat(result.get()).isEmpty();
     }
 
+    // --- explainInfeasible ---
+
+    @Test
+    void explainInfeasible_selfLoopForced_attributesSingleNode() {
+        // Node 1 can only point to itself -> the singleton self-loop alone is a sufficient reason.
+        var c = CircuitConstraint.of(List.of(s0, s1));
+        var domains = Map.<Variable<?>, Domain<?>>of(s0, dom(1), s1, dom(1, 2));
+        assertThat(c.propagate(domains)).isEmpty();
+        assertThat(c.explainInfeasible(domains)).containsOnly(Map.entry(s0, 1));
+    }
+
+    @Test
+    void explainInfeasible_duplicateSuccessor_attributesBothNodes() {
+        // s0 fixed to 3; s1's only value is 3 -> both singletons pointing to the same node 3.
+        var c = CircuitConstraint.of(List.of(s0, s1, s2));
+        var domains = Map.<Variable<?>, Domain<?>>of(s0, dom(3), s1, dom(3), s2, dom(1, 2));
+        assertThat(c.propagate(domains)).isEmpty();
+        assertThat(c.explainInfeasible(domains)).containsOnly(Map.entry(s0, 3), Map.entry(s1, 3));
+    }
+
+    @Test
+    void explainInfeasible_prematureCycle_attributesWholeChain() {
+        // s0=2, s1=1 form the sub-cycle 1->2->1 before all 4 nodes are covered.
+        var c = CircuitConstraint.of(List.of(s0, s1, s2, s3));
+        var domains = Map.<Variable<?>, Domain<?>>of(
+                s0, dom(2), s1, dom(1), s2, dom(1, 4), s3, dom(1, 3));
+        assertThat(c.propagate(domains)).isEmpty();
+        assertThat(c.explainInfeasible(domains)).containsOnly(Map.entry(s0, 2), Map.entry(s1, 1));
+    }
+
+    @Test
+    void explainInfeasible_noConflict_returnsEmptyReason() {
+        var c = CircuitConstraint.of(List.of(s0, s1, s2));
+        var domains = Map.<Variable<?>, Domain<?>>of(
+                s0, dom(2, 3), s1, dom(1, 3), s2, dom(1, 2));
+        assertThat(c.explainInfeasible(domains)).isEmpty();
+    }
+
+    @Test
+    void explainInfeasible_singleNode_returnsEmptyReason() {
+        // n == 1: self-loop removal is skipped entirely (n > 1 guard is false).
+        var c = CircuitConstraint.of(List.of(s0));
+        var domains = Map.<Variable<?>, Domain<?>>of(s0, dom(1));
+        assertThat(c.explainInfeasible(domains)).isEmpty();
+    }
+
+    @Test
+    void explainInfeasible_selfLoopPrunedWithoutEmptying_cascadesToValidCircuit() {
+        // s0's self-loop (1) is pruned from {1,3} leaving {3} (non-empty) rather than emptying it;
+        // that singleton then cascades through singleton-propagation into a fully valid circuit
+        // 1->3->2->1, so no conflict is ever found -- exercises the self-loop prune's non-empty path.
+        var c = CircuitConstraint.of(List.of(s0, s1, s2));
+        var domains = Map.<Variable<?>, Domain<?>>of(s0, dom(1, 3), s1, dom(1, 3), s2, dom(1, 2));
+        assertThat(c.explainInfeasible(domains)).isEmpty();
+    }
+
+    @Test
+    void explainInfeasible_chainReachesUnassignedNode_returnsEmptyReason() {
+        // s0 is fixed to node 2, but node 2 (s1) is left open -- the chain from s0 breaks off at
+        // an unassigned node rather than closing a cycle, so subtour detection finds nothing.
+        var c = CircuitConstraint.of(List.of(s0, s1, s2, s3));
+        var domains = Map.<Variable<?>, Domain<?>>of(
+                s0, dom(2), s1, dom(1, 3), s2, dom(1, 4), s3, dom(1, 3));
+        assertThat(c.explainInfeasible(domains)).isEmpty();
+    }
+
+    @Test
+    void explainInfeasible_fullValidCircuit_returnsEmptyReason() {
+        // 1->2->3->4->1: every node singleton, forming one complete Hamiltonian circuit across
+        // all four nodes -- the chain closes with visited.size() == n, so it's not a sub-tour.
+        var c = CircuitConstraint.of(List.of(s0, s1, s2, s3));
+        var domains = Map.<Variable<?>, Domain<?>>of(
+                s0, dom(2), s1, dom(3), s2, dom(4), s3, dom(1));
+        assertThat(c.explainInfeasible(domains)).isEmpty();
+    }
+
     // --- toString / equality ---
 
     @Test
