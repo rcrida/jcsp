@@ -87,7 +87,7 @@ Solver.Factory.INSTANCE.createSolver(csp, objective).getSolutions().forEach(Syst
 - `LexConstraint` — clips the first non-forced-equal position's lesser upper bound and greater lower bound
 - `CumulativeConstraint` — event-based timetabling propagator; start variables may be `Variable<Double>` with `IntervalDomain` (continuous scheduling) or `Variable<Integer>` with `IntRangeDomain` (integer scheduling); durations, resources, and limit are `double` in both cases
 
-Mixed discrete/interval pairs are supported for `BinaryComparatorConstraint`, `BinaryOffsetConstraint`, and `AbsoluteDifferenceConstraint`: the discrete variable's numeric range is read to clip the interval variable's bounds, while the discrete side is left for AC3 to filter. Any other constraint type referencing an `IntervalDomain` variable is rejected with `IllegalArgumentException` at build time.
+`BinaryComparatorConstraint`, `BinaryOffsetConstraint`, and `AbsoluteDifferenceConstraint` narrow via a shared bounds helper that works across any combination of discrete and interval domains, so a plain discrete/discrete pair gets real value-deletion narrowing too — not just mixed discrete/interval pairs, and not left entirely to AC3. (`BinaryComparatorConstraint` also backs non-numeric orderings like `IncreasingConstraint`/`DecreasingConstraint`, so it only applies this narrowing when both sides are actually numeric.) Any other constraint type referencing an `IntervalDomain` variable is rejected with `IllegalArgumentException` at build time.
 
 ```java
 Variable<Double> rent = F.create("rent");
@@ -289,7 +289,7 @@ InitialAssignmentFactory factory = FallbackAssignmentFactory.builder()
 <dependency>
     <groupId>io.github.rcrida</groupId>
     <artifactId>jcsp</artifactId>
-    <version>2.30.0</version>
+    <version>2.31.0</version>
 </dependency>
 ```
 
