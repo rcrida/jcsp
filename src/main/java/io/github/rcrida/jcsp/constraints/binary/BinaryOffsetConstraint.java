@@ -3,7 +3,6 @@ package io.github.rcrida.jcsp.constraints.binary;
 import io.github.rcrida.jcsp.consistency.Propagatable;
 import io.github.rcrida.jcsp.constraints.NumericBounds;
 import io.github.rcrida.jcsp.constraints.Operator;
-import io.github.rcrida.jcsp.domains.BoundedDomain;
 import io.github.rcrida.jcsp.domains.Domain;
 import io.github.rcrida.jcsp.variables.Variable;
 import lombok.EqualsAndHashCode;
@@ -86,17 +85,14 @@ public class BinaryOffsetConstraint<N extends Number> extends BinaryConstraint<N
     }
 
     @Override
-    @SuppressWarnings({"unchecked", "rawtypes"})
+    @SuppressWarnings("unchecked")
     public Optional<Map<Variable<?>, Domain<?>>> propagate(Map<Variable<?>, Domain<?>> domains) {
         if (operator == Operator.NEQ) return Optional.of(Map.of());
-        Domain<?> lDomain = domains.get(getLeft());
-        Domain<?> rDomain = domains.get(getRight());
-        boolean lBounded = lDomain instanceof BoundedDomain<?>;
-        boolean rBounded = rDomain instanceof BoundedDomain<?>;
-        if (!lBounded && !rBounded) return Optional.of(Map.of());
+        Domain<N> lDomain = (Domain<N>) domains.get(getLeft());
+        Domain<N> rDomain = (Domain<N>) domains.get(getRight());
         double o = offset.doubleValue();
-        double lMin = NumericBounds.min((Domain<N>) lDomain), lMax = NumericBounds.max((Domain<N>) lDomain);
-        double rMin = NumericBounds.min((Domain<N>) rDomain), rMax = NumericBounds.max((Domain<N>) rDomain);
+        double lMin = NumericBounds.min(lDomain), lMax = NumericBounds.max(lDomain);
+        double rMin = NumericBounds.min(rDomain), rMax = NumericBounds.max(rDomain);
         double newLMin = lMin, newLMax = lMax, newRMin = rMin, newRMax = rMax;
         if (operator == Operator.LEQ || operator == Operator.LT) {
             newLMax = Math.min(lMax, rMax - o);
@@ -111,18 +107,31 @@ public class BinaryOffsetConstraint<N extends Number> extends BinaryConstraint<N
             newRMax = Math.min(rMax, lMax + o);
         }
         if (newLMin > newLMax) return Optional.empty();
+
         Map<Variable<?>, Domain<?>> updated = new HashMap<>();
-        if (lBounded && (newLMin != lMin || newLMax != lMax)) { BoundedDomain raw = (BoundedDomain) lDomain; updated.put(getLeft(),  raw.withBounds(newLMin, newLMax)); }
-        if (rBounded && (newRMin != rMin || newRMax != rMax)) { BoundedDomain raw = (BoundedDomain) rDomain; updated.put(getRight(), raw.withBounds(newRMin, newRMax)); }
+        Optional<Domain<N>> prunedL = NumericBounds.narrow(lDomain, newLMin, newLMax);
+        if (prunedL.isPresent()) {
+            if (prunedL.get().isEmpty()) return Optional.empty();
+            updated.put(getLeft(), prunedL.get());
+        }
+        Optional<Domain<N>> prunedR = NumericBounds.narrow(rDomain, newRMin, newRMax);
+        if (prunedR.isPresent()) {
+            if (prunedR.get().isEmpty()) return Optional.empty();
+            updated.put(getRight(), prunedR.get());
+        }
         return Optional.of(updated);
     }
 
     /**
      * When bounds narrowing empties the feasible range, attributes the conflict to whichever
      * side already holds a singleton domain — the other side is omitted since no single value
-     * can be blamed for it. Empty when neither side is singleton. Mirrors
-     * {@link BinaryComparatorConstraint#explainInfeasible}; see its javadoc for the narrow
-     * scope of this benefit (mixed discrete/bounded pairs during search).
+     * can be blamed for it. Empty when neither side is singleton. Structurally mirrors
+     * {@link BinaryComparatorConstraint#explainInfeasible}, but unlike that constraint,
+     * {@code propagate()} here narrows discrete/discrete pairs too (via
+     * {@link io.github.rcrida.jcsp.constraints.NumericBounds#narrow}, not just
+     * {@link io.github.rcrida.jcsp.domains.BoundedDomain#withBounds}), so this method's
+     * infeasible branch is reachable for plain discrete pairs as well, not only mixed
+     * discrete/bounded ones.
      */
     @Override
     public Map<Variable<?>, Object> explainInfeasible(@NonNull Map<Variable<?>, Domain<?>> domains) {

@@ -2,6 +2,7 @@ package io.github.rcrida.jcsp.constraints.binary;
 
 import io.github.rcrida.jcsp.constraints.Operator;
 import io.github.rcrida.jcsp.domains.Domain;
+import io.github.rcrida.jcsp.domains.DiscreteDomain;
 import io.github.rcrida.jcsp.domains.DomainObjectSet;
 import io.github.rcrida.jcsp.domains.IntRangeDomain;
 import io.github.rcrida.jcsp.domains.IntervalDomain;
@@ -14,6 +15,7 @@ import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
 
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Stream;
 
@@ -188,12 +190,42 @@ public class BinaryOffsetConstraintTest {
         assertThat(result.get()).isEmpty();
     }
 
-    @Test void propagate_bothDiscrete_skipped() {
+    @Test void propagate_bothDiscrete_narrowsRightMin() {
+        // il=[0,5], ir=[0,10], il+3<=ir: il.max=min(5,10-3)=7->5 unchanged; ir.min=max(0,0+3)=3 (prunes 0,1,2)
         Variable<Integer> il = Variable.Factory.INSTANCE.create("il_off"), ir = Variable.Factory.INSTANCE.create("ir_off");
         var result = BinaryOffsetConstraint.of(il, 3, Operator.LEQ, ir)
-                .propagate(Map.of(il, IntRangeDomain.of(0, 5), ir, IntRangeDomain.of(0, 10)));
-        assertThat(result).isPresent();
-        assertThat(result.get()).isEmpty();
+                .propagate(Map.of(il, IntRangeDomain.of(0, 5), ir, IntRangeDomain.of(0, 10))).orElseThrow();
+        assertThat(result.containsKey(il)).isFalse();
+        assertThat(((DiscreteDomain<Integer>) result.get(ir)).toList()).containsExactly(3, 4, 5, 6, 7, 8, 9, 10);
+    }
+
+    @Test void propagate_bothDiscrete_infeasible() {
+        // il=[5,10], ir=[0,3], il+3<=ir: il.max=min(10,3-3)=0 < il.min=5 -> infeasible
+        Variable<Integer> il = Variable.Factory.INSTANCE.create("il_off2"), ir = Variable.Factory.INSTANCE.create("ir_off2");
+        var result = BinaryOffsetConstraint.of(il, 3, Operator.LEQ, ir)
+                .propagate(Map.of(il, IntRangeDomain.of(5, 10), ir, IntRangeDomain.of(0, 3)));
+        assertThat(result).isEmpty();
+    }
+
+    @Test void propagate_bothDiscrete_narrowingEmptiesGappedDomain_infeasible() {
+        // l={0,10} (gap domain), r={4,5}, l+0==r: l narrows to [max(0,4),min(10,5)]=[4,5], a
+        // non-empty numeric range, but neither 0 nor 10 lies in it -> narrowing empties l even
+        // though the fast newLMin<=newLMax check alone would not have caught this
+        Variable<Integer> l = Variable.Factory.INSTANCE.create("l_off_gap"), r = Variable.Factory.INSTANCE.create("r_off_gap");
+        var lDomain = new IntRangeDomain(Set.of(0, 10));
+        var rDomain = new IntRangeDomain(Set.of(4, 5));
+        var result = BinaryOffsetConstraint.of(l, 0, Operator.EQ, r).propagate(Map.of(l, lDomain, r, rDomain));
+        assertThat(result).isEmpty();
+    }
+
+    @Test void propagate_bothDiscrete_narrowingEmptiesGappedRightDomain_infeasible() {
+        // l={4,5}, r={0,10} (gap domain), l+0==r: l is unchanged (already within [4,5]), but r
+        // narrows to [4,5] and neither 0 nor 10 lies in it -> narrowing empties r this time
+        Variable<Integer> l = Variable.Factory.INSTANCE.create("l_off_gap2"), r = Variable.Factory.INSTANCE.create("r_off_gap2");
+        var lDomain = new IntRangeDomain(Set.of(4, 5));
+        var rDomain = new IntRangeDomain(Set.of(0, 10));
+        var result = BinaryOffsetConstraint.of(l, 0, Operator.EQ, r).propagate(Map.of(l, lDomain, r, rDomain));
+        assertThat(result).isEmpty();
     }
 
     @Test void propagate_leftBounded_rightDiscrete_clipsLeft() {
