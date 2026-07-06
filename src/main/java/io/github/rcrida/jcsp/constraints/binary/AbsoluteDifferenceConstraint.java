@@ -3,7 +3,6 @@ package io.github.rcrida.jcsp.constraints.binary;
 import io.github.rcrida.jcsp.consistency.Propagatable;
 import io.github.rcrida.jcsp.constraints.NumericBounds;
 import io.github.rcrida.jcsp.constraints.Operator;
-import io.github.rcrida.jcsp.domains.BoundedDomain;
 import io.github.rcrida.jcsp.domains.Domain;
 import io.github.rcrida.jcsp.variables.Variable;
 import lombok.EqualsAndHashCode;
@@ -17,20 +16,21 @@ import java.util.Optional;
 /**
  * A binary constraint enforcing {@code |left - right| op bound} over numeric variables.
  * <p>
- * For {@link io.github.rcrida.jcsp.domains.BoundedDomain} (e.g.
- * {@link io.github.rcrida.jcsp.domains.IntervalDomain}) variables, propagation applies
- * interval-arithmetic bounds narrowing:
+ * Propagation applies interval-arithmetic bounds narrowing via {@link NumericBounds}, which
+ * narrows both {@link io.github.rcrida.jcsp.domains.BoundedDomain} (e.g.
+ * {@link io.github.rcrida.jcsp.domains.IntervalDomain}) sides via {@code withBounds} and
+ * discrete sides via value deletion — so a plain discrete/discrete pair gets real pruning
+ * too, not only mixed discrete/bounded ones:
  * <ul>
  *   <li>{@link Operator#LEQ}/{@link Operator#LT}: clips both domains symmetrically —
  *       {@code x ∈ [y.min − d, y.max + d]} and {@code y ∈ [x.min − d, x.max + d]}.</li>
  *   <li>{@link Operator#EQ}: same narrowing plus infeasibility detection when the
  *       maximum achievable distance falls below {@code d}.</li>
  *   <li>{@link Operator#GEQ}/{@link Operator#GT}: infeasibility detection only —
- *       returns empty when no (x, y) pair can achieve the required distance.</li>
- *   <li>{@link Operator#NEQ}: skipped (delegated to AC3 for discrete domains).</li>
+ *       returns empty when no (x, y) pair can achieve the required distance; the feasible
+ *       region excludes a middle band, so it can't be expressed as a simple bounds clip.</li>
+ *   <li>{@link Operator#NEQ}: skipped (delegated to AC3).</li>
  * </ul>
- * Mixed bounded/discrete pairs are supported via {@link NumericBounds}; only
- * {@link BoundedDomain} sides are narrowed.
  */
 @SuperBuilder
 @EqualsAndHashCode(callSuper = true)
@@ -57,20 +57,17 @@ public class AbsoluteDifferenceConstraint<N extends Number> extends BinaryConstr
     }
 
     @Override
-    @SuppressWarnings({"unchecked", "rawtypes"})
+    @SuppressWarnings("unchecked")
     public Optional<Map<Variable<?>, Domain<?>>> propagate(Map<Variable<?>, Domain<?>> domains) {
         if (operator == Operator.NEQ) return Optional.of(Map.of());
-        Domain<?> lDomain = domains.get(getLeft());
-        Domain<?> rDomain = domains.get(getRight());
-        boolean lBounded = lDomain instanceof BoundedDomain<?>;
-        boolean rBounded = rDomain instanceof BoundedDomain<?>;
-        if (!lBounded && !rBounded) return Optional.of(Map.of());
+        Domain<N> lDomain = (Domain<N>) domains.get(getLeft());
+        Domain<N> rDomain = (Domain<N>) domains.get(getRight());
 
         double d = bound.doubleValue();
-        double lMin = NumericBounds.min((Domain<N>) lDomain);
-        double lMax = NumericBounds.max((Domain<N>) lDomain);
-        double rMin = NumericBounds.min((Domain<N>) rDomain);
-        double rMax = NumericBounds.max((Domain<N>) rDomain);
+        double lMin = NumericBounds.min(lDomain);
+        double lMax = NumericBounds.max(lDomain);
+        double rMin = NumericBounds.min(rDomain);
+        double rMax = NumericBounds.max(rDomain);
 
         if (operator == Operator.GEQ || operator == Operator.GT) {
             double maxDist = Math.max(lMax - rMin, rMax - lMin);
@@ -93,13 +90,15 @@ public class AbsoluteDifferenceConstraint<N extends Number> extends BinaryConstr
         }
 
         Map<Variable<?>, Domain<?>> updated = new HashMap<>();
-        if (lBounded && (newLMin != lMin || newLMax != lMax)) {
-            BoundedDomain raw = (BoundedDomain) lDomain;
-            updated.put(getLeft(), raw.withBounds(newLMin, newLMax));
+        Optional<Domain<N>> prunedL = NumericBounds.narrow(lDomain, newLMin, newLMax);
+        if (prunedL.isPresent()) {
+            if (prunedL.get().isEmpty()) return Optional.empty();
+            updated.put(getLeft(), prunedL.get());
         }
-        if (rBounded && (newRMin != rMin || newRMax != rMax)) {
-            BoundedDomain raw = (BoundedDomain) rDomain;
-            updated.put(getRight(), raw.withBounds(newRMin, newRMax));
+        Optional<Domain<N>> prunedR = NumericBounds.narrow(rDomain, newRMin, newRMax);
+        if (prunedR.isPresent()) {
+            if (prunedR.get().isEmpty()) return Optional.empty();
+            updated.put(getRight(), prunedR.get());
         }
         return Optional.of(updated);
     }
@@ -107,9 +106,13 @@ public class AbsoluteDifferenceConstraint<N extends Number> extends BinaryConstr
     /**
      * When bounds narrowing empties the feasible range, attributes the conflict to whichever
      * side already holds a singleton domain — the other side is omitted since no single value
-     * can be blamed for it. Empty when neither side is singleton. Mirrors
-     * {@link BinaryComparatorConstraint#explainInfeasible}; see its javadoc for the narrow
-     * scope of this benefit (mixed discrete/bounded pairs during search).
+     * can be blamed for it. Empty when neither side is singleton. Structurally mirrors
+     * {@link BinaryComparatorConstraint#explainInfeasible}, but unlike that constraint,
+     * {@code propagate()} here narrows discrete/discrete pairs too (via
+     * {@link NumericBounds#narrow}, not just
+     * {@link io.github.rcrida.jcsp.domains.BoundedDomain#withBounds}), so this method's
+     * infeasible branch is reachable for plain discrete pairs as well, not only mixed
+     * discrete/bounded ones.
      */
     @Override
     public Map<Variable<?>, Object> explainInfeasible(@NonNull Map<Variable<?>, Domain<?>> domains) {

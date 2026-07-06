@@ -2,6 +2,7 @@ package io.github.rcrida.jcsp.constraints.binary;
 
 import io.github.rcrida.jcsp.constraints.Operator;
 import io.github.rcrida.jcsp.domains.Domain;
+import io.github.rcrida.jcsp.domains.DiscreteDomain;
 import io.github.rcrida.jcsp.domains.DomainObjectSet;
 import io.github.rcrida.jcsp.domains.IntRangeDomain;
 import io.github.rcrida.jcsp.domains.IntervalDomain;
@@ -9,6 +10,7 @@ import io.github.rcrida.jcsp.variables.Variable;
 import org.junit.jupiter.api.Test;
 
 import java.util.Map;
+import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -92,14 +94,63 @@ public class AbsoluteDifferenceConstraintTest {
         assertThat(result.get()).isEmpty();
     }
 
-    // --- propagate: both discrete → skipped ---
+    // --- propagate: both discrete ---
 
-    @Test void propagate_bothDiscrete_skipped() {
+    @Test void propagate_bothDiscrete_noNarrowingNeeded() {
+        // il=[0,10], ir=[0,10], |il-ir|<=3: il∈[max(0,-3),min(10,13)]=[0,10] unchanged;
+        // ir∈[max(0,-3),min(10,13)]=[0,10] unchanged — both ranges already tight enough
         Variable<Integer> il = F.create("il"), ir = F.create("ir");
         var result = AbsoluteDifferenceConstraint.of(il, ir, Operator.LEQ, 3)
                 .propagate(Map.of(il, IntRangeDomain.of(0, 10), ir, IntRangeDomain.of(0, 10)));
         assertThat(result).isPresent();
         assertThat(result.get()).isEmpty();
+    }
+
+    @Test void propagate_bothDiscrete_narrowsLeftMax() {
+        // il=[0,10], ir=[0,4], |il-ir|<=3: il.max=min(10,4+3)=7 (prunes 8,9,10); ir unchanged
+        Variable<Integer> il = F.create("il2"), ir = F.create("ir2");
+        var result = AbsoluteDifferenceConstraint.of(il, ir, Operator.LEQ, 3)
+                .propagate(Map.of(il, IntRangeDomain.of(0, 10), ir, IntRangeDomain.of(0, 4))).orElseThrow();
+        assertThat(((DiscreteDomain<Integer>) result.get(il)).toList()).containsExactly(0, 1, 2, 3, 4, 5, 6, 7);
+        assertThat(result.containsKey(ir)).isFalse();
+    }
+
+    @Test void propagate_bothDiscrete_infeasible() {
+        // il=[8,10], ir=[0,3], |il-ir|<=3: il.max=min(10,3+3)=6 < il.min=8 -> infeasible
+        Variable<Integer> il = F.create("il3"), ir = F.create("ir3");
+        var result = AbsoluteDifferenceConstraint.of(il, ir, Operator.LEQ, 3)
+                .propagate(Map.of(il, IntRangeDomain.of(8, 10), ir, IntRangeDomain.of(0, 3)));
+        assertThat(result).isEmpty();
+    }
+
+    @Test void propagate_bothDiscrete_narrowingEmptiesGappedLeftDomain_infeasible() {
+        // l={0,10} (gap domain), r={4,5}, |l-r|<=1: l narrows to [max(0,3),min(10,6)]=[3,6], a
+        // non-empty numeric range, but neither 0 nor 10 lies in it -> narrowing empties l even
+        // though the fast newLMin<=newLMax check alone would not have caught this
+        Variable<Integer> l = F.create("l_gap"), r = F.create("r_gap");
+        var lDomain = new IntRangeDomain(Set.of(0, 10));
+        var rDomain = new IntRangeDomain(Set.of(4, 5));
+        var result = AbsoluteDifferenceConstraint.of(l, r, Operator.LEQ, 1).propagate(Map.of(l, lDomain, r, rDomain));
+        assertThat(result).isEmpty();
+    }
+
+    @Test void propagate_bothDiscrete_narrowingEmptiesGappedRightDomain_infeasible() {
+        // l={4,5}, r={0,10} (gap domain), |l-r|<=1: l is unchanged (already within [4,5]), but r
+        // narrows to [3,6] and neither 0 nor 10 lies in it -> narrowing empties r this time
+        Variable<Integer> l = F.create("l_gap2"), r = F.create("r_gap2");
+        var lDomain = new IntRangeDomain(Set.of(4, 5));
+        var rDomain = new IntRangeDomain(Set.of(0, 10));
+        var result = AbsoluteDifferenceConstraint.of(l, r, Operator.LEQ, 1).propagate(Map.of(l, lDomain, r, rDomain));
+        assertThat(result).isEmpty();
+    }
+
+    @Test void propagate_bothDiscrete_geq_infeasible() {
+        // il=[4,6], ir=[4,6], |il-ir|>=5: max dist = 2 < 5 -> infeasible, now detected for
+        // discrete/discrete pairs too instead of being skipped entirely
+        Variable<Integer> il = F.create("il4"), ir = F.create("ir4");
+        var result = AbsoluteDifferenceConstraint.of(il, ir, Operator.GEQ, 5)
+                .propagate(Map.of(il, IntRangeDomain.of(4, 6), ir, IntRangeDomain.of(4, 6)));
+        assertThat(result).isEmpty();
     }
 
     // --- propagate: LEQ ---
