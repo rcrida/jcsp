@@ -6,12 +6,12 @@ import lombok.val;
 import io.github.rcrida.jcsp.ConstraintSatisfactionProblem;
 import io.github.rcrida.jcsp.assignments.Assignment;
 import io.github.rcrida.jcsp.constraints.Operator;
-import io.github.rcrida.jcsp.constraints.binary.BinaryOffsetConstraint;
-import io.github.rcrida.jcsp.constraints.unary.UnaryNotEqualsConstraint;
-import io.github.rcrida.jcsp.domains.BooleanDomain;
+import io.github.rcrida.jcsp.constraints.nary.CumulativeConstraint;
 import io.github.rcrida.jcsp.domains.IntRangeDomain;
 import io.github.rcrida.jcsp.variables.Variable;
 import org.junit.jupiter.api.Test;
+
+import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -22,12 +22,12 @@ import static org.assertj.core.api.Assertions.assertThat;
  *   Job 2: machine B (2) -> machine A (4)
  * </pre>
  *
- * <p>Within-job precedence is a {@link BinaryOffsetConstraint}. The disjunctive
- * "two operations on the same machine cannot overlap" rule has no direct constraint
- * type, so it is modelled as a boolean ordering indicator per machine pair, half-reified
- * (via {@code impliesConstraint}) into whichever of the two orderings that indicator selects,
- * with its negation (via {@code reifyConstraint} against {@link UnaryNotEqualsConstraint})
- * implying the other.
+ * <p>Within-job precedence is a {@code BinaryOffsetConstraint}. The disjunctive
+ * "two operations on the same machine cannot overlap" rule has no dedicated constraint
+ * type, but is exactly a {@link CumulativeConstraint} with a resource requirement of 1
+ * per task and a capacity of 1 — a unary/disjunctive resource is just a cumulative one
+ * with limit 1, so each machine's two operations are modelled with a single
+ * {@code cumulativeConstraint} call rather than a hand-rolled boolean ordering indicator.
  *
  * <p>Machine loads (A: 3+4=7, B: 2+2=4) and job loads (job1: 3+2=5, job2: 2+4=6) give a
  * static lower bound of 7 on the makespan — achieved by running op11 and op22 back-to-back
@@ -53,11 +53,6 @@ public class JobShopSchedulingTest {
     static final Variable<Integer> START_21 = F.create("start21");
     static final Variable<Integer> START_22 = F.create("start22");
 
-    static final Variable<Boolean> ORDER_A = F.create("orderA"); // true: op11 before op22 on machine A
-    static final Variable<Boolean> NEG_A   = F.create("negA");
-    static final Variable<Boolean> ORDER_B = F.create("orderB"); // true: op12 before op21 on machine B
-    static final Variable<Boolean> NEG_B   = F.create("negB");
-
     static final int STATIC_LOWER_BOUND = 7;
 
     static final ConstraintSatisfactionProblem CSP = ConstraintSatisfactionProblem.builder()
@@ -65,21 +60,13 @@ public class JobShopSchedulingTest {
             .variableDomain(START_12, HORIZON)
             .variableDomain(START_21, HORIZON)
             .variableDomain(START_22, HORIZON)
-            .variableDomain(ORDER_A, BooleanDomain.INSTANCE)
-            .variableDomain(NEG_A,   BooleanDomain.INSTANCE)
-            .variableDomain(ORDER_B, BooleanDomain.INSTANCE)
-            .variableDomain(NEG_B,   BooleanDomain.INSTANCE)
             // within-job precedence
             .offsetConstraint(START_11, DUR_11, Operator.LEQ, START_12)
             .offsetConstraint(START_21, DUR_21, Operator.LEQ, START_22)
-            // machine A: op11 and op22 must not overlap
-            .reifyConstraint(NEG_A, UnaryNotEqualsConstraint.of(ORDER_A, true))
-            .impliesConstraint(ORDER_A, BinaryOffsetConstraint.of(START_11, DUR_11, Operator.LEQ, START_22))
-            .impliesConstraint(NEG_A,   BinaryOffsetConstraint.of(START_22, DUR_22, Operator.LEQ, START_11))
+            // machine A: op11 and op22 must not overlap (unary resource, capacity 1)
+            .cumulativeConstraint(List.of(START_11, START_22), List.of(DUR_11, DUR_22), List.of(1, 1), 1)
             // machine B: op12 and op21 must not overlap
-            .reifyConstraint(NEG_B, UnaryNotEqualsConstraint.of(ORDER_B, true))
-            .impliesConstraint(ORDER_B, BinaryOffsetConstraint.of(START_12, DUR_12, Operator.LEQ, START_21))
-            .impliesConstraint(NEG_B,   BinaryOffsetConstraint.of(START_21, DUR_21, Operator.LEQ, START_12))
+            .cumulativeConstraint(List.of(START_12, START_21), List.of(DUR_12, DUR_21), List.of(1, 1), 1)
             .build();
 
     static double makespan(Assignment a) {
