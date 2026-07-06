@@ -2,6 +2,7 @@ package io.github.rcrida.jcsp.constraints.binary;
 
 import io.github.rcrida.jcsp.assignments.Assignment;
 import io.github.rcrida.jcsp.constraints.Operator;
+import io.github.rcrida.jcsp.domains.DiscreteDomain;
 import io.github.rcrida.jcsp.domains.Domain;
 import io.github.rcrida.jcsp.domains.IntRangeDomain;
 import io.github.rcrida.jcsp.domains.IntervalDomain;
@@ -9,6 +10,7 @@ import io.github.rcrida.jcsp.variables.Variable;
 import org.junit.jupiter.api.Test;
 
 import java.util.Map;
+import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -125,10 +127,64 @@ public class BinaryComparatorConstraintTest {
         assertThat(result.get()).isEmpty();
     }
 
-    @Test void propagate_bothDiscrete_skipped() {
+    @Test void propagate_bothDiscrete_noNarrowingNeeded() {
+        // il=[1,5], ir=[1,5], il<=ir: il.max=min(5,5)=5 unchanged; ir.min=max(1,1)=1 unchanged
         Variable<Integer> il = F.create("il"), ir = F.create("ir");
         var result = BinaryComparatorConstraint.of(il, Operator.LEQ, ir)
                 .propagate(Map.of(il, IntRangeDomain.of(1, 5), ir, IntRangeDomain.of(1, 5)));
+        assertThat(result).isPresent();
+        assertThat(result.get()).isEmpty();
+    }
+
+    @Test void propagate_bothDiscrete_narrowsLeftMax() {
+        // il=[0,10], ir=[3,8], il<=ir: il.max=min(10,8)=8 (prunes 9,10); ir.min=max(3,0)=3 unchanged
+        Variable<Integer> il = F.create("il2"), ir = F.create("ir2");
+        var result = BinaryComparatorConstraint.of(il, Operator.LEQ, ir)
+                .propagate(Map.of(il, IntRangeDomain.of(0, 10), ir, IntRangeDomain.of(3, 8))).orElseThrow();
+        assertThat(((DiscreteDomain<Integer>) result.get(il)).toList()).containsExactly(0, 1, 2, 3, 4, 5, 6, 7, 8);
+        assertThat(result.containsKey(ir)).isFalse();
+    }
+
+    @Test void propagate_bothDiscrete_infeasible() {
+        // il=[5,10], ir=[0,3], il<=ir: il.max=min(10,3)=3 < il.min=5 -> infeasible
+        Variable<Integer> il = F.create("il3"), ir = F.create("ir3");
+        var result = BinaryComparatorConstraint.of(il, Operator.LEQ, ir)
+                .propagate(Map.of(il, IntRangeDomain.of(5, 10), ir, IntRangeDomain.of(0, 3)));
+        assertThat(result).isEmpty();
+    }
+
+    @Test void propagate_bothDiscrete_narrowingEmptiesGappedLeftDomain_infeasible() {
+        // l={0,10} (gap domain), r={4,5}, l==r: l narrows to [max(0,4),min(10,5)]=[4,5], a
+        // non-empty numeric range, but neither 0 nor 10 lies in it -> narrowing empties l even
+        // though the fast newLMin<=newLMax check alone would not have caught this. EQ narrows
+        // both bounds symmetrically (unlike LEQ/GEQ, which anchor one bound at l's own extreme),
+        // so a gap domain can empty here.
+        Variable<Integer> l = F.create("l_gap"), r = F.create("r_gap");
+        var lDomain = new IntRangeDomain(Set.of(0, 10));
+        var rDomain = new IntRangeDomain(Set.of(4, 5));
+        var result = BinaryComparatorConstraint.of(l, Operator.EQ, r).propagate(Map.of(l, lDomain, r, rDomain));
+        assertThat(result).isEmpty();
+    }
+
+    @Test void propagate_bothDiscrete_narrowingEmptiesGappedRightDomain_infeasible() {
+        // l={4,5}, r={0,10} (gap domain), l==r: l is unchanged (already within [4,5]), but r
+        // narrows to [4,5] and neither 0 nor 10 lies in it -> narrowing empties r this time
+        Variable<Integer> l = F.create("l_gap2"), r = F.create("r_gap2");
+        var lDomain = new IntRangeDomain(Set.of(4, 5));
+        var rDomain = new IntRangeDomain(Set.of(0, 10));
+        var result = BinaryComparatorConstraint.of(l, Operator.EQ, r).propagate(Map.of(l, lDomain, r, rDomain));
+        assertThat(result).isEmpty();
+    }
+
+    @Test void propagate_bothDiscrete_nonNumeric_noOp() {
+        // Non-numeric Comparable pair (String): propagate() must not attempt a NumericBounds
+        // conversion (which would throw ClassCastException) — the numeric guard keeps this a
+        // no-op, same as before this class's discrete narrowing was added; ordering is enforced
+        // purely by isSatisfiedBy plus AC3 during search.
+        Variable<String> sl = F.create("sl"), sr = F.create("sr");
+        var lDomain = io.github.rcrida.jcsp.domains.DomainObjectSet.<String>builder().value("a").value("b").build();
+        var rDomain = io.github.rcrida.jcsp.domains.DomainObjectSet.<String>builder().value("x").value("y").build();
+        var result = BinaryComparatorConstraint.of(sl, Operator.LEQ, sr).propagate(Map.of(sl, lDomain, sr, rDomain));
         assertThat(result).isPresent();
         assertThat(result.get()).isEmpty();
     }
