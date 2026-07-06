@@ -220,3 +220,5 @@ Classic CSP problems serve as end-to-end integration tests in `io.github.rcrida.
 - `TravelingSalesmanTest` — TSP modelled via `circuitConstraint` with optimization
 - `RectanglePackingTest` — packs four rectangles into a 3×3 bounding box via `diffnConstraint`; 12 solutions
 - `NurseSchedulingTest` — 5-day nurse shift schedule (Day/Night/Rest) with DFA-encoded rules (no work after Night, ≤2 consecutive work days) via `regularConstraint`; 79 solutions
+- `GolombRulerTest` — order-5 Golomb ruler; pairwise mark distances materialised as `linearConstraint`-defined auxiliary variables, deduplicated via `allDiffConstraint`; proves the known-optimal length 11 (OEIS A003022) by satisfiability at 11 vs. unsatisfiability at 10, avoiding the need for a hand-verified branch-and-bound lower bound
+- `JobShopSchedulingTest` — 2-job, 2-machine job-shop scheduling optimized for makespan; within-job precedence via `offsetConstraint`, same-machine mutual exclusion modelled as `cumulativeConstraint` with capacity 1 (a disjunctive/unary resource is a cumulative one with limit 1)
