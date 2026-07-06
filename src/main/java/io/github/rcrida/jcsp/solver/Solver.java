@@ -7,7 +7,6 @@ import io.github.rcrida.jcsp.assignments.SolverLimits;
 import io.github.rcrida.jcsp.consistency.Inference;
 import io.github.rcrida.jcsp.consistency.arc.MAC;
 import io.github.rcrida.jcsp.domains.BoundedDomain;
-import io.github.rcrida.jcsp.solver.backtrackingsearch.BacktrackingSearch;
 import io.github.rcrida.jcsp.solver.backtrackingsearch.order.DefaultValueOrderer;
 import io.github.rcrida.jcsp.solver.backtrackingsearch.order.LeastConstrainingValueOrderer;
 import io.github.rcrida.jcsp.solver.backtrackingsearch.selector.MinimumRemainingValuesSelector;
@@ -64,7 +63,7 @@ public interface Solver {
         /**
          * Builds a solver chain tailored for satisfaction. The chain is:
          * NodeConsistency → PropagationFixpoint → IndependentSubproblems → TreeDecomposition
-         * → CutsetConditioning → BacktrackingSearch.
+         * → CutsetConditioning → TreeSolver / DomWdegLubySearch.
          * <p>
          * For problems with {@link BoundedDomain} variables, the fixpoint snaps non-singleton
          * intervals to their midpoints, giving one concrete solution for underdetermined continuous systems.
@@ -148,14 +147,7 @@ public interface Solver {
                                             @NonNull SolverLimits limits) {
                 boolean hasContinuous = csp.getVariableDomains().values().stream()
                         .anyMatch(BoundedDomain.class::isInstance);
-                val backtrackingSearch = BacktrackingSearch.builder()
-                        .unassignedVariableSelector(MinimumRemainingValuesSelector.INSTANCE)
-                        .domainValuesOrderer(LeastConstrainingValueOrderer.INSTANCE)
-                        .inference(FULL_PROPAGATION_INFERENCE)
-                        .limits(limits)
-                        .build();
                 val branchAndBound = BranchAndBoundSolver.builder()
-                        .inner(backtrackingSearch)
                         .objective(objective)
                         .unassignedVariableSelector(MinimumRemainingValuesSelector.INSTANCE)
                         .domainValuesOrderer(LeastConstrainingValueOrderer.INSTANCE)

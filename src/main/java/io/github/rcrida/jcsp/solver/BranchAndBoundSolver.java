@@ -1,8 +1,7 @@
 package io.github.rcrida.jcsp.solver;
 
 import lombok.Builder;
-import lombok.EqualsAndHashCode;
-import lombok.experimental.SuperBuilder;
+import lombok.Value;
 import lombok.extern.slf4j.Slf4j;
 import lombok.val;
 import io.github.rcrida.jcsp.ConstraintSatisfactionProblem;
@@ -29,9 +28,9 @@ import java.util.stream.Stream;
  * so it must return a lower bound on the cost of any completion of a partial assignment.
  */
 @Slf4j
-@SuperBuilder
-@EqualsAndHashCode(callSuper = true)
-public class BranchAndBoundSolver extends SolverDecorator {
+@Value
+@Builder
+public class BranchAndBoundSolver implements Solver {
     @NonNull UnassignedVariableSelector unassignedVariableSelector;
     @NonNull DomainValuesOrderer domainValuesOrderer;
     @NonNull Inference inference;

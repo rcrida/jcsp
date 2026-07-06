@@ -5,7 +5,6 @@ import io.github.rcrida.jcsp.ConstraintSatisfactionProblem;
 import io.github.rcrida.jcsp.assignments.Assignment;
 import io.github.rcrida.jcsp.assignments.SolverLimits;
 import io.github.rcrida.jcsp.domains.IntRangeDomain;
-import io.github.rcrida.jcsp.solver.backtrackingsearch.BacktrackingSearch;
 import io.github.rcrida.jcsp.solver.backtrackingsearch.order.DefaultValueOrderer;
 import io.github.rcrida.jcsp.solver.backtrackingsearch.selector.MinimumRemainingValuesSelector;
 import io.github.rcrida.jcsp.variables.Variable;
@@ -19,11 +18,6 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 public class BranchAndBoundSolverTest {
     static final Variable.Factory F = Variable.Factory.INSTANCE;
-    static final BacktrackingSearch BACKTRACKING = BacktrackingSearch.builder()
-            .unassignedVariableSelector(MinimumRemainingValuesSelector.INSTANCE)
-            .domainValuesOrderer(DefaultValueOrderer.INSTANCE)
-            .inference((problem, variable, assignment) -> Optional.of(problem))
-            .build();
 
     static final Variable<Integer> X = F.create("x");
     static final Variable<Integer> Y = F.create("y");
@@ -48,7 +42,6 @@ public class BranchAndBoundSolverTest {
 
     static BranchAndBoundSolver solver(ToDoubleFunction<Assignment> objective, SolverLimits limits) {
         return BranchAndBoundSolver.builder()
-                .inner(BACKTRACKING)
                 .objective(objective)
                 .unassignedVariableSelector(MinimumRemainingValuesSelector.INSTANCE)
                 .domainValuesOrderer(DefaultValueOrderer.INSTANCE)
