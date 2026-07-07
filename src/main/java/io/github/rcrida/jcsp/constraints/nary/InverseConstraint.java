@@ -10,9 +10,11 @@ import lombok.experimental.SuperBuilder;
 import org.jspecify.annotations.NonNull;
 
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 
 /**
  * Enforces that two arrays of integer variables are mutual inverses:
@@ -100,6 +102,64 @@ public class InverseConstraint extends NaryConstraint implements Propagatable {
         }
 
         return Optional.of(updated);
+    }
+
+    /**
+     * Replays {@link #propagate}'s two passes, threading pass 1's updates into pass 2 exactly as
+     * {@code propagate} does, to find the same emptied domain. At that point, the emptied
+     * variable's every candidate value was excluded by some variable on the opposite array — those
+     * "opposite" variables are the culprits. Sound only when every culprit is currently singleton,
+     * via {@link Propagatable#allSingletonReason}: a non-singleton excluding variable could still
+     * be assigned a value later that resolves the exclusion, so citing it as a nogood requires its
+     * value to already be pinned.
+     */
+    @Override
+    @SuppressWarnings("unchecked")
+    public Map<Variable<?>, Object> explainInfeasible(@NonNull Map<Variable<?>, Domain<?>> domains) {
+        int n = f.size();
+        Map<Variable<?>, Domain<?>> current = new HashMap<>(domains);
+
+        // Pass 1: replay invf[j] pruning
+        for (int j = 0; j < n; j++) {
+            DiscreteDomain<Integer> invfDom = (DiscreteDomain<Integer>) current.get(invf.get(j));
+            Set<Variable<?>> culprits = new HashSet<>();
+            DiscreteDomain.Builder<Integer> builder = null;
+            for (Integer val : invfDom.toList()) {
+                DiscreteDomain<Integer> fDom = (DiscreteDomain<Integer>) current.get(f.get(val - 1));
+                if (!fDom.contains(j + 1)) {
+                    if (builder == null) builder = invfDom.toBuilder();
+                    builder.delete(val);
+                    culprits.add(f.get(val - 1));
+                }
+            }
+            if (builder != null) {
+                DiscreteDomain<Integer> pruned = (DiscreteDomain<Integer>) builder.build();
+                if (pruned.isEmpty()) return Propagatable.allSingletonReason(culprits, current);
+                current.put(invf.get(j), pruned);
+            }
+        }
+
+        // Pass 2: replay f[i] pruning using the (possibly updated) invf domains from pass 1
+        for (int i = 0; i < n; i++) {
+            DiscreteDomain<Integer> fDom = (DiscreteDomain<Integer>) current.get(f.get(i));
+            Set<Variable<?>> culprits = new HashSet<>();
+            DiscreteDomain.Builder<Integer> builder = null;
+            for (Integer j : fDom.toList()) {
+                DiscreteDomain<Integer> invfDom = (DiscreteDomain<Integer>) current.get(invf.get(j - 1));
+                if (!invfDom.contains(i + 1)) {
+                    if (builder == null) builder = fDom.toBuilder();
+                    builder.delete(j);
+                    culprits.add(invf.get(j - 1));
+                }
+            }
+            if (builder != null) {
+                DiscreteDomain<Integer> pruned = (DiscreteDomain<Integer>) builder.build();
+                if (pruned.isEmpty()) return Propagatable.allSingletonReason(culprits, current);
+                current.put(f.get(i), pruned);
+            }
+        }
+
+        return Map.of();
     }
 
     @Override

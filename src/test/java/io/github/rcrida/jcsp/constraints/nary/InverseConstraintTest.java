@@ -157,6 +157,74 @@ public class InverseConstraintTest {
         assertThat(result.get().get(f0)).isEqualTo(DomainObjectSet.<Integer>builder().value(3).build());
     }
 
+    // --- explainInfeasible() ---
+
+    @Test
+    void explainInfeasible_pass1_allSingleton_returnsFullReason() {
+        // g0={1}: only val=1 is a candidate, requiring f[0] to contain 1. f0={2} excludes it,
+        // so g0's only value is removed → g0 empty. f0 is singleton, so the reason is sound.
+        var domains = Map.<Variable<?>, Domain<?>>of(
+                f0, DomainObjectSet.<Integer>builder().value(2).build(),
+                f1, domain123(), f2, domain123(),
+                g0, DomainObjectSet.<Integer>builder().value(1).build(),
+                g1, domain123(), g2, domain123());
+        assertThat(constraint.propagate(domains)).isEmpty();
+        assertThat(constraint.explainInfeasible(domains)).isEqualTo(Map.of(f0, 2));
+    }
+
+    @Test
+    void explainInfeasible_pass1_notAllSingleton_returnsEmpty() {
+        // Same setup as propagate_pass1_infeasible_invfBecomesEmpty: f0 and f1 (the culprits
+        // excluding invf[0]'s two candidate values) are not singleton, so no reason is sound.
+        var domains = Map.<Variable<?>, Domain<?>>of(
+                f0, DomainObjectSet.<Integer>builder().value(2).value(3).build(),
+                f1, DomainObjectSet.<Integer>builder().value(2).value(3).build(),
+                f2, DomainObjectSet.<Integer>builder().value(2).value(3).build(),
+                g0, DomainObjectSet.<Integer>builder().value(1).value(2).build(),
+                g1, domain123(), g2, domain123());
+        assertThat(constraint.propagate(domains)).isEmpty();
+        assertThat(constraint.explainInfeasible(domains)).isEmpty();
+    }
+
+    @Test
+    void explainInfeasible_pass2_allSingleton_returnsFullReason() {
+        // f0={1}: pass 1 leaves g0 untouched (no support issue), but pass 2 finds f0's only
+        // value (1) unsupported by g0={2} → f0 emptied. g0 is singleton, so the reason is sound.
+        var domains = Map.<Variable<?>, Domain<?>>of(
+                f0, DomainObjectSet.<Integer>builder().value(1).build(),
+                f1, domain123(), f2, domain123(),
+                g0, DomainObjectSet.<Integer>builder().value(2).build(),
+                g1, domain123(), g2, domain123());
+        assertThat(constraint.propagate(domains)).isEmpty();
+        assertThat(constraint.explainInfeasible(domains)).isEqualTo(Map.of(g0, 2));
+    }
+
+    @Test
+    void explainInfeasible_pass2_notAllSingleton_returnsEmpty() {
+        // Same setup as propagate_infeasible_emptyDomain: g0 (the culprit excluding f0's only
+        // value) is not singleton, so no reason is sound.
+        var domains = Map.<Variable<?>, Domain<?>>of(
+                f0, DomainObjectSet.<Integer>builder().value(1).build(),
+                f1, domain123(), f2, domain123(),
+                g0, DomainObjectSet.<Integer>builder().value(2).value(3).build(),
+                g1, domain123(), g2, domain123());
+        assertThat(constraint.propagate(domains)).isEmpty();
+        assertThat(constraint.explainInfeasible(domains)).isEmpty();
+    }
+
+    @Test
+    void explainInfeasible_feasible_returnsEmpty() {
+        // Same setup as propagate_pass2_multipleRemovalsFromSameF: propagation prunes domains
+        // (in both passes) without ever emptying one, so explainInfeasible finds nothing to report.
+        var domains = Map.<Variable<?>, Domain<?>>of(
+                f0, domain123(), f1, domain123(), f2, domain123(),
+                g0, DomainObjectSet.<Integer>builder().value(2).value(3).build(),
+                g1, DomainObjectSet.<Integer>builder().value(2).value(3).build(),
+                g2, domain123());
+        assertThat(constraint.propagate(domains)).isPresent();
+        assertThat(constraint.explainInfeasible(domains)).isEmpty();
+    }
+
     @Test
     void testToString() {
         assertThat(constraint.toString()).isEqualTo("<(f0, f1, f2, g0, g1, g2), inverse(f=[f0, f1, f2], invf=[g0, g1, g2])>");
