@@ -3,6 +3,7 @@ package io.github.rcrida.jcsp.solver.backtrackingsearch.selector;
 import io.github.rcrida.jcsp.ConstraintSatisfactionProblem;
 import io.github.rcrida.jcsp.assignments.Assignment;
 import io.github.rcrida.jcsp.constraints.Constraint;
+import io.github.rcrida.jcsp.constraints.nary.NogoodConstraint;
 import io.github.rcrida.jcsp.variables.Variable;
 import org.jspecify.annotations.NonNull;
 
@@ -72,10 +73,16 @@ public class DomWdegVariableSelector implements UnassignedVariableSelector {
     }
 
     /** A constraint is "active" w.r.t. {@code variable} if it involves that variable and
-     *  has at least one other variable still unassigned in {@code assignment}. */
+     *  has at least one other variable still unassigned in {@code assignment}.
+     *  {@link NogoodConstraint}s are never active: they are derived artifacts of the current
+     *  search path rather than structural problem constraints, and {@code csp} accumulates them
+     *  as search descends (each recursive call's {@code csp} is the propagated result of the
+     *  nogood-augmented CSP from its parent) — counting them here would leak weight the
+     *  heuristic wasn't designed to see into variable ordering. */
     private boolean isActive(@NonNull Constraint c,
                              @NonNull Variable<?> variable,
                              @NonNull Assignment assignment) {
+        if (c instanceof NogoodConstraint) return false;
         if (!c.getVariables().contains(variable)) return false;
         return c.getVariables().stream()
                 .anyMatch(v -> !v.equals(variable) && assignment.getValue(v).isEmpty());

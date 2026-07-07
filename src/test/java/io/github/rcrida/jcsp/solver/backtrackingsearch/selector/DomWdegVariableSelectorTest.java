@@ -3,6 +3,7 @@ package io.github.rcrida.jcsp.solver.backtrackingsearch.selector;
 import io.github.rcrida.jcsp.ConstraintSatisfactionProblem;
 import io.github.rcrida.jcsp.assignments.Assignment;
 import io.github.rcrida.jcsp.constraints.Constraint;
+import io.github.rcrida.jcsp.constraints.nary.NogoodConstraint;
 import io.github.rcrida.jcsp.domains.Domain;
 import io.github.rcrida.jcsp.variables.Variable;
 import org.junit.jupiter.api.Test;
@@ -124,6 +125,28 @@ class DomWdegVariableSelectorTest {
         when(d3.size()).thenReturn(1); // v3: ratio = MAX_VALUE (no active constraints)
 
         assertThat(selector.select(csp, assignment)).isEqualTo(v1);
+    }
+
+    @Test
+    void nogoodConstraintsAreExcludedFromWeightingAndSelection() {
+        // A NogoodConstraint over v1+v3 must never contribute to weighting or wdeg, even though
+        // it structurally satisfies isActive's other conditions (shares an unassigned variable).
+        when(c12.getVariables()).thenReturn(Set.of(v1, v2));
+        NogoodConstraint nogood = NogoodConstraint.of(Map.of(v1, "a", v3, "b"));
+        var selector = new DomWdegVariableSelector(Set.of(c12, nogood));
+
+        when(nextAssignment.getValue(v2)).thenReturn(Optional.empty());
+        when(csp.getConstraints()).thenReturn(Set.of(c12, nogood));
+        selector.incrementWeights(csp, v1, nextAssignment); // c12 weight -> 2; nogood skipped entirely
+
+        when(csp.getVariableDomains()).thenReturn(Map.of(v2, d2, v3, d3));
+        when(assignment.getValue(v1)).thenReturn(Optional.empty());
+        when(assignment.getValue(v2)).thenReturn(Optional.empty());
+        when(assignment.getValue(v3)).thenReturn(Optional.empty());
+        when(d2.size()).thenReturn(2); // v2: wdeg = c12(2) → ratio = 1.0
+        when(d3.size()).thenReturn(1); // v3: wdeg = 0 (nogood ignored, not just unweighted) → ratio = MAX_VALUE
+
+        assertThat(selector.select(csp, assignment)).isEqualTo(v2);
     }
 
     @Test

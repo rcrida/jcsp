@@ -333,21 +333,28 @@ class DomWdegLubySearchTest {
     }
 
     @Test
-    void nogoodConstraintCatchesConflictAcrossUnrelatedBranchViaPropagation() {
+    void nogoodExplanationQualityDependsOnWhetherImpossibleVariableIsAlreadySingleton() {
         // Two deliberately conflicting cardinality constraints over {a,b,c} (each in {1,2,3,4}):
         // "exactly 1 of {a,b,c} equals 1" and "exactly 1 of {b,c} equals 2". Deciding a=2 (excluded
         // from the first target) leaves b,c genuinely open; deciding b=3 (excluded from both
         // targets) forces c=1 via the first constraint (the only remaining candidate for target 1)
         // -- but c=1 excludes it from target 2 too, so the second constraint's own propagation (in
-        // the SAME fixpoint pass) then finds no candidate left for target 2 and fails, citing
-        // {b:3, c:1}. Crucially, c is NEVER explicitly decided by search here -- it's forced purely
-        // by propagation. Under the old assignment-map NogoodStore this nogood could never be
-        // reused (c never appears in next.getValues()), so w=10 and w=20 each independently
-        // re-learned it. Modelled as a NogoodConstraint, propagate() reasons from domain state
-        // directly: once b=3 forces c=1 again in w=20's subtree, the SAME NogoodConstraint fires
-        // immediately, and its own explainInfeasible() just returns the nogood already recorded --
-        // no new entry, so store.size() stays at the 2 distinct nogoods learned once (for b=3 and
-        // b=4), not 4.
+        // the SAME fixpoint pass) then finds no candidate left for target 2 and fails. Crucially,
+        // c is NEVER explicitly decided by search here -- it's forced purely by propagation.
+        //
+        // Both w=10 and w=20 hit this same conflict shape (for b=3 and b=4), giving 4 opportunities
+        // to learn a nogood, but only the first two calls to reach it produce the general, reusable
+        // reason {b:3, c:1} / {b:4, c:1}. Whichever subtree runs second inherits those two already
+        // -- their propagation prunes value 1 from c's domain before CountConstraint ever runs, so
+        // c becomes "impossible" (can't be 1) but is left with {2,3,4}, not singleton.
+        // CountConstraint#explainInfeasible can only cite an impossible variable when it's singleton
+        // (Propagatable#allSingletonReason): the nogood format is equality-only ("variable = value"),
+        // with no way to express "variable != value" as a literal, so a non-singleton impossible
+        // variable simply can't be cited soundly. That branch's explanation falls back to the full
+        // assignment ({w:10, a:2, b:3} etc.) -- still sound, just not general enough to be reused,
+        // so the second subtree independently records its own (looser) pair. Net result: 4 distinct,
+        // individually sound nogoods, not 2 -- reusing an earlier general nogood's partial pruning
+        // can ironically make a later branch's own explanation less precise, not more.
         Variable<Integer> w  = VF.create("nw");
         Variable<Integer> a  = VF.create("na");
         Variable<Integer> b  = VF.create("nb");
@@ -383,7 +390,7 @@ class DomWdegLubySearchTest {
 
         List<Assignment> solutions = solver.getSolutions(csp).toList();
         assertThat(solutions).hasSize(12); // 2 (w) x 6 (valid a,b,c combos)
-        assertThat(store.size()).isEqualTo(2);
+        assertThat(store.size()).isEqualTo(4);
     }
 
     // ── Builder validation ────────────────────────────────────────────────────
