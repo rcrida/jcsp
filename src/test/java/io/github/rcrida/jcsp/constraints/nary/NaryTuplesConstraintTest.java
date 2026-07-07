@@ -110,6 +110,24 @@ public class NaryTuplesConstraintTest {
         assertThat(result.get()).isEmpty();
     }
 
+    // --- explainInfeasible() ---
+
+    @Test
+    void explainInfeasible_allSingleton_returnsFullReason() {
+        // x=y=z={1}: no cyclic permutation of (1,2,3) has all three variables equal to 1
+        var domains = Map.<Variable<?>, Domain<?>>of(
+                x, IntRangeDomain.of(1, 1), y, IntRangeDomain.of(1, 1), z, IntRangeDomain.of(1, 1));
+        assertThat(constraint.explainInfeasible(domains)).isEqualTo(Map.of(x, 1, y, 1, z, 1));
+    }
+
+    @Test
+    void explainInfeasible_notAllSingleton_returnsEmpty() {
+        // z is not singleton, even though no live tuple remains (see propagate_noLiveTuples_infeasible)
+        var domains = Map.<Variable<?>, Domain<?>>of(
+                x, IntRangeDomain.of(1, 1), y, IntRangeDomain.of(1, 1), z, IntRangeDomain.of(1, 2));
+        assertThat(constraint.explainInfeasible(domains)).isEmpty();
+    }
+
     @Test
     void solver_findsExactTupleSolutions() {
         // Domain is 1-3 for all variables; only cyclic permutations of (1,2,3) are allowed.

@@ -74,6 +74,16 @@ public class NaryTuplesConstraint extends NaryConstraint implements Propagatable
         return Optional.of(updated);
     }
 
+    /**
+     * Sound only when every constrained variable is currently singleton, via
+     * {@link Propagatable#allSingletonReason} — a partial subset can't rule out an unlisted
+     * open-domain variable still finding support from some tuple.
+     */
+    @Override
+    public Map<Variable<?>, Object> explainInfeasible(@NonNull Map<Variable<?>, Domain<?>> domains) {
+        return Propagatable.allSingletonReason(getVariables(), domains);
+    }
+
     @Override
     public String getRelation() {
         var sortedVars = getVariables().stream()
