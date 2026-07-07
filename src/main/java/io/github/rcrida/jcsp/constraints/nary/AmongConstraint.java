@@ -57,33 +57,46 @@ public class AmongConstraint<T> extends UniformNaryConstraint<T> implements Prop
     }
 
     /**
-     * Classifies each variable as:
+     * Classification of every constrained variable, shared by {@link #propagate} and
+     * {@link #explainInfeasible} so the classification logic lives in exactly one place:
      * <ul>
      *   <li><em>definite</em>: entire domain is within {@code S} (always contributes to count)</li>
      *   <li><em>possible</em>: domain intersects {@code S} but also has values outside it</li>
      *   <li><em>impossible</em>: domain is disjoint from {@code S} (never contributes)</li>
      * </ul>
+     */
+    private record Classification<T>(List<Variable<T>> definite, List<Variable<T>> possible,
+                                      List<Variable<?>> impossible) {}
+
+    @SuppressWarnings("unchecked")
+    private Classification<T> classify(Map<Variable<?>, Domain<?>> domains) {
+        List<Variable<T>> definite = new ArrayList<>();
+        List<Variable<T>> possible = new ArrayList<>();
+        List<Variable<?>> impossible = new ArrayList<>();
+        for (Variable<?> var : getVariables()) {
+            DiscreteDomain<T> dom = (DiscreteDomain<T>) domains.get(var);
+            boolean hasInS = dom.stream().anyMatch(values::contains);
+            if (!hasInS) { impossible.add(var); continue; }
+            if (dom.stream().allMatch(values::contains)) definite.add((Variable<T>) var);
+            else possible.add((Variable<T>) var);
+        }
+        return new Classification<>(definite, possible, impossible);
+    }
+
+    /**
      * When the definite count reaches {@code n} (EQ/LEQ), removes all {@code S} values from
      * possible domains. When the max reachable count equals {@code n} (EQ/GEQ), removes all
      * non-{@code S} values from possible domains.
      */
     @Override
-    @SuppressWarnings("unchecked")
     public Optional<Map<Variable<?>, Domain<?>>> propagate(@NonNull Map<Variable<?>, Domain<?>> domains) {
         if (!PROPAGATING_OPERATORS.contains(operator)) {
             return Optional.of(Map.of());
         }
 
-        List<Variable<T>> possibleVars = new ArrayList<>();
-        int definiteCount = 0;
-        for (Variable<?> var : getVariables()) {
-            DiscreteDomain<T> dom = (DiscreteDomain<T>) domains.get(var);
-            boolean hasInS = dom.stream().anyMatch(values::contains);
-            if (!hasInS) continue;
-            if (dom.stream().allMatch(values::contains)) definiteCount++;
-            else possibleVars.add((Variable<T>) var);
-        }
-        int maxCount = definiteCount + possibleVars.size();
+        Classification<T> c = classify(domains);
+        int definiteCount = c.definite().size();
+        int maxCount = definiteCount + c.possible().size();
 
         boolean applyUpper = operator == Operator.EQ || operator == Operator.LEQ;
         boolean applyLower = operator == Operator.EQ || operator == Operator.GEQ;
@@ -95,7 +108,7 @@ public class AmongConstraint<T> extends UniformNaryConstraint<T> implements Prop
 
         // Upper quota filled: remove S values from possible domains
         if (applyUpper && definiteCount == n) {
-            for (Variable<T> var : possibleVars) {
+            for (Variable<T> var : c.possible()) {
                 DiscreteDomain<T> dom = (DiscreteDomain<T>) domains.get(var);
                 DiscreteDomain.Builder<T> builder = dom.toBuilder();
                 for (T v : dom.toList()) {
@@ -107,7 +120,7 @@ public class AmongConstraint<T> extends UniformNaryConstraint<T> implements Prop
 
         // Lower quota requires all possibles: remove non-S values from possible domains
         if (applyLower && maxCount == n) {
-            for (Variable<T> var : possibleVars) {
+            for (Variable<T> var : c.possible()) {
                 DiscreteDomain<T> dom = (DiscreteDomain<T>) domains.get(var);
                 DiscreteDomain.Builder<T> builder = dom.toBuilder();
                 for (T v : dom.toList()) {
@@ -121,9 +134,9 @@ public class AmongConstraint<T> extends UniformNaryConstraint<T> implements Prop
     }
 
     /**
-     * On infeasibility, tries two independent, always-sound explanations — mirrors
-     * {@link CountConstraint#explainInfeasible} generalised from a single value to a set;
-     * neither replicates {@link #propagate}'s internal branch order:
+     * On infeasibility, tries two independent, always-sound explanations built from the same
+     * {@link #classify} used by {@link #propagate} — mirrors
+     * {@link CountConstraint#explainInfeasible} generalised from a single value to a set:
      * <ul>
      *   <li><b>Definite-count violation</b> (EQ/LEQ): {@code definiteCount > n}. Unlike
      *       {@link CountConstraint}, a <em>definite</em> variable here only needs its domain
@@ -138,28 +151,19 @@ public class AmongConstraint<T> extends UniformNaryConstraint<T> implements Prop
      * </ul>
      */
     @Override
-    @SuppressWarnings("unchecked")
     public Map<Variable<?>, Object> explainInfeasible(@NonNull Map<Variable<?>, Domain<?>> domains) {
         boolean applyUpper = operator == Operator.EQ || operator == Operator.LEQ;
         boolean applyLower = operator == Operator.EQ || operator == Operator.GEQ;
 
-        List<Variable<?>> definite = new ArrayList<>();
-        List<Variable<?>> impossible = new ArrayList<>();
-        int possibleCount = 0;
-        for (Variable<?> var : getVariables()) {
-            DiscreteDomain<T> dom = (DiscreteDomain<T>) domains.get(var);
-            boolean hasInS = dom.stream().anyMatch(values::contains);
-            if (!hasInS) { impossible.add(var); continue; }
-            if (dom.stream().allMatch(values::contains)) definite.add(var); else possibleCount++;
-        }
+        Classification<T> c = classify(domains);
 
-        if (applyUpper && definite.size() > n) {
-            Map<Variable<?>, Object> reason = Propagatable.allSingletonReason(definite, domains);
+        if (applyUpper && c.definite().size() > n) {
+            Map<Variable<?>, Object> reason = Propagatable.allSingletonReason(c.definite(), domains);
             if (!reason.isEmpty()) return reason;
         }
 
-        if (applyLower && definite.size() + possibleCount < n) {
-            Map<Variable<?>, Object> reason = Propagatable.allSingletonReason(impossible, domains);
+        if (applyLower && c.definite().size() + c.possible().size() < n) {
+            Map<Variable<?>, Object> reason = Propagatable.allSingletonReason(c.impossible(), domains);
             if (!reason.isEmpty()) return reason;
         }
 
