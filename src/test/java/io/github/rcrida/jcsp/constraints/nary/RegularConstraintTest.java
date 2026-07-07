@@ -177,6 +177,78 @@ public class RegularConstraintTest {
         assertThat(result.get().get(v1)).isEqualTo(IntRangeDomain.of(2, 2));
     }
 
+    // --- explainInfeasible ---
+
+    @Test
+    void explainInfeasible_forwardWipeout_allSingleton_returnsFullReason() {
+        // Same setup as propagate_forwardWipeout_infeasible: wipeout at position 0 (v0), both
+        // singleton.
+        var dfa = Automaton.of(2, 0, Set.of(1), Map.of(0, Map.of(0, 1), 1, Map.of(0, 1)));
+        var c = RegularConstraint.of(List.of(v0, v1), dfa);
+        var domains = Map.<Variable<?>, Domain<?>>of(
+                v0, IntRangeDomain.of(1, 1), v1, IntRangeDomain.of(1, 1));
+        assertThat(c.propagate(domains)).isEmpty();
+        assertThat(c.explainInfeasible(domains)).isEqualTo(Map.of(v0, 1));
+    }
+
+    @Test
+    void explainInfeasible_forwardWipeout_notAllSingleton_returnsEmpty() {
+        // No transitions defined at all: any value for v0 fails, but v0 is not singleton.
+        var dfa = Automaton.<Integer>of(2, 0, Set.of(0), Map.of());
+        var c = RegularConstraint.of(List.of(v0), dfa);
+        var domains = Map.<Variable<?>, Domain<?>>of(v0, IntRangeDomain.of(0, 1));
+        assertThat(c.propagate(domains)).isEmpty();
+        assertThat(c.explainInfeasible(domains)).isEmpty();
+    }
+
+    @Test
+    void explainInfeasible_forwardWipeout_multiPosition_citesAllPriorPositions() {
+        // v0={0} succeeds (state 0 -> state 1); state 1 has no defined transitions at all, so
+        // v1={0} wipes out reachable at position 1. Both positions must be cited, not just v1.
+        var dfa = Automaton.of(2, 0, Set.of(0), Map.of(0, Map.of(0, 1)));
+        var c = RegularConstraint.of(List.of(v0, v1), dfa);
+        var domains = Map.<Variable<?>, Domain<?>>of(
+                v0, IntRangeDomain.of(0, 0), v1, IntRangeDomain.of(0, 0));
+        assertThat(c.propagate(domains)).isEmpty();
+        assertThat(c.explainInfeasible(domains)).isEqualTo(Map.of(v0, 0, v1, 0));
+    }
+
+    @Test
+    void explainInfeasible_noAcceptingReachable_allSingleton_returnsFullReason() {
+        // Same setup as propagate_noAcceptingReachable_infeasible: forward pass completes, but no
+        // accepting state is reachable; both variables singleton.
+        var dfa = Automaton.of(2, 0, Set.of(0), Map.of(
+                0, Map.of(0, 0, 1, 1), 1, Map.of(0, 0, 1, 1)));
+        var c = RegularConstraint.of(List.of(v0, v1), dfa);
+        var domains = Map.<Variable<?>, Domain<?>>of(
+                v0, IntRangeDomain.of(1, 1), v1, IntRangeDomain.of(1, 1));
+        assertThat(c.propagate(domains)).isEmpty();
+        assertThat(c.explainInfeasible(domains)).isEqualTo(Map.of(v0, 1, v1, 1));
+    }
+
+    @Test
+    void explainInfeasible_noAcceptingReachable_notAllSingleton_returnsEmpty() {
+        // Same dfa as above, but v0 is not singleton — forward pass still completes (both of v0's
+        // values transition validly), yet no accepting state is reachable at the end.
+        var dfa = Automaton.of(2, 0, Set.of(0), Map.of(
+                0, Map.of(0, 0, 1, 1), 1, Map.of(0, 0, 1, 1)));
+        var c = RegularConstraint.of(List.of(v0, v1), dfa);
+        var domains = Map.<Variable<?>, Domain<?>>of(
+                v0, IntRangeDomain.of(0, 1), v1, IntRangeDomain.of(1, 1));
+        assertThat(c.propagate(domains)).isEmpty();
+        assertThat(c.explainInfeasible(domains)).isEmpty();
+    }
+
+    @Test
+    void explainInfeasible_feasible_returnsEmpty() {
+        // Same setup as propagate_unconstrained_noChange: no infeasibility to explain.
+        var c = RegularConstraint.of(List.of(v0, v1, v2), NO_DOUBLE_ONE);
+        var domains = Map.<Variable<?>, Domain<?>>of(
+                v0, IntRangeDomain.of(0, 1), v1, IntRangeDomain.of(0, 1), v2, IntRangeDomain.of(0, 1));
+        assertThat(c.propagate(domains)).isPresent();
+        assertThat(c.explainInfeasible(domains)).isEmpty();
+    }
+
     @Test
     void toString_showsRelation() {
         var c = RegularConstraint.of(List.of(v0, v1, v2), NO_DOUBLE_ONE);

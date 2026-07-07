@@ -58,18 +58,21 @@ public class RegularConstraint extends NaryConstraint implements Propagatable {
     }
 
     /**
-     * Generalised arc consistency via forward-backward DP. The forward pass computes the set of
-     * automaton states reachable after each position; the backward pass computes the states that
-     * can still reach an accepting state. A domain value at a position is supported only if it
-     * connects a reachable, productive state to a productive successor; unsupported values are pruned.
+     * Outcome of the forward pass, shared by {@link #propagate} and {@link #explainInfeasible} so
+     * the reachable-state computation lives in exactly one place. On success, {@code reachable}
+     * holds the full per-position array ({@code reachable[i]} = states reachable after processing
+     * positions {@code 0..i-1}); on failure, {@code reachable} is {@code null} and
+     * {@code failedAt} is the position {@code i} whose domain left no live transition out of
+     * {@code reachable[i]} ({@code -1} when the failure is instead detected after the loop, i.e.
+     * no accepting state is reachable at the end).
      */
-    @Override
-    @SuppressWarnings("unchecked")
-    public Optional<Map<Variable<?>, Domain<?>>> propagate(@NonNull Map<Variable<?>, Domain<?>> domains) {
-        int n = sequence.size();
-        var dfa = (Automaton<Object>) automaton;
+    private record ForwardPassResult(Set<Integer>[] reachable, int failedAt) {
+        boolean failedMidSequence() { return reachable == null; }
+    }
 
-        // Forward pass: reachable[i] = states reachable after processing positions 0..i-1
+    @SuppressWarnings("unchecked")
+    private ForwardPassResult forwardPass(Map<Variable<?>, Domain<?>> domains, Automaton<Object> dfa) {
+        int n = sequence.size();
         Set<Integer>[] reachable = new Set[n + 1];
         reachable[0] = Set.of(dfa.initialState());
         for (int i = 0; i < n; i++) {
@@ -82,10 +85,30 @@ public class RegularConstraint extends NaryConstraint implements Propagatable {
                 }
             }
             if (reachable[i + 1].isEmpty()) {
-                log.debug("RegularConstraint: forward pass wipeout at position {}", i);
-                return Optional.empty();
+                return new ForwardPassResult(null, i);
             }
         }
+        return new ForwardPassResult(reachable, -1);
+    }
+
+    /**
+     * Generalised arc consistency via forward-backward DP. The forward pass computes the set of
+     * automaton states reachable after each position; the backward pass computes the states that
+     * can still reach an accepting state. A domain value at a position is supported only if it
+     * connects a reachable, productive state to a productive successor; unsupported values are pruned.
+     */
+    @Override
+    @SuppressWarnings("unchecked")
+    public Optional<Map<Variable<?>, Domain<?>>> propagate(@NonNull Map<Variable<?>, Domain<?>> domains) {
+        int n = sequence.size();
+        var dfa = (Automaton<Object>) automaton;
+
+        ForwardPassResult forward = forwardPass(domains, dfa);
+        if (forward.failedMidSequence()) {
+            log.debug("RegularConstraint: forward pass wipeout at position {}", forward.failedAt());
+            return Optional.empty();
+        }
+        Set<Integer>[] reachable = forward.reachable();
 
         Set<Integer> finalReachable = new HashSet<>(reachable[n]);
         finalReachable.retainAll(dfa.acceptingStates());
@@ -130,6 +153,42 @@ public class RegularConstraint extends NaryConstraint implements Propagatable {
         }
         log.debug("RegularConstraint propagation: {} domain(s) pruned", updated.size());
         return Optional.of(updated);
+    }
+
+    /**
+     * Replays {@link #forwardPass} (the same helper {@link #propagate} uses) to find which of the
+     * two infeasibility points was hit, then cites the positions that jointly determine it:
+     * <ul>
+     *   <li><b>Forward-pass wipeout</b> at position {@code i}: {@code reachable[i]} — the set of
+     *       states reachable via <em>any</em> combination of values from positions
+     *       {@code 0..i-1} — collapses to a single deterministic trajectory only when every one of
+     *       those positions is singleton, and position {@code i} itself must be singleton too
+     *       (otherwise "no value at position {@code i} has a live transition" is a domain-shape
+     *       fact about the whole domain, not a single value, and can't be cited). Sound only when
+     *       positions {@code 0..i} are all singleton, via {@link Propagatable#allSingletonReason}.</li>
+     *   <li><b>No accepting state reachable</b>: depends on the entire sequence (the accepting-state
+     *       set is a fixed automaton property, not variable-dependent), so citing every position is
+     *       sound only when the whole sequence is singleton, via
+     *       {@link Propagatable#allSingletonReason}.</li>
+     * </ul>
+     */
+    @Override
+    @SuppressWarnings("unchecked")
+    public Map<Variable<?>, Object> explainInfeasible(@NonNull Map<Variable<?>, Domain<?>> domains) {
+        var dfa = (Automaton<Object>) automaton;
+
+        ForwardPassResult forward = forwardPass(domains, dfa);
+        if (forward.failedMidSequence()) {
+            return Propagatable.allSingletonReason(sequence.subList(0, forward.failedAt() + 1), domains);
+        }
+
+        Set<Integer> finalReachable = new HashSet<>(forward.reachable()[sequence.size()]);
+        finalReachable.retainAll(dfa.acceptingStates());
+        if (finalReachable.isEmpty()) {
+            return Propagatable.allSingletonReason(sequence, domains);
+        }
+
+        return Map.of();
     }
 
     @Override
