@@ -76,26 +76,16 @@ public class LexConstraint<T extends Comparable<T>> extends NaryConstraint imple
     }
 
     /**
-     * Scans positions left to right for the first pair not already forced equal (both domains
-     * singletons with the same value). For {@link Operator#GEQ}/{@link Operator#GT}, the pair's
-     * roles are swapped so the comparison is always expressed as {@code lesser <op> greater}.
-     * <p>
-     * At that position, {@code lesser <= greater} is a necessary condition (the lexicographic
-     * order is decided here or later, never by an earlier position being violated), so values
-     * outside the other side's range are pruned. At the final position, a strict operator
-     * ({@link Operator#LT}/{@link Operator#GT}) tightens this to {@code lesser < greater}.
-     * If every position is forced equal, the constraint reduces to {@code 0 <op> 0}.
+     * The first position not already forced equal (both domains singleton with the same value),
+     * found by a left-to-right scan shared by {@link #propagate} and {@link #explainInfeasible} —
+     * for {@link Operator#GEQ}/{@link Operator#GT} the pair's roles are swapped so it's always
+     * {@code lesser <op> greater}. Empty when every position is forced equal.
      */
-    @Override
+    private record UndecidedPosition<T>(Variable<T> lesser, Variable<T> greater, boolean strictHere) {}
+
     @SuppressWarnings("unchecked")
-    public Optional<Map<Variable<?>, Domain<?>>> propagate(@NonNull Map<Variable<?>, Domain<?>> domains) {
-        if (!PROPAGATING_OPERATORS.contains(operator)) {
-            return Optional.of(Map.of());
-        }
-
-        boolean swapped = operator == Operator.GEQ || operator == Operator.GT;
-        boolean strict = operator == Operator.LT || operator == Operator.GT;
-
+    private Optional<UndecidedPosition<T>> firstUndecidedPosition(Map<Variable<?>, Domain<?>> domains,
+                                                                   boolean swapped, boolean strict) {
         for (int i = 0; i < variablePairs.size(); i++) {
             VariablePair<T> pair = variablePairs.get(i);
             Variable<T> lesser  = swapped ? pair.right() : pair.left();
@@ -109,27 +99,54 @@ public class LexConstraint<T extends Comparable<T>> extends NaryConstraint imple
             }
 
             boolean strictHere = strict && i == variablePairs.size() - 1;
-            T greaterMax = domainMax(greaterDom);
-            T lesserMin  = domainMin(lesserDom);
-
-            Domain<T> newLesserDom  = clipUpper(lesserDom,  greaterMax, strictHere);
-            Domain<T> newGreaterDom = clipLower(greaterDom, lesserMin,  strictHere);
-            if (newLesserDom.isEmpty()) return Optional.empty();
-
-            Map<Variable<?>, Domain<?>> updated = new HashMap<>();
-            if (lesserDom  instanceof BoundedDomain<?> ? newLesserDom  != lesserDom  : newLesserDom.size()  != lesserDom.size())  updated.put(lesser,  newLesserDom);
-            if (greaterDom instanceof BoundedDomain<?> ? newGreaterDom != greaterDom : newGreaterDom.size() != greaterDom.size()) updated.put(greater, newGreaterDom);
-            return Optional.of(updated);
+            return Optional.of(new UndecidedPosition<>(lesser, greater, strictHere));
         }
-
-        return operator.compare(0, 0) ? Optional.of(Map.of()) : Optional.empty();
+        return Optional.empty();
     }
 
     /**
-     * On infeasibility, replays {@link #propagate}'s left-to-right scan (no domain threading
-     * needed: {@code propagate} returns as soon as it finds the first non-forced-equal position,
-     * so at most one position is ever examined) to find the same failing point, then attributes
-     * the conflict to every variable involved:
+     * At the first undecided position, {@code lesser <= greater} is a necessary condition (the
+     * lexicographic order is decided here or later, never by an earlier position being violated),
+     * so values outside the other side's range are pruned. At the final position, a strict
+     * operator ({@link Operator#LT}/{@link Operator#GT}) tightens this to {@code lesser < greater}.
+     * If every position is forced equal, the constraint reduces to {@code 0 <op> 0}.
+     */
+    @Override
+    @SuppressWarnings("unchecked")
+    public Optional<Map<Variable<?>, Domain<?>>> propagate(@NonNull Map<Variable<?>, Domain<?>> domains) {
+        if (!PROPAGATING_OPERATORS.contains(operator)) {
+            return Optional.of(Map.of());
+        }
+
+        boolean swapped = operator == Operator.GEQ || operator == Operator.GT;
+        boolean strict = operator == Operator.LT || operator == Operator.GT;
+
+        var position = firstUndecidedPosition(domains, swapped, strict);
+        if (position.isEmpty()) {
+            return operator.compare(0, 0) ? Optional.of(Map.of()) : Optional.empty();
+        }
+
+        UndecidedPosition<T> p = position.get();
+        Domain<T> lesserDom  = (Domain<T>) domains.get(p.lesser());
+        Domain<T> greaterDom = (Domain<T>) domains.get(p.greater());
+        T greaterMax = domainMax(greaterDom);
+        T lesserMin  = domainMin(lesserDom);
+
+        Domain<T> newLesserDom  = clipUpper(lesserDom,  greaterMax, p.strictHere());
+        Domain<T> newGreaterDom = clipLower(greaterDom, lesserMin,  p.strictHere());
+        if (newLesserDom.isEmpty()) return Optional.empty();
+
+        Map<Variable<?>, Domain<?>> updated = new HashMap<>();
+        if (lesserDom  instanceof BoundedDomain<?> ? newLesserDom  != lesserDom  : newLesserDom.size()  != lesserDom.size())  updated.put(p.lesser(),  newLesserDom);
+        if (greaterDom instanceof BoundedDomain<?> ? newGreaterDom != greaterDom : newGreaterDom.size() != greaterDom.size()) updated.put(p.greater(), newGreaterDom);
+        return Optional.of(updated);
+    }
+
+    /**
+     * On infeasibility, finds the same failing point via the same {@link #firstUndecidedPosition}
+     * scan {@link #propagate} uses (no domain threading needed: {@code propagate} returns as soon
+     * as it finds the first non-forced-equal position, so at most one position is ever examined),
+     * then attributes the conflict to every variable involved:
      * <ul>
      *   <li><b>Out-of-order position</b>: {@code lesserMin > greaterMax} (or {@code >=} when
      *       strict) depends on <em>both</em> {@code lesser} and {@code greater}'s current bounds
@@ -154,33 +171,25 @@ public class LexConstraint<T extends Comparable<T>> extends NaryConstraint imple
         boolean swapped = operator == Operator.GEQ || operator == Operator.GT;
         boolean strict = operator == Operator.LT || operator == Operator.GT;
 
-        for (int i = 0; i < variablePairs.size(); i++) {
-            VariablePair<T> pair = variablePairs.get(i);
-            Variable<T> lesser  = swapped ? pair.right() : pair.left();
-            Variable<T> greater = swapped ? pair.left()  : pair.right();
-            Domain<T> lesserDom  = (Domain<T>) domains.get(lesser);
-            Domain<T> greaterDom = (Domain<T>) domains.get(greater);
-
-            if (lesserDom.isSingleton() && greaterDom.isSingleton()
-                    && lesserDom.singleValue().equals(greaterDom.singleValue())) {
-                continue;
-            }
-
-            boolean strictHere = strict && i == variablePairs.size() - 1;
-            T greaterMax = domainMax(greaterDom);
-            T lesserMin  = domainMin(lesserDom);
-            boolean infeasible = strictHere
-                    ? lesserMin.compareTo(greaterMax) >= 0
-                    : lesserMin.compareTo(greaterMax) > 0;
-            if (!infeasible) return Map.of(); // propagate() would narrow, not fail, at this position
-            return Propagatable.allSingletonReason(List.of(lesser, greater), domains);
+        var position = firstUndecidedPosition(domains, swapped, strict);
+        if (position.isEmpty()) {
+            if (operator.compare(0, 0)) return Map.of();
+            List<Variable<T>> allVars = variablePairs.stream()
+                    .flatMap(pair -> Stream.of(pair.left(), pair.right()))
+                    .toList();
+            return Propagatable.allSingletonReason(allVars, domains);
         }
 
-        if (operator.compare(0, 0)) return Map.of();
-        List<Variable<T>> allVars = variablePairs.stream()
-                .flatMap(pair -> Stream.of(pair.left(), pair.right()))
-                .toList();
-        return Propagatable.allSingletonReason(allVars, domains);
+        UndecidedPosition<T> p = position.get();
+        Domain<T> lesserDom  = (Domain<T>) domains.get(p.lesser());
+        Domain<T> greaterDom = (Domain<T>) domains.get(p.greater());
+        T greaterMax = domainMax(greaterDom);
+        T lesserMin  = domainMin(lesserDom);
+        boolean infeasible = p.strictHere()
+                ? lesserMin.compareTo(greaterMax) >= 0
+                : lesserMin.compareTo(greaterMax) > 0;
+        if (!infeasible) return Map.of(); // propagate() would narrow, not fail, at this position
+        return Propagatable.allSingletonReason(List.of(p.lesser(), p.greater()), domains);
     }
 
     @SuppressWarnings("unchecked")
