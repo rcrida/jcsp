@@ -71,27 +71,43 @@ public class CircuitConstraint extends NaryConstraint implements Propagatable, B
                 .getAsBinaryConstraints();
     }
 
-    @Override
-    @SuppressWarnings("unchecked")
-    public Optional<Map<Variable<?>, Domain<?>>> propagate(@NonNull Map<Variable<?>, Domain<?>> domains) {
-        int n = successors.size();
-        Map<Variable<?>, Domain<?>> updated = new HashMap<>();
+    /**
+     * Outcome of one propagation pass, shared by {@link #propagate} and {@link #explainInfeasible}
+     * so each pass's narrowing/failure-detection logic lives in exactly one place. {@code updated}
+     * (passed into every pass method) is mutated in place with any narrowed domains regardless of
+     * outcome; {@link #FEASIBLE} means the pass found no infeasibility, {@code infeasible(reason)}
+     * means it did, carrying the sound explanation for {@link #explainInfeasible} to return
+     * (ignored by {@link #propagate}, which only needs to know a pass failed).
+     */
+    private record PassOutcome(boolean infeasible, Map<Variable<?>, Object> reason) {
+        static final PassOutcome FEASIBLE = new PassOutcome(false, Map.of());
+        static PassOutcome infeasible(Map<Variable<?>, Object> reason) { return new PassOutcome(true, reason); }
+    }
 
-        // Step 1: self-loop removal — node i+1 cannot point to itself.
-        if (n > 1) {
-            for (int i = 0; i < n; i++) {
-                DiscreteDomain<Integer> dom = currentDomain(i, domains, updated);
-                int self = i + 1;
-                if (dom.contains(self)) {
-                    DiscreteDomain<Integer> pruned = dom.toBuilder().delete(self).build();
-                    if (pruned.isEmpty()) return Optional.empty();
-                    log.debug("CircuitConstraint pruned self-loop {} from node {}", self, self);
-                    updated.put(successors.get(i), pruned);
+    /** Step 1: self-loop removal — node i+1 cannot point to itself. */
+    private PassOutcome selfLoopPass(Map<Variable<?>, Domain<?>> domains, Map<Variable<?>, Domain<?>> updated) {
+        int n = successors.size();
+        if (n <= 1) return PassOutcome.FEASIBLE;
+        for (int i = 0; i < n; i++) {
+            DiscreteDomain<Integer> dom = currentDomain(i, domains, updated);
+            int self = i + 1;
+            if (dom.contains(self)) {
+                DiscreteDomain<Integer> pruned = dom.toBuilder().delete(self).build();
+                if (pruned.isEmpty()) {
+                    Map<Variable<?>, Object> reason = new HashMap<>();
+                    Propagatable.addIfSingleton(dom, successors.get(i), reason);
+                    return PassOutcome.infeasible(reason);
                 }
+                log.debug("CircuitConstraint pruned self-loop {} from node {}", self, self);
+                updated.put(successors.get(i), pruned);
             }
         }
+        return PassOutcome.FEASIBLE;
+    }
 
-        // Step 2: singleton propagation — a fixed successor value is removed from all others.
+    /** Step 2: singleton propagation — a fixed successor value is removed from all others. */
+    private PassOutcome singletonPropagationPass(Map<Variable<?>, Domain<?>> domains, Map<Variable<?>, Domain<?>> updated) {
+        int n = successors.size();
         for (int i = 0; i < n; i++) {
             DiscreteDomain<Integer> domI = currentDomain(i, domains, updated);
             if (domI.isSingleton()) {
@@ -101,15 +117,24 @@ public class CircuitConstraint extends NaryConstraint implements Propagatable, B
                     DiscreteDomain<Integer> domK = currentDomain(k, domains, updated);
                     if (domK.contains(j)) {
                         DiscreteDomain<Integer> pruned = domK.toBuilder().delete(j).build();
-                        if (pruned.isEmpty()) return Optional.empty();
+                        if (pruned.isEmpty()) {
+                            Map<Variable<?>, Object> reason = new HashMap<>();
+                            Propagatable.addIfSingleton(domI, successors.get(i), reason);
+                            Propagatable.addIfSingleton(domK, successors.get(k), reason);
+                            return PassOutcome.infeasible(reason);
+                        }
                         log.debug("CircuitConstraint pruned duplicate successor {} from node {}", j, k + 1);
                         updated.put(successors.get(k), pruned);
                     }
                 }
             }
         }
+        return PassOutcome.FEASIBLE;
+    }
 
-        // Step 3: sub-tour elimination — an unfinished chain's endpoint cannot close back to its start.
+    /** Step 3: sub-tour elimination — an unfinished chain's endpoint cannot close back to its start. */
+    private PassOutcome subTourPass(Map<Variable<?>, Domain<?>> domains, Map<Variable<?>, Domain<?>> updated) {
+        int n = successors.size();
         Map<Integer, Integer> assigned = new HashMap<>();
         for (int i = 0; i < n; i++) {
             DiscreteDomain<Integer> dom = currentDomain(i, domains, updated);
@@ -127,7 +152,12 @@ public class CircuitConstraint extends NaryConstraint implements Propagatable, B
                 current = assigned.get(current);
             }
             if (visited.contains(current)) {
-                if (visited.size() < n) return Optional.empty();
+                if (visited.size() < n) {
+                    List<Variable<Integer>> chainVars = visited.stream().map(successors::get).toList();
+                    Map<Variable<?>, Domain<?>> currentDomains = new HashMap<>(domains);
+                    currentDomains.putAll(updated);
+                    return PassOutcome.infeasible(Propagatable.allSingletonReason(chainVars, currentDomains));
+                }
             } else {
                 chainStart.put(current, start);
             }
@@ -143,7 +173,15 @@ public class CircuitConstraint extends NaryConstraint implements Propagatable, B
                 updated.put(successors.get(endpoint), pruned);
             }
         }
+        return PassOutcome.FEASIBLE;
+    }
 
+    @Override
+    public Optional<Map<Variable<?>, Domain<?>>> propagate(@NonNull Map<Variable<?>, Domain<?>> domains) {
+        Map<Variable<?>, Domain<?>> updated = new HashMap<>();
+        if (selfLoopPass(domains, updated).infeasible()) return Optional.empty();
+        if (singletonPropagationPass(domains, updated).infeasible()) return Optional.empty();
+        if (subTourPass(domains, updated).infeasible()) return Optional.empty();
         return Optional.of(updated);
     }
 
@@ -155,9 +193,10 @@ public class CircuitConstraint extends NaryConstraint implements Propagatable, B
     }
 
     /**
-     * Replays {@link #propagate}'s three passes (threading the same narrowed domains, since a
-     * self-loop or singleton-propagation prune in an earlier pass can change a later pass's
-     * findings) until the same failing check is found, then attributes the conflict:
+     * Replays {@link #propagate}'s three passes via the same {@link #selfLoopPass}/
+     * {@link #singletonPropagationPass}/{@link #subTourPass} helpers (threading the same narrowed
+     * domains, since a self-loop or singleton-propagation prune in an earlier pass can change a
+     * later pass's findings) until the same failing pass is found, then returns its reason:
      * <ul>
      *     <li>self-loop removal — the domain that was already pinned to its own self-loop value
      *     is sufficient on its own, via {@link Propagatable#addIfSingleton};</li>
@@ -172,68 +211,16 @@ public class CircuitConstraint extends NaryConstraint implements Propagatable, B
      */
     @Override
     public Map<Variable<?>, Object> explainInfeasible(@NonNull Map<Variable<?>, Domain<?>> domains) {
-        int n = successors.size();
         Map<Variable<?>, Domain<?>> updated = new HashMap<>();
 
-        if (n > 1) {
-            for (int i = 0; i < n; i++) {
-                DiscreteDomain<Integer> dom = currentDomain(i, domains, updated);
-                int self = i + 1;
-                if (dom.contains(self)) {
-                    DiscreteDomain<Integer> pruned = dom.toBuilder().delete(self).build();
-                    if (pruned.isEmpty()) {
-                        Map<Variable<?>, Object> reason = new HashMap<>();
-                        Propagatable.addIfSingleton(dom, successors.get(i), reason);
-                        return reason;
-                    }
-                    updated.put(successors.get(i), pruned);
-                }
-            }
-        }
+        PassOutcome selfLoop = selfLoopPass(domains, updated);
+        if (selfLoop.infeasible()) return selfLoop.reason();
 
-        for (int i = 0; i < n; i++) {
-            DiscreteDomain<Integer> domI = currentDomain(i, domains, updated);
-            if (domI.isSingleton()) {
-                int j = domI.singleValue().orElseThrow();
-                for (int k = 0; k < n; k++) {
-                    if (k == i) continue;
-                    DiscreteDomain<Integer> domK = currentDomain(k, domains, updated);
-                    if (domK.contains(j)) {
-                        DiscreteDomain<Integer> pruned = domK.toBuilder().delete(j).build();
-                        if (pruned.isEmpty()) {
-                            Map<Variable<?>, Object> reason = new HashMap<>();
-                            Propagatable.addIfSingleton(domI, successors.get(i), reason);
-                            Propagatable.addIfSingleton(domK, successors.get(k), reason);
-                            return reason;
-                        }
-                        updated.put(successors.get(k), pruned);
-                    }
-                }
-            }
-        }
+        PassOutcome singletonPropagation = singletonPropagationPass(domains, updated);
+        if (singletonPropagation.infeasible()) return singletonPropagation.reason();
 
-        Map<Integer, Integer> assigned = new HashMap<>();
-        for (int i = 0; i < n; i++) {
-            DiscreteDomain<Integer> dom = currentDomain(i, domains, updated);
-            if (dom.isSingleton()) {
-                assigned.put(i, dom.singleValue().orElseThrow() - 1);
-            }
-        }
-        for (int start = 0; start < n; start++) {
-            if (!assigned.containsKey(start)) continue;
-            Set<Integer> visited = new LinkedHashSet<>();
-            int current = start;
-            while (assigned.containsKey(current) && !visited.contains(current)) {
-                visited.add(current);
-                current = assigned.get(current);
-            }
-            if (visited.contains(current) && visited.size() < n) {
-                List<Variable<Integer>> chainVars = visited.stream().map(successors::get).toList();
-                Map<Variable<?>, Domain<?>> currentDomains = new HashMap<>(domains);
-                currentDomains.putAll(updated);
-                return Propagatable.allSingletonReason(chainVars, currentDomains);
-            }
-        }
+        PassOutcome subTour = subTourPass(domains, updated);
+        if (subTour.infeasible()) return subTour.reason();
 
         return Map.of();
     }
