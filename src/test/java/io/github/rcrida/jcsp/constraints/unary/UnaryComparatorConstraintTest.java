@@ -97,6 +97,17 @@ public class UnaryComparatorConstraintTest {
         assertThat(result).isEmpty();
     }
 
+    @Test void explainInfeasible_usesPropagatableDefault() {
+        // UnaryComparatorConstraint deliberately never overrides explainInfeasible (see CLAUDE.md
+        // / project memory: its infeasible path is unreachable during real search, since discrete
+        // violations are eliminated by NodeConsistency and bounded domains are fully resolved
+        // before search begins). This directly exercises the Propagatable interface's default
+        // implementation, which no other class in the codebase falls back to any more now that
+        // every other Propagatable constraint has its own override.
+        var result = UnaryComparatorConstraint.of(DX, Operator.GEQ, 20.0).explainInfeasible(domains(0.0, 10.0));
+        assertThat(result).isEmpty();
+    }
+
     @Test void propagate_noChange_returnsEmptyMap() {
         var result = UnaryComparatorConstraint.of(DX, Operator.GEQ, 0.0).propagate(domains(0.0, 10.0));
         assertThat(result).isPresent();

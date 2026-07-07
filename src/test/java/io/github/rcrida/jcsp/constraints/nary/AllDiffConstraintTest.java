@@ -157,11 +157,10 @@ public class AllDiffConstraintTest {
 
     @Test
     void propagateWithReasons_infeasible_returnsEmptyReason() {
-        // AllDiffConstraint does not override propagateWithReasons, so a Hall violation
-        // (3 variables confined to 2 values) resolves via the Propagatable default: infeasible,
-        // with an empty reason. Callers (e.g. MacAndFixpointConflictExplainer) fall back to the
-        // full assignment when no finer explanation is available. Per-propagator explanation for
-        // AllDiff's Hall-set violations is deferred future work.
+        // None of x1,x2,x3 is singleton, so explainInfeasible's allSingletonReason gate can't
+        // produce a reason here (by pigeonhole, a non-empty reason always reduces to a pairwise
+        // singleton collision — see explainInfeasible_nonSingletonHallSet_returnsEmpty below).
+        // Callers (e.g. MacAndFixpointConflictExplainer) fall back to the full assignment.
         Variable<Integer> x1 = F.create("wr_x1"), x2 = F.create("wr_x2"), x3 = F.create("wr_x3");
         var c = AllDiffConstraint.<Integer>builder().variables(Set.of(x1, x2, x3)).build();
         var domains = Map.<Variable<?>, Domain<?>>of(
@@ -183,5 +182,60 @@ public class AllDiffConstraintTest {
         var result = c.propagateWithReasons(domains);
         assertThat(result.isInfeasible()).isFalse();
         assertThat(result.reason()).isEmpty();
+    }
+
+    // --- explainInfeasible() ---
+
+    @Test
+    void explainInfeasible_pairwiseSingletonCollision_returnsReason() {
+        // x1={5}, x2={5}: the simplest Hall violation (k=2), and both variables are singleton.
+        Variable<Integer> x1 = F.create("ei_x1"), x2 = F.create("ei_x2");
+        var c = AllDiffConstraint.<Integer>builder().variables(Set.of(x1, x2)).build();
+        var domains = Map.<Variable<?>, Domain<?>>of(
+                x1, IntRangeDomain.of(5, 5),
+                x2, IntRangeDomain.of(5, 5));
+        assertThat(c.propagate(domains)).isEmpty();
+        assertThat(c.explainInfeasible(domains)).isEqualTo(Map.of(x1, 5, x2, 5));
+    }
+
+    @Test
+    void explainInfeasible_pairwiseSingletonCollision_ignoresUnrelatedVariable() {
+        // x1={5}, x2={5} collide; x3∈{1,2,3} is part of the same constraint but unrelated to the
+        // violation — the Hall-set extraction must exclude it from the reason.
+        Variable<Integer> x1 = F.create("ei_u1"), x2 = F.create("ei_u2"), x3 = F.create("ei_u3");
+        var c = AllDiffConstraint.<Integer>builder().variables(Set.of(x1, x2, x3)).build();
+        var domains = Map.<Variable<?>, Domain<?>>of(
+                x1, IntRangeDomain.of(5, 5),
+                x2, IntRangeDomain.of(5, 5),
+                x3, IntRangeDomain.of(1, 3));
+        assertThat(c.propagate(domains)).isEmpty();
+        assertThat(c.explainInfeasible(domains)).isEqualTo(Map.of(x1, 5, x2, 5));
+    }
+
+    @Test
+    void explainInfeasible_nonSingletonHallSet_returnsEmpty() {
+        // Same setup as propagate_infeasible_returnsEmpty: none of x1,x2,x3 is singleton, so no
+        // reason is sound (by pigeonhole, a non-empty reason here would require at least two of
+        // them to already share the same singleton value).
+        Variable<Integer> x1 = F.create("ei_n1"), x2 = F.create("ei_n2"), x3 = F.create("ei_n3");
+        var c = AllDiffConstraint.<Integer>builder().variables(Set.of(x1, x2, x3)).build();
+        var domains = Map.<Variable<?>, Domain<?>>of(
+                x1, IntRangeDomain.of(1, 2),
+                x2, IntRangeDomain.of(1, 2),
+                x3, IntRangeDomain.of(1, 2));
+        assertThat(c.propagate(domains)).isEmpty();
+        assertThat(c.explainInfeasible(domains)).isEmpty();
+    }
+
+    @Test
+    void explainInfeasible_feasible_returnsEmpty() {
+        // Same setup as propagate_wideDomains_noChange: no infeasibility to explain.
+        Variable<Integer> x1 = F.create("ei_f1"), x2 = F.create("ei_f2");
+        var c = AllDiffConstraint.<Integer>builder().variables(Set.of(x1, x2)).build();
+        var domains = Map.<Variable<?>, Domain<?>>of(
+                x1, IntRangeDomain.of(1, 5),
+                x2, IntRangeDomain.of(1, 5));
+        assertThat(c.propagate(domains)).isPresent();
+        assertThat(c.explainInfeasible(domains)).isEmpty();
     }
 }

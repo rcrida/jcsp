@@ -12,6 +12,7 @@ import io.github.rcrida.jcsp.variables.Variable;
 import org.jspecify.annotations.NonNull;
 
 import java.util.*;
+import java.util.stream.IntStream;
 
 /**
  * Represents the "all-different" constraint in a constraint satisfaction problem (CSP).
@@ -64,14 +65,15 @@ public class AllDiffConstraint<T> extends UniformNaryConstraint<T> implements Pr
     }
 
     /**
-     * Régin's GAC propagator: bipartite matching + Tarjan SCC.
-     * Detects naked pairs/triples and any other Hall-set violation without backtracking.
-     *
-     * @see <a href="https://doi.org/10.1016/0004-3702(94)90060-4">Régin (1994)</a>
+     * The bipartite variable/value graph and maximum matching, shared by {@link #propagate} and
+     * {@link #explainInfeasible} so the matching computation lives in exactly one place.
      */
-    @Override
+    private record MatchingResult(List<Variable<?>> vars, List<Object> valueList,
+                                   List<List<Integer>> varAdj, int[] matchVar, int[] matchVal,
+                                   int matchingSize) {}
+
     @SuppressWarnings("unchecked")
-    public Optional<Map<Variable<?>, Domain<?>>> propagate(@NonNull Map<Variable<?>, Domain<?>> domains) {
+    private MatchingResult computeMatching(Map<Variable<?>, Domain<?>> domains) {
         List<Variable<T>> vars = new ArrayList<>((Set<Variable<T>>) (Set<?>) getVariables());
         int n = vars.size();
 
@@ -103,7 +105,29 @@ public class AllDiffConstraint<T> extends UniformNaryConstraint<T> implements Pr
         for (int i = 0; i < n; i++) {
             if (augment(i, varAdj, matchVar, matchVal, new boolean[m])) matchingSize++;
         }
-        if (matchingSize < n) return Optional.empty();
+
+        return new MatchingResult((List<Variable<?>>) (List<?>) vars, valueList, varAdj, matchVar, matchVal, matchingSize);
+    }
+
+    /**
+     * Régin's GAC propagator: bipartite matching + Tarjan SCC.
+     * Detects naked pairs/triples and any other Hall-set violation without backtracking.
+     *
+     * @see <a href="https://doi.org/10.1016/0004-3702(94)90060-4">Régin (1994)</a>
+     */
+    @Override
+    @SuppressWarnings("unchecked")
+    public Optional<Map<Variable<?>, Domain<?>>> propagate(@NonNull Map<Variable<?>, Domain<?>> domains) {
+        MatchingResult matching = computeMatching(domains);
+        List<Variable<?>> vars = matching.vars();
+        List<Object> valueList = matching.valueList();
+        List<List<Integer>> varAdj = matching.varAdj();
+        int[] matchVar = matching.matchVar();
+        int[] matchVal = matching.matchVal();
+        int n = vars.size();
+        int m = valueList.size();
+
+        if (matching.matchingSize() < n) return Optional.empty();
 
         int freeNode = n + m;
         int totalNodes = freeNode + 1;
@@ -138,7 +162,7 @@ public class AllDiffConstraint<T> extends UniformNaryConstraint<T> implements Pr
             for (int vj : varAdj.get(i)) {
                 if (vj != mv && scc[i] != scc[n + vj]) {
                     if (builder == null) builder = dom.toBuilder();
-                    builder.delete(valueList.get(vj));
+                    builder.delete((T) valueList.get(vj));
                 }
             }
             if (builder != null) {
@@ -146,6 +170,67 @@ public class AllDiffConstraint<T> extends UniformNaryConstraint<T> implements Pr
             }
         }
         return Optional.of(updates);
+    }
+
+    /**
+     * Finds the Hall-violating variable subset via the standard alternating-reachability
+     * construction (the constructive proof of König/Hall's theorem): starting from a variable left
+     * unmatched by the maximum matching, {@code z} is every variable reachable by alternating
+     * paths. This set is guaranteed to have {@code |N(z)| < |z|} — a genuine Hall violation — since
+     * `exposed` has no augmenting path in a maximum matching.
+     * <p>
+     * Deliberately no {@code matchedVar != -1} or {@code z.add(...)}-truthiness guard: both are
+     * mathematically impossible to fail here. A free value reachable from {@code exposed} would
+     * itself complete an augmenting path from {@code exposed}, contradicting the matching's
+     * maximality; and since the matching is injective, each variable is matched to exactly one
+     * value, so it can only ever be proposed for {@code z}-membership once. Adding checks for
+     * cases that provably can't happen would only create untestable dead branches under this
+     * project's 100%-branch-coverage requirement.
+     */
+    private Set<Integer> hallViolatingVars(int exposed, List<List<Integer>> varAdj, int[] matchVal) {
+        Set<Integer> z = new HashSet<>();
+        Set<Integer> visitedValues = new HashSet<>();
+        Deque<Integer> queue = new ArrayDeque<>();
+        z.add(exposed);
+        queue.add(exposed);
+        while (!queue.isEmpty()) {
+            int i = queue.poll();
+            for (int vj : varAdj.get(i)) {
+                if (visitedValues.add(vj)) {
+                    int matchedVar = matchVal[vj];
+                    z.add(matchedVar);
+                    queue.add(matchedVar);
+                }
+            }
+        }
+        return z;
+    }
+
+    /**
+     * Attributes a Hall-set violation to the variables of the Hall-violating subset {@code z}
+     * found by {@link #hallViolatingVars}, via {@link Propagatable#allSingletonReason} — sound
+     * only when every variable in {@code z} is currently singleton.
+     * <p>
+     * This is a narrower proof than {@code propagate}'s general Régin GAC: by pigeonhole, if every
+     * variable in a Hall-violating set of size {@code k} is singleton, at least two of them
+     * necessarily share the same value (they occupy at most {@code k-1} distinct values), so a
+     * non-empty reason from this method always reduces to a simple pairwise collision. The
+     * general, non-singleton Hall violation — e.g. three variables each with domain {@code {1,2}},
+     * the actual reason Régin's algorithm exists instead of plain pairwise decomposition — isn't
+     * reducible to a small set of variable-value pairs, and still falls back to {@code Map.of()}
+     * here, same as the default.
+     */
+    @Override
+    public Map<Variable<?>, Object> explainInfeasible(@NonNull Map<Variable<?>, Domain<?>> domains) {
+        MatchingResult matching = computeMatching(domains);
+        int n = matching.vars().size();
+        if (matching.matchingSize() >= n) return Map.of();
+
+        // matchingSize < n guarantees some variable is unmatched.
+        int exposed = IntStream.range(0, n).filter(i -> matching.matchVar()[i] == -1).findFirst().orElseThrow();
+        Set<Integer> z = hallViolatingVars(exposed, matching.varAdj(), matching.matchVal());
+        List<Variable<?>> zVars = z.stream().map(matching.vars()::get).toList();
+        return Propagatable.allSingletonReason(zVars, domains);
     }
 
     private boolean augment(int u, List<List<Integer>> adj, int[] matchVar, int[] matchVal,
