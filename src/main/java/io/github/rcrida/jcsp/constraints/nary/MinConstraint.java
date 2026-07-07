@@ -48,6 +48,16 @@ public class MinConstraint<N extends Number> extends UniformNaryConstraint<N> im
     @NonNull private final N bound;
     @NonNull private final Operator operator;
 
+    /** Whether the lower-bound pass applies, shared by {@link #propagate} and {@link #explainInfeasible}. */
+    private boolean lowerPassApplies() {
+        return operator == Operator.EQ || operator == Operator.GEQ || operator == Operator.GT;
+    }
+
+    /** Whether the upper-bound pass applies, shared by {@link #propagate} and {@link #explainInfeasible}. */
+    private boolean upperPassApplies() {
+        return operator == Operator.EQ || operator == Operator.LEQ || operator == Operator.LT;
+    }
+
     public static <N extends Number> MinConstraint<N> of(@NonNull Set<Variable<N>> variables,
                                                          @NonNull Operator operator,
                                                          @NonNull N bound) {
@@ -93,7 +103,7 @@ public class MinConstraint<N extends Number> extends UniformNaryConstraint<N> im
         Map<Variable<?>, Domain<?>> updated = new HashMap<>();
 
         // Lower-bound pass: min(vars) ≥ k — every variable must be ≥ k
-        if (operator == Operator.EQ || operator == Operator.GEQ || operator == Operator.GT) {
+        if (lowerPassApplies()) {
             double globalSmallestMax = Double.POSITIVE_INFINITY;
             for (double m : maxs) globalSmallestMax = Math.min(globalSmallestMax, m);
             boolean strict = operator == Operator.GT;
@@ -110,7 +120,7 @@ public class MinConstraint<N extends Number> extends UniformNaryConstraint<N> im
         }
 
         // Upper-bound pass: min(vars) ≤ k — at least one variable must reach k
-        if (operator == Operator.EQ || operator == Operator.LEQ || operator == Operator.LT) {
+        if (upperPassApplies()) {
             double globalSmallestMin = Double.POSITIVE_INFINITY;
             for (double m : mins) globalSmallestMin = Math.min(globalSmallestMin, m);
             boolean strict = operator == Operator.LT;
@@ -175,7 +185,7 @@ public class MinConstraint<N extends Number> extends UniformNaryConstraint<N> im
         double k = bound.doubleValue();
         boolean lowerStrict = operator == Operator.GT;
 
-        if (operator == Operator.EQ || operator == Operator.GEQ || operator == Operator.GT) {
+        if (lowerPassApplies()) {
             for (Variable<?> var : getVariables()) {
                 Domain<N> dom = (Domain<N>) domains.get(var);
                 if (!dom.isSingleton()) continue;
@@ -189,7 +199,7 @@ public class MinConstraint<N extends Number> extends UniformNaryConstraint<N> im
             }
         }
 
-        if (operator == Operator.EQ || operator == Operator.LEQ || operator == Operator.LT) {
+        if (upperPassApplies()) {
             Map<Variable<?>, Object> reason = Propagatable.allSingletonReason(getVariables(), domains);
             if (!reason.isEmpty()) return reason;
         }

@@ -48,6 +48,16 @@ public class MaxConstraint<N extends Number> extends UniformNaryConstraint<N> im
     @NonNull private final N bound;
     @NonNull private final Operator operator;
 
+    /** Whether the upper-bound pass applies, shared by {@link #propagate} and {@link #explainInfeasible}. */
+    private boolean upperPassApplies() {
+        return operator == Operator.EQ || operator == Operator.LEQ || operator == Operator.LT;
+    }
+
+    /** Whether the lower-bound pass applies, shared by {@link #propagate} and {@link #explainInfeasible}. */
+    private boolean lowerPassApplies() {
+        return operator == Operator.EQ || operator == Operator.GEQ || operator == Operator.GT;
+    }
+
     public static <N extends Number> MaxConstraint<N> of(@NonNull Set<Variable<N>> variables,
                                                          @NonNull Operator operator,
                                                          @NonNull N bound) {
@@ -93,7 +103,7 @@ public class MaxConstraint<N extends Number> extends UniformNaryConstraint<N> im
         Map<Variable<?>, Domain<?>> updated = new HashMap<>();
 
         // Upper-bound pass: max(vars) ≤ k — every variable must be ≤ k
-        if (operator == Operator.EQ || operator == Operator.LEQ || operator == Operator.LT) {
+        if (upperPassApplies()) {
             double globalMin = Double.NEGATIVE_INFINITY;
             for (double m : mins) globalMin = Math.max(globalMin, m);
             boolean strict = operator == Operator.LT;
@@ -110,7 +120,7 @@ public class MaxConstraint<N extends Number> extends UniformNaryConstraint<N> im
         }
 
         // Lower-bound pass: max(vars) ≥ k — at least one variable must reach k
-        if (operator == Operator.EQ || operator == Operator.GEQ || operator == Operator.GT) {
+        if (lowerPassApplies()) {
             double globalMax = Double.NEGATIVE_INFINITY;
             for (double m : maxs) globalMax = Math.max(globalMax, m);
             boolean strict = operator == Operator.GT;
@@ -174,7 +184,7 @@ public class MaxConstraint<N extends Number> extends UniformNaryConstraint<N> im
         double k = bound.doubleValue();
         boolean upperStrict = operator == Operator.LT;
 
-        if (operator == Operator.EQ || operator == Operator.LEQ || operator == Operator.LT) {
+        if (upperPassApplies()) {
             for (Variable<?> var : getVariables()) {
                 Domain<N> dom = (Domain<N>) domains.get(var);
                 if (!dom.isSingleton()) continue;
@@ -188,7 +198,7 @@ public class MaxConstraint<N extends Number> extends UniformNaryConstraint<N> im
             }
         }
 
-        if (operator == Operator.EQ || operator == Operator.GEQ || operator == Operator.GT) {
+        if (lowerPassApplies()) {
             Map<Variable<?>, Object> reason = Propagatable.allSingletonReason(getVariables(), domains);
             if (!reason.isEmpty()) return reason;
         }
