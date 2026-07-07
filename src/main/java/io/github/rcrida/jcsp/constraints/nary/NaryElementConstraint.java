@@ -166,6 +166,40 @@ public class NaryElementConstraint<T> extends NaryConstraint implements Propagat
         return Optional.of(updated);
     }
 
+    /**
+     * The sole infeasibility point is pass 1 emptying {@code index}'s domain: every candidate
+     * {@code i} was excluded either because it's out of bounds (unconditional — no variable
+     * involved) or because {@code vars[i-1]}'s domain doesn't overlap {@code result}'s (depends on
+     * both). Since {@code propagate} guarantees {@code index}, {@code result}, and every
+     * {@code vars[i-1]} were {@link DiscreteDomain} before ever reaching pass 1 (the type guards
+     * upstream return {@code Optional.of(Map.of())} otherwise, never {@code Optional.empty()}, and
+     * {@code explainInfeasible} is only ever invoked with the same {@code domains} that made
+     * {@code propagate} return infeasible), no redundant type check is needed here.
+     * <p>
+     * Attributes the wipeout to {@code result} plus every {@code vars[i-1]} for in-bounds
+     * candidates only — out-of-bounds candidates contribute to the wipeout "for free" and cite
+     * nothing. Sound only when every cited variable is singleton, via
+     * {@link Propagatable#allSingletonReason}: a non-singleton {@code vars[i-1]} could still narrow
+     * to a value overlapping {@code result} along a different search path. If every candidate was
+     * out of bounds (nothing to cite), returns {@link Map#of()} directly rather than degrading
+     * through an empty {@code allSingletonReason} call on an empty set.
+     */
+    @Override
+    @SuppressWarnings("unchecked")
+    public Map<Variable<?>, Object> explainInfeasible(@NonNull Map<Variable<?>, Domain<?>> domains) {
+        DiscreteDomain<Integer> indexDomain = (DiscreteDomain<Integer>) domains.get(index);
+
+        Set<Variable<?>> cited = new HashSet<>();
+        for (Integer i : indexDomain.toList()) {
+            if (i >= 1 && i <= vars.size()) {
+                cited.add(vars.get(i - 1));
+            }
+        }
+        if (cited.isEmpty()) return Map.of();
+        cited.add(result);
+        return Propagatable.allSingletonReason(cited, domains);
+    }
+
     @Override
     public String getRelation() {
         String varList = vars.stream().map(Object::toString).collect(Collectors.joining(", ", "[", "]"));

@@ -235,6 +235,68 @@ public class NaryElementConstraintTest {
         assertThat(newIndex.toList()).containsExactlyInAnyOrder(1, 2, 3);
     }
 
+    // --- explainInfeasible() ---
+
+    @Test
+    void explainInfeasible_allSingleton_returnsFullReason() {
+        // Same setup as propagate_infeasibleWhenNoLiveIndices: all three in-bounds candidates
+        // excluded for lack of overlap with result, and every cited variable is singleton.
+        var domains = Map.<Variable<?>, io.github.rcrida.jcsp.domains.Domain<?>>of(
+                INDEX, IntRangeDomain.of(1, 3),
+                RESULT, DomainObjectSet.<String>builder().value("x").build(),
+                A, DomainObjectSet.<String>builder().value("alpha").build(),
+                B, DomainObjectSet.<String>builder().value("beta").build(),
+                C, DomainObjectSet.<String>builder().value("gamma").build()
+        );
+        assertThat(constraint.propagate(domains)).isEmpty();
+        assertThat(constraint.explainInfeasible(domains))
+                .isEqualTo(Map.of(A, "alpha", B, "beta", C, "gamma", RESULT, "x"));
+    }
+
+    @Test
+    void explainInfeasible_notAllSingleton_returnsEmpty() {
+        // A is not singleton (still no overlap with result), so no reason is sound.
+        var domains = Map.<Variable<?>, io.github.rcrida.jcsp.domains.Domain<?>>of(
+                INDEX, IntRangeDomain.of(1, 3),
+                RESULT, DomainObjectSet.<String>builder().value("x").build(),
+                A, DomainObjectSet.<String>builder().value("alpha").value("delta").build(),
+                B, DomainObjectSet.<String>builder().value("beta").build(),
+                C, DomainObjectSet.<String>builder().value("gamma").build()
+        );
+        assertThat(constraint.propagate(domains)).isEmpty();
+        assertThat(constraint.explainInfeasible(domains)).isEmpty();
+    }
+
+    @Test
+    void explainInfeasible_allOutOfBounds_returnsEmpty() {
+        // Every candidate is out of bounds — nothing to cite, no variable is ever consulted.
+        var domains = Map.<Variable<?>, io.github.rcrida.jcsp.domains.Domain<?>>of(
+                INDEX, DomainObjectSet.<Integer>builder().value(0).value(4).build(),
+                RESULT, DomainObjectSet.<String>builder().value("alpha").build(),
+                A, DomainObjectSet.<String>builder().value("alpha").build(),
+                B, DomainObjectSet.<String>builder().value("beta").build(),
+                C, DomainObjectSet.<String>builder().value("gamma").build()
+        );
+        assertThat(constraint.propagate(domains)).isEmpty();
+        assertThat(constraint.explainInfeasible(domains)).isEmpty();
+    }
+
+    @Test
+    void explainInfeasible_mixedBoundsAndSupport_citesOnlyInBoundsVars() {
+        // 0 and 4 are out of bounds (uncited); 1 and 2 are in-bounds but unsupported (cited via
+        // A and B); index 3 (C) never appears in the domain at all, so C must not be cited.
+        var domains = Map.<Variable<?>, io.github.rcrida.jcsp.domains.Domain<?>>of(
+                INDEX, DomainObjectSet.<Integer>builder().value(0).value(1).value(2).value(4).build(),
+                RESULT, DomainObjectSet.<String>builder().value("x").build(),
+                A, DomainObjectSet.<String>builder().value("alpha").build(),
+                B, DomainObjectSet.<String>builder().value("beta").build(),
+                C, DomainObjectSet.<String>builder().value("gamma").build()
+        );
+        assertThat(constraint.propagate(domains)).isEmpty();
+        assertThat(constraint.explainInfeasible(domains))
+                .isEqualTo(Map.of(A, "alpha", B, "beta", RESULT, "x"));
+    }
+
     @Test
     void testToString() {
         assertThat(constraint.toString()).isEqualTo("<(a, b, c, index, result), result = [a, b, c][index]>");
