@@ -54,78 +54,33 @@ public class InverseConstraint extends NaryConstraint implements Propagatable {
     }
 
     /**
-     * Arc consistency between the two arrays: {@code j ∈ dom(f[i]) ↔ (i+1) ∈ dom(invf[j-1])}.
-     * Runs two passes — first pruning invf based on f domains, then pruning f based on the
-     * (possibly updated) invf domains.
+     * Outcome of one propagation pass, shared by {@link #propagate} and {@link #explainInfeasible}
+     * so each pass's narrowing/failure-detection logic lives in exactly one place. {@code updated}
+     * (passed into every pass method) is mutated in place with any narrowed domains regardless of
+     * outcome; {@link #FEASIBLE} means the pass found no infeasibility, {@code infeasible(reason)}
+     * means it did, carrying the sound explanation for {@link #explainInfeasible} to return
+     * (ignored by {@link #propagate}, which only needs to know a pass failed).
      */
-    @Override
-    @SuppressWarnings("unchecked")
-    public Optional<Map<Variable<?>, Domain<?>>> propagate(@NonNull Map<Variable<?>, Domain<?>> domains) {
-        int n = f.size();
-        Map<Variable<?>, Domain<?>> updated = new HashMap<>();
-
-        // Pass 1: prune invf[j] — remove val if (j+1) ∉ dom(f[val-1])
-        for (int j = 0; j < n; j++) {
-            DiscreteDomain<Integer> invfDom = (DiscreteDomain<Integer>) domains.get(invf.get(j));
-            DiscreteDomain.Builder<Integer> builder = null;
-            for (Integer val : invfDom.toList()) {
-                DiscreteDomain<Integer> fDom = (DiscreteDomain<Integer>) domains.get(f.get(val - 1));
-                if (!fDom.contains(j + 1)) {
-                    if (builder == null) builder = invfDom.toBuilder();
-                    builder.delete(val);
-                }
-            }
-            if (builder != null) {
-                DiscreteDomain<Integer> pruned = builder.build();
-                if (pruned.isEmpty()) return Optional.empty();
-                updated.put(invf.get(j), pruned);
-            }
-        }
-
-        // Pass 2: prune f[i] — remove j if (i+1) ∉ dom(invf[j-1]) (using updated invf domains)
-        for (int i = 0; i < n; i++) {
-            DiscreteDomain<Integer> fDom = (DiscreteDomain<Integer>) domains.get(f.get(i));
-            DiscreteDomain.Builder<Integer> builder = null;
-            for (Integer j : fDom.toList()) {
-                DiscreteDomain<Integer> invfDom = (DiscreteDomain<Integer>) updated.getOrDefault(invf.get(j - 1),
-                        domains.get(invf.get(j - 1)));
-                if (!invfDom.contains(i + 1)) {
-                    if (builder == null) builder = fDom.toBuilder();
-                    builder.delete(j);
-                }
-            }
-            if (builder != null) {
-                DiscreteDomain<Integer> pruned = builder.build();
-                if (pruned.isEmpty()) return Optional.empty();
-                updated.put(f.get(i), pruned);
-            }
-        }
-
-        return Optional.of(updated);
+    private record PassOutcome(boolean infeasible, Map<Variable<?>, Object> reason) {
+        static final PassOutcome FEASIBLE = new PassOutcome(false, Map.of());
+        static PassOutcome infeasible(Map<Variable<?>, Object> reason) { return new PassOutcome(true, reason); }
     }
 
-    /**
-     * Replays {@link #propagate}'s two passes, threading pass 1's updates into pass 2 exactly as
-     * {@code propagate} does, to find the same emptied domain. At that point, the emptied
-     * variable's every candidate value was excluded by some variable on the opposite array — those
-     * "opposite" variables are the culprits. Sound only when every culprit is currently singleton,
-     * via {@link Propagatable#allSingletonReason}: a non-singleton excluding variable could still
-     * be assigned a value later that resolves the exclusion, so citing it as a nogood requires its
-     * value to already be pinned.
-     */
-    @Override
     @SuppressWarnings("unchecked")
-    public Map<Variable<?>, Object> explainInfeasible(@NonNull Map<Variable<?>, Domain<?>> domains) {
-        int n = f.size();
-        Map<Variable<?>, Domain<?>> current = new HashMap<>(domains);
+    private DiscreteDomain<Integer> currentDomain(Variable<Integer> v, Map<Variable<?>, Domain<?>> domains,
+                                                  Map<Variable<?>, Domain<?>> updated) {
+        return (DiscreteDomain<Integer>) updated.getOrDefault(v, domains.get(v));
+    }
 
-        // Pass 1: replay invf[j] pruning
+    /** Pass 1: prune invf[j] — remove val if (j+1) ∉ dom(f[val-1]). */
+    private PassOutcome invfPruningPass(Map<Variable<?>, Domain<?>> domains, Map<Variable<?>, Domain<?>> updated) {
+        int n = f.size();
         for (int j = 0; j < n; j++) {
-            DiscreteDomain<Integer> invfDom = (DiscreteDomain<Integer>) current.get(invf.get(j));
+            DiscreteDomain<Integer> invfDom = currentDomain(invf.get(j), domains, updated);
             Set<Variable<?>> culprits = new HashSet<>();
             DiscreteDomain.Builder<Integer> builder = null;
             for (Integer val : invfDom.toList()) {
-                DiscreteDomain<Integer> fDom = (DiscreteDomain<Integer>) current.get(f.get(val - 1));
+                DiscreteDomain<Integer> fDom = currentDomain(f.get(val - 1), domains, updated);
                 if (!fDom.contains(j + 1)) {
                     if (builder == null) builder = invfDom.toBuilder();
                     builder.delete(val);
@@ -133,19 +88,27 @@ public class InverseConstraint extends NaryConstraint implements Propagatable {
                 }
             }
             if (builder != null) {
-                DiscreteDomain<Integer> pruned = (DiscreteDomain<Integer>) builder.build();
-                if (pruned.isEmpty()) return Propagatable.allSingletonReason(culprits, current);
-                current.put(invf.get(j), pruned);
+                DiscreteDomain<Integer> pruned = builder.build();
+                if (pruned.isEmpty()) {
+                    Map<Variable<?>, Domain<?>> merged = new HashMap<>(domains);
+                    merged.putAll(updated);
+                    return PassOutcome.infeasible(Propagatable.allSingletonReason(culprits, merged));
+                }
+                updated.put(invf.get(j), pruned);
             }
         }
+        return PassOutcome.FEASIBLE;
+    }
 
-        // Pass 2: replay f[i] pruning using the (possibly updated) invf domains from pass 1
+    /** Pass 2: prune f[i] — remove j if (i+1) ∉ dom(invf[j-1]) (using updated invf domains). */
+    private PassOutcome fPruningPass(Map<Variable<?>, Domain<?>> domains, Map<Variable<?>, Domain<?>> updated) {
+        int n = f.size();
         for (int i = 0; i < n; i++) {
-            DiscreteDomain<Integer> fDom = (DiscreteDomain<Integer>) current.get(f.get(i));
+            DiscreteDomain<Integer> fDom = currentDomain(f.get(i), domains, updated);
             Set<Variable<?>> culprits = new HashSet<>();
             DiscreteDomain.Builder<Integer> builder = null;
             for (Integer j : fDom.toList()) {
-                DiscreteDomain<Integer> invfDom = (DiscreteDomain<Integer>) current.get(invf.get(j - 1));
+                DiscreteDomain<Integer> invfDom = currentDomain(invf.get(j - 1), domains, updated);
                 if (!invfDom.contains(i + 1)) {
                     if (builder == null) builder = fDom.toBuilder();
                     builder.delete(j);
@@ -153,12 +116,48 @@ public class InverseConstraint extends NaryConstraint implements Propagatable {
                 }
             }
             if (builder != null) {
-                DiscreteDomain<Integer> pruned = (DiscreteDomain<Integer>) builder.build();
-                if (pruned.isEmpty()) return Propagatable.allSingletonReason(culprits, current);
-                current.put(f.get(i), pruned);
+                DiscreteDomain<Integer> pruned = builder.build();
+                if (pruned.isEmpty()) {
+                    Map<Variable<?>, Domain<?>> merged = new HashMap<>(domains);
+                    merged.putAll(updated);
+                    return PassOutcome.infeasible(Propagatable.allSingletonReason(culprits, merged));
+                }
+                updated.put(f.get(i), pruned);
             }
         }
+        return PassOutcome.FEASIBLE;
+    }
 
+    /**
+     * Arc consistency between the two arrays: {@code j ∈ dom(f[i]) ↔ (i+1) ∈ dom(invf[j-1])}.
+     * Runs two passes — first pruning invf based on f domains, then pruning f based on the
+     * (possibly updated) invf domains.
+     */
+    @Override
+    public Optional<Map<Variable<?>, Domain<?>>> propagate(@NonNull Map<Variable<?>, Domain<?>> domains) {
+        Map<Variable<?>, Domain<?>> updated = new HashMap<>();
+        if (invfPruningPass(domains, updated).infeasible()) return Optional.empty();
+        if (fPruningPass(domains, updated).infeasible()) return Optional.empty();
+        return Optional.of(updated);
+    }
+
+    /**
+     * Replays {@link #propagate}'s two passes via the same {@link #invfPruningPass}/
+     * {@link #fPruningPass} helpers (threading pass 1's updates into pass 2 exactly as
+     * {@code propagate} does) to find the same emptied domain. At that point, the emptied
+     * variable's every candidate value was excluded by some variable on the opposite array — those
+     * "opposite" variables are the culprits. Sound only when every culprit is currently singleton,
+     * via {@link Propagatable#allSingletonReason}: a non-singleton excluding variable could still
+     * be assigned a value later that resolves the exclusion, so citing it as a nogood requires its
+     * value to already be pinned.
+     */
+    @Override
+    public Map<Variable<?>, Object> explainInfeasible(@NonNull Map<Variable<?>, Domain<?>> domains) {
+        Map<Variable<?>, Domain<?>> updated = new HashMap<>();
+        PassOutcome pass1 = invfPruningPass(domains, updated);
+        if (pass1.infeasible()) return pass1.reason();
+        PassOutcome pass2 = fPruningPass(domains, updated);
+        if (pass2.infeasible()) return pass2.reason();
         return Map.of();
     }
 
