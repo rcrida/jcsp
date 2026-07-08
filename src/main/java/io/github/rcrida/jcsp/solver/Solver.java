@@ -21,6 +21,7 @@ import lombok.val;
 import org.jspecify.annotations.NonNull;
 
 import java.util.Optional;
+import java.util.function.Function;
 import java.util.function.ToDoubleFunction;
 import java.util.stream.Stream;
 
@@ -97,31 +98,37 @@ public interface Solver {
                                             @NonNull SolverLimits limits) {
                 boolean hasContinuous = csp.getVariableDomains().values().stream()
                         .anyMatch(BoundedDomain.class::isInstance);
-                val nogoodStore = NogoodStore.forProblem(csp);
-                val domWdegLubySearch = DomWdegLubySearch.builder()
-                        .domainValuesOrderer(LeastConstrainingValueOrderer.INSTANCE)
-                        .inference(FULL_PROPAGATION_INFERENCE)
-                        .limits(limits)
-                        .nogoodStore(nogoodStore)
-                        .conflictExplainer(MacAndFixpointConflictExplainer.INSTANCE)
-                        // Effectively unbounded: getSolution() now reaches Luby-restart search directly
-                        // (see BoundSolver#getSolution below), so DEFAULT_MAX_RESTARTS's cap would silently
-                        // turn SolverLimits.unlimited() into a bounded search. SolverLimits (node/time)
-                        // remains the only intended way to bound a search; restarts should never be it.
-                        .maxRestarts(Integer.MAX_VALUE)
-                        .build();
                 val treeSolver = new TreeSolver(BFSTopologicalSorter.INSTANCE, DefaultValueOrderer.INSTANCE, TreeUnassignedVariableSelector.Factory.INSTANCE);
-                val cutsetConditioningSolver = CutsetConditioningSolver.builder()
-                        .inner(domWdegLubySearch)
-                        .treeSolver(treeSolver)
-                        .build();
-                val treeDecompositionSolver = TreeDecompositionSolver.builder()
-                        .inner(cutsetConditioningSolver)
-                        .treeDecomposer(new TreeDecomposerImpl(MinimumDegreeVariableSelector.Factory.INSTANCE))
-                        .treeSolver(treeSolver)
-                        .targetTreewidth(7)
-                        .build();
-                val independentSubproblemSolver = IndependentSubproblemSolver.builder().inner(treeDecompositionSolver).build();
+                // Built fresh per sub-problem (not shared) so each independent sub-problem gets its own
+                // NogoodStore, correctly sized and scoped to just its own variables -- see
+                // IndependentSubproblemSolver's javadoc for why sharing one across sub-problems is unsound.
+                // treeSolver is stateless (no accumulated learning) and safe to share across sub-problems.
+                Function<ConstraintSatisfactionProblem, Solver> innerFactory = sub -> {
+                    val nogoodStore = NogoodStore.forProblem(sub);
+                    val domWdegLubySearch = DomWdegLubySearch.builder()
+                            .domainValuesOrderer(LeastConstrainingValueOrderer.INSTANCE)
+                            .inference(FULL_PROPAGATION_INFERENCE)
+                            .limits(limits)
+                            .nogoodStore(nogoodStore)
+                            .conflictExplainer(MacAndFixpointConflictExplainer.INSTANCE)
+                            // Effectively unbounded: getSolution() now reaches Luby-restart search directly
+                            // (see BoundSolver#getSolution below), so DEFAULT_MAX_RESTARTS's cap would silently
+                            // turn SolverLimits.unlimited() into a bounded search. SolverLimits (node/time)
+                            // remains the only intended way to bound a search; restarts should never be it.
+                            .maxRestarts(Integer.MAX_VALUE)
+                            .build();
+                    val cutsetConditioningSolver = CutsetConditioningSolver.builder()
+                            .inner(domWdegLubySearch)
+                            .treeSolver(treeSolver)
+                            .build();
+                    return TreeDecompositionSolver.builder()
+                            .inner(cutsetConditioningSolver)
+                            .treeDecomposer(new TreeDecomposerImpl(MinimumDegreeVariableSelector.Factory.INSTANCE))
+                            .treeSolver(treeSolver)
+                            .targetTreewidth(7)
+                            .build();
+                };
+                val independentSubproblemSolver = IndependentSubproblemSolver.builder().innerFactory(innerFactory).build();
                 val propagationFixpointSolver = PropagationFixpointSolver.builder()
                         .inner(independentSubproblemSolver)
                         .snap(hasContinuous)

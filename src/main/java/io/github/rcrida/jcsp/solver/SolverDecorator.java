@@ -20,13 +20,15 @@ import java.util.stream.Stream;
  *
  * <p>Preprocessing decorators (node/arc consistency) override only {@link #preprocess} and
  * inherit both {@code getSolutions} and {@link #getSolution} for free. Structural decomposers
- * (independent subproblem, cutset conditioning, tree decomposition) override
- * {@link #getSolutions(ConstraintSatisfactionProblem)} <em>and</em>
- * {@link #getSolution(ConstraintSatisfactionProblem)} for their decomposition logic — the two
- * are not simply "first element of the stream" for decomposers with genuinely different
- * single-solution strategies (e.g. {@code IndependentSubproblemSolver} solving subproblems in
- * parallel, {@code CutsetConditioningSolver} short-circuiting on the first cutset assignment that
- * yields a tree solution), so this base class's default cannot be relied on for them.
+ * (cutset conditioning, tree decomposition) override {@link #getSolutions(ConstraintSatisfactionProblem)}
+ * <em>and</em> {@link #getSolution(ConstraintSatisfactionProblem)} for their decomposition logic
+ * — the two are not simply "first element of the stream" for decomposers with genuinely different
+ * single-solution strategies (e.g. {@code CutsetConditioningSolver} short-circuiting on the first
+ * cutset assignment that yields a tree solution), so this base class's default cannot be relied on
+ * for them. {@code IndependentSubproblemSolver} goes further still and doesn't extend this class at
+ * all — each decomposed sub-problem needs its own, freshly-built inner solver (so its own
+ * {@link io.github.rcrida.jcsp.assignments.NogoodStore}, correctly scoped to just that sub-problem's
+ * variables), which a single fixed {@code inner} field can't provide.
  */
 @Value
 @NonFinal

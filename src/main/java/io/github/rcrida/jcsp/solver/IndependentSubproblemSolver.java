@@ -1,7 +1,7 @@
 package io.github.rcrida.jcsp.solver;
 
-import lombok.EqualsAndHashCode;
-import lombok.experimental.SuperBuilder;
+import lombok.Builder;
+import lombok.Value;
 import lombok.extern.slf4j.Slf4j;
 import io.github.rcrida.jcsp.ConstraintSatisfactionProblem;
 import io.github.rcrida.jcsp.assignments.Assignment;
@@ -13,6 +13,7 @@ import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.Executors;
+import java.util.function.Function;
 import java.util.stream.Stream;
 
 /**
@@ -21,11 +22,24 @@ import java.util.stream.Stream;
  * in a {@link LazyList}, so they are computed at most once regardless of how many combined solutions are
  * requested. This is efficient for both finding the first solution (only the first element of each
  * sub-problem is computed) and finding all solutions (inner sub-problem solutions are replayed from cache).
+ * <p>
+ * Takes an {@code innerFactory} rather than a single fixed inner {@link Solver} — unlike every other
+ * decorator, so this does not extend {@link SolverDecorator} — because each decomposed sub-problem
+ * needs its <em>own</em>, freshly-built solver: specifically its own
+ * {@link io.github.rcrida.jcsp.assignments.NogoodStore}, sized for and scoped to just that
+ * sub-problem's variables. A single fixed inner solver bakes one {@code NogoodStore} into
+ * {@link DomWdegLubySearch} at build time, independent of whatever CSP is later passed to
+ * {@code getSolutions(csp)} — so sharing it across independent sub-problems is unsound (a nogood
+ * learned solving one sub-problem can reference variables a different sub-problem has never heard
+ * of) and previously crashed ({@code IllegalArgumentException}: unknown variables) as soon as any
+ * sub-problem was hard enough to actually learn one.
  */
 @Slf4j
-@SuperBuilder
-@EqualsAndHashCode(callSuper = true)
-public class IndependentSubproblemSolver extends SolverDecorator {
+@Value
+@Builder
+public class IndependentSubproblemSolver implements Solver {
+    @NonNull Function<ConstraintSatisfactionProblem, Solver> innerFactory;
+
     @Override
     public Optional<Assignment> getSolution(@NonNull ConstraintSatisfactionProblem csp) {
         return csp.decomposeSubproblems()
@@ -34,7 +48,7 @@ public class IndependentSubproblemSolver extends SolverDecorator {
                     try (var exec = Executors.newVirtualThreadPerTaskExecutor()) {
                         List<CompletableFuture<Optional<Assignment>>> futures = subproblems.stream()
                                 .map(sub -> CompletableFuture.supplyAsync(
-                                        () -> getInner().getSolution(sub), exec))
+                                        () -> innerFactory.apply(sub).getSolution(sub), exec))
                                 .toList();
                         return futures.stream()
                                 .map(f -> {
@@ -48,7 +62,7 @@ public class IndependentSubproblemSolver extends SolverDecorator {
                                 .orElse(Optional.empty());
                     }
                 })
-                .orElseGet(() -> getInner().getSolution(csp));
+                .orElseGet(() -> innerFactory.apply(csp).getSolution(csp));
     }
 
     @Override
@@ -60,11 +74,11 @@ public class IndependentSubproblemSolver extends SolverDecorator {
                             // solve the bigger problems first so that the smaller problems are the ones cached and replayed
                             .sorted(Comparator.comparing(ConstraintSatisfactionProblem::getSearchSpace).reversed())
                             .peek(sub -> log.info("Solving subproblem {}", sub))
-                            .map(s -> new LazyList<>(getInner().getSolutions(s)))
+                            .map(s -> new LazyList<>(innerFactory.apply(s).getSolutions(s)))
                             .reduce((ll1, ll2) -> new LazyList<>(ll1.stream().flatMap(a1 -> ll2.stream().map(a1::merge))))
                             .map(LazyList::stream)
                             .orElse(Stream.empty());
                 })
-                .orElseGet(() -> getInner().getSolutions(csp));
+                .orElseGet(() -> innerFactory.apply(csp).getSolutions(csp));
     }
 }

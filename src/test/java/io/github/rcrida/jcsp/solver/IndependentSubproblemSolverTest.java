@@ -29,7 +29,7 @@ public class IndependentSubproblemSolverTest {
             .build();
 
     Solver inner = csp -> Solver.Factory.INSTANCE.createSolver(csp).getSolutions();
-    IndependentSubproblemSolver solver = IndependentSubproblemSolver.builder().inner(inner).build();
+    IndependentSubproblemSolver solver = IndependentSubproblemSolver.builder().innerFactory(sub -> inner).build();
 
     @Test
     void getSolutions_independentSubproblems() {
@@ -48,11 +48,16 @@ public class IndependentSubproblemSolverTest {
 
     @Test
     void getSolutions_eachSubproblemSolvedOnce() {
+        // innerFactory is called exactly once per sub-problem (a fresh inner solver each time,
+        // mirroring production where each sub-problem gets its own NogoodStore); this Solver's
+        // own getSolutions(csp) is what actually does the solving, wrapped by the factory.
         val callCount = new AtomicInteger();
-        val counting = IndependentSubproblemSolver.builder().inner(csp -> {
-            callCount.incrementAndGet();
-            return inner.getSolutions(csp);
-        }).build();
+        val counting = IndependentSubproblemSolver.builder()
+                .innerFactory(sub -> {
+                    callCount.incrementAndGet();
+                    return inner;
+                })
+                .build();
 
         counting.getSolutions(TWO_SUBPROBLEM_CSP).toList();
 
@@ -91,7 +96,7 @@ public class IndependentSubproblemSolverTest {
     void getSolution_propagatesRuntimeExceptionFromSubproblem() {
         var boom = new RuntimeException("boom");
         var throwing = IndependentSubproblemSolver.builder()
-                .inner(csp -> { throw boom; })
+                .innerFactory(sub -> { throw boom; })
                 .build();
         assertThatThrownBy(() -> throwing.getSolution(TWO_SUBPROBLEM_CSP)).isSameAs(boom);
     }
@@ -99,8 +104,9 @@ public class IndependentSubproblemSolverTest {
     @Test
     void getSolutions_innerSubproblemSolutionsCachedAcrossIterations() {
         val elementCount = new AtomicInteger();
+        Solver peekingInner = csp -> inner.getSolutions(csp).peek(a -> elementCount.incrementAndGet());
         val counting = IndependentSubproblemSolver.builder()
-                .inner(csp -> inner.getSolutions(csp).peek(a -> elementCount.incrementAndGet()))
+                .innerFactory(sub -> peekingInner)
                 .build();
 
         counting.getSolutions(TWO_SUBPROBLEM_CSP).limit(3).toList();
