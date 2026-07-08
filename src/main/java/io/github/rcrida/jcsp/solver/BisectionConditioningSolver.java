@@ -62,12 +62,23 @@ public class BisectionConditioningSolver extends SolverDecorator {
         });
     }
 
+    /**
+     * Explicitly pinned to {@code getSolutions(csp).findFirst()} rather than inheriting
+     * {@link SolverDecorator}'s default (which delegates to {@code inner.getSolution} and would
+     * skip this class's own bisection logic in {@link #getSolutions} entirely, since that logic
+     * lives outside the {@code preprocess}-then-delegate pattern the base default assumes).
+     */
+    @Override
+    public Optional<Assignment> getSolution(@NonNull ConstraintSatisfactionProblem csp) {
+        return getSolutions(csp).findFirst();
+    }
+
     private Stream<Assignment> allFeasible(@NonNull ConstraintSatisfactionProblem csp) {
         val target = findWidestBounded(csp);
         if (target == null) {
             // All bounded domains are singletons. If fully determined, validate and return the
             // forced assignment; otherwise delegate remaining discrete variables to inner.
-            return csp.isFullyDetermined() ? forcedSolution(csp) : getInner().getSolutions(csp);
+            return csp.isFullyDetermined() ? forcedSolution(csp).stream() : getInner().getSolutions(csp);
         }
         val bd = (BoundedDomain<?>) csp.getDomain(target);
         double lo = bd.getMin().doubleValue();

@@ -104,6 +104,11 @@ public interface Solver {
                         .limits(limits)
                         .nogoodStore(nogoodStore)
                         .conflictExplainer(MacAndFixpointConflictExplainer.INSTANCE)
+                        // Effectively unbounded: getSolution() now reaches Luby-restart search directly
+                        // (see BoundSolver#getSolution below), so DEFAULT_MAX_RESTARTS's cap would silently
+                        // turn SolverLimits.unlimited() into a bounded search. SolverLimits (node/time)
+                        // remains the only intended way to bound a search; restarts should never be it.
+                        .maxRestarts(Integer.MAX_VALUE)
                         .build();
                 val treeSolver = new TreeSolver(BFSTopologicalSorter.INSTANCE, DefaultValueOrderer.INSTANCE, TreeUnassignedVariableSelector.Factory.INSTANCE);
                 val cutsetConditioningSolver = CutsetConditioningSolver.builder()
@@ -131,12 +136,12 @@ public interface Solver {
 
                     @Override
                     public Optional<Assignment> getSolution() {
+                        // Delegates to chain.getSolution(csp) (not getSolutions().findFirst()) so this
+                        // actually reaches DomWdegLubySearch.getSolution()'s Luby-restart search rather than
+                        // a plain first-element-of-stream traversal; DomWdegLubySearch throws
+                        // LimitExceededException itself when limits are hit, so no manual check is needed here.
                         limits.resetLimitReached();
-                        Optional<Assignment> result = getSolutions().findFirst();
-                        if (result.isEmpty() && limits.isLimitReached()) {
-                            throw new LimitExceededException(limits.getLimitHitStatistics());
-                        }
-                        return result;
+                        return chain.getSolution(csp);
                     }
                 };
             }

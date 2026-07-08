@@ -14,6 +14,7 @@ import org.jspecify.annotations.NonNull;
 
 import java.math.BigInteger;
 import java.util.Comparator;
+import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Stream;
 
@@ -40,9 +41,35 @@ public class TreeDecompositionSolver extends SolverDecorator {
 
     @Override
     public Stream<Assignment> getSolutions(@NonNull ConstraintSatisfactionProblem csp) {
+        return decomposeIfWorthwhile(csp)
+                .map(treeCsp -> treeSolver.getSolutions(treeCsp).map(this::recomposeAssignment))
+                .orElseGet(() -> getInner().getSolutions(csp));
+    }
+
+    /**
+     * Mirrors {@link #getSolutions}, delegating to {@code treeSolver.getSolution} /
+     * {@code getInner().getSolution} instead of taking the first element of the corresponding
+     * stream, so a single-solution call still gets the decomposition's speedup rather than
+     * silently skipping straight to {@code inner} (which finds a correct but potentially much
+     * slower solution without it).
+     */
+    @Override
+    public Optional<Assignment> getSolution(@NonNull ConstraintSatisfactionProblem csp) {
+        return decomposeIfWorthwhile(csp)
+                .flatMap(treeCsp -> treeSolver.getSolution(treeCsp).map(this::recomposeAssignment))
+                .or(() -> getInner().getSolution(csp));
+    }
+
+    /**
+     * Shared by {@link #getSolutions} and {@link #getSolution}: decomposes {@code csp} into a
+     * tree representation when doing so is expected to help, or {@link Optional#empty()} when
+     * decomposition is skipped (minimum degree too high, no decomposition found, or the
+     * decomposition's estimated complexity doesn't beat the original problem's).
+     */
+    private Optional<ConstraintSatisfactionProblem> decomposeIfWorthwhile(@NonNull ConstraintSatisfactionProblem csp) {
         if (isMinDegreeTooHigh(csp, targetTreewidth)) {
             log.debug("Skipping tree decomposition: minimum degree >= targetTreewidth {}", targetTreewidth);
-            return getInner().getSolutions(csp);
+            return Optional.empty();
         }
         int d = csp.getVariableDomains().values().stream()
                 .mapToInt(Domain::size)
@@ -51,9 +78,7 @@ public class TreeDecompositionSolver extends SolverDecorator {
         int maxDomainSize = (int) Math.min(Math.pow(d, targetTreewidth), MAX_DOMAIN_SIZE_CAP);
         log.info("d={}, targetTreewidth={}, maxDomainSize={}", d, targetTreewidth, maxDomainSize);
         return treeDecomposer.decompose(csp, maxDomainSize)
-                .filter(treeCsp -> shouldApplyDecomposition(treeCsp, csp))
-                .map(treeCsp -> treeSolver.getSolutions(treeCsp).map(this::recomposeAssignment))
-                .orElseGet(() -> getInner().getSolutions(csp));
+                .filter(treeCsp -> shouldApplyDecomposition(treeCsp, csp));
     }
 
     /**

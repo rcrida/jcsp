@@ -107,6 +107,48 @@ public class TreeDecompositionSolverTest {
         assertThat(solver.getSolutions(ORIGINAL_CSP)).containsExactly(fallbackAssignment);
     }
 
+    // ── getSolution() mirrors of the getSolutions() cases above: guards against getSolution()
+    // silently skipping the decomposition speedup (e.g. by inheriting a base-class default that
+    // just delegates straight to inner) instead of reusing the same decompose-then-solve logic. ──
+
+    @Test
+    void getSolution_decompositionApplied() {
+        val originalAssignment = Assignment.of(Map.of(V1, 1, V2, 2));
+        val treeSolution = Assignment.builder().value(C1, originalAssignment).build();
+        when(treeDecomposer.decompose(eq(ORIGINAL_CSP), anyInt())).thenReturn(Optional.of(TREE_CSP));
+        when(treeSolver.getSolution(TREE_CSP)).thenReturn(Optional.of(treeSolution));
+
+        assertThat(solver.getSolution(ORIGINAL_CSP)).contains(originalAssignment);
+    }
+
+    @Test
+    void getSolution_decompositionSkippedDueToComplexity() {
+        val fallbackAssignment = Assignment.of(Map.of(S1, 1));
+        when(treeDecomposer.decompose(eq(SMALL_ORIGINAL_CSP), anyInt())).thenReturn(Optional.of(EXPENSIVE_TREE_CSP));
+        when(defaultSolver.getSolution(SMALL_ORIGINAL_CSP)).thenReturn(Optional.of(fallbackAssignment));
+
+        assertThat(solver.getSolution(SMALL_ORIGINAL_CSP)).contains(fallbackAssignment);
+    }
+
+    @Test
+    void getSolution_noDecomposition() {
+        val fallbackAssignment = Assignment.of(Map.of(V1, 1));
+        when(treeDecomposer.decompose(eq(ORIGINAL_CSP), anyInt())).thenReturn(Optional.empty());
+        when(defaultSolver.getSolution(ORIGINAL_CSP)).thenReturn(Optional.of(fallbackAssignment));
+
+        assertThat(solver.getSolution(ORIGINAL_CSP)).contains(fallbackAssignment);
+    }
+
+    @Test
+    void getSolution_highMinDegree_skipsDecomposer() {
+        // K8 → min-degree = 7 = targetTreewidth → decomposer never called
+        val fallback = Assignment.of(Map.of(K1, 1));
+        when(defaultSolver.getSolution(K8_CSP)).thenReturn(Optional.of(fallback));
+
+        assertThat(solver.getSolution(K8_CSP)).contains(fallback);
+        verify(treeDecomposer, never()).decompose(eq(K8_CSP), anyInt());
+    }
+
     @Test
     void maxDomainSizeScalesWithDomainSize() {
         // d=2, tw=7: min(2^7, 1_000_000) = 128

@@ -19,9 +19,14 @@ import java.util.stream.Stream;
  * before delegating.
  *
  * <p>Preprocessing decorators (node/arc consistency) override only {@link #preprocess} and
- * inherit {@code getSolutions} for free. Structural decomposers (independent subproblem, cutset
- * conditioning, tree decomposition) override {@link #getSolutions(ConstraintSatisfactionProblem)}
- * for their decomposition logic.
+ * inherit both {@code getSolutions} and {@link #getSolution} for free. Structural decomposers
+ * (independent subproblem, cutset conditioning, tree decomposition) override
+ * {@link #getSolutions(ConstraintSatisfactionProblem)} <em>and</em>
+ * {@link #getSolution(ConstraintSatisfactionProblem)} for their decomposition logic — the two
+ * are not simply "first element of the stream" for decomposers with genuinely different
+ * single-solution strategies (e.g. {@code IndependentSubproblemSolver} solving subproblems in
+ * parallel, {@code CutsetConditioningSolver} short-circuiting on the first cutset assignment that
+ * yields a tree solution), so this base class's default cannot be relied on for them.
  */
 @Value
 @NonFinal
@@ -41,19 +46,33 @@ public abstract class SolverDecorator implements Solver {
     @Override
     public Stream<Assignment> getSolutions(@NonNull ConstraintSatisfactionProblem csp) {
         return preprocess(csp)
-                .map(p -> p.isFullyDetermined() ? forcedSolution(p) : inner.getSolutions(p))
+                .map(p -> p.isFullyDetermined() ? forcedSolution(p).stream() : inner.getSolutions(p))
                 .orElse(Stream.empty());
     }
 
     /**
-     * Extracts the forced assignment from singleton domains and validates it against all constraints.
-     * Returns a singleton stream when valid, empty otherwise.
+     * Mirrors {@link #getSolutions}, delegating to {@code inner.getSolution} rather than
+     * {@code inner.getSolutions().findFirst()} so that a terminal solver's own single-solution
+     * strategy (e.g. {@link DomWdegLubySearch}'s Luby-restart search) is actually reached, instead
+     * of being masked by every ancestor decorator falling back to the {@link Solver} interface's
+     * generic default.
      */
-    protected static Stream<Assignment> forcedSolution(ConstraintSatisfactionProblem csp) {
+    @Override
+    public Optional<Assignment> getSolution(@NonNull ConstraintSatisfactionProblem csp) {
+        return preprocess(csp)
+                .flatMap(p -> p.isFullyDetermined() ? forcedSolution(p) : inner.getSolution(p));
+    }
+
+    /**
+     * Extracts the forced assignment from singleton domains and validates it against all constraints.
+     * A 0-or-1 result is exactly what {@link Optional} means; {@link Optional#stream()} is the
+     * standard bridge for the one caller ({@link #getSolutions}) that needs a {@link Stream}.
+     */
+    protected static Optional<Assignment> forcedSolution(ConstraintSatisfactionProblem csp) {
         val values = csp.getVariableDomains().entrySet().stream()
                 .collect(Collectors.toMap(Map.Entry::getKey, e -> e.getValue().singleValue().orElseThrow()));
         Assignment a = Assignment.of(values);
         boolean valid = csp.getConstraints().stream().allMatch(c -> c.isSatisfiedBy(a));
-        return valid ? Stream.of(a) : Stream.empty();
+        return valid ? Optional.of(a) : Optional.empty();
     }
 }

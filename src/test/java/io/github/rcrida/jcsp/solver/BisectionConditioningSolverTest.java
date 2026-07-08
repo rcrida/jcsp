@@ -97,6 +97,22 @@ public class BisectionConditioningSolverTest {
     }
 
     @Test
+    void getSolution_doesNotSkipBisectionLogic() {
+        // Guards against a future change making this class inherit SolverDecorator's default
+        // getSolution() (delegate straight to inner) instead of its own explicit override: inner
+        // is SINGLETON_EXTRACTOR, which throws NoSuchElementException on singleValue().orElseThrow()
+        // if x isn't already singleton -- it only becomes singleton once bisection snaps it, so this
+        // test fails loudly (not silently) if getSolution() ever bypasses bisection.
+        Variable<Double> x = F.create("x_no_skip");
+        var csp = ConstraintSatisfactionProblem.builder()
+                .variableDomain(x, IntervalDomain.of(2.0, 2.5))
+                .build();
+        var solution = solver(1.0).getSolution(csp);
+        assertThat(solution).isPresent();
+        assertThat((Double) solution.get().getValue(x).orElseThrow()).isCloseTo(2.25, within(1e-9));
+    }
+
+    @Test
     void bisects_oneInfeasibleBranch() {
         // x+y=3.5, x∈[0,2], y∈[0,2] — SumConstraint Double bound triggers propagateDouble
         // Bisect x at mid=1.0:

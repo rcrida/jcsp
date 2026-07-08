@@ -9,6 +9,7 @@ import lombok.experimental.SuperBuilder;
 import org.junit.jupiter.api.Test;
 
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Stream;
 
@@ -81,5 +82,31 @@ public class SolverDecoratorTest {
         Solver inner = c -> Stream.of(1, 2).map(v -> Assignment.of(Map.of(x, v)));
         var solutions = PassthroughDecorator.builder().inner(inner).build().getSolutions(csp).toList();
         assertThat(solutions).hasSize(2);
+    }
+
+    @Test
+    void defaultGetSolution_delegatesToInnerGetSolution_notGetSolutionsFindFirst() {
+        // inner.getSolutions() and inner.getSolution() deliberately disagree here, so this only
+        // passes if SolverDecorator's default getSolution() calls inner.getSolution() directly --
+        // not inner.getSolutions().findFirst(), which would silently mask a terminal solver's own
+        // single-solution strategy (e.g. DomWdegLubySearch's Luby-restart search) behind the
+        // generic "first element of the stream" behaviour.
+        Variable<Integer> x = F.create("x_delegate");
+        var csp = ConstraintSatisfactionProblem.builder()
+                .variableDomain(x, IntRangeDomain.of(1, 2))
+                .build();
+        Solver inner = new Solver() {
+            @Override
+            public Stream<Assignment> getSolutions(ConstraintSatisfactionProblem c) {
+                return Stream.of(Assignment.of(Map.of(x, 1)));
+            }
+
+            @Override
+            public Optional<Assignment> getSolution(ConstraintSatisfactionProblem c) {
+                return Optional.of(Assignment.of(Map.of(x, 99)));
+            }
+        };
+        var result = PassthroughDecorator.builder().inner(inner).build().getSolution(csp);
+        assertThat(result).contains(Assignment.of(Map.of(x, 99)));
     }
 }
