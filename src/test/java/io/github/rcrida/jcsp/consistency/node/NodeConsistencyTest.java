@@ -48,6 +48,22 @@ public class NodeConsistencyTest {
     }
 
     @Test
+    void explainConflict_usesInheritedDefault_returnsEmpty() {
+        // NodeConsistency doesn't override explainConflict, unlike AC3/FixpointConsistency -- this
+        // keeps ConstraintConsistency's default implementation itself covered (Optional.empty()),
+        // since no other ConstraintConsistency implementor falls back to it any more.
+        val domain = EnumDomain.allOf(Colour.class);
+        val builder = ConstraintSatisfactionProblem.builder();
+        val SA = builder.createVariable("SA", domain);
+        builder
+                .notEqualsConstraint(SA, Colour.RED)
+                .notEqualsConstraint(SA, Colour.GREEN)
+                .notEqualsConstraint(SA, Colour.BLUE);
+        val problem = builder.build();
+        assertThat(NodeConsistency.INSTANCE.explainConflict(problem)).isEmpty();
+    }
+
+    @Test
     void noRevisionsRequired() {
         val domain = new EnumDomain<>(EnumSet.of(Colour.RED, Colour.GREEN));
         val builder = ConstraintSatisfactionProblem.builder();

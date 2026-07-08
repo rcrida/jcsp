@@ -17,6 +17,7 @@ import org.junit.jupiter.api.Test;
 
 import java.util.EnumSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -149,6 +150,50 @@ public class AC3Test {
         assertThat(result).isPresent();
         assertThat(result.get().getDomain(d)).isEqualTo(discreteDoubleDomain);
         assertThat(result.get().getDomain(c)).isEqualTo(IntervalDomain.of(0.0, 10.0));
+    }
+
+    @Test
+    void explainConflict_bothSidesSingleton_returnsSoundReason() {
+        // Same setup as reviseArc_emptyDomain: WA and NT both fixed to RED, notEquals violated.
+        // Both sides singleton -> the pair alone is a sound, structural reason.
+        val redOnly = new EnumDomain<>(EnumSet.of(RED));
+        val problem = ConstraintSatisfactionProblem.builder()
+                .variableDomain(WA, redOnly)
+                .variableDomain(NT, redOnly)
+                .notEqualsConstraint(WA, NT)
+                .build();
+        assertThat(AC3.INSTANCE.explainConflict(problem)).contains(Map.of(WA, RED, NT, RED));
+    }
+
+    @Test
+    void explainConflict_neitherSideSingleton_returnsEmptyReason() {
+        // Same setup as inconsistent(): both domains have 11 values, none of which can ever
+        // satisfy the sole tuple (0,11) since 11 isn't even in either domain. AC3 still wipes a
+        // domain, but since neither side is singleton, no sound reason can be cited -- the empty
+        // map signals the caller to fall back to the full assignment.
+        val domain = IntRangeDomain.of(0, 10);
+        val tuples = List.of(BinaryTuple.of(0, 11));
+        val builder = ConstraintSatisfactionProblem.builder();
+        Variable<Object> left = Variable.Factory.INSTANCE.create("left_ec");
+        Variable<Object> right = Variable.Factory.INSTANCE.create("right_ec");
+        builder.variableDomainEntry(left, domain);
+        builder.variableDomainEntry(right, domain);
+        builder.constraint(BinaryTuplesConstraint.of(left, right, Set.copyOf(tuples)));
+        val problem = builder.build();
+        assertThat(AC3.INSTANCE.explainConflict(problem)).contains(Map.of());
+    }
+
+    @Test
+    void explainConflict_noWipeout_returnsEmptyOptional() {
+        // Same setup as reviseArc_noRevisionNeeded: no domain is ever wiped, so explainConflict
+        // must report no conflict at all (Optional.empty()), not just an empty reason.
+        val twoColours = new EnumDomain<>(EnumSet.of(RED, GREEN));
+        val problem = ConstraintSatisfactionProblem.builder()
+                .variableDomain(WA, twoColours)
+                .variableDomain(NT, twoColours)
+                .notEqualsConstraint(WA, NT)
+                .build();
+        assertThat(AC3.INSTANCE.explainConflict(problem)).isEmpty();
     }
 
     @Test

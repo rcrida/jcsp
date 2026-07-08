@@ -4,8 +4,10 @@ import lombok.extern.slf4j.Slf4j;
 import lombok.val;
 import io.github.rcrida.jcsp.ConstraintSatisfactionProblem;
 import io.github.rcrida.jcsp.consistency.ConstraintConsistency;
+import io.github.rcrida.jcsp.consistency.Propagatable;
 import io.github.rcrida.jcsp.constraints.binary.BinaryConstraint;
 import io.github.rcrida.jcsp.domains.DiscreteDomain;
+import io.github.rcrida.jcsp.variables.Variable;
 
 import java.util.*;
 import java.util.stream.Collectors;
@@ -64,6 +66,61 @@ public class AC3 implements ConstraintConsistency {
             }
         }
         return Optional.of(problem.toBuilder().variableDomains(variableDomains).build());
+    }
+
+    /**
+     * Re-runs the same arc-consistency traversal as {@link #applyQueue} (same initial queue, same
+     * arc/constraint grouping, same processing order), stopping at the same domain wipeout, and
+     * attributes it. Deliberately a separate traversal rather than sharing a core loop with
+     * {@link #applyQueue} — mirrors {@code FixpointConsistency}'s {@code apply}/{@code explainConflict}
+     * pair, which are likewise two parallel implementations rather than one shared one.
+     * <p>
+     * A wipeout on arc {@code (X_i, X_j)} means: {@code revise} found that, of the values currently
+     * in {@code D_i} (as read from {@code problem} — not X_i's declared/original domain, its
+     * current, context-dependent one), none satisfy the constraint against {@code D_j} (likewise
+     * current). Citing only {@code X_j}'s value would be <em>unsound</em> here even when
+     * {@code X_j} is singleton: it would claim the constraint rules out every value {@code X_i}
+     * could <em>ever</em> take, when it only ruled out what was in {@code D_i} <em>at this point
+     * in the search</em> — a claim that doesn't generalise to branches where X_i's domain differs.
+     * The reason is sound only when {@code X_i} is <em>also</em> singleton at this point
+     * ({@link Propagatable#allSingletonReason}): then the wipeout reduces to one concrete pair
+     * violating the (fixed, structural) constraint, which is unconditionally true regardless of
+     * search state. Unlike {@link #applyQueue}, no domain bookkeeping is needed here: {@link #revise}
+     * reads only from {@code problem}, never from any progressively-narrowed map, so the wipeout
+     * point is found identically either way.
+     */
+    @Override
+    public Optional<Map<Variable<?>, Object>> explainConflict(ConstraintSatisfactionProblem problem) {
+        val allArcs = problem.getAllBinaryConstraints().stream()
+                .flatMap(BinaryConstraint::getArcs)
+                .collect(Collectors.toSet());
+        val queue = new ArrayDeque<>(allArcs);
+        val allBinaryConstraints = problem.getAllBinaryConstraints();
+        val arcConstraints = allBinaryConstraints.stream()
+                .flatMap(binaryConstraint -> binaryConstraint.getArcs()
+                        .map(arc -> new AbstractMap.SimpleEntry<>(arc, binaryConstraint)))
+                .collect(Collectors.groupingBy(Map.Entry::getKey, Collectors.mapping(Map.Entry::getValue, Collectors.toList())));
+        val arcsByTarget = arcConstraints.keySet().stream()
+                .collect(Collectors.groupingBy(Arc::getTo));
+        while (!queue.isEmpty()) {
+            val arc = queue.poll();
+            val X_i = arc.getFrom();
+            val X_j = arc.getTo();
+            for (BinaryConstraint<?, ?> binaryConstraint : arcConstraints.get(arc)) {
+                val optionalRevisedD_i = revise(problem, arc, binaryConstraint);
+                if (optionalRevisedD_i.isPresent()) {
+                    val revisedD_i = optionalRevisedD_i.get();
+                    if (revisedD_i.isEmpty()) {
+                        return Optional.of(Propagatable.allSingletonReason(List.of(X_i, X_j), problem.getVariableDomains()));
+                    }
+                    val X_iNeighbours = arcsByTarget.getOrDefault(X_i, List.of()).stream()
+                            .filter(c -> !c.getFrom().equals(X_j))
+                            .toList();
+                    queue.addAll(X_iNeighbours);
+                }
+            }
+        }
+        return Optional.empty();
     }
 
     public Optional<ConstraintSatisfactionProblem> revise(ConstraintSatisfactionProblem problem, Arc arc) {
