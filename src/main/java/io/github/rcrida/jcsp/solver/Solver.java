@@ -97,7 +97,7 @@ public interface Solver {
                                             @NonNull SolverLimits limits) {
                 boolean hasContinuous = csp.getVariableDomains().values().stream()
                         .anyMatch(BoundedDomain.class::isInstance);
-                val nogoodStore = new NogoodStore();
+                val nogoodStore = NogoodStore.forProblem(csp);
                 val domWdegLubySearch = DomWdegLubySearch.builder()
                         .domainValuesOrderer(LeastConstrainingValueOrderer.INSTANCE)
                         .inference(FULL_PROPAGATION_INFERENCE)

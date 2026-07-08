@@ -9,6 +9,7 @@ import lombok.Getter;
 import lombok.ToString;
 import lombok.Value;
 
+import java.util.Comparator;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
@@ -48,14 +49,23 @@ import java.util.concurrent.atomic.AtomicReference;
  * genuinely new nogood, so the graph is rebuilt at most once per distinct learned nogood rather than
  * once per node.
  * <p>
- * <b>No forgetting policy.</b> The nogood set is deduplicated but never pruned — it grows
- * monotonically for the lifetime of a search (and across its Luby restarts). This is intentional
- * for the problem sizes this solver targets; a very long search would eventually want a
- * relevance-bounded nogood database (evicting low-utility nogoods) to cap the per-node propagation
- * and memory cost, which is not implemented here.
+ * <b>Forgetting policy.</b> The set is deduplicated and capped at {@link #maxNogoods}: once
+ * {@link #record} pushes the size over the cap, the largest-arity nogoods are evicted first
+ * (ties broken arbitrarily). Arity is used as a proxy for reusability rather than a fixed "too
+ * big" cutoff, because there is no size threshold that's meaningful across problems of different
+ * scale — a nogood's largest source, {@link io.github.rcrida.jcsp.solver.MacAndFixpointConflictExplainer}'s
+ * full-assignment fallback, is bounded by search depth, not a constant. Evicting is always safe:
+ * nogoods are derived facts, never a source of truth, so forgetting one at worst costs re-deriving
+ * the same failure later — never correctness. {@link #forProblem} scales the cap itself to the
+ * problem's size for the same reason, rather than using one constant for every CSP.
  */
 @Value
 public class NogoodStore {
+
+    private static final int MIN_MAX_NOGOODS = 1000;
+    private static final int VARIABLES_PER_NOGOOD_BUDGET = 50;
+
+    int maxNogoods;
 
     @EqualsAndHashCode.Exclude
     @ToString.Exclude
@@ -72,7 +82,26 @@ public class NogoodStore {
     @Getter(AccessLevel.NONE)
     AtomicReference<ConstraintSatisfactionProblem> cachedAugmented = new AtomicReference<>();
 
-    public NogoodStore() {}
+    public NogoodStore() {
+        this(MIN_MAX_NOGOODS);
+    }
+
+    public NogoodStore(int maxNogoods) {
+        if (maxNogoods <= 0) throw new IllegalArgumentException("maxNogoods must be positive, got: " + maxNogoods);
+        this.maxNogoods = maxNogoods;
+    }
+
+    /**
+     * Scales the eviction cap to problem size rather than using one constant for every CSP:
+     * currently a budget of {@link #VARIABLES_PER_NOGOOD_BUDGET} nogoods per variable, floored at
+     * {@link #MIN_MAX_NOGOODS} so small problems still have comfortable headroom. Takes the whole
+     * {@code csp} (not just a variable count) so the formula can draw on other attributes —
+     * constraint count, arity distribution, etc. — without changing this method's signature again.
+     */
+    public static NogoodStore forProblem(ConstraintSatisfactionProblem csp) {
+        int variableCount = csp.getVariableDomains().size();
+        return new NogoodStore(Math.max(MIN_MAX_NOGOODS, VARIABLES_PER_NOGOOD_BUDGET * variableCount));
+    }
 
     /**
      * Records a nogood. The map is copied defensively so callers may reuse their map.
@@ -86,13 +115,27 @@ public class NogoodStore {
      */
     public void record(Map<Variable<?>, Object> nogood) {
         if (nogood.isEmpty()) return;
-        // TODO: implement a forgetting policy. The set is deduplicated but never pruned, so it grows
-        //  monotonically across a search and its Luby restarts, capping per-node propagation and
-        //  memory cost only by the number of distinct nogoods learned. A relevance-bounded database
-        //  (e.g. evict low-activity nogoods past a size threshold) would bound both for long searches.
         if (nogoods.add(NogoodConstraint.of(nogood))) {
             cachedAugmented.set(null); // nogood set grew: the cached augmented graph is now stale
+            evictIfOverCap();
         }
+    }
+
+    /**
+     * Evicts the largest-arity nogoods first once {@link #maxNogoods} is exceeded (see the class
+     * javadoc for why arity rather than a fixed size threshold). {@code nogoods} is weakly
+     * consistent under concurrent {@link #record} calls from parallel independent-subproblem
+     * solves, so the excess computed here may be slightly stale by the time eviction finishes —
+     * harmless, since a later call re-checks and corrects it.
+     */
+    private void evictIfOverCap() {
+        int excess = nogoods.size() - maxNogoods;
+        if (excess <= 0) return;
+        nogoods.stream()
+                .sorted(Comparator.comparingInt((NogoodConstraint n) -> n.getVariables().size()).reversed())
+                .limit(excess)
+                .forEach(nogoods::remove);
+        cachedAugmented.set(null);
     }
 
     /**
