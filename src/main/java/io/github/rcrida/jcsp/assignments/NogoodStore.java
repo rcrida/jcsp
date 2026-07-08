@@ -62,8 +62,8 @@ import java.util.concurrent.atomic.AtomicReference;
 @Value
 public class NogoodStore {
 
-    private static final int MIN_MAX_NOGOODS = 1000;
-    private static final int VARIABLES_PER_NOGOOD_BUDGET = 50;
+    private static final int MIN_MAX_NOGOODS = 50;
+    private static final int VARIABLES_PER_NOGOOD_BUDGET = 20;
 
     int maxNogoods;
 

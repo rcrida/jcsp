@@ -111,14 +111,14 @@ class NogoodStoreTest {
 
     @Test
     void forProblemFloorsAtMinimumForSmallProblems() {
-        // 50 (budget per variable) * 5 variables = 250, below the 1000 floor.
-        assertThat(NogoodStore.forProblem(cspWithVariableCount(5)).getMaxNogoods()).isEqualTo(1000);
+        // 20 (budget per variable) * 2 variables = 40, below the 50 floor.
+        assertThat(NogoodStore.forProblem(cspWithVariableCount(2)).getMaxNogoods()).isEqualTo(50);
     }
 
     @Test
     void forProblemScalesWithVariableCountForLargeProblems() {
-        // 50 (budget per variable) * 30 variables = 1500, above the 1000 floor.
-        assertThat(NogoodStore.forProblem(cspWithVariableCount(30)).getMaxNogoods()).isEqualTo(1500);
+        // 20 (budget per variable) * 30 variables = 600, above the 50 floor.
+        assertThat(NogoodStore.forProblem(cspWithVariableCount(30)).getMaxNogoods()).isEqualTo(600);
     }
 
     @Test
