@@ -6,6 +6,7 @@ import lombok.Builder;
 import lombok.EqualsAndHashCode;
 import lombok.Getter;
 import lombok.Singular;
+import lombok.ToString;
 import lombok.Value;
 import lombok.experimental.NonFinal;
 import lombok.val;
@@ -98,20 +99,36 @@ public class ConstraintSatisfactionProblem {
             Set.of(SumConstraint.class, LinearConstraint.class, UnaryComparatorConstraint.class, BinaryComparatorConstraint.class, BinaryOffsetConstraint.class, AbsoluteDifferenceConstraint.class, DivisionConstraint.class, LexConstraint.class, CumulativeConstraint.class, MaxConstraint.class, MinConstraint.class, ProductConstraint.class, DiffnConstraint.class, NogoodConstraint.class);
 
     Map<Variable<?>, Domain<?>> variableDomains;
-    @Getter(AccessLevel.NONE) @EqualsAndHashCode.Exclude ConstraintGraph constraintGraph;
+    // Included in equals/hashCode (via ConstraintGraph's own, which compares constraints/isCyclic/
+    // isFullyConnected and excludes only its derived neighbours/allBinaryConstraints caches) so that
+    // two CSPs with the same variables but different constraints are correctly distinct.
+    @Getter(AccessLevel.NONE) ConstraintGraph constraintGraph;
+    // Excluded: nogoods are learned facts accumulated during search, not part of the problem's
+    // identity -- two CSPs that differ only in what a search has learned so far are the same problem.
+    @EqualsAndHashCode.Exclude Set<NogoodConstraint> nogoods;
+    // Excluded: purely a derived cache of constraintGraph's constraints + nogoods (see mergeNogoods),
+    // already covered transitively by constraintGraph and nogoods above.
+    @Getter(AccessLevel.NONE) @EqualsAndHashCode.Exclude @ToString.Exclude Set<Constraint> allConstraints;
 
     /**
      * Constructor ensures constraints reference known variables and determines whether graph is cyclic and/or
      * fully connected. When a {@code constraintGraph} is supplied whose constraint set matches {@code constraints}
      * (e.g. via {@link #toBuilder()} during domain-only updates) it is reused directly, avoiding redundant
      * recomputation of neighbours and binary constraints.
+     * <p>
+     * {@code nogoods} is layered on top of {@code constraints} without ever influencing
+     * {@code constraintGraph}: a {@link NogoodConstraint} is neither a {@link BinaryConstraint} nor
+     * {@link BinaryDecomposable}, so it never contributes to neighbours, binary decomposition, or
+     * cycle/connectivity analysis. This is what lets {@link #withNogoods} add learned nogoods without
+     * ever triggering graph recomputation.
      *
      * @param variableDomains the variables and their corresponding domains for the problem
-     * @param constraints the constraints that will apply to the solution
+     * @param constraints the structural constraints that will apply to the solution
      * @param constraintGraph pre-computed constraint graph to reuse, or {@code null} to compute fresh
+     * @param nogoods learned nogoods folded into {@link #getConstraints()} but excluded from the constraint graph
      */
     @Builder
-    ConstraintSatisfactionProblem(@Singular("variableDomainEntry") Map<Variable<?>, Domain<?>> variableDomains, @Singular Set<Constraint> constraints, @Nullable ConstraintGraph constraintGraph) {
+    ConstraintSatisfactionProblem(@Singular("variableDomainEntry") Map<Variable<?>, Domain<?>> variableDomains, @Singular Set<Constraint> constraints, @Nullable ConstraintGraph constraintGraph, @Singular Set<NogoodConstraint> nogoods) {
         this.variableDomains = variableDomains;
         if (constraintGraph != null && constraintGraph.getConstraints().equals(constraints)) {
             this.constraintGraph = constraintGraph;
@@ -119,18 +136,39 @@ public class ConstraintSatisfactionProblem {
             validateConstraints(variableDomains, constraints);
             this.constraintGraph = new ConstraintGraph(constraints, variableDomains.keySet());
         }
+        assert nogoods.stream().flatMap(n -> n.getVariables().stream()).allMatch(variableDomains::containsKey)
+                : "Nogoods reference unknown variables";
+        this.nogoods = nogoods;
+        this.allConstraints = nogoods.isEmpty() ? this.constraintGraph.getConstraints() : mergeNogoods(this.constraintGraph.getConstraints(), nogoods);
+    }
+
+    private static Set<Constraint> mergeNogoods(Set<Constraint> constraints, Set<NogoodConstraint> nogoods) {
+        val merged = new HashSet<Constraint>(constraints);
+        merged.addAll(nogoods);
+        return Set.copyOf(merged);
     }
 
     /**
      * Returns a builder pre-populated from this instance, sharing the existing {@link ConstraintGraph}
-     * reference. Domain-only modifications via the builder will reuse the constraint graph without
-     * recomputation; modifications to the constraint set will trigger a fresh computation.
+     * reference and current nogoods. Domain-only modifications via the builder will reuse the constraint
+     * graph without recomputation; modifications to the constraint set will trigger a fresh computation.
      */
     public ConstraintSatisfactionProblemBuilder toBuilder() {
         return builder()
                 .variableDomains(variableDomains)
                 .constraints(constraintGraph.getConstraints())
-                .constraintGraph(constraintGraph);
+                .constraintGraph(constraintGraph)
+                .nogoods(nogoods);
+    }
+
+    /**
+     * Returns this problem with its learned nogoods replaced by {@code newNogoods}. Reuses the existing
+     * {@link ConstraintGraph} untouched — see the constructor javadoc for why nogoods never need to
+     * affect it — so this never recomputes neighbours, binary decomposition, or cycle/connectivity
+     * analysis; only the flat set returned by {@link #getConstraints()} changes.
+     */
+    public ConstraintSatisfactionProblem withNogoods(@NonNull Set<NogoodConstraint> newNogoods) {
+        return toBuilder().clearNogoods().nogoods(newNogoods).build();
     }
 
     private static void validateConstraints(Map<Variable<?>, Domain<?>> variableDomains, Set<Constraint> constraints) {
@@ -221,7 +259,7 @@ public class ConstraintSatisfactionProblem {
     }
 
     public Set<Constraint> getConstraints() {
-        return constraintGraph.getConstraints();
+        return allConstraints;
     }
 
     /**

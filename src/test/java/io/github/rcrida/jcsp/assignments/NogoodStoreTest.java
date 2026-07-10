@@ -139,12 +139,13 @@ class NogoodStoreTest {
     }
 
     @Test
-    void evictionInvalidatesCachedAugmentedCsp() {
-        // apply() must not keep serving a cached graph that still contains an evicted nogood.
+    void evictedNogoodIsNotAppliedAfterEviction() {
+        // apply() always reflects the current nogood set, so an evicted nogood must not reappear
+        // even after an earlier apply() call already observed it present.
         NogoodStore store = new NogoodStore(2);
         store.record(Map.of(X, 1, Y, 1, Z, 1));
         store.record(Map.of(X, 2));
-        store.apply(csp()); // populates the cache while the 3-variable nogood is still present
+        store.apply(csp()); // observes the 3-variable nogood while it is still present
 
         store.record(Map.of(Y, 2)); // pushes size to 3, evicting the 3-variable nogood
 

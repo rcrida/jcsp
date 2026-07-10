@@ -5,6 +5,7 @@ import io.github.rcrida.jcsp.assignments.Assignment;
 import io.github.rcrida.jcsp.constraints.binary.BinaryNotEqualsConstraint;
 import io.github.rcrida.jcsp.constraints.binary.BinaryOffsetConstraint;
 import io.github.rcrida.jcsp.constraints.Operator;
+import io.github.rcrida.jcsp.constraints.nary.NogoodConstraint;
 import io.github.rcrida.jcsp.constraints.unary.UnaryValueConstraint;
 import io.github.rcrida.jcsp.domains.BooleanDomain;
 import io.github.rcrida.jcsp.domains.Domain;
@@ -384,6 +385,105 @@ public class ConstraintSatisfactionProblemTest {
                         Assignment.of(Map.of(a, 2, b, 1))))
                 .build();
         assertThat(csp.getConstraints()).hasSize(1);
+    }
+
+    @Test
+    void equals_distinguishesCspsWithSameVariablesButDifferentConstraints() {
+        Variable<Integer> a = VARIABLE_FACTORY.create("A");
+        Variable<Integer> b = VARIABLE_FACTORY.create("B");
+        val withConstraint = ConstraintSatisfactionProblem.builder()
+                .variableDomain(a, IntRangeDomain.of(1, 3))
+                .variableDomain(b, IntRangeDomain.of(1, 3))
+                .notEqualsConstraint(a, b)
+                .build();
+        val withoutConstraint = ConstraintSatisfactionProblem.builder()
+                .variableDomain(a, IntRangeDomain.of(1, 3))
+                .variableDomain(b, IntRangeDomain.of(1, 3))
+                .build();
+        assertThat(withConstraint).isNotEqualTo(withoutConstraint);
+
+        val sameConstraint = ConstraintSatisfactionProblem.builder()
+                .variableDomain(a, IntRangeDomain.of(1, 3))
+                .variableDomain(b, IntRangeDomain.of(1, 3))
+                .notEqualsConstraint(a, b)
+                .build();
+        assertThat(withConstraint).isEqualTo(sameConstraint);
+        assertThat(withConstraint.hashCode()).isEqualTo(sameConstraint.hashCode());
+    }
+
+    @Test
+    void equals_ignoresNogoods() {
+        Variable<Integer> a = VARIABLE_FACTORY.create("A");
+        val csp = ConstraintSatisfactionProblem.builder()
+                .variableDomain(a, IntRangeDomain.of(1, 3))
+                .build();
+        val withNogood = csp.withNogoods(Set.of(NogoodConstraint.of(Map.of(a, 1))));
+        assertThat(csp).isEqualTo(withNogood);
+        assertThat(csp.hashCode()).isEqualTo(withNogood.hashCode());
+    }
+
+    @Test
+    void withNogoods_foldsIntoGetConstraintsWithoutMutatingOriginal() {
+        Variable<Integer> a = VARIABLE_FACTORY.create("A");
+        Variable<Integer> b = VARIABLE_FACTORY.create("B");
+        val csp = ConstraintSatisfactionProblem.builder()
+                .variableDomain(a, IntRangeDomain.of(1, 3))
+                .variableDomain(b, IntRangeDomain.of(1, 3))
+                .build();
+        val nogood = NogoodConstraint.of(Map.of(a, 1, b, 2));
+        val withNogood = csp.withNogoods(Set.of(nogood));
+        assertThat(withNogood.getConstraints()).containsExactly(nogood);
+        assertThat(csp.getConstraints()).isEmpty();
+    }
+
+    @Test
+    void withNogoods_doesNotAffectConstraintGraph() {
+        // A NogoodConstraint is neither a BinaryConstraint nor BinaryDecomposable, so even though this
+        // nogood spans both variables it must not show up in neighbours/connectivity analysis --
+        // withNogoods reuses the existing ConstraintGraph untouched rather than recomputing it.
+        Variable<Integer> a = VARIABLE_FACTORY.create("A");
+        Variable<Integer> b = VARIABLE_FACTORY.create("B");
+        val csp = ConstraintSatisfactionProblem.builder()
+                .variableDomain(a, IntRangeDomain.of(1, 3))
+                .variableDomain(b, IntRangeDomain.of(1, 3))
+                .build();
+        val withNogood = csp.withNogoods(Set.of(NogoodConstraint.of(Map.of(a, 1, b, 2))));
+        assertThat(withNogood.getNeighbours(a)).isEmpty();
+        assertThat(withNogood.getNeighbours(b)).isEmpty();
+        assertThat(withNogood.isFullyConnected()).isFalse();
+    }
+
+    @Test
+    void withNogoods_replacesPreviouslySetNogoods() {
+        Variable<Integer> a = VARIABLE_FACTORY.create("A");
+        val csp = ConstraintSatisfactionProblem.builder()
+                .variableDomain(a, IntRangeDomain.of(1, 3))
+                .build();
+        val first = csp.withNogoods(Set.of(NogoodConstraint.of(Map.of(a, 1))));
+        val second = first.withNogoods(Set.of(NogoodConstraint.of(Map.of(a, 2))));
+        assertThat(second.getConstraints()).containsExactly(NogoodConstraint.of(Map.of(a, 2)));
+    }
+
+    @Test
+    void withNogoods_referencingUnknownVariable_asserts() {
+        Variable<Integer> a = VARIABLE_FACTORY.create("A");
+        Variable<Integer> stray = VARIABLE_FACTORY.create("stray");
+        val csp = ConstraintSatisfactionProblem.builder()
+                .variableDomain(a, IntRangeDomain.of(1, 3))
+                .build();
+        assertThatThrownBy(() -> csp.withNogoods(Set.of(NogoodConstraint.of(Map.of(stray, 1)))))
+                .isInstanceOf(AssertionError.class);
+    }
+
+    @Test
+    void toBuilder_carriesNogoodsForward() {
+        Variable<Integer> a = VARIABLE_FACTORY.create("A");
+        val csp = ConstraintSatisfactionProblem.builder()
+                .variableDomain(a, IntRangeDomain.of(1, 3))
+                .build()
+                .withNogoods(Set.of(NogoodConstraint.of(Map.of(a, 1))));
+        val rebuilt = csp.toBuilder().build();
+        assertThat(rebuilt.getConstraints()).isEqualTo(csp.getConstraints());
     }
 
     @Test

@@ -13,7 +13,6 @@ import java.util.Comparator;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.atomic.AtomicReference;
 
 /**
  * Accumulates learned nogoods during backtracking search, as actual {@link NogoodConstraint}s
@@ -32,22 +31,19 @@ import java.util.concurrent.atomic.AtomicReference;
  * unboundedly, keeping {@link #size()} a meaningful distinct-nogood count.
  * <p>
  * Follows the same mutable-runtime-state-inside-@Value pattern as {@link SolverLimits}: the store
- * is immutable as a configuration object but accumulates nogoods during search. The internal set
- * (and the cached augmented CSP described below) are excluded from
- * {@code equals}/{@code hashCode}/{@code toString}. A single {@code NogoodStore} instance is shared
- * across Luby restarts so learned nogoods survive and benefit every subsequent restart.
+ * is immutable as a configuration object but accumulates nogoods during search. The internal set is
+ * excluded from {@code equals}/{@code hashCode}/{@code toString}. A single {@code NogoodStore}
+ * instance is shared across Luby restarts so learned nogoods survive and benefit every subsequent
+ * restart.
  * <p>
- * <b>Graph caching.</b> {@link #apply} augments a CSP with the recorded nogoods. Building a CSP
- * whose constraint set has grown forces {@link ConstraintSatisfactionProblem} to recompute its
- * constraint graph (neighbours, binary decomposition, cycle/connectivity analysis) — and
- * {@code apply} is called for every candidate at every search node. Since a search's base
- * constraints and variable set are fixed and only domains change between nodes, the augmented graph
- * depends solely on the nogood set. {@code apply} therefore caches the last augmented CSP and, while
- * the nogood set is unchanged, serves subsequent nodes by swapping only the domains into that cached
- * CSP via {@link ConstraintSatisfactionProblem#toBuilder()} — whose constraint-set-equality reuse
- * path returns the cached graph untouched. {@link #record} invalidates the cache whenever it adds a
- * genuinely new nogood, so the graph is rebuilt at most once per distinct learned nogood rather than
- * once per node.
+ * <b>No graph rebuild.</b> {@link #apply} augments a CSP with the recorded nogoods via
+ * {@link ConstraintSatisfactionProblem#withNogoods}, which layers nogoods on top of the CSP's
+ * existing constraint graph without ever touching it — a {@link NogoodConstraint} never
+ * contributes to neighbours, binary decomposition, or cycle/connectivity analysis, so there is
+ * nothing to recompute there regardless of how often {@code apply} is called. The flat union of
+ * structural constraints and nogoods that backs {@link ConstraintSatisfactionProblem#getConstraints()}
+ * is still redone on every {@code withNogoods} call, but that is cheap relative to the graph analysis
+ * it replaces, so {@code apply} calls it directly rather than caching the result.
  * <p>
  * <b>Forgetting policy.</b> The set is deduplicated and capped at {@link #maxNogoods}: once
  * {@link #record} pushes the size over the cap, the largest-arity nogoods are evicted first
@@ -71,16 +67,6 @@ public class NogoodStore {
     @ToString.Exclude
     @Getter(AccessLevel.NONE)
     Set<NogoodConstraint> nogoods = ConcurrentHashMap.newKeySet();
-
-    /**
-     * The last CSP produced by {@link #apply}, reused as a graph template while the nogood set is
-     * unchanged. Holds a final reference to mutable runtime state (same pattern as the
-     * {@code nogoods} set); {@code null} means "rebuild on next {@link #apply}".
-     */
-    @EqualsAndHashCode.Exclude
-    @ToString.Exclude
-    @Getter(AccessLevel.NONE)
-    AtomicReference<ConstraintSatisfactionProblem> cachedAugmented = new AtomicReference<>();
 
     public NogoodStore() {
         this(MIN_MAX_NOGOODS);
@@ -116,7 +102,6 @@ public class NogoodStore {
     public void record(Map<Variable<?>, Object> nogood) {
         if (nogood.isEmpty()) return;
         if (nogoods.add(NogoodConstraint.of(nogood))) {
-            cachedAugmented.set(null); // nogood set grew: the cached augmented graph is now stale
             evictIfOverCap();
         }
     }
@@ -135,31 +120,18 @@ public class NogoodStore {
                 .sorted(Comparator.comparingInt((NogoodConstraint n) -> n.getVariables().size()).reversed())
                 .limit(excess)
                 .forEach(nogoods::remove);
-        cachedAugmented.set(null);
     }
 
     /**
-     * Returns {@code csp} augmented with every nogood constraint recorded so far, or {@code csp}
-     * unchanged if none have been recorded yet. Since {@link ConstraintSatisfactionProblem}
-     * stores constraints in a {@code Set}, re-adding nogoods already present in {@code csp} (e.g.
-     * from an ancestor node further up the same search path) is a safe no-op — callers can call
-     * this on every node without needing to track what's already included.
+     * Returns {@code csp} augmented with every nogood constraint recorded so far, via
+     * {@link ConstraintSatisfactionProblem#withNogoods}, or {@code csp} unchanged if none have been
+     * recorded yet. {@code withNogoods} never rebuilds {@code csp}'s constraint graph — nogoods are
+     * layered on top of it — so this can be called on every node without needing to track what's
+     * already included or cache the result.
      */
     public ConstraintSatisfactionProblem apply(ConstraintSatisfactionProblem csp) {
         if (nogoods.isEmpty()) return csp;
-        ConstraintSatisfactionProblem cached = cachedAugmented.get();
-        if (cached != null) {
-            // Reuse the cached augmented graph; only the domains differ between search nodes.
-            // toBuilder() carries the cached constraints + graph, so swapping domains hits the
-            // constructor's constraint-set-equality reuse path (no graph recomputation).
-            return cached.toBuilder()
-                    .clearVariableDomains()
-                    .variableDomains(csp.getVariableDomains())
-                    .build();
-        }
-        ConstraintSatisfactionProblem built = csp.toBuilder().constraints(nogoods).build();
-        cachedAugmented.set(built);
-        return built;
+        return csp.withNogoods(Set.copyOf(nogoods));
     }
 
     public int size() {
