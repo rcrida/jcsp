@@ -2,7 +2,6 @@ package io.github.rcrida.jcsp.assignments;
 
 import io.github.rcrida.jcsp.ConstraintSatisfactionProblem;
 import io.github.rcrida.jcsp.constraints.nary.NogoodConstraint;
-import io.github.rcrida.jcsp.variables.Variable;
 import lombok.AccessLevel;
 import lombok.EqualsAndHashCode;
 import lombok.Getter;
@@ -10,7 +9,6 @@ import lombok.ToString;
 import lombok.Value;
 
 import java.util.Comparator;
-import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -90,18 +88,14 @@ public class NogoodStore {
     }
 
     /**
-     * Records a nogood. The map is copied defensively so callers may reuse their map.
-     * <p>
-     * An empty map is ignored rather than recorded: {@link NogoodConstraint#isSatisfiedBy} treats
-     * a nogood as matched when every one of its entries is present in the candidate assignment,
-     * which is vacuously true for an empty nogood — recording one would prune every future
-     * assignment. Per {@link io.github.rcrida.jcsp.solver.ConflictExplainer}, an empty map means
-     * "no explanation available"; callers are expected to substitute the full assignment in that
-     * case, but this guards against a caller that doesn't.
+     * Records a nogood constraint, deduplicated via {@link Set#add} (see the class javadoc for
+     * why a {@code Set} rather than a {@code List}). Callers typically get {@code nogood} from
+     * {@link io.github.rcrida.jcsp.solver.ConflictExplainer#explain}'s {@code Optional} — there is
+     * no "empty nogood" case to guard against here any more, since a {@link NogoodConstraint} is
+     * non-empty by construction (see e.g. {@link io.github.rcrida.jcsp.constraints.nary.GroundNogoodConstraint#of}).
      */
-    public void record(Map<Variable<?>, Object> nogood) {
-        if (nogood.isEmpty()) return;
-        if (nogoods.add(NogoodConstraint.of(nogood))) {
+    public void record(NogoodConstraint nogood) {
+        if (nogoods.add(nogood)) {
             evictIfOverCap();
         }
     }

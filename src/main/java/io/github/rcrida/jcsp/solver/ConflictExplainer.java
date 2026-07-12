@@ -2,22 +2,26 @@ package io.github.rcrida.jcsp.solver;
 
 import io.github.rcrida.jcsp.ConstraintSatisfactionProblem;
 import io.github.rcrida.jcsp.assignments.Assignment;
+import io.github.rcrida.jcsp.constraints.nary.NogoodConstraint;
 import io.github.rcrida.jcsp.variables.Variable;
 
-import java.util.Map;
+import java.util.Optional;
 
 /**
- * Explains a propagation conflict by returning a nogood: a partial variable-to-value map
- * whose entries together guarantee failure, derived by re-running propagation with reason
- * tracking after {@link io.github.rcrida.jcsp.consistency.Inference#apply} returns empty.
+ * Explains a propagation conflict by returning a nogood constraint, derived by re-running
+ * propagation with reason tracking after {@link io.github.rcrida.jcsp.consistency.Inference#apply}
+ * returns empty.
  * <p>
- * The returned map must be a valid nogood — every branch whose assignment subsumes it will
- * also fail. An empty map is treated as "no explanation available"; callers use the full
- * current assignment as the nogood in that case.
+ * Any branch whose assignment subsumes the returned nogood must also fail — that's the only
+ * soundness requirement; implementations are free to choose how they represent it (see
+ * {@link NogoodConstraint}). {@link Optional#empty()} means "this explainer can't account for the
+ * conflict" — used by composite explainers that try several specialized strategies before falling
+ * back to a general-purpose one (e.g. {@link MacAndFixpointConflictExplainer}) that never returns
+ * empty, since the full current assignment is always itself a valid, if not minimal, nogood.
  */
 @FunctionalInterface
 public interface ConflictExplainer {
-    Map<Variable<?>, Object> explain(ConstraintSatisfactionProblem csp,
-                                     Variable<?> variable,
-                                     Assignment assignment);
+    Optional<NogoodConstraint> explain(ConstraintSatisfactionProblem csp,
+                                       Variable<?> variable,
+                                       Assignment assignment);
 }

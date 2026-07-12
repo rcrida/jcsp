@@ -4,6 +4,7 @@ import io.github.rcrida.jcsp.ConstraintSatisfactionProblem;
 import io.github.rcrida.jcsp.assignments.Assignment;
 import io.github.rcrida.jcsp.assignments.NogoodStore;
 import io.github.rcrida.jcsp.assignments.SolverLimits;
+import io.github.rcrida.jcsp.constraints.nary.GroundNogoodConstraint;
 import io.github.rcrida.jcsp.domains.IntRangeDomain;
 import io.github.rcrida.jcsp.solver.backtrackingsearch.order.LeastConstrainingValueOrderer;
 import io.github.rcrida.jcsp.variables.Variable;
@@ -208,7 +209,7 @@ class DomWdegLubySearchTest {
                 .build();
 
         NogoodStore store = new NogoodStore();
-        store.record(java.util.Map.of(x, 1));
+        store.record(GroundNogoodConstraint.of(java.util.Map.of(x, 1)));
 
         DomWdegLubySearch solver = DomWdegLubySearch.builder()
                 .domainValuesOrderer(LeastConstrainingValueOrderer.INSTANCE)
@@ -234,8 +235,8 @@ class DomWdegLubySearchTest {
                 .build();
 
         NogoodStore store = new NogoodStore();
-        store.record(java.util.Map.of(x, 1));
-        store.record(java.util.Map.of(x, 2));
+        store.record(GroundNogoodConstraint.of(java.util.Map.of(x, 1)));
+        store.record(GroundNogoodConstraint.of(java.util.Map.of(x, 2)));
 
         DomWdegLubySearch solver = DomWdegLubySearch.builder()
                 .domainValuesOrderer(LeastConstrainingValueOrderer.INSTANCE)
@@ -323,13 +324,14 @@ class DomWdegLubySearchTest {
                 .domainValuesOrderer(LeastConstrainingValueOrderer.INSTANCE)
                 .inference(Solver.Factory.FULL_PROPAGATION_INFERENCE)
                 .nogoodStore(store)
-                .conflictExplainer((c, variable, assignment) -> java.util.Map.of(x, 99))
+                .conflictExplainer((c, variable, assignment) ->
+                        Optional.of(GroundNogoodConstraint.of(java.util.Map.of(x, 99))))
                 .build();
 
         assertThat(solver.getSolution(csp)).isEmpty();
         var constraints = store.apply(csp).getConstraints();
-        assertThat(constraints).contains(io.github.rcrida.jcsp.constraints.nary.NogoodConstraint.of(java.util.Map.of(x, 99)));
-        assertThat(constraints).doesNotContain(io.github.rcrida.jcsp.constraints.nary.NogoodConstraint.of(java.util.Map.of(x, 1)));
+        assertThat(constraints).contains(GroundNogoodConstraint.of(java.util.Map.of(x, 99)));
+        assertThat(constraints).doesNotContain(GroundNogoodConstraint.of(java.util.Map.of(x, 1)));
     }
 
     @Test

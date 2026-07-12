@@ -6,6 +6,7 @@ import io.github.rcrida.jcsp.assignments.NogoodStore;
 import io.github.rcrida.jcsp.assignments.SolverLimits;
 import io.github.rcrida.jcsp.assignments.Statistics;
 import io.github.rcrida.jcsp.consistency.Inference;
+import io.github.rcrida.jcsp.constraints.nary.GroundNogoodConstraint;
 import io.github.rcrida.jcsp.solver.backtrackingsearch.order.DomainValuesOrderer;
 import io.github.rcrida.jcsp.solver.backtrackingsearch.selector.DomWdegVariableSelector;
 import io.github.rcrida.jcsp.variables.Variable;
@@ -63,7 +64,8 @@ public class DomWdegLubySearch implements Solver {
         private int maxRestarts = DEFAULT_MAX_RESTARTS;
         private SolverLimits limits = SolverLimits.unlimited();
         private NogoodStore nogoodStore = new NogoodStore();
-        private ConflictExplainer conflictExplainer = (csp, variable, assignment) -> assignment.getValues();
+        private ConflictExplainer conflictExplainer =
+                (csp, variable, assignment) -> Optional.of(GroundNogoodConstraint.of(assignment.getValues()));
 
         public DomWdegLubySearch build() {
             if (lubyUnit <= 0) throw new IllegalArgumentException("lubyUnit must be positive, got: " + lubyUnit);
@@ -140,9 +142,11 @@ public class DomWdegLubySearch implements Solver {
                     Optional<ConstraintSatisfactionProblem> inferred = inference.apply(cspWithNogoods, variable, next);
                     if (inferred.isEmpty()) {
                         selector.incrementWeights(cspWithNogoods, variable, next);
-                        nogoodStore.record(conflictExplainer.explain(cspWithNogoods, variable, next));
+                        conflictExplainer.explain(cspWithNogoods, variable, next).ifPresent(nogood -> {
+                            nogoodStore.record(nogood);
+                            next.getStatistics().incrementNogoodsLearned();
+                        });
                         next.getStatistics().incrementBacktracks();
-                        next.getStatistics().incrementNogoodsLearned();
                         return Stream.empty();
                     }
                     return searchStream(inferred.get(), next, selector, deadline);
@@ -175,9 +179,11 @@ public class DomWdegLubySearch implements Solver {
             Optional<ConstraintSatisfactionProblem> inferred = inference.apply(cspWithNogoods, variable, next);
             if (inferred.isEmpty()) {
                 selector.incrementWeights(cspWithNogoods, variable, next);
-                nogoodStore.record(conflictExplainer.explain(cspWithNogoods, variable, next));
+                conflictExplainer.explain(cspWithNogoods, variable, next).ifPresent(nogood -> {
+                    nogoodStore.record(nogood);
+                    next.getStatistics().incrementNogoodsLearned();
+                });
                 next.getStatistics().incrementBacktracks();
-                next.getStatistics().incrementNogoodsLearned();
                 if (++failures[0] >= budget) throw BudgetExceeded.INSTANCE;
                 continue;
             }

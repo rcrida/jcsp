@@ -12,7 +12,7 @@ import java.util.Map;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-public class NogoodConstraintTest {
+public class GroundNogoodConstraintTest {
     static final Variable.Factory F = Variable.Factory.INSTANCE;
 
     // --- construction ---
@@ -20,20 +20,20 @@ public class NogoodConstraintTest {
     @Test
     void of_createsEquivalentConstraint() {
         Variable<Integer> x = F.create("x"), y = F.create("y");
-        assertThat(NogoodConstraint.of(Map.of(x, 1, y, 2)))
-                .isEqualTo(NogoodConstraint.of(Map.of(x, 1, y, 2)));
+        assertThat(GroundNogoodConstraint.of(Map.of(x, 1, y, 2)))
+                .isEqualTo(GroundNogoodConstraint.of(Map.of(x, 1, y, 2)));
     }
 
     @Test
     void of_populatesVariablesFromForbiddenMapKeys() {
         Variable<Integer> x = F.create("x"), y = F.create("y");
-        var c = NogoodConstraint.of(Map.of(x, 1, y, 2));
+        var c = GroundNogoodConstraint.of(Map.of(x, 1, y, 2));
         assertThat(c.getVariables()).containsExactlyInAnyOrder(x, y);
     }
 
     @Test
     void of_emptyForbidden_asserts() {
-        assertThatThrownBy(() -> NogoodConstraint.of(Map.of()))
+        assertThatThrownBy(() -> GroundNogoodConstraint.of(Map.of()))
                 .isInstanceOf(AssertionError.class);
     }
 
@@ -42,7 +42,7 @@ public class NogoodConstraintTest {
     @Test
     void isSatisfiedBy_partialAssignment_optimistic() {
         Variable<Integer> x = F.create("ix"), y = F.create("iy");
-        var c = NogoodConstraint.of(Map.of(x, 1, y, 2));
+        var c = GroundNogoodConstraint.of(Map.of(x, 1, y, 2));
         assertThat(c.isSatisfiedBy(Assignment.of(Map.of(x, 1)))).isTrue();
         assertThat(c.isSatisfiedBy(Assignment.of(Map.of()))).isTrue();
     }
@@ -50,14 +50,14 @@ public class NogoodConstraintTest {
     @Test
     void isSatisfiedBy_exactMatch_violated() {
         Variable<Integer> x = F.create("jx"), y = F.create("jy");
-        var c = NogoodConstraint.of(Map.of(x, 1, y, 2));
+        var c = GroundNogoodConstraint.of(Map.of(x, 1, y, 2));
         assertThat(c.isSatisfiedBy(Assignment.of(Map.of(x, 1, y, 2)))).isFalse();
     }
 
     @Test
     void isSatisfiedBy_oneValueDiffers_satisfied() {
         Variable<Integer> x = F.create("kx"), y = F.create("ky");
-        var c = NogoodConstraint.of(Map.of(x, 1, y, 2));
+        var c = GroundNogoodConstraint.of(Map.of(x, 1, y, 2));
         assertThat(c.isSatisfiedBy(Assignment.of(Map.of(x, 1, y, 3)))).isTrue();
     }
 
@@ -67,7 +67,7 @@ public class NogoodConstraintTest {
     void propagate_oneDomainAlreadyExcludesForbiddenValue_permanentlySatisfied() {
         // y's domain never contains 2 at all: this literal is guaranteed true regardless of x.
         Variable<Integer> x = F.create("lx"), y = F.create("ly");
-        var c = NogoodConstraint.of(Map.of(x, 1, y, 2));
+        var c = GroundNogoodConstraint.of(Map.of(x, 1, y, 2));
         var domains = Map.<Variable<?>, Domain<?>>of(
                 x, IntRangeDomain.of(1, 1), y, IntRangeDomain.of(5, 6));
         var result = c.propagate(domains);
@@ -78,7 +78,7 @@ public class NogoodConstraintTest {
     @Test
     void propagate_allSingletonMatchingForbidden_infeasible() {
         Variable<Integer> x = F.create("mx"), y = F.create("my");
-        var c = NogoodConstraint.of(Map.of(x, 1, y, 2));
+        var c = GroundNogoodConstraint.of(Map.of(x, 1, y, 2));
         var domains = Map.<Variable<?>, Domain<?>>of(
                 x, IntRangeDomain.of(1, 1), y, IntRangeDomain.of(2, 2));
         assertThat(c.propagate(domains)).isEmpty();
@@ -90,7 +90,7 @@ public class NogoodConstraintTest {
         // forbidden value (undetermined) -- the only way to keep the clause satisfiable is for y
         // to avoid 2, so propagation prunes it.
         Variable<Integer> x = F.create("nx"), y = F.create("ny");
-        var c = NogoodConstraint.of(Map.of(x, 1, y, 2));
+        var c = GroundNogoodConstraint.of(Map.of(x, 1, y, 2));
         var domains = Map.<Variable<?>, Domain<?>>of(
                 x, IntRangeDomain.of(1, 1), y, IntRangeDomain.of(1, 3));
         var result = c.propagate(domains);
@@ -107,7 +107,7 @@ public class NogoodConstraintTest {
         // since the literal remains genuinely undetermined.
         Variable<Integer> x = F.create("ox");
         Variable<Double> z = F.create("oz");
-        var c = NogoodConstraint.of(Map.<Variable<?>, Object>of(x, 1, z, 5.0));
+        var c = GroundNogoodConstraint.of(Map.<Variable<?>, Object>of(x, 1, z, 5.0));
         var domains = Map.<Variable<?>, Domain<?>>of(
                 x, IntRangeDomain.of(1, 1), z, IntervalDomain.of(1.0, 10.0));
         var result = c.propagate(domains);
@@ -118,7 +118,7 @@ public class NogoodConstraintTest {
     @Test
     void propagate_twoOrMoreUndetermined_noChange() {
         Variable<Integer> x = F.create("px"), y = F.create("py");
-        var c = NogoodConstraint.of(Map.of(x, 1, y, 2));
+        var c = GroundNogoodConstraint.of(Map.of(x, 1, y, 2));
         var domains = Map.<Variable<?>, Domain<?>>of(
                 x, IntRangeDomain.of(1, 3), y, IntRangeDomain.of(1, 3));
         var result = c.propagate(domains);
@@ -131,7 +131,7 @@ public class NogoodConstraintTest {
     @Test
     void explainInfeasible_returnsForbiddenMap() {
         Variable<Integer> x = F.create("qx"), y = F.create("qy");
-        var c = NogoodConstraint.of(Map.of(x, 1, y, 2));
+        var c = GroundNogoodConstraint.of(Map.of(x, 1, y, 2));
         var domains = Map.<Variable<?>, Domain<?>>of(
                 x, IntRangeDomain.of(1, 1), y, IntRangeDomain.of(2, 2));
         assertThat(c.explainInfeasible(domains)).containsOnly(Map.entry(x, 1), Map.entry(y, 2));
@@ -142,7 +142,7 @@ public class NogoodConstraintTest {
     @Test
     void testToString() {
         Variable<Integer> x = F.create("rx");
-        var c = NogoodConstraint.of(Map.of(x, 1));
+        var c = GroundNogoodConstraint.of(Map.of(x, 1));
         assertThat(c.toString()).isEqualTo("<(rx), nogood(rx!=1)>");
     }
 }

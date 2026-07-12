@@ -3,6 +3,7 @@ package io.github.rcrida.jcsp.solver.backtrackingsearch.selector;
 import io.github.rcrida.jcsp.ConstraintSatisfactionProblem;
 import io.github.rcrida.jcsp.assignments.Assignment;
 import io.github.rcrida.jcsp.constraints.Constraint;
+import io.github.rcrida.jcsp.constraints.nary.GroundNogoodConstraint;
 import io.github.rcrida.jcsp.constraints.nary.NogoodConstraint;
 import io.github.rcrida.jcsp.domains.Domain;
 import io.github.rcrida.jcsp.variables.Variable;
@@ -132,7 +133,7 @@ class DomWdegVariableSelectorTest {
         // A NogoodConstraint over v1+v3 must never contribute to weighting or wdeg, even though
         // it structurally satisfies isActive's other conditions (shares an unassigned variable).
         when(c12.getVariables()).thenReturn(Set.of(v1, v2));
-        NogoodConstraint nogood = NogoodConstraint.of(Map.of(v1, "a", v3, "b"));
+        NogoodConstraint nogood = GroundNogoodConstraint.of(Map.of(v1, "a", v3, "b"));
         var selector = new DomWdegVariableSelector(Set.of(c12, nogood));
 
         when(nextAssignment.getValue(v2)).thenReturn(Optional.empty());

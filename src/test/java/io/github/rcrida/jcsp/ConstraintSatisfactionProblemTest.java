@@ -5,7 +5,7 @@ import io.github.rcrida.jcsp.assignments.Assignment;
 import io.github.rcrida.jcsp.constraints.binary.BinaryNotEqualsConstraint;
 import io.github.rcrida.jcsp.constraints.binary.BinaryOffsetConstraint;
 import io.github.rcrida.jcsp.constraints.Operator;
-import io.github.rcrida.jcsp.constraints.nary.NogoodConstraint;
+import io.github.rcrida.jcsp.constraints.nary.GroundNogoodConstraint;
 import io.github.rcrida.jcsp.constraints.unary.UnaryValueConstraint;
 import io.github.rcrida.jcsp.domains.BooleanDomain;
 import io.github.rcrida.jcsp.domains.Domain;
@@ -417,7 +417,7 @@ public class ConstraintSatisfactionProblemTest {
         val csp = ConstraintSatisfactionProblem.builder()
                 .variableDomain(a, IntRangeDomain.of(1, 3))
                 .build();
-        val withNogood = csp.withNogoods(Set.of(NogoodConstraint.of(Map.of(a, 1))));
+        val withNogood = csp.withNogoods(Set.of(GroundNogoodConstraint.of(Map.of(a, 1))));
         assertThat(csp).isEqualTo(withNogood);
         assertThat(csp.hashCode()).isEqualTo(withNogood.hashCode());
     }
@@ -430,7 +430,7 @@ public class ConstraintSatisfactionProblemTest {
                 .variableDomain(a, IntRangeDomain.of(1, 3))
                 .variableDomain(b, IntRangeDomain.of(1, 3))
                 .build();
-        val nogood = NogoodConstraint.of(Map.of(a, 1, b, 2));
+        val nogood = GroundNogoodConstraint.of(Map.of(a, 1, b, 2));
         val withNogood = csp.withNogoods(Set.of(nogood));
         assertThat(withNogood.getConstraints()).containsExactly(nogood);
         assertThat(csp.getConstraints()).isEmpty();
@@ -447,7 +447,7 @@ public class ConstraintSatisfactionProblemTest {
                 .variableDomain(a, IntRangeDomain.of(1, 3))
                 .variableDomain(b, IntRangeDomain.of(1, 3))
                 .build();
-        val withNogood = csp.withNogoods(Set.of(NogoodConstraint.of(Map.of(a, 1, b, 2))));
+        val withNogood = csp.withNogoods(Set.of(GroundNogoodConstraint.of(Map.of(a, 1, b, 2))));
         assertThat(withNogood.getNeighbours(a)).isEmpty();
         assertThat(withNogood.getNeighbours(b)).isEmpty();
         assertThat(withNogood.isFullyConnected()).isFalse();
@@ -459,9 +459,9 @@ public class ConstraintSatisfactionProblemTest {
         val csp = ConstraintSatisfactionProblem.builder()
                 .variableDomain(a, IntRangeDomain.of(1, 3))
                 .build();
-        val first = csp.withNogoods(Set.of(NogoodConstraint.of(Map.of(a, 1))));
-        val second = first.withNogoods(Set.of(NogoodConstraint.of(Map.of(a, 2))));
-        assertThat(second.getConstraints()).containsExactly(NogoodConstraint.of(Map.of(a, 2)));
+        val first = csp.withNogoods(Set.of(GroundNogoodConstraint.of(Map.of(a, 1))));
+        val second = first.withNogoods(Set.of(GroundNogoodConstraint.of(Map.of(a, 2))));
+        assertThat(second.getConstraints()).containsExactly(GroundNogoodConstraint.of(Map.of(a, 2)));
     }
 
     @Test
@@ -471,7 +471,7 @@ public class ConstraintSatisfactionProblemTest {
         val csp = ConstraintSatisfactionProblem.builder()
                 .variableDomain(a, IntRangeDomain.of(1, 3))
                 .build();
-        assertThatThrownBy(() -> csp.withNogoods(Set.of(NogoodConstraint.of(Map.of(stray, 1)))))
+        assertThatThrownBy(() -> csp.withNogoods(Set.of(GroundNogoodConstraint.of(Map.of(stray, 1)))))
                 .isInstanceOf(AssertionError.class);
     }
 
@@ -481,7 +481,7 @@ public class ConstraintSatisfactionProblemTest {
         val csp = ConstraintSatisfactionProblem.builder()
                 .variableDomain(a, IntRangeDomain.of(1, 3))
                 .build()
-                .withNogoods(Set.of(NogoodConstraint.of(Map.of(a, 1))));
+                .withNogoods(Set.of(GroundNogoodConstraint.of(Map.of(a, 1))));
         val rebuilt = csp.toBuilder().build();
         assertThat(rebuilt.getConstraints()).isEqualTo(csp.getConstraints());
     }
