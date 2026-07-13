@@ -4,14 +4,16 @@ import io.github.rcrida.jcsp.ConstraintSatisfactionProblem;
 import io.github.rcrida.jcsp.consistency.ConstraintConsistency;
 import io.github.rcrida.jcsp.consistency.Propagatable;
 import io.github.rcrida.jcsp.consistency.PropagationResult;
+import io.github.rcrida.jcsp.constraints.Constraint;
+import io.github.rcrida.jcsp.constraints.nary.GroundNogoodConstraint;
+import io.github.rcrida.jcsp.constraints.nary.NogoodConstraint;
+import io.github.rcrida.jcsp.constraints.nary.RangeNogoodConstraint;
 import io.github.rcrida.jcsp.domains.Domain;
 import io.github.rcrida.jcsp.variables.Variable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 import java.util.Optional;
 
 /**
@@ -73,27 +75,39 @@ public final class FixpointConsistency implements ConstraintConsistency {
     }
 
     /**
-     * Re-runs the fixpoint using {@link Propagatable#propagateWithReasons} and returns the
-     * accumulated reason when a domain wipeout is detected, or {@link Optional#empty()} if this
-     * constraint type caused no conflict (the conflict is in a different {@link FixpointConsistency}).
+     * Re-runs the fixpoint using {@link Propagatable#propagateWithReasons} and returns the nogood
+     * that explains a domain wipeout, or {@link Optional#empty()} if this constraint type caused
+     * no conflict (the conflict is in a different {@link FixpointConsistency}). Tries, in order:
+     * (1) the failing constraint's own {@link Propagatable#explainInfeasible} via {@code result.reason()}
+     * — tightest, e.g. a specific ground value or a Hall-set subset; (2)
+     * {@link RangeNogoodConstraint#fromCurrentBounds} over that same constraint's own variables —
+     * sound whenever (1) is empty, since {@code propagateWithReasons} already reported infeasibility
+     * given exactly these current domains, just not always as tightly as (1) would if it applied.
+     * <p>
+     * Earlier (feasible-step) reasons are never accumulated across constraints on the way to the
+     * wipeout: the default {@code propagateWithReasons} always reports an empty reason on its
+     * feasible path, and no implementor overrides it to do otherwise, so only the terminal
+     * infeasible step's own reason (or its tier-2 fallback) ever contributes anything.
      */
     @Override
     @SuppressWarnings({"unchecked", "rawtypes"})
-    public Optional<Map<Variable<?>, Object>> explainConflict(ConstraintSatisfactionProblem csp) {
+    public Optional<NogoodConstraint> explainConflict(ConstraintSatisfactionProblem csp) {
         List<Propagatable> constraints = (List) csp.getConstraints().stream()
                 .filter(constraintType::isInstance)
                 .toList();
         if (constraints.isEmpty()) return Optional.empty();
         var current = csp;
-        Map<Variable<?>, Object> accumulated = new HashMap<>();
         boolean changed = true;
         while (changed) {
             changed = false;
             for (Propagatable constraint : constraints) {
                 PropagationResult result = constraint.propagateWithReasons(current.getVariableDomains());
                 if (result.isInfeasible()) {
-                    accumulated.putAll(result.reason());
-                    return Optional.of(Map.copyOf(accumulated));
+                    if (!result.reason().isEmpty()) {
+                        return Optional.of(GroundNogoodConstraint.of(result.reason()));
+                    }
+                    return RangeNogoodConstraint.fromCurrentBounds(
+                            ((Constraint) constraint).getVariables(), current.getVariableDomains());
                 }
                 var updates = result.updatedDomains();
                 if (!updates.isEmpty()) {
@@ -102,7 +116,6 @@ public final class FixpointConsistency implements ConstraintConsistency {
                         builder.variableDomainEntry((Variable) entry.getKey(), (Domain) entry.getValue());
                     }
                     current = builder.build();
-                    accumulated.putAll(result.reason());
                     changed = true;
                 }
             }

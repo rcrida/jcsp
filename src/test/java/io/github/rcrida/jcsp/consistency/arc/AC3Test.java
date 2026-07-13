@@ -5,6 +5,7 @@ import io.github.rcrida.jcsp.ConstraintSatisfactionProblem;
 import io.github.rcrida.jcsp.constraints.Operator;
 import io.github.rcrida.jcsp.constraints.binary.BinaryComparatorConstraint;
 import io.github.rcrida.jcsp.constraints.binary.BinaryTuplesConstraint;
+import io.github.rcrida.jcsp.constraints.nary.GroundNogoodConstraint;
 import io.github.rcrida.jcsp.domains.DiscreteDomain;
 import io.github.rcrida.jcsp.domains.DomainObjectSet;
 import io.github.rcrida.jcsp.domains.EnumDomain;
@@ -162,15 +163,18 @@ public class AC3Test {
                 .variableDomain(NT, redOnly)
                 .notEqualsConstraint(WA, NT)
                 .build();
-        assertThat(AC3.INSTANCE.explainConflict(problem)).contains(Map.of(WA, RED, NT, RED));
+        assertThat(AC3.INSTANCE.explainConflict(problem)).contains(GroundNogoodConstraint.of(Map.of(WA, RED, NT, RED)));
     }
 
     @Test
-    void explainConflict_neitherSideSingleton_returnsEmptyReason() {
+    void explainConflict_neitherSideSingleton_returnsEmptyOptional() {
         // Same setup as inconsistent(): both domains have 11 values, none of which can ever
         // satisfy the sole tuple (0,11) since 11 isn't even in either domain. AC3 still wipes a
-        // domain, but since neither side is singleton, no sound reason can be cited -- the empty
-        // map signals the caller to fall back to the full assignment.
+        // domain, but since neither side is singleton, no sound reason can be cited -- deliberately
+        // ground-only (see AC3#explainConflict's javadoc for why it doesn't fall back to a
+        // range-based nogood the way FixpointConsistency does), so this reports Optional.empty()
+        // (a GroundNogoodConstraint can't be built from an empty reason map), signalling the caller
+        // to fall back to the full assignment -- same observable shape as no wipeout at all.
         val domain = IntRangeDomain.of(0, 10);
         val tuples = List.of(BinaryTuple.of(0, 11));
         val builder = ConstraintSatisfactionProblem.builder();
@@ -180,7 +184,7 @@ public class AC3Test {
         builder.variableDomainEntry(right, domain);
         builder.constraint(BinaryTuplesConstraint.of(left, right, Set.copyOf(tuples)));
         val problem = builder.build();
-        assertThat(AC3.INSTANCE.explainConflict(problem)).contains(Map.of());
+        assertThat(AC3.INSTANCE.explainConflict(problem)).isEmpty();
     }
 
     @Test

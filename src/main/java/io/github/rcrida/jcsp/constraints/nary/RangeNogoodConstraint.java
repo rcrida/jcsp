@@ -12,6 +12,8 @@ import lombok.EqualsAndHashCode;
 import lombok.experimental.SuperBuilder;
 import org.jspecify.annotations.NonNull;
 
+import java.util.Collection;
+import java.util.HashMap;
 import java.util.Map;
 import java.util.Optional;
 import java.util.stream.Collectors;
@@ -55,6 +57,46 @@ public class RangeNogoodConstraint extends NaryConstraint implements NogoodConst
             if (value.isEmpty() || !entry.getValue().contains(value.get())) return true;
         }
         return false;
+    }
+
+    /**
+     * Builds a nogood citing every one of {@code variables}' current domain bounds (a degenerate
+     * point range for an already-singleton domain). Sound whenever the constraint these variables
+     * jointly belong to has just reported infeasibility via
+     * {@link io.github.rcrida.jcsp.consistency.Propagatable#propagate}: that return value already
+     * means no combination drawn from these exact current domains satisfies it, which is exactly
+     * this class's falsified condition — no propagator-specific reasoning is needed beyond that.
+     * Unlike a propagator's own {@code explainInfeasible}, this never requires any variable to be
+     * singleton, so it can produce a real (if not always minimal) explanation in cases that would
+     * otherwise fall through to the full-assignment fallback.
+     * <p>
+     * Returns {@link Optional#empty()} if any cited variable's domain isn't numeric — a
+     * {@link BoundedDomain} or a {@link DiscreteDomain} of {@link Number} values — since
+     * {@link IntervalDomain} can't express a forbidden region for anything else.
+     */
+    @SuppressWarnings({"unchecked", "rawtypes"})
+    public static Optional<NogoodConstraint> fromCurrentBounds(
+            @NonNull Collection<? extends Variable<?>> variables, @NonNull Map<Variable<?>, Domain<?>> domains) {
+        Map<Variable<?>, IntervalDomain> forbidden = new HashMap<>();
+        for (Variable<?> variable : variables) {
+            Domain<?> domain = domains.get(variable);
+            if (!isNumeric(domain)) return Optional.empty();
+            Domain rawDomain = domain;
+            forbidden.put(variable, IntervalDomain.of(NumericBounds.min(rawDomain), NumericBounds.max(rawDomain)));
+        }
+        return Optional.of(of(forbidden));
+    }
+
+    /**
+     * Whether {@code domain} is numeric: a {@link BoundedDomain} (always {@link Number}-typed by
+     * its own type bound) or a {@link DiscreteDomain} whose values are {@link Number}s. Peeking a
+     * single value suffices for the discrete case, since a {@link DiscreteDomain}'s values are
+     * uniformly typed.
+     */
+    private static boolean isNumeric(Domain<?> domain) {
+        if (domain instanceof BoundedDomain<?>) return true;
+        DiscreteDomain<?> discrete = (DiscreteDomain<?>) domain;
+        return discrete.stream().findFirst().map(value -> value instanceof Number).orElse(false);
     }
 
     private enum Literal { SATISFIED, FALSIFIED, UNDETERMINED }

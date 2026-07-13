@@ -6,6 +6,8 @@ import io.github.rcrida.jcsp.ConstraintSatisfactionProblem;
 import io.github.rcrida.jcsp.consistency.ConstraintConsistency;
 import io.github.rcrida.jcsp.consistency.Propagatable;
 import io.github.rcrida.jcsp.constraints.binary.BinaryConstraint;
+import io.github.rcrida.jcsp.constraints.nary.GroundNogoodConstraint;
+import io.github.rcrida.jcsp.constraints.nary.NogoodConstraint;
 import io.github.rcrida.jcsp.domains.DiscreteDomain;
 import io.github.rcrida.jcsp.variables.Variable;
 
@@ -88,9 +90,17 @@ public class AC3 implements ConstraintConsistency {
      * search state. Unlike {@link #applyQueue}, no domain bookkeeping is needed here: {@link #revise}
      * reads only from {@code problem}, never from any progressively-narrowed map, so the wipeout
      * point is found identically either way.
+     * <p>
+     * Deliberately ground-only, unlike {@link io.github.rcrida.jcsp.consistency.fixpoint.FixpointConsistency#explainConflict},
+     * which additionally falls back to a range-based nogood over a whole failing constraint's
+     * variables when the ground reason is empty. That fallback's soundness argument rests on
+     * {@link Propagatable#propagate} directly reporting infeasibility for a constraint given its
+     * current domains; AC3's wipeout is a per-arc support-existence check on {@link #revise}, not a
+     * single constraint's own {@code propagate} call, so extending the same argument here would
+     * need separate justification not attempted in this pass.
      */
     @Override
-    public Optional<Map<Variable<?>, Object>> explainConflict(ConstraintSatisfactionProblem problem) {
+    public Optional<NogoodConstraint> explainConflict(ConstraintSatisfactionProblem problem) {
         val allArcs = problem.getAllBinaryConstraints().stream()
                 .flatMap(BinaryConstraint::getArcs)
                 .collect(Collectors.toSet());
@@ -111,7 +121,8 @@ public class AC3 implements ConstraintConsistency {
                 if (optionalRevisedD_i.isPresent()) {
                     val revisedD_i = optionalRevisedD_i.get();
                     if (revisedD_i.isEmpty()) {
-                        return Optional.of(Propagatable.allSingletonReason(List.of(X_i, X_j), problem.getVariableDomains()));
+                        val reason = Propagatable.allSingletonReason(List.of(X_i, X_j), problem.getVariableDomains());
+                        return reason.isEmpty() ? Optional.empty() : Optional.of(GroundNogoodConstraint.of(reason));
                     }
                     val X_iNeighbours = arcsByTarget.getOrDefault(X_i, List.of()).stream()
                             .filter(c -> !c.getFrom().equals(X_j))

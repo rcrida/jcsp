@@ -4,6 +4,7 @@ import io.github.rcrida.jcsp.ConstraintSatisfactionProblem;
 import io.github.rcrida.jcsp.assignments.Assignment;
 import io.github.rcrida.jcsp.constraints.Operator;
 import io.github.rcrida.jcsp.constraints.nary.GroundNogoodConstraint;
+import io.github.rcrida.jcsp.constraints.nary.RangeNogoodConstraint;
 import io.github.rcrida.jcsp.domains.IntRangeDomain;
 import io.github.rcrida.jcsp.domains.IntervalDomain;
 import io.github.rcrida.jcsp.variables.Variable;
@@ -50,14 +51,18 @@ public class MacAndFixpointConflictExplainerTest {
     }
 
     @Test
-    void explain_macSucceedsButAllDiffHallViolation_fallsBackToAssignmentValues() {
+    void explain_macSucceedsButAllDiffHallViolation_producesRangeNogoodOverViolatingVariables() {
         // x=3 causes notEquals(x,a/b/c) to narrow a,b,c from {1,2,3} to {1,2}.
         // With a=b=c={1,2} after MAC, pairwise AC3 finds every value supported (e.g. a=1
         // is supported by b=2) so AC3 does NOT detect the infeasibility. AllDiff GAC detects
-        // the Hall violation (3 variables confined to 2 values) via propagate(), and its
+        // the Hall violation (3 variables confined to 2 values) via propagate(), and its own
         // explainInfeasible finds the same Hall-violating subset -- but a,b,c are not all
-        // singleton here, so allSingletonReason yields no reason -- reason.isEmpty()=true →
-        // falls back to a ground nogood over assignment.getValues().
+        // singleton here, so allSingletonReason yields no ground reason (tier 1 empty). Tier 2
+        // (FixpointConsistency's generic current-bounds fallback) then fires: AllDiffConstraint's
+        // propagate() already reported infeasible given exactly a,b,c's current {1,2} domains, so
+        // citing those bounds as a RangeNogoodConstraint is sound -- and strictly better than the
+        // old full-assignment fallback, since it excludes x (irrelevant to AllDiff) and generalises
+        // over the whole {1,2} range rather than one exact value.
         Variable<Integer> x = F.create("x");
         Variable<Integer> a = F.create("a"), b = F.create("b"), c = F.create("c");
         var csp = ConstraintSatisfactionProblem.builder()
@@ -72,7 +77,8 @@ public class MacAndFixpointConflictExplainerTest {
                 .build();
         var assignment = Assignment.of(Map.of(x, 3));
         var result = MacAndFixpointConflictExplainer.INSTANCE.explain(csp, x, assignment);
-        assertThat(result).contains(GroundNogoodConstraint.of(assignment.getValues()));
+        assertThat(result).contains(RangeNogoodConstraint.of(Map.of(
+                a, IntervalDomain.of(1.0, 2.0), b, IntervalDomain.of(1.0, 2.0), c, IntervalDomain.of(1.0, 2.0))));
     }
 
     @Test

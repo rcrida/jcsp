@@ -2,12 +2,14 @@ package io.github.rcrida.jcsp.constraints.nary;
 
 import io.github.rcrida.jcsp.assignments.Assignment;
 import io.github.rcrida.jcsp.domains.Domain;
+import io.github.rcrida.jcsp.domains.DomainObjectSet;
 import io.github.rcrida.jcsp.domains.IntRangeDomain;
 import io.github.rcrida.jcsp.domains.IntervalDomain;
 import io.github.rcrida.jcsp.variables.Variable;
 import org.junit.jupiter.api.Test;
 
 import java.util.Map;
+import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -183,6 +185,33 @@ public class RangeNogoodConstraintTest {
         var result = c.propagate(domains);
         assertThat(result).isPresent();
         assertThat(result.get()).isEmpty();
+    }
+
+    // --- fromCurrentBounds ---
+
+    @Test
+    void fromCurrentBounds_discreteVariables_citesEachOnesFullCurrentRange() {
+        Variable<Integer> x = F.create("dx"), y = F.create("dy");
+        var domains = Map.<Variable<?>, Domain<?>>of(x, IntRangeDomain.of(1, 3), y, IntRangeDomain.of(4, 4));
+        var result = RangeNogoodConstraint.fromCurrentBounds(Set.of(x, y), domains);
+        assertThat(result).contains(RangeNogoodConstraint.of(
+                Map.of(x, IntervalDomain.of(1.0, 3.0), y, IntervalDomain.of(4.0, 4.0))));
+    }
+
+    @Test
+    void fromCurrentBounds_boundedVariable_citesItsCurrentBounds() {
+        Variable<Double> x = F.create("bx");
+        var domains = Map.<Variable<?>, Domain<?>>of(x, IntervalDomain.of(2.0, 5.0));
+        var result = RangeNogoodConstraint.fromCurrentBounds(Set.of(x), domains);
+        assertThat(result).contains(RangeNogoodConstraint.of(Map.of(x, IntervalDomain.of(2.0, 5.0))));
+    }
+
+    @Test
+    void fromCurrentBounds_nonNumericVariable_returnsEmpty() {
+        Variable<String> x = F.create("sx");
+        var domains = Map.<Variable<?>, Domain<?>>of(
+                x, DomainObjectSet.<String>builder().value("a").value("b").build());
+        assertThat(RangeNogoodConstraint.fromCurrentBounds(Set.of(x), domains)).isEmpty();
     }
 
     // --- explainInfeasible ---

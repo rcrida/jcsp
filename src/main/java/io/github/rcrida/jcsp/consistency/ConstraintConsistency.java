@@ -1,9 +1,8 @@
 package io.github.rcrida.jcsp.consistency;
 
 import io.github.rcrida.jcsp.ConstraintSatisfactionProblem;
-import io.github.rcrida.jcsp.variables.Variable;
+import io.github.rcrida.jcsp.constraints.nary.NogoodConstraint;
 
-import java.util.Map;
 import java.util.Optional;
 
 /**
@@ -19,7 +18,7 @@ public interface ConstraintConsistency {
      * the conflict, or {@link Optional#empty()} if this pass did not detect a conflict.
      * The default returns empty; subclasses that support explanation override this.
      */
-    default Optional<Map<Variable<?>, Object>> explainConflict(ConstraintSatisfactionProblem csp) {
+    default Optional<NogoodConstraint> explainConflict(ConstraintSatisfactionProblem csp) {
         return Optional.empty();
     }
 }
