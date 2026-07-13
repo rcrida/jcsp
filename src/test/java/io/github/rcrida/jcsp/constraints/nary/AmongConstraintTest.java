@@ -182,7 +182,7 @@ public class AmongConstraintTest {
         var domains = Map.<Variable<?>, Domain<?>>of(v1, IN_S, v2, MIXED, v3, OUT_S);
         var result = c.propagateWithReasons(domains);
         assertThat(result.isInfeasible()).isFalse();
-        assertThat(result.reason()).isEmpty();
+        assertThat(result.reason()).isNull();
     }
 
     @Test
@@ -192,7 +192,7 @@ public class AmongConstraintTest {
         var domains = Map.<Variable<?>, Domain<?>>of(v1, RED_ONLY, v2, GREEN_ONLY);
         var result = c.propagateWithReasons(domains);
         assertThat(result.isInfeasible()).isTrue();
-        assertThat(result.reason()).containsOnly(Map.entry(v1, Color.RED), Map.entry(v2, Color.GREEN));
+        assertThat(result.reason()).isEqualTo(GroundNogoodConstraint.of(Map.of(v1, Color.RED, v2, Color.GREEN)));
     }
 
     @Test
@@ -204,7 +204,7 @@ public class AmongConstraintTest {
         var domains = Map.<Variable<?>, Domain<?>>of(v1, IN_S, v2, IN_S);
         var result = c.propagateWithReasons(domains);
         assertThat(result.isInfeasible()).isTrue();
-        assertThat(result.reason()).isEmpty();
+        assertThat(result.reason()).isNull();
     }
 
     @Test
@@ -214,7 +214,7 @@ public class AmongConstraintTest {
         var domains = Map.<Variable<?>, Domain<?>>of(v1, OUT_S, v2, OUT_S);
         var result = c.propagateWithReasons(domains);
         assertThat(result.isInfeasible()).isTrue();
-        assertThat(result.reason()).containsOnly(Map.entry(v1, Color.BLUE), Map.entry(v2, Color.BLUE));
+        assertThat(result.reason()).isEqualTo(GroundNogoodConstraint.of(Map.of(v1, Color.BLUE, v2, Color.BLUE)));
     }
 
     @Test
@@ -227,7 +227,7 @@ public class AmongConstraintTest {
         var c = AmongConstraint.of(Set.of(i1, i2), sInt, Operator.EQ, 2);
         var result = c.propagateWithReasons(Map.of(i1, outS, i2, outS));
         assertThat(result.isInfeasible()).isTrue();
-        assertThat(result.reason()).isEmpty();
+        assertThat(result.reason()).isNull();
     }
 
     @Test
@@ -239,7 +239,7 @@ public class AmongConstraintTest {
         var domains = Map.<Variable<?>, Domain<?>>of(v1, RED_ONLY, v2, GREEN_ONLY);
         var result = c.propagateWithReasons(domains);
         assertThat(result.isInfeasible()).isTrue();
-        assertThat(result.reason()).containsOnly(Map.entry(v1, Color.RED), Map.entry(v2, Color.GREEN));
+        assertThat(result.reason()).isEqualTo(GroundNogoodConstraint.of(Map.of(v1, Color.RED, v2, Color.GREEN)));
     }
 
     @Test
@@ -252,7 +252,7 @@ public class AmongConstraintTest {
         var domains = Map.<Variable<?>, Domain<?>>of(v1, OUT_S, v2, OUT_S, v3, MIXED);
         var result = c.propagateWithReasons(domains);
         assertThat(result.isInfeasible()).isTrue();
-        assertThat(result.reason()).containsOnly(Map.entry(v1, Color.BLUE), Map.entry(v2, Color.BLUE));
+        assertThat(result.reason()).isEqualTo(GroundNogoodConstraint.of(Map.of(v1, Color.BLUE, v2, Color.BLUE)));
     }
 
     @Test

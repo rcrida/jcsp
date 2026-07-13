@@ -3,6 +3,7 @@ package io.github.rcrida.jcsp.constraints.nary;
 import io.github.rcrida.jcsp.ConstraintSatisfactionProblem;
 import io.github.rcrida.jcsp.assignments.Assignment;
 import io.github.rcrida.jcsp.domains.Domain;
+import io.github.rcrida.jcsp.domains.IntervalDomain;
 import io.github.rcrida.jcsp.domains.IntRangeDomain;
 import io.github.rcrida.jcsp.variables.Variable;
 import org.junit.jupiter.api.BeforeEach;
@@ -156,11 +157,12 @@ public class AllDiffConstraintTest {
     }
 
     @Test
-    void propagateWithReasons_infeasible_returnsEmptyReason() {
+    void propagateWithReasons_infeasible_nonSingletonHallSet_returnsRangeReason() {
         // None of x1,x2,x3 is singleton, so explainInfeasible's allSingletonReason gate can't
-        // produce a reason here (by pigeonhole, a non-empty reason always reduces to a pairwise
-        // singleton collision — see explainInfeasible_nonSingletonHallSet_returnsEmpty below).
-        // Callers (e.g. MacAndFixpointConflictExplainer) fall back to the full assignment.
+        // produce a ground reason here (by pigeonhole, a non-empty ground reason always reduces to
+        // a pairwise singleton collision). It falls back to a RangeNogoodConstraint over the same
+        // Hall-violating subset's current bounds instead — see
+        // explainInfeasible_nonSingletonHallSet_returnsRangeReason below.
         Variable<Integer> x1 = F.create("wr_x1"), x2 = F.create("wr_x2"), x3 = F.create("wr_x3");
         var c = AllDiffConstraint.<Integer>builder().variables(Set.of(x1, x2, x3)).build();
         var domains = Map.<Variable<?>, Domain<?>>of(
@@ -169,7 +171,8 @@ public class AllDiffConstraintTest {
                 x3, IntRangeDomain.of(1, 2));
         var result = c.propagateWithReasons(domains);
         assertThat(result.isInfeasible()).isTrue();
-        assertThat(result.reason()).isEmpty();
+        assertThat(result.reason()).isEqualTo(RangeNogoodConstraint.of(Map.of(
+                x1, IntervalDomain.of(1, 2), x2, IntervalDomain.of(1, 2), x3, IntervalDomain.of(1, 2))));
     }
 
     @Test
@@ -181,7 +184,7 @@ public class AllDiffConstraintTest {
                 x2, IntRangeDomain.of(1, 5));
         var result = c.propagateWithReasons(domains);
         assertThat(result.isInfeasible()).isFalse();
-        assertThat(result.reason()).isEmpty();
+        assertThat(result.reason()).isNull();
     }
 
     // --- explainInfeasible() ---
@@ -195,7 +198,7 @@ public class AllDiffConstraintTest {
                 x1, IntRangeDomain.of(5, 5),
                 x2, IntRangeDomain.of(5, 5));
         assertThat(c.propagate(domains)).isEmpty();
-        assertThat(c.explainInfeasible(domains)).isEqualTo(Map.of(x1, 5, x2, 5));
+        assertThat(c.explainInfeasible(domains)).contains(GroundNogoodConstraint.of(Map.of(x1, 5, x2, 5)));
     }
 
     @Test
@@ -209,14 +212,15 @@ public class AllDiffConstraintTest {
                 x2, IntRangeDomain.of(5, 5),
                 x3, IntRangeDomain.of(1, 3));
         assertThat(c.propagate(domains)).isEmpty();
-        assertThat(c.explainInfeasible(domains)).isEqualTo(Map.of(x1, 5, x2, 5));
+        assertThat(c.explainInfeasible(domains)).contains(GroundNogoodConstraint.of(Map.of(x1, 5, x2, 5)));
     }
 
     @Test
-    void explainInfeasible_nonSingletonHallSet_returnsEmpty() {
+    void explainInfeasible_nonSingletonHallSet_returnsRangeReasonExcludingUnrelatedVariable() {
         // Same setup as propagate_infeasible_returnsEmpty: none of x1,x2,x3 is singleton, so no
-        // reason is sound (by pigeonhole, a non-empty reason here would require at least two of
-        // them to already share the same singleton value).
+        // ground reason is sound (by pigeonhole, a non-empty ground reason here would require at
+        // least two of them to already share the same singleton value). Falls back to a
+        // RangeNogoodConstraint over the same Hall-violating subset's current bounds instead.
         Variable<Integer> x1 = F.create("ei_n1"), x2 = F.create("ei_n2"), x3 = F.create("ei_n3");
         var c = AllDiffConstraint.<Integer>builder().variables(Set.of(x1, x2, x3)).build();
         var domains = Map.<Variable<?>, Domain<?>>of(
@@ -224,7 +228,8 @@ public class AllDiffConstraintTest {
                 x2, IntRangeDomain.of(1, 2),
                 x3, IntRangeDomain.of(1, 2));
         assertThat(c.propagate(domains)).isEmpty();
-        assertThat(c.explainInfeasible(domains)).isEmpty();
+        assertThat(c.explainInfeasible(domains)).contains(RangeNogoodConstraint.of(Map.of(
+                x1, IntervalDomain.of(1, 2), x2, IntervalDomain.of(1, 2), x3, IntervalDomain.of(1, 2))));
     }
 
     @Test

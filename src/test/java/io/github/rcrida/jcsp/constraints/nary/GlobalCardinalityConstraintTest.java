@@ -174,7 +174,7 @@ public class GlobalCardinalityConstraintTest {
         var domains = Map.<Variable<?>, Domain<?>>of(v1, RED_ONLY, v2, RED_GREEN, v3, ALL);
         var result = c.propagateWithReasons(domains);
         assertThat(result.isInfeasible()).isFalse();
-        assertThat(result.reason()).isEmpty();
+        assertThat(result.reason()).isNull();
     }
 
     @Test
@@ -185,7 +185,7 @@ public class GlobalCardinalityConstraintTest {
         var domains = Map.<Variable<?>, Domain<?>>of(v1, RED_ONLY, v2, RED_ONLY);
         var result = c.propagateWithReasons(domains);
         assertThat(result.isInfeasible()).isTrue();
-        assertThat(result.reason()).containsOnly(Map.entry(v1, Color.RED), Map.entry(v2, Color.RED));
+        assertThat(result.reason()).isEqualTo(GroundNogoodConstraint.of(Map.of(v1, Color.RED, v2, Color.RED)));
     }
 
     @Test
@@ -196,7 +196,7 @@ public class GlobalCardinalityConstraintTest {
         var domains = Map.<Variable<?>, Domain<?>>of(v1, GREEN_ONLY, v2, EnumDomain.of(Color.BLUE));
         var result = c.propagateWithReasons(domains);
         assertThat(result.isInfeasible()).isTrue();
-        assertThat(result.reason()).containsOnly(Map.entry(v1, Color.GREEN), Map.entry(v2, Color.BLUE));
+        assertThat(result.reason()).isEqualTo(GroundNogoodConstraint.of(Map.of(v1, Color.GREEN, v2, Color.BLUE)));
     }
 
     @Test
@@ -207,7 +207,7 @@ public class GlobalCardinalityConstraintTest {
         var domains = Map.<Variable<?>, Domain<?>>of(v1, GREEN_BLUE, v2, GREEN_BLUE);
         var result = c.propagateWithReasons(domains);
         assertThat(result.isInfeasible()).isTrue();
-        assertThat(result.reason()).isEmpty();
+        assertThat(result.reason()).isNull();
     }
 
     @Test
@@ -259,8 +259,8 @@ public class GlobalCardinalityConstraintTest {
         var c = GlobalCardinalityConstraint.of(Set.of(v1, v2, v3), cardinalities);
         var domains = Map.<Variable<?>, Domain<?>>of(v1, RED_ONLY, v2, RED_GREEN, v3, GREEN_ONLY);
         assertThat(c.propagate(domains)).isEmpty();
-        assertThat(c.explainInfeasible(domains)).containsOnly(
-                Map.entry(v2, Color.GREEN), Map.entry(v3, Color.GREEN));
+        assertThat(c.explainInfeasible(domains)).contains(
+                GroundNogoodConstraint.of(Map.of(v2, Color.GREEN, v3, Color.GREEN)));
     }
 
     @Test

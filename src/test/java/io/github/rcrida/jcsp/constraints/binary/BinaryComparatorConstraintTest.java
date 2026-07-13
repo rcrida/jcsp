@@ -2,6 +2,7 @@ package io.github.rcrida.jcsp.constraints.binary;
 
 import io.github.rcrida.jcsp.assignments.Assignment;
 import io.github.rcrida.jcsp.constraints.Operator;
+import io.github.rcrida.jcsp.constraints.nary.GroundNogoodConstraint;
 import io.github.rcrida.jcsp.domains.DiscreteDomain;
 import io.github.rcrida.jcsp.domains.Domain;
 import io.github.rcrida.jcsp.domains.IntRangeDomain;
@@ -221,7 +222,7 @@ public class BinaryComparatorConstraintTest {
     @Test void propagateWithReasons_feasible_returnsEmptyReason() {
         var result = BinaryComparatorConstraint.of(L, Operator.LEQ, R).propagateWithReasons(domains(0.0, 10.0, 3.0, 8.0));
         assertThat(result.isInfeasible()).isFalse();
-        assertThat(result.reason()).isEmpty();
+        assertThat(result.reason()).isNull();
     }
 
     @Test void propagateWithReasons_infeasible_leftSingleton_attributesLeft() {
@@ -229,14 +230,14 @@ public class BinaryComparatorConstraintTest {
         // value; R is a genuine open range with nothing to pin the conflict on.
         var result = BinaryComparatorConstraint.of(L, Operator.LEQ, R).propagateWithReasons(domains(5.0, 5.0, 0.0, 3.0));
         assertThat(result.isInfeasible()).isTrue();
-        assertThat(result.reason()).containsExactly(Map.entry(L, 5.0));
+        assertThat(result.reason()).isEqualTo(GroundNogoodConstraint.of(Map.of(L, 5.0)));
     }
 
     @Test void propagateWithReasons_infeasible_bothSingleton_attributesBoth() {
         // L=[5,5], R=[1,1]: L<=R is infeasible with both sides pinned to a concrete value.
         var result = BinaryComparatorConstraint.of(L, Operator.LEQ, R).propagateWithReasons(domains(5.0, 5.0, 1.0, 1.0));
         assertThat(result.isInfeasible()).isTrue();
-        assertThat(result.reason()).containsOnly(Map.entry(L, 5.0), Map.entry(R, 1.0));
+        assertThat(result.reason()).isEqualTo(GroundNogoodConstraint.of(Map.of(L, 5.0, R, 1.0)));
     }
 
     @Test void propagateWithReasons_infeasible_neitherSingleton_returnsEmptyReason() {
@@ -244,6 +245,6 @@ public class BinaryComparatorConstraintTest {
         // variable-value pair can be blamed — matches propagate_infeasible_returnsEmpty() above.
         var result = BinaryComparatorConstraint.of(L, Operator.LEQ, R).propagateWithReasons(domains(5.0, 10.0, 0.0, 3.0));
         assertThat(result.isInfeasible()).isTrue();
-        assertThat(result.reason()).isEmpty();
+        assertThat(result.reason()).isNull();
     }
 }

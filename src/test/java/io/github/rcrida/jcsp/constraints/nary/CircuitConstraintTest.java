@@ -188,7 +188,7 @@ public class CircuitConstraintTest {
         var c = CircuitConstraint.of(List.of(s0, s1));
         var domains = Map.<Variable<?>, Domain<?>>of(s0, dom(1), s1, dom(1, 2));
         assertThat(c.propagate(domains)).isEmpty();
-        assertThat(c.explainInfeasible(domains)).containsOnly(Map.entry(s0, 1));
+        assertThat(c.explainInfeasible(domains)).contains(GroundNogoodConstraint.of(Map.of(s0, 1)));
     }
 
     @Test
@@ -197,7 +197,7 @@ public class CircuitConstraintTest {
         var c = CircuitConstraint.of(List.of(s0, s1, s2));
         var domains = Map.<Variable<?>, Domain<?>>of(s0, dom(3), s1, dom(3), s2, dom(1, 2));
         assertThat(c.propagate(domains)).isEmpty();
-        assertThat(c.explainInfeasible(domains)).containsOnly(Map.entry(s0, 3), Map.entry(s1, 3));
+        assertThat(c.explainInfeasible(domains)).contains(GroundNogoodConstraint.of(Map.of(s0, 3, s1, 3)));
     }
 
     @Test
@@ -207,7 +207,7 @@ public class CircuitConstraintTest {
         var domains = Map.<Variable<?>, Domain<?>>of(
                 s0, dom(2), s1, dom(1), s2, dom(1, 4), s3, dom(1, 3));
         assertThat(c.propagate(domains)).isEmpty();
-        assertThat(c.explainInfeasible(domains)).containsOnly(Map.entry(s0, 2), Map.entry(s1, 1));
+        assertThat(c.explainInfeasible(domains)).contains(GroundNogoodConstraint.of(Map.of(s0, 2, s1, 1)));
     }
 
     @Test

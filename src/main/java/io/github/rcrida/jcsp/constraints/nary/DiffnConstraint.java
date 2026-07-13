@@ -183,18 +183,18 @@ public class DiffnConstraint extends NaryConstraint implements Propagatable {
      * {@link Propagatable#allSingletonReason}: non-empty solely when all four are singleton.
      */
     @Override
-    public Map<Variable<?>, Object> explainInfeasible(@NonNull Map<Variable<?>, Domain<?>> domains) {
+    public Optional<NogoodConstraint> explainInfeasible(@NonNull Map<Variable<?>, Domain<?>> domains) {
         int n = xOrigins.size();
         Map<Variable<?>, Domain<?>> updated = new HashMap<>();
         for (int i = 0; i < n; i++) {
             for (int j = i + 1; j < n; j++) {
                 var failure = separateOnOverlap(i, j, xOrigins, widths, yOrigins, heights, domains, updated);
-                if (failure.isPresent()) return buildReason(failure.get(), domains, updated);
+                if (failure.isPresent()) return GroundNogoodConstraint.fromReason(buildReason(failure.get(), domains, updated));
                 failure = separateOnOverlap(i, j, yOrigins, heights, xOrigins, widths, domains, updated);
-                if (failure.isPresent()) return buildReason(failure.get(), domains, updated);
+                if (failure.isPresent()) return GroundNogoodConstraint.fromReason(buildReason(failure.get(), domains, updated));
             }
         }
-        return Map.of();
+        return Optional.empty();
     }
 
     private Map<Variable<?>, Object> buildReason(Failure failure,

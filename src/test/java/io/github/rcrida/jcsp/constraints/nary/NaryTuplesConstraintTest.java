@@ -117,7 +117,7 @@ public class NaryTuplesConstraintTest {
         // x=y=z={1}: no cyclic permutation of (1,2,3) has all three variables equal to 1
         var domains = Map.<Variable<?>, Domain<?>>of(
                 x, IntRangeDomain.of(1, 1), y, IntRangeDomain.of(1, 1), z, IntRangeDomain.of(1, 1));
-        assertThat(constraint.explainInfeasible(domains)).isEqualTo(Map.of(x, 1, y, 1, z, 1));
+        assertThat(constraint.explainInfeasible(domains)).contains(GroundNogoodConstraint.of(Map.of(x, 1, y, 1, z, 1)));
     }
 
     @Test

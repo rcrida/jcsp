@@ -214,22 +214,43 @@ public class RangeNogoodConstraintTest {
         assertThat(RangeNogoodConstraint.fromCurrentBounds(Set.of(x), domains)).isEmpty();
     }
 
-    // --- explainInfeasible ---
-
     @Test
-    void explainInfeasible_everyVariableSingleton_returnsGroundReason() {
-        Variable<Integer> x = F.create("vx"), y = F.create("vy");
-        var c = RangeNogoodConstraint.of(Map.of(x, IntervalDomain.of(1, 5), y, IntervalDomain.of(1, 5)));
-        var domains = Map.<Variable<?>, Domain<?>>of(x, IntRangeDomain.of(3, 3), y, IntRangeDomain.of(4, 4));
-        assertThat(c.explainInfeasible(domains)).containsOnly(Map.entry(x, 3), Map.entry(y, 4));
+    void fromCurrentBounds_emptyDomain_returnsEmpty() {
+        Variable<Integer> x = F.create("ex");
+        var domains = Map.<Variable<?>, Domain<?>>of(x, DomainObjectSet.<Integer>builder().build());
+        assertThat(RangeNogoodConstraint.fromCurrentBounds(Set.of(x), domains)).isEmpty();
     }
 
     @Test
-    void explainInfeasible_notEveryVariableSingleton_returnsEmpty() {
+    void fromCurrentBounds_gappedDiscreteDomain_returnsEmpty() {
+        // {1,5} bounds to [1,5], but 2/3/4 were never actually part of the domain that caused the
+        // original infeasibility -- citing the interval here would be unsound (see the javadoc on
+        // isSafeToCiteAsRange / fromCurrentBounds), so this must degrade to empty rather than
+        // producing a RangeNogoodConstraint over a superset of the real domain.
+        Variable<Integer> x = F.create("gx");
+        var domains = Map.<Variable<?>, Domain<?>>of(
+                x, DomainObjectSet.<Integer>builder().value(1).value(5).build());
+        assertThat(RangeNogoodConstraint.fromCurrentBounds(Set.of(x), domains)).isEmpty();
+    }
+
+    // --- explainInfeasible ---
+
+    @Test
+    void explainInfeasible_everyVariableSingleton_returnsSelf() {
+        Variable<Integer> x = F.create("vx"), y = F.create("vy");
+        var c = RangeNogoodConstraint.of(Map.of(x, IntervalDomain.of(1, 5), y, IntervalDomain.of(1, 5)));
+        var domains = Map.<Variable<?>, Domain<?>>of(x, IntRangeDomain.of(3, 3), y, IntRangeDomain.of(4, 4));
+        assertThat(c.explainInfeasible(domains)).contains(c);
+    }
+
+    @Test
+    void explainInfeasible_notEveryVariableSingleton_stillReturnsSelf() {
+        // No singleton requirement is needed: the clause is falsified (both domains entirely
+        // within their forbidden ranges) regardless of whether either domain is a single point.
         Variable<Integer> x = F.create("wx"), y = F.create("wy");
         var c = RangeNogoodConstraint.of(Map.of(x, IntervalDomain.of(1, 5), y, IntervalDomain.of(1, 5)));
         var domains = Map.<Variable<?>, Domain<?>>of(x, IntRangeDomain.of(2, 3), y, IntRangeDomain.of(4, 4));
-        assertThat(c.explainInfeasible(domains)).isEmpty();
+        assertThat(c.explainInfeasible(domains)).contains(c);
     }
 
     // --- misc ---

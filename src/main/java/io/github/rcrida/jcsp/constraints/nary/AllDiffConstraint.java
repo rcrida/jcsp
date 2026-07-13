@@ -207,30 +207,43 @@ public class AllDiffConstraint<T> extends UniformNaryConstraint<T> implements Pr
     }
 
     /**
-     * Attributes a Hall-set violation to the variables of the Hall-violating subset {@code z}
-     * found by {@link #hallViolatingVars}, via {@link Propagatable#allSingletonReason} — sound
-     * only when every variable in {@code z} is currently singleton.
-     * <p>
-     * This is a narrower proof than {@code propagate}'s general Régin GAC: by pigeonhole, if every
-     * variable in a Hall-violating set of size {@code k} is singleton, at least two of them
-     * necessarily share the same value (they occupy at most {@code k-1} distinct values), so a
-     * non-empty reason from this method always reduces to a simple pairwise collision. The
-     * general, non-singleton Hall violation — e.g. three variables each with domain {@code {1,2}},
-     * the actual reason Régin's algorithm exists instead of plain pairwise decomposition — isn't
-     * reducible to a small set of variable-value pairs, and still falls back to {@code Map.of()}
-     * here, same as the default.
+     * Finds the Hall-violating variable subset via {@link #hallViolatingVars}, or
+     * {@link Optional#empty()} if the matching is already perfect (no violation). Shared by
+     * {@link #explainInfeasible} (which further requires every one to be singleton for a ground
+     * reason) and range-based citation of the same subset, so the matching/Hall-subset computation
+     * lives in exactly one place.
      */
-    @Override
-    public Map<Variable<?>, Object> explainInfeasible(@NonNull Map<Variable<?>, Domain<?>> domains) {
+    private Optional<List<Variable<?>>> findHallViolatingSubset(Map<Variable<?>, Domain<?>> domains) {
         MatchingResult matching = computeMatching(domains);
         int n = matching.vars().size();
-        if (matching.matchingSize() >= n) return Map.of();
+        if (matching.matchingSize() >= n) return Optional.empty();
 
         // matchingSize < n guarantees some variable is unmatched.
         int exposed = IntStream.range(0, n).filter(i -> matching.matchVar()[i] == -1).findFirst().orElseThrow();
         Set<Integer> z = hallViolatingVars(exposed, matching.varAdj(), matching.matchVal());
-        List<Variable<?>> zVars = z.stream().map(matching.vars()::get).toList();
-        return Propagatable.allSingletonReason(zVars, domains);
+        return Optional.of(z.stream().map(matching.vars()::get).toList());
+    }
+
+    /**
+     * Attributes a Hall-set violation to the Hall-violating subset found by
+     * {@link #findHallViolatingSubset}: first tries a ground reason via
+     * {@link Propagatable#allSingletonReason} — sound only when every variable in the subset is
+     * currently singleton, and by pigeonhole always reducible to a simple pairwise collision when
+     * it applies, since a singleton subset of size {@code k} occupies at most {@code k-1} distinct
+     * values. When that's not available (e.g. three variables each with domain {@code {1,2}}, the
+     * actual reason Régin's algorithm exists instead of plain pairwise decomposition), falls back
+     * to a {@link RangeNogoodConstraint} over the same subset's current bounds — sound because
+     * {@code propagate()} already reported infeasible given exactly these domains, and tighter than
+     * the generic {@code FixpointConsistency} tier-2 fallback would be, since it's scoped to just
+     * the Hall-violating subset rather than every variable this constraint covers.
+     */
+    @Override
+    public Optional<NogoodConstraint> explainInfeasible(@NonNull Map<Variable<?>, Domain<?>> domains) {
+        return findHallViolatingSubset(domains).flatMap(zVars -> {
+            Map<Variable<?>, Object> ground = Propagatable.allSingletonReason(zVars, domains);
+            if (!ground.isEmpty()) return GroundNogoodConstraint.fromReason(ground);
+            return RangeNogoodConstraint.fromCurrentBounds(zVars, domains);
+        });
     }
 
     private boolean augment(int u, List<List<Integer>> adj, int[] matchVar, int[] matchVal,

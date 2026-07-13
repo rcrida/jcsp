@@ -1,6 +1,7 @@
 package io.github.rcrida.jcsp.constraints.binary;
 
 import io.github.rcrida.jcsp.constraints.Operator;
+import io.github.rcrida.jcsp.constraints.nary.GroundNogoodConstraint;
 import io.github.rcrida.jcsp.domains.Domain;
 import io.github.rcrida.jcsp.domains.DiscreteDomain;
 import io.github.rcrida.jcsp.domains.DomainObjectSet;
@@ -251,7 +252,7 @@ public class BinaryOffsetConstraintTest {
     @Test void propagateWithReasons_feasible_returnsEmptyReason() {
         var result = BinaryOffsetConstraint.of(L, O, Operator.LEQ, R).propagateWithReasons(domains(0, 10, 3, 8));
         assertThat(result.isInfeasible()).isFalse();
-        assertThat(result.reason()).isEmpty();
+        assertThat(result.reason()).isNull();
     }
 
     @Test void propagateWithReasons_infeasible_leftSingleton_attributesLeft() {
@@ -259,14 +260,14 @@ public class BinaryOffsetConstraintTest {
         // value; R is a genuine open range with nothing to pin the conflict on.
         var result = BinaryOffsetConstraint.of(L, O, Operator.LEQ, R).propagateWithReasons(domains(5, 5, 0, 3));
         assertThat(result.isInfeasible()).isTrue();
-        assertThat(result.reason()).containsExactly(Map.entry(L, 5.0));
+        assertThat(result.reason()).isEqualTo(GroundNogoodConstraint.of(Map.of(L, 5.0)));
     }
 
     @Test void propagateWithReasons_infeasible_bothSingleton_attributesBoth() {
         // L=[5,5], R=[1,1]: L+3<=R is infeasible with both sides pinned to a concrete value.
         var result = BinaryOffsetConstraint.of(L, O, Operator.LEQ, R).propagateWithReasons(domains(5, 5, 1, 1));
         assertThat(result.isInfeasible()).isTrue();
-        assertThat(result.reason()).containsOnly(Map.entry(L, 5.0), Map.entry(R, 1.0));
+        assertThat(result.reason()).isEqualTo(GroundNogoodConstraint.of(Map.of(L, 5.0, R, 1.0)));
     }
 
     @Test void propagateWithReasons_infeasible_neitherSingleton_returnsEmptyReason() {
@@ -274,6 +275,6 @@ public class BinaryOffsetConstraintTest {
         // variable-value pair can be blamed — matches propagate_infeasible() above.
         var result = BinaryOffsetConstraint.of(L, O, Operator.LEQ, R).propagateWithReasons(domains(5, 10, 0, 3));
         assertThat(result.isInfeasible()).isTrue();
-        assertThat(result.reason()).isEmpty();
+        assertThat(result.reason()).isNull();
     }
 }

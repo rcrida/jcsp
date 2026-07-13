@@ -3,6 +3,7 @@ package io.github.rcrida.jcsp.constraints.binary;
 import io.github.rcrida.jcsp.ConstraintSatisfactionProblem;
 import io.github.rcrida.jcsp.assignments.Assignment;
 import io.github.rcrida.jcsp.constraints.Operator;
+import io.github.rcrida.jcsp.constraints.nary.GroundNogoodConstraint;
 import io.github.rcrida.jcsp.domains.Domain;
 import io.github.rcrida.jcsp.domains.DomainObjectSet;
 import io.github.rcrida.jcsp.domains.IntRangeDomain;
@@ -292,7 +293,7 @@ public class DivisionConstraintTest {
     @Test void propagateWithReasons_feasible_returnsEmptyReason() {
         var result = DivisionConstraint.of(X, Y, Operator.GEQ, 4.0).propagateWithReasons(intervals(1, 10, 1, 3));
         assertThat(result.isInfeasible()).isFalse();
-        assertThat(result.reason()).isEmpty();
+        assertThat(result.reason()).isNull();
     }
 
     @Test void propagateWithReasons_leq_infeasible_leftSingleton_attributesLeft() {
@@ -300,14 +301,14 @@ public class DivisionConstraintTest {
         // blamed on a specific value; Y is a genuine open range with nothing to pin the conflict on.
         var result = DivisionConstraint.of(X, Y, Operator.LEQ, 2.0).propagateWithReasons(intervals(6, 6, 1, 2));
         assertThat(result.isInfeasible()).isTrue();
-        assertThat(result.reason()).containsExactly(Map.entry(X, 6.0));
+        assertThat(result.reason()).isEqualTo(GroundNogoodConstraint.of(Map.of(X, 6.0)));
     }
 
     @Test void propagateWithReasons_leq_infeasible_bothSingleton_attributesBoth() {
         // X=[6,6], Y=[2,2]: xMin/yMax=3.0 > 2.0 (LEQ) → infeasible, both sides pinned.
         var result = DivisionConstraint.of(X, Y, Operator.LEQ, 2.0).propagateWithReasons(intervals(6, 6, 2, 2));
         assertThat(result.isInfeasible()).isTrue();
-        assertThat(result.reason()).containsOnly(Map.entry(X, 6.0), Map.entry(Y, 2.0));
+        assertThat(result.reason()).isEqualTo(GroundNogoodConstraint.of(Map.of(X, 6.0, Y, 2.0)));
     }
 
     @Test void propagateWithReasons_leq_infeasible_neitherSingleton_returnsEmptyReason() {
@@ -315,14 +316,14 @@ public class DivisionConstraintTest {
         // above, but neither side is pinned to a single value.
         var result = DivisionConstraint.of(X, Y, Operator.LEQ, 2.0).propagateWithReasons(intervals(6, 10, 1, 2));
         assertThat(result.isInfeasible()).isTrue();
-        assertThat(result.reason()).isEmpty();
+        assertThat(result.reason()).isNull();
     }
 
     @Test void propagateWithReasons_geq_infeasible_bothSingleton_attributesBoth() {
         // X=[4,4], Y=[2,2]: xMax/yMin=2.0 < 3.0 (GEQ) → infeasible, both sides pinned.
         var result = DivisionConstraint.of(X, Y, Operator.GEQ, 3.0).propagateWithReasons(intervals(4, 4, 2, 2));
         assertThat(result.isInfeasible()).isTrue();
-        assertThat(result.reason()).containsOnly(Map.entry(X, 4.0), Map.entry(Y, 2.0));
+        assertThat(result.reason()).isEqualTo(GroundNogoodConstraint.of(Map.of(X, 4.0, Y, 2.0)));
     }
 
     // --- solver integration ---

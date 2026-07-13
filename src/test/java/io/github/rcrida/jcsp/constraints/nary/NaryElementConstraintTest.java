@@ -250,7 +250,7 @@ public class NaryElementConstraintTest {
         );
         assertThat(constraint.propagate(domains)).isEmpty();
         assertThat(constraint.explainInfeasible(domains))
-                .isEqualTo(Map.of(A, "alpha", B, "beta", C, "gamma", RESULT, "x"));
+                .contains(GroundNogoodConstraint.of(Map.of(A, "alpha", B, "beta", C, "gamma", RESULT, "x")));
     }
 
     @Test
@@ -294,7 +294,7 @@ public class NaryElementConstraintTest {
         );
         assertThat(constraint.propagate(domains)).isEmpty();
         assertThat(constraint.explainInfeasible(domains))
-                .isEqualTo(Map.of(A, "alpha", B, "beta", RESULT, "x"));
+                .contains(GroundNogoodConstraint.of(Map.of(A, "alpha", B, "beta", RESULT, "x")));
     }
 
     @Test

@@ -174,21 +174,22 @@ public class RegularConstraint extends NaryConstraint implements Propagatable {
      */
     @Override
     @SuppressWarnings("unchecked")
-    public Map<Variable<?>, Object> explainInfeasible(@NonNull Map<Variable<?>, Domain<?>> domains) {
+    public Optional<NogoodConstraint> explainInfeasible(@NonNull Map<Variable<?>, Domain<?>> domains) {
         var dfa = (Automaton<Object>) automaton;
 
         ForwardPassResult forward = forwardPass(domains, dfa);
         if (forward.failedMidSequence()) {
-            return Propagatable.allSingletonReason(sequence.subList(0, forward.failedAt() + 1), domains);
+            return GroundNogoodConstraint.fromReason(
+                    Propagatable.allSingletonReason(sequence.subList(0, forward.failedAt() + 1), domains));
         }
 
         Set<Integer> finalReachable = new HashSet<>(forward.reachable()[sequence.size()]);
         finalReachable.retainAll(dfa.acceptingStates());
         if (finalReachable.isEmpty()) {
-            return Propagatable.allSingletonReason(sequence, domains);
+            return GroundNogoodConstraint.fromReason(Propagatable.allSingletonReason(sequence, domains));
         }
 
-        return Map.of();
+        return Optional.empty();
     }
 
     @Override

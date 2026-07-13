@@ -4,6 +4,8 @@ import io.github.rcrida.jcsp.consistency.Propagatable;
 import io.github.rcrida.jcsp.consistency.PropagationResult;
 import io.github.rcrida.jcsp.constraints.NumericBounds;
 import io.github.rcrida.jcsp.constraints.Operator;
+import io.github.rcrida.jcsp.constraints.nary.GroundNogoodConstraint;
+import io.github.rcrida.jcsp.constraints.nary.NogoodConstraint;
 import io.github.rcrida.jcsp.domains.BoundedDomain;
 import io.github.rcrida.jcsp.domains.DiscreteDomain;
 import io.github.rcrida.jcsp.domains.Domain;
@@ -138,10 +140,10 @@ public class BinaryComparatorConstraint<T extends Comparable<T>> extends BinaryC
      * </ul>
      */
     @Override
-    public Map<Variable<?>, Object> explainInfeasible(@NonNull Map<Variable<?>, Domain<?>> domains) {
+    public Optional<NogoodConstraint> explainInfeasible(@NonNull Map<Variable<?>, Domain<?>> domains) {
         Map<Variable<?>, Object> reason = new HashMap<>();
         Propagatable.addIfSingleton(domains.get(getLeft()), getLeft(), reason);
         Propagatable.addIfSingleton(domains.get(getRight()), getRight(), reason);
-        return reason;
+        return GroundNogoodConstraint.fromReason(reason);
     }
 }

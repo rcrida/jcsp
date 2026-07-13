@@ -172,8 +172,8 @@ public class SumConstraint<N extends Number> extends UniformNaryConstraint<N> im
      * only sound, self-contained one.
      */
     @Override
-    public Map<Variable<?>, Object> explainInfeasible(@NonNull Map<Variable<?>, Domain<?>> domains) {
-        return Propagatable.allSingletonReason(getVariables(), domains);
+    public Optional<NogoodConstraint> explainInfeasible(@NonNull Map<Variable<?>, Domain<?>> domains) {
+        return GroundNogoodConstraint.fromReason(Propagatable.allSingletonReason(getVariables(), domains));
     }
 
     @Override

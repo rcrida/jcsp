@@ -127,7 +127,7 @@ public class AtLeastNConstraintTest {
         var constraint = AtLeastNConstraint.builder().variables(Set.of(a, b, c)).n(2).build();
         var result = constraint.propagateWithReasons(Map.of(a, TRUE, b, BOTH, c, FALSE));
         assertThat(result.isInfeasible()).isFalse();
-        assertThat(result.reason()).isEmpty();
+        assertThat(result.reason()).isNull();
     }
 
     @Test
@@ -138,7 +138,7 @@ public class AtLeastNConstraintTest {
         var constraint = AtLeastNConstraint.builder().variables(Set.of(a, b, c)).n(3).build();
         var result = constraint.propagateWithReasons(Map.of(a, TRUE, b, FALSE, c, FALSE));
         assertThat(result.isInfeasible()).isTrue();
-        assertThat(result.reason()).containsOnly(Map.entry(b, false), Map.entry(c, false));
+        assertThat(result.reason()).isEqualTo(GroundNogoodConstraint.of(Map.of(b, false, c, false)));
     }
 
     @Test
@@ -149,7 +149,7 @@ public class AtLeastNConstraintTest {
         var constraint = AtLeastNConstraint.builder().variables(Set.of(a, b)).n(1).build();
         var result = constraint.propagateWithReasons(Map.of(a, FALSE, b, FALSE));
         assertThat(result.isInfeasible()).isTrue();
-        assertThat(result.reason()).containsOnly(Map.entry(a, false), Map.entry(b, false));
+        assertThat(result.reason()).isEqualTo(GroundNogoodConstraint.of(Map.of(a, false, b, false)));
     }
 
     @Test
@@ -161,6 +161,6 @@ public class AtLeastNConstraintTest {
         var constraint = AtLeastNConstraint.builder().variables(Set.of(a, b)).n(3).build();
         var result = constraint.propagateWithReasons(Map.of(a, BOTH, b, BOTH));
         assertThat(result.isInfeasible()).isTrue();
-        assertThat(result.reason()).isEmpty();
+        assertThat(result.reason()).isNull();
     }
 }

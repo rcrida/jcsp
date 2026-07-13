@@ -186,7 +186,7 @@ public class NaryElementConstraint<T> extends NaryConstraint implements Propagat
      */
     @Override
     @SuppressWarnings("unchecked")
-    public Map<Variable<?>, Object> explainInfeasible(@NonNull Map<Variable<?>, Domain<?>> domains) {
+    public Optional<NogoodConstraint> explainInfeasible(@NonNull Map<Variable<?>, Domain<?>> domains) {
         DiscreteDomain<Integer> indexDomain = (DiscreteDomain<Integer>) domains.get(index);
 
         Set<Variable<?>> cited = new HashSet<>();
@@ -195,9 +195,9 @@ public class NaryElementConstraint<T> extends NaryConstraint implements Propagat
                 cited.add(vars.get(i - 1));
             }
         }
-        if (cited.isEmpty()) return Map.of();
+        if (cited.isEmpty()) return Optional.empty();
         cited.add(result);
-        return Propagatable.allSingletonReason(cited, domains);
+        return GroundNogoodConstraint.fromReason(Propagatable.allSingletonReason(cited, domains));
     }
 
     @Override

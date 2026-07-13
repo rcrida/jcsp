@@ -40,6 +40,18 @@ public class GroundNogoodConstraint extends NaryConstraint implements NogoodCons
                 .build();
     }
 
+    /**
+     * Converts a raw ground-value reason map, as built by {@link io.github.rcrida.jcsp.consistency.Propagatable#addIfSingleton}
+     * or {@link io.github.rcrida.jcsp.consistency.Propagatable#allSingletonReason}, into the
+     * {@code explainInfeasible}-ready shape: {@link Optional#empty()} if {@code reason} is empty
+     * (no explanation available), otherwise {@link #of} wrapped in {@link Optional#of}. The
+     * mechanical wrapper every {@code explainInfeasible} override that still builds a plain ground
+     * map ends its method with.
+     */
+    public static Optional<NogoodConstraint> fromReason(@NonNull Map<Variable<?>, Object> reason) {
+        return reason.isEmpty() ? Optional.empty() : Optional.of(of(reason));
+    }
+
     @Override
     public boolean isSatisfiedBy(@NonNull Assignment assignment) {
         for (var entry : forbidden.entrySet()) {
@@ -101,10 +113,14 @@ public class GroundNogoodConstraint extends NaryConstraint implements NogoodCons
         return Optional.of(Map.of());
     }
 
-    /** All falsified means every variable is already pinned to exactly its forbidden value: the nogood itself. */
+    /**
+     * All falsified means every variable is already pinned to exactly its forbidden value —
+     * the clause itself is already the (unconditionally sound) explanation, no further reasoning
+     * needed.
+     */
     @Override
-    public Map<Variable<?>, Object> explainInfeasible(@NonNull Map<Variable<?>, Domain<?>> domains) {
-        return Map.copyOf(forbidden);
+    public Optional<NogoodConstraint> explainInfeasible(@NonNull Map<Variable<?>, Domain<?>> domains) {
+        return Optional.of(this);
     }
 
     @Override

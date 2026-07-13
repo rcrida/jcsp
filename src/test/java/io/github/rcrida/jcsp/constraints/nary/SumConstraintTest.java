@@ -398,7 +398,7 @@ public class SumConstraintTest {
                 v3, IntRangeDomain.of(1, 9));
         var result = eq10.propagateWithReasons(domains);
         assertThat(result.isInfeasible()).isFalse();
-        assertThat(result.reason()).isEmpty();
+        assertThat(result.reason()).isNull();
     }
 
     @Test
@@ -411,7 +411,7 @@ public class SumConstraintTest {
                 v3, IntRangeDomain.of(3, 3));
         var result = eq10.propagateWithReasons(domains);
         assertThat(result.isInfeasible()).isTrue();
-        assertThat(result.reason()).containsOnly(Map.entry(v1, 3), Map.entry(v2, 3), Map.entry(v3, 3));
+        assertThat(result.reason()).isEqualTo(GroundNogoodConstraint.of(Map.of(v1, 3, v2, 3, v3, 3)));
     }
 
     @Test
@@ -424,7 +424,7 @@ public class SumConstraintTest {
                 v2, IntRangeDomain.of(1, 3));
         var result = c.propagateWithReasons(domains);
         assertThat(result.isInfeasible()).isTrue();
-        assertThat(result.reason()).isEmpty();
+        assertThat(result.reason()).isNull();
     }
 
     @Test
@@ -440,7 +440,7 @@ public class SumConstraintTest {
         // value to blame, so even though v2 is pinned, the explanation can't be sound without v1.
         var result = c.propagateWithReasons(domains);
         assertThat(result.isInfeasible()).isTrue();
-        assertThat(result.reason()).isEmpty();
+        assertThat(result.reason()).isNull();
     }
 
     @Test

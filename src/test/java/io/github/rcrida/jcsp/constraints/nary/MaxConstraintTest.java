@@ -293,7 +293,7 @@ public class MaxConstraintTest {
     @Test void propagateWithReasons_feasible_returnsEmptyReason() {
         var result = MaxConstraint.of(Set.of(X, Y), Operator.LEQ, 5.0).propagateWithReasons(intervals(0, 10, 0, 8));
         assertThat(result.isInfeasible()).isFalse();
-        assertThat(result.reason()).isEmpty();
+        assertThat(result.reason()).isNull();
     }
 
     @Test void propagateWithReasons_leq_singleCulprit_attributesSingleton() {
@@ -301,7 +301,7 @@ public class MaxConstraintTest {
         // culprit regardless of Y.
         var result = MaxConstraint.of(Set.of(X, Y), Operator.LEQ, 5.0).propagateWithReasons(intervals(7, 7, 0, 3));
         assertThat(result.isInfeasible()).isTrue();
-        assertThat(result.reason()).containsExactly(Map.entry(X, 7.0));
+        assertThat(result.reason()).isEqualTo(GroundNogoodConstraint.of(Map.of(X, 7.0)));
     }
 
     @Test void propagateWithReasons_leq_noSingletonCulprit_bothOpen_returnsEmptyReason() {
@@ -309,7 +309,7 @@ public class MaxConstraintTest {
         // single value, so nothing can be blamed.
         var result = MaxConstraint.of(Set.of(X, Y), Operator.LEQ, 5.0).propagateWithReasons(intervals(6, 10, 7, 9));
         assertThat(result.isInfeasible()).isTrue();
-        assertThat(result.reason()).isEmpty();
+        assertThat(result.reason()).isNull();
     }
 
     @Test void propagateWithReasons_leq_singletonDoesNotExceed_openVariableIsTrueCulprit_returnsEmptyReason() {
@@ -317,7 +317,7 @@ public class MaxConstraintTest {
         // but Y isn't pinned to a value so nothing can be blamed.
         var result = MaxConstraint.of(Set.of(X, Y), Operator.LEQ, 5.0).propagateWithReasons(intervals(3, 3, 6, 10));
         assertThat(result.isInfeasible()).isTrue();
-        assertThat(result.reason()).isEmpty();
+        assertThat(result.reason()).isNull();
     }
 
     @Test void propagateWithReasons_lt_singleCulprit_strictAttributesSingleton() {
@@ -325,7 +325,7 @@ public class MaxConstraintTest {
         // pinned exactly at the bound already violates the strict comparison.
         var result = MaxConstraint.of(Set.of(X, Y), Operator.LT, 5.0).propagateWithReasons(intervals(5, 5, 0, 3));
         assertThat(result.isInfeasible()).isTrue();
-        assertThat(result.reason()).containsExactly(Map.entry(X, 5.0));
+        assertThat(result.reason()).isEqualTo(GroundNogoodConstraint.of(Map.of(X, 5.0)));
     }
 
     @Test void propagateWithReasons_lt_singletonDoesNotExceedStrictly_openVariableIsTrueCulprit_returnsEmptyReason() {
@@ -333,7 +333,7 @@ public class MaxConstraintTest {
         // under the strict comparison): infeasible, but Y isn't pinned so nothing can be blamed.
         var result = MaxConstraint.of(Set.of(X, Y), Operator.LT, 5.0).propagateWithReasons(intervals(3, 3, 5, 10));
         assertThat(result.isInfeasible()).isTrue();
-        assertThat(result.reason()).isEmpty();
+        assertThat(result.reason()).isNull();
     }
 
     @Test void propagateWithReasons_geq_collective_allSingleton_attributesBoth() {
@@ -341,7 +341,7 @@ public class MaxConstraintTest {
         // both are pinned, so the full pair is a sound, self-contained explanation.
         var result = MaxConstraint.of(Set.of(X, Y), Operator.GEQ, 5.0).propagateWithReasons(intervals(3, 3, 4, 4));
         assertThat(result.isInfeasible()).isTrue();
-        assertThat(result.reason()).containsOnly(Map.entry(X, 3.0), Map.entry(Y, 4.0));
+        assertThat(result.reason()).isEqualTo(GroundNogoodConstraint.of(Map.of(X, 3.0, Y, 4.0)));
     }
 
     @Test void propagateWithReasons_geq_collective_notAllSingleton_returnsEmptyReason() {
@@ -349,14 +349,14 @@ public class MaxConstraintTest {
         // unlisted open variable can't be ruled out — falls back to empty.
         var result = MaxConstraint.of(Set.of(X, Y), Operator.GEQ, 5.0).propagateWithReasons(intervals(0, 3, 0, 4));
         assertThat(result.isInfeasible()).isTrue();
-        assertThat(result.reason()).isEmpty();
+        assertThat(result.reason()).isNull();
     }
 
     @Test void propagateWithReasons_gt_collective_allSingleton_attributesBoth() {
         // X=[3,3], Y=[3,3]: max>5 infeasible (globalMax=3<=5); both pinned, sound explanation.
         var result = MaxConstraint.of(Set.of(X, Y), Operator.GT, 5.0).propagateWithReasons(intervals(3, 3, 3, 3));
         assertThat(result.isInfeasible()).isTrue();
-        assertThat(result.reason()).containsOnly(Map.entry(X, 3.0), Map.entry(Y, 3.0));
+        assertThat(result.reason()).isEqualTo(GroundNogoodConstraint.of(Map.of(X, 3.0, Y, 3.0)));
     }
 
     @Test void propagateWithReasons_eq_singleCulpritFoundBeforeCollective() {
@@ -364,7 +364,7 @@ public class MaxConstraintTest {
         // the single-culprit search finds X before ever considering the collective explanation.
         var result = MaxConstraint.of(Set.of(X, Y), Operator.EQ, 5.0).propagateWithReasons(intervals(8, 8, 0, 3));
         assertThat(result.isInfeasible()).isTrue();
-        assertThat(result.reason()).containsExactly(Map.entry(X, 8.0));
+        assertThat(result.reason()).isEqualTo(GroundNogoodConstraint.of(Map.of(X, 8.0)));
     }
 
     @Test void propagateWithReasons_eq_collectiveFoundAfterSingleCulpritMisses() {
@@ -372,6 +372,6 @@ public class MaxConstraintTest {
         // collective lower-bound explanation succeeds since both are pinned and neither reaches 5.
         var result = MaxConstraint.of(Set.of(X, Y), Operator.EQ, 5.0).propagateWithReasons(intervals(3, 3, 4, 4));
         assertThat(result.isInfeasible()).isTrue();
-        assertThat(result.reason()).containsOnly(Map.entry(X, 3.0), Map.entry(Y, 4.0));
+        assertThat(result.reason()).isEqualTo(GroundNogoodConstraint.of(Map.of(X, 3.0, Y, 4.0)));
     }
 }

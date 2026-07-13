@@ -181,7 +181,7 @@ public class MinConstraint<N extends Number> extends UniformNaryConstraint<N> im
      */
     @Override
     @SuppressWarnings("unchecked")
-    public Map<Variable<?>, Object> explainInfeasible(@NonNull Map<Variable<?>, Domain<?>> domains) {
+    public Optional<NogoodConstraint> explainInfeasible(@NonNull Map<Variable<?>, Domain<?>> domains) {
         double k = bound.doubleValue();
         boolean lowerStrict = operator == Operator.GT;
 
@@ -194,16 +194,16 @@ public class MinConstraint<N extends Number> extends UniformNaryConstraint<N> im
                 if (fallsBelow) {
                     Map<Variable<?>, Object> reason = new HashMap<>();
                     reason.put(var, value);
-                    return reason;
+                    return GroundNogoodConstraint.fromReason(reason);
                 }
             }
         }
 
         if (upperPassApplies()) {
             Map<Variable<?>, Object> reason = Propagatable.allSingletonReason(getVariables(), domains);
-            if (!reason.isEmpty()) return reason;
+            if (!reason.isEmpty()) return GroundNogoodConstraint.fromReason(reason);
         }
 
-        return Map.of();
+        return Optional.empty();
     }
 }

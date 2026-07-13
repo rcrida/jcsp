@@ -205,7 +205,7 @@ public class CountConstraintTest {
         var domains = Map.<Variable<?>, Domain<?>>of(a, RED_ONLY, b, ALL_COLORS, c, NOT_RED);
         var result = constraint.propagateWithReasons(domains);
         assertThat(result.isInfeasible()).isFalse();
-        assertThat(result.reason()).isEmpty();
+        assertThat(result.reason()).isNull();
     }
 
     @Test
@@ -216,7 +216,7 @@ public class CountConstraintTest {
         var domains = Map.<Variable<?>, Domain<?>>of(a, RED_ONLY, b, RED_ONLY);
         var result = constraint.propagateWithReasons(domains);
         assertThat(result.isInfeasible()).isTrue();
-        assertThat(result.reason()).containsOnly(Map.entry(a, Color.RED), Map.entry(b, Color.RED));
+        assertThat(result.reason()).isEqualTo(GroundNogoodConstraint.of(Map.of(a, Color.RED, b, Color.RED)));
     }
 
     @Test
@@ -227,8 +227,8 @@ public class CountConstraintTest {
         var domains = Map.<Variable<?>, Domain<?>>of(a, GREEN_ONLY, b, BLUE_ONLY, c, GREEN_ONLY);
         var result = constraint.propagateWithReasons(domains);
         assertThat(result.isInfeasible()).isTrue();
-        assertThat(result.reason()).containsOnly(
-                Map.entry(a, Color.GREEN), Map.entry(b, Color.BLUE), Map.entry(c, Color.GREEN));
+        assertThat(result.reason()).isEqualTo(GroundNogoodConstraint.of(
+                Map.of(a, Color.GREEN, b, Color.BLUE, c, Color.GREEN)));
     }
 
     @Test
@@ -240,7 +240,7 @@ public class CountConstraintTest {
         var domains = Map.<Variable<?>, Domain<?>>of(a, NOT_RED, b, NOT_RED, c, NOT_RED);
         var result = constraint.propagateWithReasons(domains);
         assertThat(result.isInfeasible()).isTrue();
-        assertThat(result.reason()).isEmpty();
+        assertThat(result.reason()).isNull();
     }
 
     @Test
@@ -251,7 +251,7 @@ public class CountConstraintTest {
         var domains = Map.<Variable<?>, Domain<?>>of(a, RED_ONLY, b, RED_ONLY);
         var result = constraint.propagateWithReasons(domains);
         assertThat(result.isInfeasible()).isTrue();
-        assertThat(result.reason()).containsOnly(Map.entry(a, Color.RED), Map.entry(b, Color.RED));
+        assertThat(result.reason()).isEqualTo(GroundNogoodConstraint.of(Map.of(a, Color.RED, b, Color.RED)));
     }
 
     @Test
@@ -264,7 +264,7 @@ public class CountConstraintTest {
         var domains = Map.<Variable<?>, Domain<?>>of(a, GREEN_ONLY, b, BLUE_ONLY, c, ALL_COLORS);
         var result = constraint.propagateWithReasons(domains);
         assertThat(result.isInfeasible()).isTrue();
-        assertThat(result.reason()).containsOnly(Map.entry(a, Color.GREEN), Map.entry(b, Color.BLUE));
+        assertThat(result.reason()).isEqualTo(GroundNogoodConstraint.of(Map.of(a, Color.GREEN, b, Color.BLUE)));
     }
 
     @Test

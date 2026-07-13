@@ -268,7 +268,7 @@ public class CumulativeConstraint extends NaryConstraint implements Propagatable
      */
     @Override
     @SuppressWarnings("unchecked")
-    public Map<Variable<?>, Object> explainInfeasible(@NonNull Map<Variable<?>, Domain<?>> domains) {
+    public Optional<NogoodConstraint> explainInfeasible(@NonNull Map<Variable<?>, Domain<?>> domains) {
         int n = starts.size();
         double[] est = new double[n];
         double[] lst = new double[n];
@@ -286,7 +286,7 @@ public class CumulativeConstraint extends NaryConstraint implements Propagatable
         for (double[] e : events) {
             running += e[1];
             if (running > limit) {
-                return Propagatable.allSingletonReason(compulsoryVars, domains);
+                return GroundNogoodConstraint.fromReason(Propagatable.allSingletonReason(compulsoryVars, domains));
             }
         }
 
@@ -294,10 +294,10 @@ public class CumulativeConstraint extends NaryConstraint implements Propagatable
             if (!taskWindow(i, est, lst, events).feasible()) {
                 Set<Variable<?>> culprits = new HashSet<>(compulsoryVars);
                 culprits.add(starts.get(i));
-                return Propagatable.allSingletonReason(culprits, domains);
+                return GroundNogoodConstraint.fromReason(Propagatable.allSingletonReason(culprits, domains));
             }
         }
-        return Map.of();
+        return Optional.empty();
     }
 
     @Override

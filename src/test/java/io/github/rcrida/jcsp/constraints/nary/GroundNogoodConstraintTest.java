@@ -134,7 +134,7 @@ public class GroundNogoodConstraintTest {
         var c = GroundNogoodConstraint.of(Map.of(x, 1, y, 2));
         var domains = Map.<Variable<?>, Domain<?>>of(
                 x, IntRangeDomain.of(1, 1), y, IntRangeDomain.of(2, 2));
-        assertThat(c.explainInfeasible(domains)).containsOnly(Map.entry(x, 1), Map.entry(y, 2));
+        assertThat(c.explainInfeasible(domains)).contains(c);
     }
 
     // --- misc ---

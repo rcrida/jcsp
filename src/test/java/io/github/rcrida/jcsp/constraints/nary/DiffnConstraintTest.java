@@ -361,8 +361,8 @@ public class DiffnConstraintTest {
                 x0, IntRangeDomain.of(0, 0), x1, IntRangeDomain.of(2, 2),
                 y0, IntRangeDomain.of(2, 2), y1, IntRangeDomain.of(2, 2));
         assertThat(c.propagate(d)).isEmpty();
-        assertThat(c.explainInfeasible(d)).containsOnly(
-                Map.entry(x0, 0), Map.entry(x1, 2), Map.entry(y0, 2), Map.entry(y1, 2));
+        assertThat(c.explainInfeasible(d)).contains(
+                GroundNogoodConstraint.of(Map.of(x0, 0, x1, 2, y0, 2, y1, 2)));
     }
 
     @Test

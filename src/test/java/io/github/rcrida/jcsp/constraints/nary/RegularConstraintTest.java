@@ -188,7 +188,7 @@ public class RegularConstraintTest {
         var domains = Map.<Variable<?>, Domain<?>>of(
                 v0, IntRangeDomain.of(1, 1), v1, IntRangeDomain.of(1, 1));
         assertThat(c.propagate(domains)).isEmpty();
-        assertThat(c.explainInfeasible(domains)).isEqualTo(Map.of(v0, 1));
+        assertThat(c.explainInfeasible(domains)).contains(GroundNogoodConstraint.of(Map.of(v0, 1)));
     }
 
     @Test
@@ -210,7 +210,7 @@ public class RegularConstraintTest {
         var domains = Map.<Variable<?>, Domain<?>>of(
                 v0, IntRangeDomain.of(0, 0), v1, IntRangeDomain.of(0, 0));
         assertThat(c.propagate(domains)).isEmpty();
-        assertThat(c.explainInfeasible(domains)).isEqualTo(Map.of(v0, 0, v1, 0));
+        assertThat(c.explainInfeasible(domains)).contains(GroundNogoodConstraint.of(Map.of(v0, 0, v1, 0)));
     }
 
     @Test
@@ -223,7 +223,7 @@ public class RegularConstraintTest {
         var domains = Map.<Variable<?>, Domain<?>>of(
                 v0, IntRangeDomain.of(1, 1), v1, IntRangeDomain.of(1, 1));
         assertThat(c.propagate(domains)).isEmpty();
-        assertThat(c.explainInfeasible(domains)).isEqualTo(Map.of(v0, 1, v1, 1));
+        assertThat(c.explainInfeasible(domains)).contains(GroundNogoodConstraint.of(Map.of(v0, 1, v1, 1)));
     }
 
     @Test

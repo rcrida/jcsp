@@ -5,7 +5,6 @@ import io.github.rcrida.jcsp.consistency.ConstraintConsistency;
 import io.github.rcrida.jcsp.consistency.Propagatable;
 import io.github.rcrida.jcsp.consistency.PropagationResult;
 import io.github.rcrida.jcsp.constraints.Constraint;
-import io.github.rcrida.jcsp.constraints.nary.GroundNogoodConstraint;
 import io.github.rcrida.jcsp.constraints.nary.NogoodConstraint;
 import io.github.rcrida.jcsp.constraints.nary.RangeNogoodConstraint;
 import io.github.rcrida.jcsp.domains.Domain;
@@ -79,13 +78,16 @@ public final class FixpointConsistency implements ConstraintConsistency {
      * that explains a domain wipeout, or {@link Optional#empty()} if this constraint type caused
      * no conflict (the conflict is in a different {@link FixpointConsistency}). Tries, in order:
      * (1) the failing constraint's own {@link Propagatable#explainInfeasible} via {@code result.reason()}
-     * — tightest, e.g. a specific ground value or a Hall-set subset; (2)
-     * {@link RangeNogoodConstraint#fromCurrentBounds} over that same constraint's own variables —
-     * sound whenever (1) is empty, since {@code propagateWithReasons} already reported infeasibility
-     * given exactly these current domains, just not always as tightly as (1) would if it applied.
+     * — tightest when it applies, and free to be a ground or a range nogood depending on what the
+     * propagator itself can prove (e.g. {@code AllDiffConstraint} tries ground on its Hall-violating
+     * subset, then range over that same subset); (2) {@link RangeNogoodConstraint#fromCurrentBounds}
+     * over the failing constraint's <em>entire</em> variable set — the generic fallback for
+     * propagators that don't provide anything tighter, sound whenever (1) is {@code null}, since
+     * {@code propagateWithReasons} already reported infeasibility given exactly these current
+     * domains.
      * <p>
      * Earlier (feasible-step) reasons are never accumulated across constraints on the way to the
-     * wipeout: the default {@code propagateWithReasons} always reports an empty reason on its
+     * wipeout: the default {@code propagateWithReasons} always reports a {@code null} reason on its
      * feasible path, and no implementor overrides it to do otherwise, so only the terminal
      * infeasible step's own reason (or its tier-2 fallback) ever contributes anything.
      */
@@ -103,9 +105,8 @@ public final class FixpointConsistency implements ConstraintConsistency {
             for (Propagatable constraint : constraints) {
                 PropagationResult result = constraint.propagateWithReasons(current.getVariableDomains());
                 if (result.isInfeasible()) {
-                    if (!result.reason().isEmpty()) {
-                        return Optional.of(GroundNogoodConstraint.of(result.reason()));
-                    }
+                    NogoodConstraint reason = result.reason();
+                    if (reason != null) return Optional.of(reason);
                     return RangeNogoodConstraint.fromCurrentBounds(
                             ((Constraint) constraint).getVariables(), current.getVariableDomains());
                 }

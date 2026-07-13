@@ -75,12 +75,12 @@ public class AtLeastNConstraint extends UniformNaryConstraint<Boolean> implement
      */
     @Override
     @SuppressWarnings("unchecked")
-    public Map<Variable<?>, Object> explainInfeasible(@NonNull Map<Variable<?>, Domain<?>> domains) {
+    public Optional<NogoodConstraint> explainInfeasible(@NonNull Map<Variable<?>, Domain<?>> domains) {
         Map<Variable<?>, Object> reason = new HashMap<>();
         for (Variable<?> var : getVariables()) {
             Domain<Boolean> dom = (Domain<Boolean>) domains.get(var);
             if (!dom.contains(Boolean.TRUE)) reason.put(var, Boolean.FALSE);
         }
-        return reason;
+        return GroundNogoodConstraint.fromReason(reason);
     }
 }

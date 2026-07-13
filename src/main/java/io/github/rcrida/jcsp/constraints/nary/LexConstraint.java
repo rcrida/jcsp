@@ -163,9 +163,9 @@ public class LexConstraint<T extends Comparable<T>> extends NaryConstraint imple
      */
     @Override
     @SuppressWarnings("unchecked")
-    public Map<Variable<?>, Object> explainInfeasible(@NonNull Map<Variable<?>, Domain<?>> domains) {
+    public Optional<NogoodConstraint> explainInfeasible(@NonNull Map<Variable<?>, Domain<?>> domains) {
         if (!PROPAGATING_OPERATORS.contains(operator)) {
-            return Map.of();
+            return Optional.empty();
         }
 
         boolean swapped = operator == Operator.GEQ || operator == Operator.GT;
@@ -173,11 +173,11 @@ public class LexConstraint<T extends Comparable<T>> extends NaryConstraint imple
 
         var position = firstUndecidedPosition(domains, swapped, strict);
         if (position.isEmpty()) {
-            if (operator.compare(0, 0)) return Map.of();
+            if (operator.compare(0, 0)) return Optional.empty();
             List<Variable<T>> allVars = variablePairs.stream()
                     .flatMap(pair -> Stream.of(pair.left(), pair.right()))
                     .toList();
-            return Propagatable.allSingletonReason(allVars, domains);
+            return GroundNogoodConstraint.fromReason(Propagatable.allSingletonReason(allVars, domains));
         }
 
         UndecidedPosition<T> p = position.get();
@@ -188,8 +188,8 @@ public class LexConstraint<T extends Comparable<T>> extends NaryConstraint imple
         boolean infeasible = p.strictHere()
                 ? lesserMin.compareTo(greaterMax) >= 0
                 : lesserMin.compareTo(greaterMax) > 0;
-        if (!infeasible) return Map.of(); // propagate() would narrow, not fail, at this position
-        return Propagatable.allSingletonReason(List.of(p.lesser(), p.greater()), domains);
+        if (!infeasible) return Optional.empty(); // propagate() would narrow, not fail, at this position
+        return GroundNogoodConstraint.fromReason(Propagatable.allSingletonReason(List.of(p.lesser(), p.greater()), domains));
     }
 
     @SuppressWarnings("unchecked")

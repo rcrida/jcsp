@@ -179,7 +179,7 @@ public class CumulativeConstraintTest {
                 x1, IntRangeDomain.of(1, 1),
                 x2, IntRangeDomain.of(1, 1));
         assertThat(c.propagate(domains)).isEmpty();
-        assertThat(c.explainInfeasible(domains)).containsOnly(Map.entry(x1, 1), Map.entry(x2, 1));
+        assertThat(c.explainInfeasible(domains)).contains(GroundNogoodConstraint.of(Map.of(x1, 1, x2, 1)));
     }
 
     @Test
@@ -199,7 +199,7 @@ public class CumulativeConstraintTest {
                 a, IntRangeDomain.of(0, 0),
                 b, IntRangeDomain.of(1, 1));
         assertThat(c.propagate(domains)).isEmpty();
-        assertThat(c.explainInfeasible(domains)).containsOnly(Map.entry(a, 0), Map.entry(b, 1));
+        assertThat(c.explainInfeasible(domains)).contains(GroundNogoodConstraint.of(Map.of(a, 0, b, 1)));
     }
 
     @Test

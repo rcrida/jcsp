@@ -152,13 +152,13 @@ public class InverseConstraint extends NaryConstraint implements Propagatable {
      * value to already be pinned.
      */
     @Override
-    public Map<Variable<?>, Object> explainInfeasible(@NonNull Map<Variable<?>, Domain<?>> domains) {
+    public Optional<NogoodConstraint> explainInfeasible(@NonNull Map<Variable<?>, Domain<?>> domains) {
         Map<Variable<?>, Domain<?>> updated = new HashMap<>();
         PassOutcome pass1 = invfPruningPass(domains, updated);
-        if (pass1.infeasible()) return pass1.reason();
+        if (pass1.infeasible()) return GroundNogoodConstraint.fromReason(pass1.reason());
         PassOutcome pass2 = fPruningPass(domains, updated);
-        if (pass2.infeasible()) return pass2.reason();
-        return Map.of();
+        if (pass2.infeasible()) return GroundNogoodConstraint.fromReason(pass2.reason());
+        return Optional.empty();
     }
 
     @Override

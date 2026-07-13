@@ -247,14 +247,14 @@ public class ProductConstraintTest {
     @Test void propagateWithReasons_feasible_returnsEmptyReason() {
         var result = ProductConstraint.of(Set.of(X, Y), Operator.GEQ, 6.0).propagateWithReasons(intervals(4, 10, 2, 3));
         assertThat(result.isInfeasible()).isFalse();
-        assertThat(result.reason()).isEmpty();
+        assertThat(result.reason()).isNull();
     }
 
     @Test void propagateWithReasons_infeasible_bothSingleton_attributesBoth() {
         // X=[1,1], Y=[2,2], productMax=2, bound=5 (GEQ) > 2 → infeasible; both sides pinned.
         var result = ProductConstraint.of(Set.of(X, Y), Operator.GEQ, 5.0).propagateWithReasons(intervals(1, 1, 2, 2));
         assertThat(result.isInfeasible()).isTrue();
-        assertThat(result.reason()).containsOnly(Map.entry(X, 1.0), Map.entry(Y, 2.0));
+        assertThat(result.reason()).isEqualTo(GroundNogoodConstraint.of(Map.of(X, 1.0, Y, 2.0)));
     }
 
     @Test void propagateWithReasons_infeasible_notAllSingleton_returnsEmptyReason() {
@@ -262,7 +262,7 @@ public class ProductConstraintTest {
         // but neither side is pinned to a single value, so no variable-value pair can be blamed.
         var result = ProductConstraint.of(Set.of(X, Y), Operator.GEQ, 5.0).propagateWithReasons(intervals(1, 2, 1, 2));
         assertThat(result.isInfeasible()).isTrue();
-        assertThat(result.reason()).isEmpty();
+        assertThat(result.reason()).isNull();
     }
 
     // --- solver integration ---

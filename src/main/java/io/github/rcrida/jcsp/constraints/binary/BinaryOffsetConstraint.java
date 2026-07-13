@@ -3,6 +3,8 @@ package io.github.rcrida.jcsp.constraints.binary;
 import io.github.rcrida.jcsp.consistency.Propagatable;
 import io.github.rcrida.jcsp.constraints.NumericBounds;
 import io.github.rcrida.jcsp.constraints.Operator;
+import io.github.rcrida.jcsp.constraints.nary.GroundNogoodConstraint;
+import io.github.rcrida.jcsp.constraints.nary.NogoodConstraint;
 import io.github.rcrida.jcsp.domains.Domain;
 import io.github.rcrida.jcsp.variables.Variable;
 import lombok.EqualsAndHashCode;
@@ -134,10 +136,10 @@ public class BinaryOffsetConstraint<N extends Number> extends BinaryConstraint<N
      * discrete/bounded ones.
      */
     @Override
-    public Map<Variable<?>, Object> explainInfeasible(@NonNull Map<Variable<?>, Domain<?>> domains) {
+    public Optional<NogoodConstraint> explainInfeasible(@NonNull Map<Variable<?>, Domain<?>> domains) {
         Map<Variable<?>, Object> reason = new HashMap<>();
         Propagatable.addIfSingleton(domains.get(getLeft()), getLeft(), reason);
         Propagatable.addIfSingleton(domains.get(getRight()), getRight(), reason);
-        return reason;
+        return GroundNogoodConstraint.fromReason(reason);
     }
 }

@@ -169,7 +169,7 @@ public class InverseConstraintTest {
                 g0, DomainObjectSet.<Integer>builder().value(1).build(),
                 g1, domain123(), g2, domain123());
         assertThat(constraint.propagate(domains)).isEmpty();
-        assertThat(constraint.explainInfeasible(domains)).isEqualTo(Map.of(f0, 2));
+        assertThat(constraint.explainInfeasible(domains)).contains(GroundNogoodConstraint.of(Map.of(f0, 2)));
     }
 
     @Test
@@ -196,7 +196,7 @@ public class InverseConstraintTest {
                 g0, DomainObjectSet.<Integer>builder().value(2).build(),
                 g1, domain123(), g2, domain123());
         assertThat(constraint.propagate(domains)).isEmpty();
-        assertThat(constraint.explainInfeasible(domains)).isEqualTo(Map.of(g0, 2));
+        assertThat(constraint.explainInfeasible(domains)).contains(GroundNogoodConstraint.of(Map.of(g0, 2)));
     }
 
     @Test

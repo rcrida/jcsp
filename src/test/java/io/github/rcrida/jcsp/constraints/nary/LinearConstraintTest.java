@@ -545,7 +545,7 @@ public class LinearConstraintTest {
                 y, IntRangeDomain.of(0, 9));
         var result = eq12.propagateWithReasons(domains);
         assertThat(result.isInfeasible()).isFalse();
-        assertThat(result.reason()).isEmpty();
+        assertThat(result.reason()).isNull();
     }
 
     @Test
@@ -557,7 +557,7 @@ public class LinearConstraintTest {
                 y, IntRangeDomain.of(5, 5));
         var result = eq12.propagateWithReasons(domains);
         assertThat(result.isInfeasible()).isTrue();
-        assertThat(result.reason()).containsOnly(Map.entry(x, 5), Map.entry(y, 5));
+        assertThat(result.reason()).isEqualTo(GroundNogoodConstraint.of(Map.of(x, 5, y, 5)));
     }
 
     @Test
@@ -569,7 +569,7 @@ public class LinearConstraintTest {
                 y, IntRangeDomain.of(5, 9));
         var result = eq12.propagateWithReasons(domains);
         assertThat(result.isInfeasible()).isTrue();
-        assertThat(result.reason()).isEmpty();
+        assertThat(result.reason()).isNull();
     }
 
     @Test
@@ -585,6 +585,6 @@ public class LinearConstraintTest {
                 ny, DomainObjectSet.<Integer>builder().value(1).build());
         var result = c.propagateWithReasons(domains);
         assertThat(result.isInfeasible()).isTrue();
-        assertThat(result.reason()).isEmpty();
+        assertThat(result.reason()).isNull();
     }
 }

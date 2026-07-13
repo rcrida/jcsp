@@ -146,7 +146,7 @@ public class CountConstraint<T> extends UniformNaryConstraint<T> implements Prop
      * </ul>
      */
     @Override
-    public Map<Variable<?>, Object> explainInfeasible(@NonNull Map<Variable<?>, Domain<?>> domains) {
+    public Optional<NogoodConstraint> explainInfeasible(@NonNull Map<Variable<?>, Domain<?>> domains) {
         boolean applyUpper = operator == Operator.EQ || operator == Operator.LEQ;
         boolean applyLower = operator == Operator.EQ || operator == Operator.GEQ;
 
@@ -155,15 +155,15 @@ public class CountConstraint<T> extends UniformNaryConstraint<T> implements Prop
         if (applyUpper && c.definite().size() > n) {
             Map<Variable<?>, Object> reason = new HashMap<>();
             for (Variable<?> var : c.definite()) reason.put(var, value);
-            return reason;
+            return GroundNogoodConstraint.fromReason(reason);
         }
 
         if (applyLower && c.definite().size() + c.possible().size() < n) {
             Map<Variable<?>, Object> reason = Propagatable.allSingletonReason(c.impossible(), domains);
-            if (!reason.isEmpty()) return reason;
+            if (!reason.isEmpty()) return GroundNogoodConstraint.fromReason(reason);
         }
 
-        return Map.of();
+        return Optional.empty();
     }
 
     @Override

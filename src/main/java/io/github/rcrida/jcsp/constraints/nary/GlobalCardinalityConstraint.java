@@ -110,7 +110,7 @@ public class GlobalCardinalityConstraint<T> extends UniformNaryConstraint<T> imp
      * </ul>
      */
     @Override
-    public Map<Variable<?>, Object> explainInfeasible(@NonNull Map<Variable<?>, Domain<?>> domains) {
+    public Optional<NogoodConstraint> explainInfeasible(@NonNull Map<Variable<?>, Domain<?>> domains) {
         Map<Variable<?>, Domain<?>> current = new HashMap<>(domains);
 
         for (var entry : cardinalities.entrySet()) {
@@ -124,17 +124,17 @@ public class GlobalCardinalityConstraint<T> extends UniformNaryConstraint<T> imp
             if (definiteCount > n) {
                 Map<Variable<?>, Object> reason = new HashMap<>();
                 for (Variable<?> var : c.definite()) reason.put(var, value);
-                return reason;
+                return GroundNogoodConstraint.fromReason(reason);
             }
             if (maxCount < n) {
-                return Propagatable.allSingletonReason(c.impossible(), current);
+                return GroundNogoodConstraint.fromReason(Propagatable.allSingletonReason(c.impossible(), current));
             }
 
             if (definiteCount == n) narrow(value, c.possible(), true, current, new HashMap<>());
             else if (maxCount == n) narrow(value, c.possible(), false, current, new HashMap<>());
         }
 
-        return Map.of();
+        return Optional.empty();
     }
 
     @SuppressWarnings("unchecked")

@@ -210,19 +210,19 @@ public class CircuitConstraint extends NaryConstraint implements Propagatable, B
      * </ul>
      */
     @Override
-    public Map<Variable<?>, Object> explainInfeasible(@NonNull Map<Variable<?>, Domain<?>> domains) {
+    public Optional<NogoodConstraint> explainInfeasible(@NonNull Map<Variable<?>, Domain<?>> domains) {
         Map<Variable<?>, Domain<?>> updated = new HashMap<>();
 
         PassOutcome selfLoop = selfLoopPass(domains, updated);
-        if (selfLoop.infeasible()) return selfLoop.reason();
+        if (selfLoop.infeasible()) return GroundNogoodConstraint.fromReason(selfLoop.reason());
 
         PassOutcome singletonPropagation = singletonPropagationPass(domains, updated);
-        if (singletonPropagation.infeasible()) return singletonPropagation.reason();
+        if (singletonPropagation.infeasible()) return GroundNogoodConstraint.fromReason(singletonPropagation.reason());
 
         PassOutcome subTour = subTourPass(domains, updated);
-        if (subTour.infeasible()) return subTour.reason();
+        if (subTour.infeasible()) return GroundNogoodConstraint.fromReason(subTour.reason());
 
-        return Map.of();
+        return Optional.empty();
     }
 
     @Override

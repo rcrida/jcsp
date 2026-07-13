@@ -1,6 +1,7 @@
 package io.github.rcrida.jcsp.constraints.binary;
 
 import io.github.rcrida.jcsp.constraints.Operator;
+import io.github.rcrida.jcsp.constraints.nary.GroundNogoodConstraint;
 import io.github.rcrida.jcsp.domains.Domain;
 import io.github.rcrida.jcsp.domains.DiscreteDomain;
 import io.github.rcrida.jcsp.domains.DomainObjectSet;
@@ -278,7 +279,7 @@ public class AbsoluteDifferenceConstraintTest {
     @Test void propagateWithReasons_feasible_returnsEmptyReason() {
         var result = AbsoluteDifferenceConstraint.of(L, R, Operator.LEQ, 3.0).propagateWithReasons(intervals(0, 10, 0, 4));
         assertThat(result.isInfeasible()).isFalse();
-        assertThat(result.reason()).isEmpty();
+        assertThat(result.reason()).isNull();
     }
 
     @Test void propagateWithReasons_leq_infeasible_leftSingleton_attributesLeft() {
@@ -286,14 +287,14 @@ public class AbsoluteDifferenceConstraintTest {
         // blamed on a specific value; R is a genuine open range with nothing to pin the conflict on.
         var result = AbsoluteDifferenceConstraint.of(L, R, Operator.LEQ, 3.0).propagateWithReasons(intervals(8, 8, 0, 3));
         assertThat(result.isInfeasible()).isTrue();
-        assertThat(result.reason()).containsExactly(Map.entry(L, 8.0));
+        assertThat(result.reason()).isEqualTo(GroundNogoodConstraint.of(Map.of(L, 8.0)));
     }
 
     @Test void propagateWithReasons_leq_infeasible_bothSingleton_attributesBoth() {
         // L=[8,8], R=[0,0]: |L-R|<=3 is infeasible with both sides pinned to a concrete value.
         var result = AbsoluteDifferenceConstraint.of(L, R, Operator.LEQ, 3.0).propagateWithReasons(intervals(8, 8, 0, 0));
         assertThat(result.isInfeasible()).isTrue();
-        assertThat(result.reason()).containsOnly(Map.entry(L, 8.0), Map.entry(R, 0.0));
+        assertThat(result.reason()).isEqualTo(GroundNogoodConstraint.of(Map.of(L, 8.0, R, 0.0)));
     }
 
     @Test void propagateWithReasons_leq_infeasible_neitherSingleton_returnsEmptyReason() {
@@ -301,21 +302,21 @@ public class AbsoluteDifferenceConstraintTest {
         // variable-value pair can be blamed — matches propagate_leq_infeasible() above.
         var result = AbsoluteDifferenceConstraint.of(L, R, Operator.LEQ, 3.0).propagateWithReasons(intervals(8, 10, 0, 3));
         assertThat(result.isInfeasible()).isTrue();
-        assertThat(result.reason()).isEmpty();
+        assertThat(result.reason()).isNull();
     }
 
     @Test void propagateWithReasons_geq_infeasible_bothSingleton_attributesBoth() {
         // L=[5,5], R=[5,5]: |L-R|>=3 is infeasible (max dist 0 < 3), both sides singleton.
         var result = AbsoluteDifferenceConstraint.of(L, R, Operator.GEQ, 3.0).propagateWithReasons(intervals(5, 5, 5, 5));
         assertThat(result.isInfeasible()).isTrue();
-        assertThat(result.reason()).containsOnly(Map.entry(L, 5.0), Map.entry(R, 5.0));
+        assertThat(result.reason()).isEqualTo(GroundNogoodConstraint.of(Map.of(L, 5.0, R, 5.0)));
     }
 
     @Test void propagateWithReasons_geq_infeasible_neitherSingleton_returnsEmptyReason() {
         // L=[4,6], R=[4,6]: infeasible (max dist 2 < 5), matches propagate_geq_infeasible() above.
         var result = AbsoluteDifferenceConstraint.of(L, R, Operator.GEQ, 5.0).propagateWithReasons(intervals(4, 6, 4, 6));
         assertThat(result.isInfeasible()).isTrue();
-        assertThat(result.reason()).isEmpty();
+        assertThat(result.reason()).isNull();
     }
 
     @Test void propagateWithReasons_eq_infeasible_tooFar_attributesSingletons() {
@@ -324,6 +325,6 @@ public class AbsoluteDifferenceConstraintTest {
         // are attributed.
         var result = AbsoluteDifferenceConstraint.of(L, R, Operator.EQ, 3.0).propagateWithReasons(intervals(0, 0, 9, 9));
         assertThat(result.isInfeasible()).isTrue();
-        assertThat(result.reason()).containsOnly(Map.entry(L, 0.0), Map.entry(R, 9.0));
+        assertThat(result.reason()).isEqualTo(GroundNogoodConstraint.of(Map.of(L, 0.0, R, 9.0)));
     }
 }

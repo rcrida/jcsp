@@ -1,5 +1,6 @@
 package io.github.rcrida.jcsp.consistency;
 
+import io.github.rcrida.jcsp.constraints.nary.NogoodConstraint;
 import io.github.rcrida.jcsp.domains.Domain;
 import io.github.rcrida.jcsp.variables.Variable;
 import org.jspecify.annotations.NonNull;
@@ -34,18 +35,19 @@ public interface Propagatable {
      */
     default PropagationResult propagateWithReasons(Map<Variable<?>, Domain<?>> domains) {
         return propagate(domains)
-                .map(updated -> PropagationResult.feasible(updated, Map.of()))
-                .orElseGet(() -> PropagationResult.infeasible(explainInfeasible(domains)));
+                .map(updated -> PropagationResult.feasible(updated, null))
+                .orElseGet(() -> PropagationResult.infeasible(explainInfeasible(domains).orElse(null)));
     }
 
     /**
-     * Explains a {@link #propagate} infeasibility by identifying the current variable-value pairs
-     * responsible for the domain wipeout. The default returns an empty map, meaning no explanation
-     * is provided and the caller substitutes the full assignment as the nogood. Constraints
-     * override this to return a tighter, sound explanation.
+     * Explains a {@link #propagate} infeasibility by identifying the nogood responsible for the
+     * domain wipeout. The default returns {@link Optional#empty()}, meaning no explanation is
+     * provided and the caller substitutes the full assignment as the nogood. Constraints override
+     * this to return a tighter, sound explanation — a {@link NogoodConstraint}, not necessarily a
+     * ground one; see {@code GroundNogoodConstraint}/{@code RangeNogoodConstraint}.
      */
-    default Map<Variable<?>, Object> explainInfeasible(Map<Variable<?>, Domain<?>> domains) {
-        return Map.of();
+    default Optional<NogoodConstraint> explainInfeasible(Map<Variable<?>, Domain<?>> domains) {
+        return Optional.empty();
     }
 
     /**

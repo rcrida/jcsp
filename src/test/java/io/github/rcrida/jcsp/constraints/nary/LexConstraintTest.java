@@ -305,7 +305,7 @@ public class LexConstraintTest {
         var c = LexConstraint.of(List.of(x1), Operator.LEQ, List.of(y1));
         var domains = Map.<Variable<?>, Domain<?>>of(x1, IntRangeDomain.of(5, 5), y1, IntRangeDomain.of(3, 3));
         assertThat(c.propagate(domains)).isEmpty();
-        assertThat(c.explainInfeasible(domains)).containsOnly(Map.entry(x1, 5), Map.entry(y1, 3));
+        assertThat(c.explainInfeasible(domains)).contains(GroundNogoodConstraint.of(Map.of(x1, 5, y1, 3)));
     }
 
     @Test
@@ -342,7 +342,7 @@ public class LexConstraintTest {
                 x1, IntRangeDomain.of(5, 5), y1, IntRangeDomain.of(3, 3),
                 x2, IntRangeDomain.of(0, 9), y2, IntRangeDomain.of(0, 9));
         assertThat(c.propagate(domains)).isEmpty();
-        assertThat(c.explainInfeasible(domains)).containsOnly(Map.entry(x1, 5), Map.entry(y1, 3));
+        assertThat(c.explainInfeasible(domains)).contains(GroundNogoodConstraint.of(Map.of(x1, 5, y1, 3)));
     }
 
     @Test
@@ -364,7 +364,7 @@ public class LexConstraintTest {
                 x1, IntRangeDomain.of(2, 2), y1, IntRangeDomain.of(2, 2),
                 x2, IntRangeDomain.of(5, 5), y2, IntRangeDomain.of(3, 3));
         assertThat(c.propagate(domains)).isEmpty();
-        assertThat(c.explainInfeasible(domains)).containsOnly(Map.entry(x2, 5), Map.entry(y2, 3));
+        assertThat(c.explainInfeasible(domains)).contains(GroundNogoodConstraint.of(Map.of(x2, 5, y2, 3)));
     }
 
     @Test
@@ -376,8 +376,8 @@ public class LexConstraintTest {
                 x1, IntRangeDomain.of(2, 2), y1, IntRangeDomain.of(2, 2),
                 x2, IntRangeDomain.of(3, 3), y2, IntRangeDomain.of(3, 3));
         assertThat(c.propagate(domains)).isEmpty();
-        assertThat(c.explainInfeasible(domains)).containsOnly(
-                Map.entry(x1, 2), Map.entry(y1, 2), Map.entry(x2, 3), Map.entry(y2, 3));
+        assertThat(c.explainInfeasible(domains)).contains(GroundNogoodConstraint.of(
+                Map.of(x1, 2, y1, 2, x2, 3, y2, 3)));
     }
 
     @Test
@@ -398,7 +398,7 @@ public class LexConstraintTest {
         var c = LexConstraint.of(List.of(x1), Operator.GEQ, List.of(y1));
         var domains = Map.<Variable<?>, Domain<?>>of(x1, IntRangeDomain.of(2, 2), y1, IntRangeDomain.of(4, 4));
         assertThat(c.propagate(domains)).isEmpty();
-        assertThat(c.explainInfeasible(domains)).containsOnly(Map.entry(x1, 2), Map.entry(y1, 4));
+        assertThat(c.explainInfeasible(domains)).contains(GroundNogoodConstraint.of(Map.of(x1, 2, y1, 4)));
     }
 
     @Test
@@ -409,7 +409,7 @@ public class LexConstraintTest {
         var c = LexConstraint.of(List.of(x1), Operator.GT, List.of(y1));
         var domains = Map.<Variable<?>, Domain<?>>of(x1, IntRangeDomain.of(2, 2), y1, IntRangeDomain.of(5, 5));
         assertThat(c.propagate(domains)).isEmpty();
-        assertThat(c.explainInfeasible(domains)).containsOnly(Map.entry(x1, 2), Map.entry(y1, 5));
+        assertThat(c.explainInfeasible(domains)).contains(GroundNogoodConstraint.of(Map.of(x1, 2, y1, 5)));
     }
 
     @Test

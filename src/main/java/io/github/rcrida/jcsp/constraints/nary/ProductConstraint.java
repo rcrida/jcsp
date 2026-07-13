@@ -130,8 +130,8 @@ public class ProductConstraint<N extends Number> extends UniformNaryConstraint<N
      * way.
      */
     @Override
-    public Map<Variable<?>, Object> explainInfeasible(@NonNull Map<Variable<?>, Domain<?>> domains) {
-        return Propagatable.allSingletonReason(getVariables(), domains);
+    public Optional<NogoodConstraint> explainInfeasible(@NonNull Map<Variable<?>, Domain<?>> domains) {
+        return GroundNogoodConstraint.fromReason(Propagatable.allSingletonReason(getVariables(), domains));
     }
 
     @Override

@@ -1,7 +1,6 @@
 package io.github.rcrida.jcsp.constraints.nary;
 
 import io.github.rcrida.jcsp.assignments.Assignment;
-import io.github.rcrida.jcsp.consistency.Propagatable;
 import io.github.rcrida.jcsp.constraints.NumericBounds;
 import io.github.rcrida.jcsp.domains.BoundedDomain;
 import io.github.rcrida.jcsp.domains.DiscreteDomain;
@@ -70,9 +69,17 @@ public class RangeNogoodConstraint extends NaryConstraint implements NogoodConst
      * singleton, so it can produce a real (if not always minimal) explanation in cases that would
      * otherwise fall through to the full-assignment fallback.
      * <p>
-     * Returns {@link Optional#empty()} if any cited variable's domain isn't numeric — a
-     * {@link BoundedDomain} or a {@link DiscreteDomain} of {@link Number} values — since
-     * {@link IntervalDomain} can't express a forbidden region for anything else.
+     * Returns {@link Optional#empty()} if any cited variable's domain can't be soundly stood in for
+     * by its bounding {@link IntervalDomain} — a {@link BoundedDomain} always qualifies (min/max
+     * already describe it exactly, with no possible gap), but a {@link DiscreteDomain} only
+     * qualifies when it is <i>gapless</i> (every integer between its min and max is actually
+     * present). A gapped discrete domain — e.g. {@code {1,5}} — must not be cited this way: its
+     * bounding interval {@code [1,5]} is a strict superset, so a later, unrelated domain such as
+     * {@code {2,3,4}} would satisfy "contained in {@code [1,5]}" without ever being a subset of the
+     * domain that actually caused the original infeasibility, silently generalising the nogood past
+     * what was proven and over-pruning the search (caught via a real regression: this exact gap
+     * made {@code NQueensTest} drop from 92 solutions to 80 once {@link AllDiffConstraint} started
+     * citing Hall-violating subsets — which are gapped almost by definition — through this method).
      */
     @SuppressWarnings({"unchecked", "rawtypes"})
     public static Optional<NogoodConstraint> fromCurrentBounds(
@@ -80,7 +87,7 @@ public class RangeNogoodConstraint extends NaryConstraint implements NogoodConst
         Map<Variable<?>, IntervalDomain> forbidden = new HashMap<>();
         for (Variable<?> variable : variables) {
             Domain<?> domain = domains.get(variable);
-            if (!isNumeric(domain)) return Optional.empty();
+            if (!isSafeToCiteAsRange(domain)) return Optional.empty();
             Domain rawDomain = domain;
             forbidden.put(variable, IntervalDomain.of(NumericBounds.min(rawDomain), NumericBounds.max(rawDomain)));
         }
@@ -88,15 +95,25 @@ public class RangeNogoodConstraint extends NaryConstraint implements NogoodConst
     }
 
     /**
-     * Whether {@code domain} is numeric: a {@link BoundedDomain} (always {@link Number}-typed by
-     * its own type bound) or a {@link DiscreteDomain} whose values are {@link Number}s. Peeking a
-     * single value suffices for the discrete case, since a {@link DiscreteDomain}'s values are
-     * uniformly typed.
+     * Whether {@code domain} can be soundly replaced by its bounding interval: always true for a
+     * {@link BoundedDomain} (continuous, so min/max already is the whole domain); for a
+     * {@link DiscreteDomain}, only when every value is an {@link Integer} and the domain is
+     * gapless — its size equals {@code max - min + 1} — so the interval and the domain denote
+     * exactly the same set of values.
      */
-    private static boolean isNumeric(Domain<?> domain) {
+    private static boolean isSafeToCiteAsRange(Domain<?> domain) {
         if (domain instanceof BoundedDomain<?>) return true;
         DiscreteDomain<?> discrete = (DiscreteDomain<?>) domain;
-        return discrete.stream().findFirst().map(value -> value instanceof Number).orElse(false);
+        var values = discrete.toList();
+        if (values.isEmpty() || !(values.get(0) instanceof Integer)) return false;
+        int min = Integer.MAX_VALUE;
+        int max = Integer.MIN_VALUE;
+        for (Object value : values) {
+            int v = (Integer) value;
+            min = Math.min(min, v);
+            max = Math.max(max, v);
+        }
+        return discrete.size() == (max - min + 1);
     }
 
     private enum Literal { SATISFIED, FALSIFIED, UNDETERMINED }
@@ -205,16 +222,16 @@ public class RangeNogoodConstraint extends NaryConstraint implements NogoodConst
     }
 
     /**
-     * All falsified means every cited variable's current domain is entirely within its forbidden
-     * range — but unlike {@link GroundNogoodConstraint}, there's no single value to cite per
-     * variable in general (a falsified literal here only guarantees the whole remaining domain is
-     * forbidden, not any one point of it). Sound only when every cited variable also happens to be
-     * singleton at this point — exactly {@link Propagatable#allSingletonReason}'s contract, and the
-     * same joint-condition pattern used by {@code AllDiffConstraint}, {@code SumConstraint}, etc.
+     * All falsified means every cited variable's current domain is entirely within its own
+     * forbidden range — the clause itself is already the (unconditionally sound) explanation, same
+     * as {@link GroundNogoodConstraint#explainInfeasible}. No singleton requirement is needed here,
+     * unlike citing individual ground values would require: "this variable's whole current domain
+     * is forbidden" is exactly what falsified already established, regardless of whether that
+     * domain happens to be a single point.
      */
     @Override
-    public Map<Variable<?>, Object> explainInfeasible(@NonNull Map<Variable<?>, Domain<?>> domains) {
-        return Propagatable.allSingletonReason(forbidden.keySet(), domains);
+    public Optional<NogoodConstraint> explainInfeasible(@NonNull Map<Variable<?>, Domain<?>> domains) {
+        return Optional.of(this);
     }
 
     @Override
