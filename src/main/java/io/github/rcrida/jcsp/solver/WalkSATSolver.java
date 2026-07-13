@@ -2,10 +2,7 @@ package io.github.rcrida.jcsp.solver;
 
 import io.github.rcrida.jcsp.ConstraintSatisfactionProblem;
 import io.github.rcrida.jcsp.assignments.Assignment;
-import io.github.rcrida.jcsp.constraints.BinaryDecomposable;
 import io.github.rcrida.jcsp.constraints.Constraint;
-import io.github.rcrida.jcsp.constraints.nary.NaryConstraint;
-import io.github.rcrida.jcsp.constraints.unary.UnaryConstraint;
 import io.github.rcrida.jcsp.domains.BooleanDomain;
 import io.github.rcrida.jcsp.domains.DiscreteDomain;
 import io.github.rcrida.jcsp.domains.Domain;
@@ -22,7 +19,6 @@ import java.util.Optional;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.function.ToDoubleFunction;
 import java.util.stream.IntStream;
-import java.util.stream.Stream;
 
 /**
  * WalkSAT local search for boolean constraint satisfaction and optimization problems.
@@ -52,7 +48,7 @@ public class WalkSATSolver implements LocalSolver {
 
     @Override
     public Optional<Assignment> getLocalSolution(@NonNull ConstraintSatisfactionProblem csp) {
-        var constraints = candidates(csp).toList();
+        var constraints = LocalSearchSupport.conflictConstraints(csp).toList();
         return IntStream.range(0, maxAttempts)
                 .parallel()
                 .unordered()
@@ -65,7 +61,7 @@ public class WalkSATSolver implements LocalSolver {
     @Override
     public Optional<Assignment> getLocalSolution(@NonNull ConstraintSatisfactionProblem csp,
                                                   @NonNull ToDoubleFunction<Assignment> objective) {
-        var constraints = candidates(csp).toList();
+        var constraints = LocalSearchSupport.conflictConstraints(csp).toList();
         return IntStream.range(0, maxAttempts)
                 .parallel()
                 .mapToObj(attempt -> runAttempt(csp, constraints, attempt))
@@ -129,17 +125,5 @@ public class WalkSATSolver implements LocalSolver {
         // Safe: WalkSAT is only invoked for boolean-only CSPs
         boolean value = (Boolean) current.getValue(variable).orElseThrow();
         return current.withValue(variable, (T) (Boolean) !value);
-    }
-
-    // Same constraint set as MinConflictsSolver: binary decompositions for granularity where
-    // available, plus non-decomposable n-ary constraints so they are never silently dropped.
-    private static Stream<Constraint> candidates(@NonNull ConstraintSatisfactionProblem csp) {
-        var binaryAndUnary = Stream.concat(
-                csp.getAllBinaryConstraints().stream(),
-                csp.getConstraints().stream().filter(c -> c instanceof UnaryConstraint));
-        var nonDecomposableNary = csp.getConstraints().stream()
-                .filter(c -> c instanceof NaryConstraint
-                        && (!(c instanceof BinaryDecomposable bd) || bd.getAsBinaryConstraints().isEmpty()));
-        return Stream.concat(binaryAndUnary, nonDecomposableNary);
     }
 }

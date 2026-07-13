@@ -6,10 +6,7 @@ import lombok.extern.slf4j.Slf4j;
 import lombok.val;
 import io.github.rcrida.jcsp.ConstraintSatisfactionProblem;
 import io.github.rcrida.jcsp.assignments.Assignment;
-import io.github.rcrida.jcsp.constraints.BinaryDecomposable;
 import io.github.rcrida.jcsp.constraints.Constraint;
-import io.github.rcrida.jcsp.constraints.nary.NaryConstraint;
-import io.github.rcrida.jcsp.constraints.unary.UnaryConstraint;
 import io.github.rcrida.jcsp.domains.DiscreteDomain;
 import io.github.rcrida.jcsp.solver.assignmentfactory.InitialAssignmentFactory;
 import io.github.rcrida.jcsp.solver.backtrackingsearch.selector.ConflictedVariableSelector;
@@ -19,15 +16,12 @@ import org.jspecify.annotations.NonNull;
 
 import java.util.Comparator;
 import java.util.HashMap;
-import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.ThreadLocalRandom;
-import java.util.function.Predicate;
 import java.util.function.ToDoubleFunction;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
-import java.util.stream.Stream;
 
 /**
  * The {@code MinConflictsSolver} class implements the local search technique for solving
@@ -135,12 +129,12 @@ public class MinConflictsSolver implements LocalSolver {
                                                                         @NonNull ToDoubleFunction<Assignment> objective) {
         record ValueCost<V>(V value, double violations, double objective) {}
 
-        val variableConstraints = conflictConstraints(csp)
+        val variableConstraints = LocalSearchSupport.conflictConstraints(csp)
                 .filter(c -> c.getVariables().contains(variable))
                 .toList();
         val costs = ((DiscreteDomain<T>) csp.getDomain(variable)).stream()
                 .map(v -> new ValueCost<>(v,
-                        weighConflicts(variable, v, current, variableConstraints, constraintWeights),
+                        LocalSearchSupport.weighConflicts(variable, v, current, variableConstraints, constraintWeights),
                         objective.applyAsDouble(current.withValue(variable, v))))
                 .toList();
 
@@ -156,28 +150,6 @@ public class MinConflictsSolver implements LocalSolver {
         T value = candidates.get(ThreadLocalRandom.current().nextInt(candidates.size()));
         log.debug("{} -> {}", variable, value);
         return current.toBuilder().value(variable, value).build();
-    }
-
-    /**
-     * Selects a conflicted variable from the current assignment in the context of the given
-     * constraint satisfaction problem. A variable is considered conflicted if it violates
-     * one or more constraints in the current assignment.
-     *
-     * @param csp The constraint satisfaction problem containing the set of variables and constraints.
-     * @return A variable that is in conflict based on the current assignment. If multiple
-     *         variables are in conflict, a randomly selected one is returned.
-     */
-    // Use binary decompositions where available (preserves per-pair granularity for AllDiff,
-    // ExactlyOne, etc.) and fall through to the original n-ary constraint where no binary
-    // decomposition exists (e.g. AtLeastN, AtMostN) so they are never silently dropped.
-    // Unary constraints have no binary form and are included directly.
-    private Stream<Constraint> conflictConstraints(@NonNull ConstraintSatisfactionProblem csp) {
-        Stream<Constraint> binaryAndUnary = Stream.concat(
-                csp.getAllBinaryConstraints().stream(),
-                csp.getConstraints().stream().filter(c -> c instanceof UnaryConstraint));
-        Stream<Constraint> nonDecomposableNary = csp.getConstraints().stream()
-                .filter(c -> c instanceof NaryConstraint && (!(c instanceof BinaryDecomposable bd) || bd.getAsBinaryConstraints().isEmpty()));
-        return Stream.concat(binaryAndUnary, nonDecomposableNary);
     }
 
     /**
@@ -203,11 +175,11 @@ public class MinConflictsSolver implements LocalSolver {
                                                             @NonNull Variable<T> variable,
                                                             @NonNull Assignment current,
                                                             @NonNull Map<Constraint, Double> constraintWeights) {
-        val variableConstraints = conflictConstraints(csp)
+        val variableConstraints = LocalSearchSupport.conflictConstraints(csp)
                 .filter(constraint -> constraint.getVariables().contains(variable))
                 .toList();
         Map<T, Double> valueWeights = ((DiscreteDomain<T>) csp.getDomain(variable)).stream()
-                .collect(Collectors.toMap(v -> v, v -> weighConflicts(variable, v, current, variableConstraints, constraintWeights)));
+                .collect(Collectors.toMap(v -> v, v -> LocalSearchSupport.weighConflicts(variable, v, current, variableConstraints, constraintWeights)));
         log.debug("Value weights: {}", valueWeights);
         val minWeight = valueWeights.values().stream().min(Comparator.naturalOrder()).orElseThrow();
         val candidates = valueWeights.entrySet().stream()
@@ -217,30 +189,6 @@ public class MinConflictsSolver implements LocalSolver {
         T value = candidates.get(ThreadLocalRandom.current().nextInt(candidates.size()));
         log.info("{} -> {}", variable, value);
         return current.toBuilder().value(variable, value).build();
-    }
-
-    /**
-     * Computes the total weight of unsatisfied constraints when a variable is assigned a specific value.
-     * This method evaluates all constraints associated with the variable and accumulates the weights
-     * of those that are violated under the given assignment.
-     *
-     * @param variable The variable for which the value is being evaluated.
-     * @param value The value being assigned to the variable.
-     * @param current The current assignment of variables, used to create a candidate assignment
-     *                with the new value for the variable.
-     * @param variableConstraints A list of constraints specifically associated with the variable
-     *                            whose assignment is being analyzed.
-     * @param constraintWeights A map containing the weights of each constraint, where a higher
-     *                          weight indicates more importance. Default weight is 1.0 if a constraint
-     *                          is not explicitly present in the map.
-     * @return The total weight of constraints that are violated when the variable is assigned the given value.
-     */
-    private <T> double weighConflicts(@NonNull Variable<T> variable, @NonNull T value, @NonNull Assignment current, @NonNull List<? extends Constraint> variableConstraints, @NonNull Map<Constraint, Double> constraintWeights) {
-        val candidate = current.withValue(variable, value);
-        return variableConstraints.stream()
-                .filter(Predicate.not(constraint -> constraint.isSatisfiedBy(candidate)))
-                .map(constraint -> constraintWeights.getOrDefault(constraint, 1.0))
-                .reduce(0.0, Double::sum);
     }
 
     /**
@@ -255,12 +203,7 @@ public class MinConflictsSolver implements LocalSolver {
      *                check which constraints are not satisfied.
      */
     private void updateWeights(@NonNull ConstraintSatisfactionProblem csp, @NonNull Map<Constraint, Double> constraintWeights, @NonNull Assignment current) {
-        conflictConstraints(csp)
-                .filter(Predicate.not(constraint -> constraint.isSatisfiedBy(current)))
-                .forEach(constraint -> {
-                    val currentWeight = constraintWeights.getOrDefault(constraint, 1.0);
-                    constraintWeights.put(constraint, currentWeight + 1);
-                });
+        LocalSearchSupport.incrementViolatedWeights(csp, constraintWeights, current);
         log.debug("Constraint weights {}", constraintWeights);
     }
 }
