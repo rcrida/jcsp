@@ -61,15 +61,21 @@ final class LocalSearchSupport {
                 .reduce(0.0, Double::sum);
     }
 
-    /** Increments the weight of every constraint currently violated by {@code current} by 1. */
-    static void incrementViolatedWeights(@NonNull ConstraintSatisfactionProblem csp,
-                                         @NonNull Map<Constraint, Double> constraintWeights,
-                                         @NonNull Assignment current) {
-        conflictConstraints(csp)
+    /**
+     * Increments the weight of every constraint currently violated by {@code current} by 1, and
+     * returns that count — equivalently, the amount {@code totalWeight(csp, current, ...)} rises
+     * by as a result, which callers maintaining a running total weight incrementally (rather than
+     * rescanning the whole CSP) need in order to keep it in sync after escalation.
+     */
+    static double incrementViolatedWeights(@NonNull ConstraintSatisfactionProblem csp,
+                                           @NonNull Map<Constraint, Double> constraintWeights,
+                                           @NonNull Assignment current) {
+        return conflictConstraints(csp)
                 .filter(Predicate.not(constraint -> constraint.isSatisfiedBy(current)))
-                .forEach(constraint -> {
+                .peek(constraint -> {
                     val currentWeight = constraintWeights.getOrDefault(constraint, 1.0);
                     constraintWeights.put(constraint, currentWeight + 1);
-                });
+                })
+                .count();
     }
 }
