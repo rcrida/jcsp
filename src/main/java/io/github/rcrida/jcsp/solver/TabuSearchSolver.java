@@ -1,6 +1,10 @@
 package io.github.rcrida.jcsp.solver;
 
+import lombok.AccessLevel;
 import lombok.Builder;
+import lombok.EqualsAndHashCode;
+import lombok.Getter;
+import lombok.ToString;
 import lombok.Value;
 import lombok.extern.slf4j.Slf4j;
 import lombok.val;
@@ -45,8 +49,8 @@ import java.util.stream.IntStream;
  */
 @Slf4j
 @Value
-@Builder
-public class TabuSearchSolver implements LocalSolver {
+@Builder(toBuilder = true)
+public class TabuSearchSolver implements LocalSolver, CancellableLocalSolver {
     int maxAttempts;
     int maxSteps;
     @NonNull InitialAssignmentFactory initialAssignmentFactory;
@@ -54,8 +58,24 @@ public class TabuSearchSolver implements LocalSolver {
     /** Number of steps a reverted value stays forbidden for the variable it was moved away from. */
     @Builder.Default int tabuTenure = 10;
 
+    /**
+     * Cooperative cancellation, only ever set by {@link RaceLocalSolver} via {@link #withCancellation}.
+     * Excluded from equals/hashCode/toString since it's ephemeral race state, not configuration —
+     * same reasoning as {@link io.github.rcrida.jcsp.assignments.SolverLimits}'s limitHitStats field.
+     */
+    @Builder.Default
+    @EqualsAndHashCode.Exclude
+    @ToString.Exclude
+    @Getter(AccessLevel.NONE)
+    Cancellation cancellation = Cancellation.NEVER;
+
     public static TabuSearchSolver of(int maxAttempts, int maxSteps, @NonNull InitialAssignmentFactory factory) {
         return builder().maxAttempts(maxAttempts).maxSteps(maxSteps).initialAssignmentFactory(factory).build();
+    }
+
+    @Override
+    public TabuSearchSolver withCancellation(@NonNull Cancellation cancellation) {
+        return toBuilder().cancellation(cancellation).build();
     }
 
     record TabuEntry(Object forbiddenValue, int expiresAtStep) {}
@@ -79,7 +99,7 @@ public class TabuSearchSolver implements LocalSolver {
         val tabu = new HashMap<Variable<?>, TabuEntry>();
         var currentTotalWeight = LocalSearchSupport.totalWeight(csp, current, constraintWeights);
         var bestTotalWeight = Double.MAX_VALUE;
-        for (int step = 0; step < maxSteps; step++) {
+        for (int step = 0; step < maxSteps && !cancellation.isCancelled(); step++) {
             if (current.isSolution(csp)) {
                 log.info("Tabu search solution at attempt {} step {}", attempt, step);
                 return Optional.of(current);
@@ -113,7 +133,7 @@ public class TabuSearchSolver implements LocalSolver {
         val tabu = new HashMap<Variable<?>, TabuEntry>();
         var currentTotalWeight = LocalSearchSupport.totalWeight(csp, current, constraintWeights);
         var bestTotalWeight = Double.MAX_VALUE;
-        for (int step = 0; step < maxSteps; step++) {
+        for (int step = 0; step < maxSteps && !cancellation.isCancelled(); step++) {
             if (current.isSolution(csp)) {
                 double cost = objective.applyAsDouble(current);
                 log.info("Tabu search found solution at attempt {} step {} with cost {}", attempt, step, cost);

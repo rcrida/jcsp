@@ -66,4 +66,20 @@ public class MinConflictsSolverTest {
         Optional<Assignment> result = solver.getLocalSolution(CSP, a -> 1.0);
         assertThat(result).isPresent();
     }
+
+    @Test
+    void withCancellation_stopsSearchBeforeTheFirstStep() {
+        val cancellation = new Cancellation();
+        cancellation.cancel();
+        val solver = MinConflictsSolver.of(1, 500, csp -> infeasible()).withCancellation(cancellation);
+        assertThat(solver.getLocalSolution(CSP)).isEmpty();
+    }
+
+    @Test
+    void withCancellation_withObjective_stopsSearchBeforeTheFirstStep() {
+        val cancellation = new Cancellation();
+        cancellation.cancel();
+        val solver = MinConflictsSolver.of(1, 500, csp -> infeasible()).withCancellation(cancellation);
+        assertThat(solver.getLocalSolution(CSP, a -> 0.0)).isEmpty();
+    }
 }

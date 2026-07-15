@@ -1,6 +1,10 @@
 package io.github.rcrida.jcsp.solver;
 
 import lombok.Builder;
+import lombok.EqualsAndHashCode;
+import lombok.Getter;
+import lombok.AccessLevel;
+import lombok.ToString;
 import lombok.Value;
 import lombok.extern.slf4j.Slf4j;
 import lombok.val;
@@ -47,15 +51,31 @@ import java.util.stream.IntStream;
  */
 @Slf4j
 @Value
-@Builder
-public class MinConflictsSolver implements LocalSolver {
+@Builder(toBuilder = true)
+public class MinConflictsSolver implements LocalSolver, CancellableLocalSolver {
     int maxAttempts;
     int maxSteps;
     @NonNull InitialAssignmentFactory initialAssignmentFactory;
     @Builder.Default UnassignedVariableSelector conflictedVariableSelector = ConflictedVariableSelector.INSTANCE;
 
+    /**
+     * Cooperative cancellation, only ever set by {@link RaceLocalSolver} via {@link #withCancellation}.
+     * Excluded from equals/hashCode/toString since it's ephemeral race state, not configuration —
+     * same reasoning as {@link io.github.rcrida.jcsp.assignments.SolverLimits}'s limitHitStats field.
+     */
+    @Builder.Default
+    @EqualsAndHashCode.Exclude
+    @ToString.Exclude
+    @Getter(AccessLevel.NONE)
+    Cancellation cancellation = Cancellation.NEVER;
+
     public static MinConflictsSolver of(int maxAttempts, int maxSteps, @NonNull InitialAssignmentFactory factory) {
         return builder().maxAttempts(maxAttempts).maxSteps(maxSteps).initialAssignmentFactory(factory).build();
+    }
+
+    @Override
+    public MinConflictsSolver withCancellation(@NonNull Cancellation cancellation) {
+        return toBuilder().cancellation(cancellation).build();
     }
 
     @Override
@@ -72,7 +92,7 @@ public class MinConflictsSolver implements LocalSolver {
     private Optional<Assignment> solveAttempt(@NonNull ConstraintSatisfactionProblem csp, int attempt) {
         var current = initialAssignmentFactory.getAssignment(csp);
         val constraintWeights = new HashMap<Constraint, Double>();
-        for (int step = 0; step < maxSteps; step++) {
+        for (int step = 0; step < maxSteps && !cancellation.isCancelled(); step++) {
             if (current.isSolution(csp)) {
                 log.info("Solution at attempt {} step {}", attempt, step);
                 return Optional.of(current);
@@ -100,7 +120,7 @@ public class MinConflictsSolver implements LocalSolver {
                                                             @NonNull ToDoubleFunction<Assignment> objective) {
         var current = initialAssignmentFactory.getAssignment(csp);
         val constraintWeights = new HashMap<Constraint, Double>();
-        for (int step = 0; step < maxSteps; step++) {
+        for (int step = 0; step < maxSteps && !cancellation.isCancelled(); step++) {
             if (current.isSolution(csp)) {
                 double cost = objective.applyAsDouble(current);
                 log.info("Found solution at attempt {} step {} with cost {}", attempt, step, cost);

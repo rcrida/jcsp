@@ -202,4 +202,20 @@ public class TabuSearchSolverTest {
         val entry = new TabuSearchSolver.TabuEntry(1, 100);
         assertThat(TabuSearchSolver.isAdmissible(entry, 1, 5, 2.0, 3.0)).isTrue();
     }
+
+    @Test
+    void withCancellation_stopsSearchBeforeTheFirstStep() {
+        val cancellation = new Cancellation();
+        cancellation.cancel();
+        val solver = TabuSearchSolver.of(1, 500, csp -> infeasible()).withCancellation(cancellation);
+        assertThat(solver.getLocalSolution(CSP)).isEmpty();
+    }
+
+    @Test
+    void withCancellation_withObjective_stopsSearchBeforeTheFirstStep() {
+        val cancellation = new Cancellation();
+        cancellation.cancel();
+        val solver = TabuSearchSolver.of(1, 500, csp -> infeasible()).withCancellation(cancellation);
+        assertThat(solver.getLocalSolution(CSP, a -> 0.0)).isEmpty();
+    }
 }

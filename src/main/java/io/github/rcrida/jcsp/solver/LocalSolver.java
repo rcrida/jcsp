@@ -90,8 +90,15 @@ public interface LocalSolver {
         );
 
         Factory INSTANCE = (maxAttempts, maxSteps, initialAssignmentFactory) -> {
-            val minConflicts = IndependentSubproblemLocalSolver.builder()
-                    .delegate(MinConflictsSolver.of(maxAttempts, maxSteps, initialAssignmentFactory))
+            // Race min-conflicts against tabu search rather than committing to one — a routing
+            // heuristic for this exact pair was tried and falsified before for a different pair of
+            // solvers (BacktrackingSearch vs DomWdegLubySearch), so this avoids needing to predict
+            // which strategy suits a given problem shape.
+            val raced = IndependentSubproblemLocalSolver.builder()
+                    .delegate(RaceLocalSolver.builder()
+                            .delegate(MinConflictsSolver.of(maxAttempts, maxSteps, initialAssignmentFactory))
+                            .delegate(TabuSearchSolver.of(maxAttempts, maxSteps, initialAssignmentFactory))
+                            .build())
                     .build();
             val walkSat = IndependentSubproblemLocalSolver.builder()
                     .delegate(WalkSATSolver.of(maxAttempts, maxSteps, initialAssignmentFactory))
@@ -110,7 +117,7 @@ public interface LocalSolver {
                         boolean noCountingConstraints = r.getConstraints().stream()
                                 .noneMatch(c -> c instanceof ExactlyOneConstraint
                                         || c instanceof AtLeastNConstraint);
-                        return (allBoolean && noCountingConstraints ? walkSat : minConflicts).getLocalSolution(r);
+                        return (allBoolean && noCountingConstraints ? walkSat : raced).getLocalSolution(r);
                     });
                 }
 
@@ -122,7 +129,7 @@ public interface LocalSolver {
                     return reduced.flatMap(r -> {
                         boolean hasExactlyOne = r.getConstraints().stream()
                                 .anyMatch(c -> c instanceof ExactlyOneConstraint);
-                        return (hasExactlyOne ? lns : minConflicts).getLocalSolution(r, objective);
+                        return (hasExactlyOne ? lns : raced).getLocalSolution(r, objective);
                     });
                 }
             };
