@@ -4,7 +4,6 @@ import lombok.Value;
 import lombok.extern.slf4j.Slf4j;
 import lombok.val;
 import io.github.rcrida.jcsp.ConstraintSatisfactionProblem;
-import io.github.rcrida.jcsp.constraints.binary.BinaryTuplesConstraint;
 import io.github.rcrida.jcsp.assignments.Assignment;
 import io.github.rcrida.jcsp.domains.AssignmentDomain;
 import io.github.rcrida.jcsp.domains.Domain;
@@ -113,30 +112,52 @@ public class TreeDecomposerImpl implements TreeDecomposer {
         return Optional.of(treeBuilder.build());
     }
 
+    /**
+     * Computes tree-decomposition bags via min-degree elimination, maintaining the working
+     * adjacency graph as a plain {@code Map<Variable<?>, Set<Variable<?>>>} rather than a
+     * {@link ConstraintSatisfactionProblem}. This loop only ever needs adjacency (which variables
+     * are structurally connected) — it never inspects constraint semantics or domain values — so
+     * building a fully validated CSP on every elimination step was both wasted work and, worse,
+     * unsound: each step's "fill-in" edges (recording that a pivot's remaining neighbours must now
+     * be treated as mutually adjacent) used to be represented as a real {@code BinaryTuplesConstraint}
+     * pushed through {@link ConstraintSatisfactionProblem.ConstraintSatisfactionProblemBuilder#build()},
+     * which re-runs the {@code BoundedDomain} compatibility check ({@code validateConstraints}) on
+     * every new constraint added. That check is meant for constraints that are actually evaluated
+     * during solving; a fill-in edge never is; it exists purely to make the next iteration's
+     * {@code getNeighbours} report the right adjacency. Since {@code BinaryTuplesConstraint} was
+     * never (and shouldn't be) whitelisted for {@code BoundedDomain} — extensional tables over
+     * continuous values don't make sense — any tree decomposition attempt over 3+ mutually
+     * connected {@code BoundedDomain} variables not already resolved by propagation would throw
+     * {@code IllegalArgumentException}, regardless of which real constraint originally connected
+     * them (2026-07-15).
+     */
     private @NonNull List<Set<Variable<?>>> getMaximalCliqueBags(@NonNull ConstraintSatisfactionProblem csp) {
-        var workGraph = csp.toBuilder().build();
+        val neighbours = new HashMap<Variable<?>, Set<Variable<?>>>();
+        csp.getNeighbours().forEach((v, ns) -> neighbours.put(v, new HashSet<>(ns)));
+
         val bags = new ArrayList<Set<Variable<?>>>();
-        while (workGraph.getNumVariables() > 0) {
+        while (!neighbours.isEmpty()) {
             // build bag = pick U neighbours (uneliminated)
-            val pick = selectVertex(workGraph);
-            val N = workGraph.getNeighbours(pick);
+            val pick = selectVertex(neighbours);
+            val N = neighbours.get(pick);
             val bag = new HashSet<>(N);
             bag.add(pick);
             bags.add(bag);
 
             // add fill edges: make neighbors a clique
-            val workGraphBuilder = workGraph.toBuilder();
             val listN = new ArrayList<>(N);
             for (int i = 0; i < listN.size(); i++) {
                 for (int j = i + 1; j < listN.size(); j++) {
-                    workGraphBuilder.constraint(BinaryTuplesConstraint.of(listN.get(i), listN.get(j), Set.of()));
+                    neighbours.get(listN.get(i)).add(listN.get(j));
+                    neighbours.get(listN.get(j)).add(listN.get(i));
                 }
             }
 
             // remove vertex pick
-            workGraphBuilder.deleteVariable(pick);
-
-            workGraph = workGraphBuilder.build();
+            neighbours.remove(pick);
+            for (Variable<?> n : N) {
+                neighbours.get(n).remove(pick);
+            }
         }
         log.info("Bags = {}", bags);
 
@@ -158,9 +179,9 @@ public class TreeDecomposerImpl implements TreeDecomposer {
         return maximal;
     }
 
-    private Variable selectVertex(@NonNull ConstraintSatisfactionProblem workGraph) {
-        val variableHeuristic = variableHeuristicFactory.create(workGraph);
-        return workGraph.getVariableDomains().keySet().stream()
+    private Variable<?> selectVertex(@NonNull Map<Variable<?>, Set<Variable<?>>> neighbours) {
+        val variableHeuristic = variableHeuristicFactory.create(neighbours);
+        return neighbours.keySet().stream()
                 .min(variableHeuristic)
                 .orElseThrow();
     }

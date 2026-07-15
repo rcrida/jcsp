@@ -1,6 +1,5 @@
 package io.github.rcrida.jcsp.solver.tree.decomposition.decomposer.variableselector;
 
-import io.github.rcrida.jcsp.ConstraintSatisfactionProblem;
 import io.github.rcrida.jcsp.variables.Variable;
 import lombok.AccessLevel;
 import lombok.Getter;
@@ -36,8 +35,8 @@ public class MinimumDegreeVariableSelector implements VariableSelectionHeuristic
         private Factory() {}
 
         @Override
-        public VariableSelectionHeuristic create(@NonNull ConstraintSatisfactionProblem csp) {
-            return new MinimumDegreeVariableSelector(csp.getNeighbours());
+        public VariableSelectionHeuristic create(@NonNull Map<Variable<?>, Set<Variable<?>>> neighbours) {
+            return new MinimumDegreeVariableSelector(neighbours);
         }
     }
 }

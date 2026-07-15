@@ -4,6 +4,9 @@ import io.github.rcrida.jcsp.solver.Solver;
 import io.github.rcrida.jcsp.ConstraintSatisfactionProblem;
 import io.github.rcrida.jcsp.assignments.Assignment;
 import io.github.rcrida.jcsp.constraints.Operator;
+import io.github.rcrida.jcsp.constraints.unary.UnaryComparatorConstraint;
+import io.github.rcrida.jcsp.domains.BooleanDomain;
+import io.github.rcrida.jcsp.domains.IntRangeDomain;
 import io.github.rcrida.jcsp.domains.IntervalDomain;
 import io.github.rcrida.jcsp.variables.Variable;
 import org.junit.jupiter.api.Test;
@@ -506,5 +509,180 @@ public class RealValuedConstraintTest {
         assertThat(xVal).isCloseTo(2.0, within(1e-9));
         assertThat(yVal).isCloseTo(3.0, within(1e-9));
         assertThat(xVal * yVal).isCloseTo(6.0, within(1e-9));
+    }
+
+    @Test
+    void unaryPredicateConstraint_intervalDomain_wholeRangeSatisfied() {
+        // x∈[10,20]: predicate x>=5.0 holds across the whole domain, so NodeConsistency's
+        // DiscreteDomain-only gate means no propagation ever touches x; correctness rests entirely
+        // on the final isSatisfiedBy check after x is snapped to its midpoint.
+        Variable<Double> x = F.create("up_x");
+        var csp = ConstraintSatisfactionProblem.builder()
+                .variableDomain(x, IntervalDomain.of(10.0, 20.0))
+                .predicateConstraint(x, (Double v) -> v >= 5.0)
+                .build();
+        var solution = Solver.Factory.INSTANCE.createSolver(csp).getSolution();
+        assertThat(solution).isPresent();
+        double xVal = (Double) solution.get().getValue(x).orElseThrow();
+        assertThat(xVal).isGreaterThanOrEqualTo(5.0);
+    }
+
+    @Test
+    void unaryPredicateConstraint_intervalDomain_infeasible_returnsNoSolutions() {
+        // x∈[0,3]: predicate x>=5.0 is false for every value in the domain, not just the midpoint.
+        Variable<Double> x = F.create("up_xinf");
+        var csp = ConstraintSatisfactionProblem.builder()
+                .variableDomain(x, IntervalDomain.of(0.0, 3.0))
+                .predicateConstraint(x, (Double v) -> v >= 5.0)
+                .build();
+        assertThat(Solver.Factory.INSTANCE.createSolver(csp).getSolutions()).isEmpty();
+    }
+
+    @Test
+    void biPredicateConstraint_intervalDomain_disjointRangesAlwaysSatisfied() {
+        // x∈[0,4], y∈[6,10]: x<y holds for every possible pairing.
+        Variable<Double> x = F.create("bp_x"), y = F.create("bp_y");
+        var csp = ConstraintSatisfactionProblem.builder()
+                .variableDomain(x, IntervalDomain.of(0.0, 4.0))
+                .variableDomain(y, IntervalDomain.of(6.0, 10.0))
+                .biPredicateConstraint(x, y, (Double a, Double b) -> a < b)
+                .build();
+        var solution = Solver.Factory.INSTANCE.createSolver(csp).getSolution();
+        assertThat(solution).isPresent();
+        double xVal = (Double) solution.get().getValue(x).orElseThrow();
+        double yVal = (Double) solution.get().getValue(y).orElseThrow();
+        assertThat(xVal).isLessThan(yVal);
+    }
+
+    @Test
+    void biPredicateConstraint_intervalDomain_infeasible_returnsNoSolutions() {
+        // x∈[6,10], y∈[0,4]: x<y is impossible for any pairing.
+        Variable<Double> x = F.create("bp_xinf"), y = F.create("bp_yinf");
+        var csp = ConstraintSatisfactionProblem.builder()
+                .variableDomain(x, IntervalDomain.of(6.0, 10.0))
+                .variableDomain(y, IntervalDomain.of(0.0, 4.0))
+                .biPredicateConstraint(x, y, (Double a, Double b) -> a < b)
+                .build();
+        assertThat(Solver.Factory.INSTANCE.createSolver(csp).getSolutions()).isEmpty();
+    }
+
+    @Test
+    void predicateConstraint_nary_intervalDomain_satisfied() {
+        // x,y,z∈[1,2]: sum of three positive values is always positive, regardless of midpoints.
+        Variable<Double> x = F.create("pc_x"), y = F.create("pc_y"), z = F.create("pc_z");
+        var csp = ConstraintSatisfactionProblem.builder()
+                .variableDomain(x, IntervalDomain.of(1.0, 2.0))
+                .variableDomain(y, IntervalDomain.of(1.0, 2.0))
+                .variableDomain(z, IntervalDomain.of(1.0, 2.0))
+                .predicateConstraint(Set.of(x, y, z), a ->
+                        (Double) a.getValue(x).orElseThrow()
+                                + (Double) a.getValue(y).orElseThrow()
+                                + (Double) a.getValue(z).orElseThrow() > 0.0)
+                .build();
+        var solution = Solver.Factory.INSTANCE.createSolver(csp).getSolution();
+        assertThat(solution).isPresent();
+    }
+
+    @Test
+    void reifyConstraint_intervalDomain_bodyAlwaysTrue_forcesIndicatorTrue() {
+        // x∈[10,20]: body "x>=5.0" holds for the whole domain, so the only consistent indicator
+        // value is true. ReifiedConstraint isn't Propagatable and its body is never registered as
+        // a top-level constraint, so this is resolved purely by search plus the final isSatisfiedBy
+        // check, not by any dedicated propagator.
+        Variable<Double> x = F.create("reif_x");
+        Variable<Boolean> b = F.create("reif_b");
+        var csp = ConstraintSatisfactionProblem.builder()
+                .variableDomain(x, IntervalDomain.of(10.0, 20.0))
+                .variableDomain(b, BooleanDomain.INSTANCE)
+                .reifyConstraint(b, UnaryComparatorConstraint.of(x, Operator.GEQ, 5.0))
+                .build();
+        var solution = Solver.Factory.INSTANCE.createSolver(csp).getSolution();
+        assertThat(solution).isPresent();
+        assertThat(solution.get().getValue(b)).contains(true);
+    }
+
+    @Test
+    void reifyConstraint_intervalDomain_bodyAlwaysFalse_forcesIndicatorFalse() {
+        // x∈[0,3]: body "x>=5.0" is false across the whole domain, so indicator must be false.
+        Variable<Double> x = F.create("reif_xf");
+        Variable<Boolean> b = F.create("reif_bf");
+        var csp = ConstraintSatisfactionProblem.builder()
+                .variableDomain(x, IntervalDomain.of(0.0, 3.0))
+                .variableDomain(b, BooleanDomain.INSTANCE)
+                .reifyConstraint(b, UnaryComparatorConstraint.of(x, Operator.GEQ, 5.0))
+                .build();
+        var solution = Solver.Factory.INSTANCE.createSolver(csp).getSolution();
+        assertThat(solution).isPresent();
+        assertThat(solution.get().getValue(b)).contains(false);
+    }
+
+    @Test
+    void impliesConstraint_intervalDomain_indicatorTrue_bodyMustHold() {
+        // indicator pinned true via equalsConstraint; body "x>=5.0" holds unconditionally across
+        // x's whole domain, so the problem is satisfiable.
+        Variable<Double> x = F.create("impl_x");
+        Variable<Boolean> b = F.create("impl_b");
+        var csp = ConstraintSatisfactionProblem.builder()
+                .variableDomain(x, IntervalDomain.of(10.0, 20.0))
+                .variableDomain(b, BooleanDomain.INSTANCE)
+                .equalsConstraint(b, true)
+                .impliesConstraint(b, UnaryComparatorConstraint.of(x, Operator.GEQ, 5.0))
+                .build();
+        var solution = Solver.Factory.INSTANCE.createSolver(csp).getSolution();
+        assertThat(solution).isPresent();
+        assertThat(solution.get().getValue(b)).contains(true);
+    }
+
+    @Test
+    void impliesConstraint_intervalDomain_indicatorTrue_bodyViolated_infeasible() {
+        // indicator pinned true; body "x>=5.0" is false across x's whole domain -> infeasible.
+        Variable<Double> x = F.create("impl_xinf");
+        Variable<Boolean> b = F.create("impl_binf");
+        var csp = ConstraintSatisfactionProblem.builder()
+                .variableDomain(x, IntervalDomain.of(0.0, 3.0))
+                .variableDomain(b, BooleanDomain.INSTANCE)
+                .equalsConstraint(b, true)
+                .impliesConstraint(b, UnaryComparatorConstraint.of(x, Operator.GEQ, 5.0))
+                .build();
+        assertThat(Solver.Factory.INSTANCE.createSolver(csp).getSolutions()).isEmpty();
+    }
+
+    @Test
+    void naryElementConstraint_intervalDomain_resolvedBySearchOverIndex() {
+        // result and vars are singleton IntervalDomains; index (discrete, {1,2,3}) is the only
+        // unresolved variable. Element propagation is a no-op here (result/vars aren't
+        // DiscreteDomain), so search must try each index value and the final isSatisfiedBy check
+        // picks out index=2, the only one whose vars[index-1] equals result.
+        Variable<Integer> index = F.create("ne_index");
+        Variable<Double> result = F.create("ne_result");
+        Variable<Double> v1 = F.create("ne_v1"), v2 = F.create("ne_v2"), v3 = F.create("ne_v3");
+        var csp = ConstraintSatisfactionProblem.builder()
+                .variableDomain(index, IntRangeDomain.of(1, 3))
+                .variableDomain(result, IntervalDomain.of(20.0, 20.0))
+                .variableDomain(v1, IntervalDomain.of(10.0, 10.0))
+                .variableDomain(v2, IntervalDomain.of(20.0, 20.0))
+                .variableDomain(v3, IntervalDomain.of(30.0, 30.0))
+                .elementVariableConstraint(index, result, List.of(v1, v2, v3))
+                .build();
+        var solution = Solver.Factory.INSTANCE.createSolver(csp).getSolution();
+        assertThat(solution).isPresent();
+        assertThat(solution.get().getValue(index)).contains(2);
+    }
+
+    @Test
+    void naryElementConstraint_intervalDomain_infeasible_returnsNoSolutions() {
+        // result (25.0) matches none of vars' singleton values (10, 20, 30) for any index choice.
+        Variable<Integer> index = F.create("ne_index_inf");
+        Variable<Double> result = F.create("ne_result_inf");
+        Variable<Double> v1 = F.create("ne_v1i"), v2 = F.create("ne_v2i"), v3 = F.create("ne_v3i");
+        var csp = ConstraintSatisfactionProblem.builder()
+                .variableDomain(index, IntRangeDomain.of(1, 3))
+                .variableDomain(result, IntervalDomain.of(25.0, 25.0))
+                .variableDomain(v1, IntervalDomain.of(10.0, 10.0))
+                .variableDomain(v2, IntervalDomain.of(20.0, 20.0))
+                .variableDomain(v3, IntervalDomain.of(30.0, 30.0))
+                .elementVariableConstraint(index, result, List.of(v1, v2, v3))
+                .build();
+        assertThat(Solver.Factory.INSTANCE.createSolver(csp).getSolutions()).isEmpty();
     }
 }

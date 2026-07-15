@@ -7,6 +7,7 @@ import io.github.rcrida.jcsp.assignments.Assignment;
 import io.github.rcrida.jcsp.variables.Variable;
 import org.jspecify.annotations.NonNull;
 
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.function.Supplier;
@@ -36,9 +37,7 @@ public record AssignmentDomain(Set<Assignment> values) implements SetDomain<Assi
         val variableAssignments = variableDomains.entrySet().stream()
                 .collect(Collectors.toMap(
                         Map.Entry::getKey,
-                        e -> ((DiscreteDomain<?>) e.getValue()).stream()
-                                .map(v -> Assignment.builder().value(e.getKey(), v).build())
-                                .toList()));
+                        e -> singleVariableAssignments(e.getKey(), e.getValue())));
         // now merge all the combinations of the variable assignments, as long as they are consistent
         return variableAssignments.values().stream()
                 .map(assignments -> (Supplier<Stream<Assignment>>) assignments::stream)
@@ -47,5 +46,23 @@ public record AssignmentDomain(Set<Assignment> values) implements SetDomain<Assi
                 .orElse(Stream::empty).get()
                 .filter(a -> a.isConsistent(csp))
                 .collect(Collectors.toSet());
+    }
+
+    /**
+     * Enumerates one clique variable's domain into single-variable assignments: full enumeration
+     * for a {@link DiscreteDomain}, or the sole point for an already-singleton {@link BoundedDomain}
+     * via {@link Domain#singleValue()} — the only shape a {@code BoundedDomain} can ever be by the
+     * time a clique reaches tree decomposition, since the satisfaction chain's
+     * {@code PropagationFixpointSolver(snap=true)} always resolves every bounded domain to a
+     * singleton before {@code TreeDecompositionSolver} runs (tree decomposition is never reached
+     * from the optimization chain, the only one that leaves bounded domains open). A genuinely
+     * non-singleton {@code BoundedDomain} can't be enumerated at all, so this deliberately doesn't
+     * attempt to handle that case.
+     */
+    private static List<Assignment> singleVariableAssignments(Variable<?> variable, Domain<?> domain) {
+        if (domain instanceof DiscreteDomain<?> discrete) {
+            return discrete.stream().map(v -> Assignment.builder().value(variable, v).build()).toList();
+        }
+        return List.of(Assignment.builder().value(variable, domain.singleValue().orElseThrow()).build());
     }
 }

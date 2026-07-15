@@ -31,21 +31,21 @@ public class MinimumDegreeVariableSelectorTest {
 
     @Test
     void lowerDegreeComesFirst() {
-        val selector = MinimumDegreeVariableSelector.Factory.INSTANCE.create(CSP);
+        val selector = MinimumDegreeVariableSelector.Factory.INSTANCE.create(CSP.getNeighbours());
         assertThat(selector.compare(LOW, HIGH)).isNegative();
         assertThat(selector.compare(HIGH, LOW)).isPositive();
     }
 
     @Test
     void equalDegreeComparesAsZero() {
-        val selector = MinimumDegreeVariableSelector.Factory.INSTANCE.create(CSP);
+        val selector = MinimumDegreeVariableSelector.Factory.INSTANCE.create(CSP.getNeighbours());
         assertThat(selector.compare(LOW, MID)).isZero(); // both degree 2
     }
 
     @Test
     void factoryCreatesNewInstancePerCsp() {
-        val selector1 = MinimumDegreeVariableSelector.Factory.INSTANCE.create(CSP);
-        val selector2 = MinimumDegreeVariableSelector.Factory.INSTANCE.create(CSP);
+        val selector1 = MinimumDegreeVariableSelector.Factory.INSTANCE.create(CSP.getNeighbours());
+        val selector2 = MinimumDegreeVariableSelector.Factory.INSTANCE.create(CSP.getNeighbours());
         assertThat(selector1).isNotSameAs(selector2);
     }
 }

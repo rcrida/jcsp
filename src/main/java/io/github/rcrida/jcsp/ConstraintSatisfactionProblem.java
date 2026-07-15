@@ -97,15 +97,46 @@ public class ConstraintSatisfactionProblem {
      * {@link io.github.rcrida.jcsp.domains.IntervalDomain}) variables. Any other constraint type
      * referencing such a variable is rejected at build time.
      * <p>
-     * Most entries here propagate via interval-arithmetic bounds narrowing. {@link IncreasingConstraint}
-     * and {@link DecreasingConstraint} are the exception: their {@link BinaryDecomposable} pairs only
-     * ever reach {@link io.github.rcrida.jcsp.consistency.arc.AC3}, which skips non-{@code DiscreteDomain}
-     * arcs entirely, so over {@code BoundedDomain} variables they get no propagation at all — correctness
-     * for them rests solely on the final {@code isSatisfiedBy} check every solver path already runs
-     * before returning a solution (e.g. {@link io.github.rcrida.jcsp.solver.SolverDecorator#forcedSolution}),
-     * the same guarantee every other listed constraint falls back on beyond its one upfront propagation
-     * pass in {@link io.github.rcrida.jcsp.solver.BisectionConditioningSolver} (whose own re-propagation
-     * is itself limited to {@code SumConstraint}/{@code LinearConstraint} — see its {@code REPROPAGATORS}).
+     * Most entries here propagate via interval-arithmetic bounds narrowing. Several are the
+     * exception, relying solely on the final {@code isSatisfiedBy} check every solver path already
+     * runs before returning a solution (e.g. {@link io.github.rcrida.jcsp.solver.SolverDecorator#forcedSolution})
+     * — the same fallback guarantee every other listed constraint relies on beyond its one upfront
+     * propagation pass in {@link io.github.rcrida.jcsp.solver.BisectionConditioningSolver} (whose own
+     * re-propagation is itself limited to {@code SumConstraint}/{@code LinearConstraint} — see its
+     * {@code REPROPAGATORS}):
+     * <ul>
+     *   <li>{@link IncreasingConstraint}/{@link DecreasingConstraint} — their {@link BinaryDecomposable}
+     *       pairs only ever reach {@link io.github.rcrida.jcsp.consistency.arc.AC3}, which skips
+     *       non-{@code DiscreteDomain} arcs entirely, so they get no propagation over
+     *       {@code BoundedDomain} variables at all.</li>
+     *   <li>{@link io.github.rcrida.jcsp.constraints.unary.UnaryPredicateConstraint} — {@code NodeConsistency}
+     *       already gates on {@code instanceof DiscreteDomain} and no-ops otherwise.</li>
+     *   <li>{@link io.github.rcrida.jcsp.constraints.binary.BinaryPredicateConstraint},
+     *       {@link PredicateConstraint}, {@link ImplicationConstraint} — none of these implement
+     *       {@link io.github.rcrida.jcsp.consistency.Propagatable} or {@link BinaryDecomposable}, so
+     *       no propagator ever sees them.</li>
+     *   <li>{@link ReifiedConstraint} — likewise not {@code Propagatable}; its {@code BinaryDecomposable}
+     *       output only exists when the body is a {@code UnaryConstraint}, and AC3 gates that arc on
+     *       {@code DiscreteDomain} the same way as above.</li>
+     *   <li>{@link NaryElementConstraint} — the one exception that's already explicitly defensive:
+     *       every propagation pass checks {@code instanceof DiscreteDomain} up front and returns
+     *       {@code Optional.of(Map.of())} (a no-op) the moment {@code result} or any {@code vars[i]}
+     *       is a {@code BoundedDomain}, so mixing a discrete {@code index} with continuous
+     *       {@code result}/{@code vars} was always safe at the propagator level, just previously
+     *       blocked by this list. Enabling it also surfaced (and required fixing) two latent bugs
+     *       one layer down, in {@code TreeDecompositionSolver}'s machinery — reachable by any
+     *       {@code BoundedDomain} CSP with 3+ mutually connected variables not fully resolved by
+     *       propagation, not just this constraint: {@code TreeDecomposerImpl.getMaximalCliqueBags}'s
+     *       min-degree elimination used to represent purely-structural "fill-in" edges as a real
+     *       {@code BinaryTuplesConstraint} pushed through the fully validated CSP builder (fixed by
+     *       maintaining the working adjacency graph as a plain map instead); and
+     *       {@code AssignmentDomain.populateCombinations} unconditionally cast every clique
+     *       variable's domain to {@code DiscreteDomain} to enumerate it (fixed by special-casing an
+     *       already-singleton {@code BoundedDomain} via {@code Domain#singleValue()} — the only
+     *       shape one can be by the time it reaches a clique, since the satisfaction chain's
+     *       {@code PropagationFixpointSolver(snap=true)} always resolves bounded domains to
+     *       singletons before tree decomposition ever runs).</li>
+     * </ul>
      * <p>
      * Lists {@link GroundNogoodConstraint} and {@link RangeNogoodConstraint} specifically, not the
      * {@link NogoodConstraint} interface they implement — this check matches on
@@ -113,7 +144,7 @@ public class ConstraintSatisfactionProblem {
      * {@code NogoodConstraint} implementation needs its own entry here too.
      */
     private static final Set<Class<? extends Constraint>> CONTINUOUS_COMPATIBLE_CONSTRAINTS =
-            Set.of(SumConstraint.class, LinearConstraint.class, UnaryComparatorConstraint.class, BinaryComparatorConstraint.class, BinaryOffsetConstraint.class, AbsoluteDifferenceConstraint.class, DivisionConstraint.class, LexConstraint.class, CumulativeConstraint.class, MaxConstraint.class, MinConstraint.class, ProductConstraint.class, DiffnConstraint.class, GroundNogoodConstraint.class, RangeNogoodConstraint.class, IncreasingConstraint.class, DecreasingConstraint.class);
+            Set.of(SumConstraint.class, LinearConstraint.class, UnaryComparatorConstraint.class, BinaryComparatorConstraint.class, BinaryOffsetConstraint.class, AbsoluteDifferenceConstraint.class, DivisionConstraint.class, LexConstraint.class, CumulativeConstraint.class, MaxConstraint.class, MinConstraint.class, ProductConstraint.class, DiffnConstraint.class, GroundNogoodConstraint.class, RangeNogoodConstraint.class, IncreasingConstraint.class, DecreasingConstraint.class, UnaryPredicateConstraint.class, BinaryPredicateConstraint.class, PredicateConstraint.class, ReifiedConstraint.class, ImplicationConstraint.class, NaryElementConstraint.class);
 
     Map<Variable<?>, Domain<?>> variableDomains;
     // Included in equals/hashCode (via ConstraintGraph's own, which compares constraints/isCyclic/
@@ -467,19 +498,6 @@ public class ConstraintSatisfactionProblem {
          */
         public <T> ConstraintSatisfactionProblemBuilder variableDomain(@NonNull Variable<T> variable, @NonNull Domain<T> domain) {
             return this.variableDomainEntry(variable, domain);
-        }
-
-        public ConstraintSatisfactionProblemBuilder deleteVariable(@NonNull Variable<?> variable) {
-            val index = this.variableDomains$key.indexOf(variable);
-            this.variableDomains$key.remove(index);
-            this.variableDomains$value.remove(index);
-
-            val binaryConstraintsOnVariable = this.constraints.stream()
-                    .filter(bc -> bc.getVariables().contains(variable))
-                    .toList();
-            this.constraints.removeAll(binaryConstraintsOnVariable);
-            this.constraintGraph = null;
-            return this;
         }
 
         /**

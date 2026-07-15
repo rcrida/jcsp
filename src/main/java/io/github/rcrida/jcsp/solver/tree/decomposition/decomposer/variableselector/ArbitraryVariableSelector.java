@@ -1,8 +1,10 @@
 package io.github.rcrida.jcsp.solver.tree.decomposition.decomposer.variableselector;
 
-import io.github.rcrida.jcsp.ConstraintSatisfactionProblem;
 import io.github.rcrida.jcsp.variables.Variable;
 import org.jspecify.annotations.NonNull;
+
+import java.util.Map;
+import java.util.Set;
 
 public class ArbitraryVariableSelector implements VariableSelectionHeuristic {
     static final ArbitraryVariableSelector INSTANCE = new ArbitraryVariableSelector();
@@ -20,7 +22,7 @@ public class ArbitraryVariableSelector implements VariableSelectionHeuristic {
         private Factory() {}
 
         @Override
-        public VariableSelectionHeuristic create(@NonNull ConstraintSatisfactionProblem csp) {
+        public VariableSelectionHeuristic create(@NonNull Map<Variable<?>, Set<Variable<?>>> neighbours) {
             return ArbitraryVariableSelector.INSTANCE;
         }
     }
