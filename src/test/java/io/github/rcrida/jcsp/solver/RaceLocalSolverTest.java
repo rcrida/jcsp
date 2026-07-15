@@ -54,6 +54,20 @@ public class RaceLocalSolverTest {
     }
 
     @Test
+    void onlyTheFirstDelegateToCompleteWinsTheRace() {
+        // Two delegates that both instantly produce a present result: whichever's whenComplete
+        // callback runs first wins (promise.complete returns true); the other's call is a no-op
+        // (returns false) — exercises both outcomes of that check deterministically, unlike racing
+        // two real searches where the loser might get cancelled before ever producing a result.
+        LocalSolver a = csp -> Optional.of(Assignment.builder().value(X, 1).value(Y, 2).build());
+        LocalSolver b = csp -> Optional.of(Assignment.builder().value(X, 2).value(Y, 1).build());
+        val solver = RaceLocalSolver.builder().delegate(a).delegate(b).build();
+        val solution = solver.getLocalSolution(CSP);
+        assertThat(solution).isPresent();
+        assertThat(solution.get().isSolution(CSP)).isTrue();
+    }
+
+    @Test
     void returnsEmptyOnlyWhenEveryDelegateFails() {
         val solver = RaceLocalSolver.builder()
                 .delegate(MinConflictsSolver.of(1, 0, csp -> infeasible()))

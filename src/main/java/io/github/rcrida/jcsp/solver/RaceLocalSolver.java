@@ -69,7 +69,9 @@ public class RaceLocalSolver implements LocalSolver {
                             if (error != null) {
                                 promise.completeExceptionally(error);
                             } else if (result.isPresent()) {
-                                promise.complete(result);
+                                if (promise.complete(result)) {
+                                    log.info("{} won the race with a solution", delegate.getClass().getSimpleName());
+                                }
                             } else if (isLast) {
                                 promise.complete(Optional.empty());
                             }
