@@ -39,9 +39,10 @@ Traditional Java constraint satisfaction problem (CSP) solvers were designed ove
 - **Search limits**: `SolverLimits` caps work by node count and/or wall-clock time; `createSolver(csp, limits)` enforces them during search. `getSolution()` throws `LimitExceededException` (carrying `Statistics`) when a limit is hit — distinguishable from a genuine UNSAT result (`Optional.empty()`). `getSolutions()` truncates the stream silently instead
 - **Heuristics**: dom/wdeg variable ordering with Luby restarts (Boussemart et al. 2004) for the satisfaction terminal solver; MRV variable selection for the optimization chain; LCV value ordering; and Minimum Degree variable elimination for tree decomposition
 - **Nogood learning**: the satisfaction terminal solver records a learned nogood (a partial assignment guaranteed to fail) on every domain wipeout, explained by re-running MAC and the propagation fixpoint with reason tracking; future search nodes whose assignment subsumes a learned nogood are pruned immediately, and nogoods persist across Luby restarts
-- **Local search**: `LocalSolver.Factory.INSTANCE` wires the full pipeline (NC + AC3 + bounds/value propagation → independent subproblem decomposition → terminal solver) and supports both satisfaction and optimization. Terminal solver is auto-selected: WalkSAT for all-boolean satisfaction CSPs without counting constraints, LargeNeighborhoodSearch for optimization with `ExactlyOneConstraint`s, MinConflicts otherwise. All `maxAttempts` restarts run in parallel; independent subproblems are also solved concurrently. Seeded by `RandomAssignmentFactory`, `GreedyAssignmentFactory`, or `FallbackAssignmentFactory` for hybrid restart strategies
+- **Local search**: `LocalSolver.Factory.INSTANCE` wires the full pipeline (NC + AC3 + bounds/value propagation → independent subproblem decomposition → terminal solver) and supports both satisfaction and optimization. Terminal solver is auto-selected: WalkSAT for all-boolean satisfaction CSPs without counting constraints, LargeNeighborhoodSearch for optimization with `ExactlyOneConstraint`s, and otherwise `RaceLocalSolver` runs MinConflicts and TabuSearch concurrently and returns whichever finds a solution first. All `maxAttempts` restarts run in parallel; independent subproblems are also solved concurrently. Seeded by `RandomAssignmentFactory`, `GreedyAssignmentFactory`, or `FallbackAssignmentFactory` for hybrid restart strategies
+- **Tabu search**: `TabuSearchSolver` extends min-conflicts move selection with a short-term memory that forbids reverting a variable to the value it just held for `tabuTenure` steps, unless doing so strictly improves on the best total conflict weight seen so far this attempt (the aspiration criterion) — breaks the two-step cycles plain min-conflicts can get stuck repeating
 - **Reification**: `ReifiedConstraint` (`b <-> body`) and `ImplicationConstraint` (`b -> body`) introduce boolean indicator variables that capture constraint satisfaction — enables soft constraints, counting satisfaction, and conditional constraints via `csp.reifyConstraint(b, constraint)` and `csp.impliesConstraint(b, constraint)`
-- **Real-valued variables**: `IntervalDomain` represents a continuous `[min, max]` range of `double`s. `SumConstraint`, `LinearConstraint`, `UnaryComparatorConstraint`, `BinaryComparatorConstraint`, `BinaryOffsetConstraint`, `AbsoluteDifferenceConstraint`, `DivisionConstraint`, `ProductConstraint`, `LexConstraint`, `MaxConstraint`, `MinConstraint`, `CumulativeConstraint`, and `DiffnConstraint` (origin variables) all propagate over interval bounds, so many continuous problems are solved entirely by propagation
+- **Real-valued variables**: `IntervalDomain` represents a continuous `[min, max]` range of `double`s. `SumConstraint`, `LinearConstraint`, `UnaryComparatorConstraint`, `BinaryComparatorConstraint`, `BinaryOffsetConstraint`, `AbsoluteDifferenceConstraint`, `DivisionConstraint`, `ProductConstraint`, `LexConstraint`, `MaxConstraint`, `MinConstraint`, `CumulativeConstraint`, and `DiffnConstraint` (origin variables) all propagate over interval bounds, so many continuous problems are solved entirely by propagation. `IncreasingConstraint`, `DecreasingConstraint`, `UnaryPredicateConstraint`, `BinaryPredicateConstraint`, `PredicateConstraint`, `ReifiedConstraint`, `ImplicationConstraint`, and `NaryElementConstraint` also accept `IntervalDomain` variables (no dedicated interval propagation, but resolved correctly via search plus the final satisfaction check)
 - **Continuous optimization**: `createSolver(csp, objective)` auto-detects `IntervalDomain` variables and explores their feasible region via `BisectionConditioningSolver` — recursively bisecting intervals to within `DEFAULT_BISECTION_EPSILON (1e-3)`, repropagating bounds at each step, then filtering the resulting feasible points by the objective; `getSolution()` returns the global optimum and `getSolutions()` streams improving assignments
 
 ## Usage
@@ -87,7 +88,16 @@ Solver.Factory.INSTANCE.createSolver(csp, objective).getSolutions().forEach(Syst
 - `LexConstraint` — clips the first non-forced-equal position's lesser upper bound and greater lower bound
 - `CumulativeConstraint` — event-based timetabling propagator; start variables may be `Variable<Double>` with `IntervalDomain` (continuous scheduling) or `Variable<Integer>` with `IntRangeDomain` (integer scheduling); durations, resources, and limit are `double` in both cases
 
-`BinaryComparatorConstraint`, `BinaryOffsetConstraint`, and `AbsoluteDifferenceConstraint` narrow via a shared bounds helper that works across any combination of discrete and interval domains, so a plain discrete/discrete pair gets real value-deletion narrowing too — not just mixed discrete/interval pairs, and not left entirely to AC3. (`BinaryComparatorConstraint` also backs non-numeric orderings like `IncreasingConstraint`/`DecreasingConstraint`, so it only applies this narrowing when both sides are actually numeric.) Any other constraint type referencing an `IntervalDomain` variable is rejected with `IllegalArgumentException` at build time.
+`BinaryComparatorConstraint`, `BinaryOffsetConstraint`, and `AbsoluteDifferenceConstraint` narrow via a shared bounds helper that works across any combination of discrete and interval domains, so a plain discrete/discrete pair gets real value-deletion narrowing too — not just mixed discrete/interval pairs, and not left entirely to AC3. (`BinaryComparatorConstraint` also backs non-numeric orderings like `IncreasingConstraint`/`DecreasingConstraint`, so it only applies this narrowing when both sides are actually numeric.)
+
+A second group of constraint types also accepts `IntervalDomain` variables, but without dedicated interval propagation — correctness instead rests on the same final satisfaction check every solver path already runs before returning a solution, so they're resolved by search rather than bounds narrowing:
+
+- `IncreasingConstraint` / `DecreasingConstraint` — order constraints over a sequence (e.g. `x <= y <= z`)
+- `UnaryPredicateConstraint` / `BinaryPredicateConstraint` / `PredicateConstraint` — arbitrary user predicates over one, two, or a set of variables
+- `ReifiedConstraint` / `ImplicationConstraint` — reification and half-reification of another constraint via a boolean indicator
+- `NaryElementConstraint` — `result = vars[index]` with continuous `result`/`vars` and a discrete `index`
+
+Any other constraint type referencing an `IntervalDomain` variable is rejected with `IllegalArgumentException` at build time.
 
 ```java
 Variable<Double> rent = F.create("rent");
@@ -245,13 +255,13 @@ Tree decomposition uses a domain-aware clique size limit (`d^targetTreewidth`, c
 `LocalSolver.Factory.INSTANCE` wires the local search pipeline:
 
 ```
-NodeConsistency → AC3 → SumBounds → LinearBounds → CountValue → InverseArc → AmongValue → AtLeastN/AtMostN → CumulativeTimetable → GlobalCardinalityValue → LexBounds → MaxBounds → MinBounds → ElementDomains → TuplesGAC → ProductBounds → DivisionBounds → CircuitPropagation → DiffnCompulsoryParts → RegularDP → IndependentSubproblems → WalkSAT / LNS / MinConflicts
+NodeConsistency → AC3 → SumBounds → LinearBounds → CountValue → InverseArc → AmongValue → AtLeastN/AtMostN → CumulativeTimetable → GlobalCardinalityValue → LexBounds → MaxBounds → MinBounds → ElementDomains → TuplesGAC → ProductBounds → DivisionBounds → CircuitPropagation → DiffnCompulsoryParts → RegularDP → IndependentSubproblems → WalkSAT / LNS / (MinConflicts race TabuSearch)
 ```
 
 The terminal solver is chosen automatically after preprocessing:
 - **WalkSAT** — satisfaction only; used when all variable domains are boolean and the CSP has no `ExactlyOneConstraint` or `AtLeastNConstraint`
 - **LargeNeighborhoodSearch** — optimization only; used when the CSP contains any `ExactlyOneConstraint`; enumerates destroy-repair moves over exactly-one slots
-- **MinConflicts** — used otherwise for both satisfaction and optimization
+- **MinConflicts vs TabuSearch** — used otherwise for both satisfaction and optimization; `RaceLocalSolver` runs both concurrently and returns whichever finds a result first (a shared cancellation token stops the loser at its next search step) rather than picking one via a heuristic — a routing heuristic for this exact pair was tried and falsified before for a different pair of solvers (`BacktrackingSearch` vs `DomWdegLubySearch`)
 
 Create a local solver and call `getLocalSolution` for satisfaction, or pass an objective for optimization:
 
@@ -289,7 +299,7 @@ InitialAssignmentFactory factory = FallbackAssignmentFactory.builder()
 <dependency>
     <groupId>io.github.rcrida</groupId>
     <artifactId>jcsp</artifactId>
-    <version>2.32.0</version>
+    <version>2.33.0</version>
 </dependency>
 ```
 
