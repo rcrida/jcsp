@@ -440,6 +440,54 @@ public class RealValuedConstraintTest {
     }
 
     @Test
+    void increasingConstraint_intervalDomain_disjointRangesAlwaysSatisfied() {
+        // x∈[0,4], y∈[6,10]: x<=y holds for every possible pairing, so no propagation is needed —
+        // increasingConstraint gets none over IntervalDomain (its BinaryComparatorConstraint
+        // decomposition only reaches AC3, which skips non-discrete domains); correctness here
+        // rests entirely on the final isSatisfiedBy check after both midpoints are snapped.
+        Variable<Double> x = F.create("inc_x"), y = F.create("inc_y");
+        var csp = ConstraintSatisfactionProblem.builder()
+                .variableDomain(x, IntervalDomain.of(0.0, 4.0))
+                .variableDomain(y, IntervalDomain.of(6.0, 10.0))
+                .increasingConstraint(List.of(x, y))
+                .build();
+        var solution = Solver.Factory.INSTANCE.createSolver(csp).getSolution();
+        assertThat(solution).isPresent();
+        double xVal = (Double) solution.get().getValue(x).orElseThrow();
+        double yVal = (Double) solution.get().getValue(y).orElseThrow();
+        assertThat(xVal).isLessThanOrEqualTo(yVal);
+    }
+
+    @Test
+    void increasingConstraint_intervalDomain_infeasible_returnsNoSolutions() {
+        // x∈[6,10], y∈[0,4]: x<=y is impossible for any pairing (x.min > y.max); no propagator
+        // detects this up front, but the midpoint-snapped candidate still fails isSatisfiedBy.
+        Variable<Double> x = F.create("inc_inf_x"), y = F.create("inc_inf_y");
+        var csp = ConstraintSatisfactionProblem.builder()
+                .variableDomain(x, IntervalDomain.of(6.0, 10.0))
+                .variableDomain(y, IntervalDomain.of(0.0, 4.0))
+                .increasingConstraint(List.of(x, y))
+                .build();
+        assertThat(Solver.Factory.INSTANCE.createSolver(csp).getSolutions()).isEmpty();
+    }
+
+    @Test
+    void decreasingConstraint_intervalDomain_disjointRangesAlwaysSatisfied() {
+        // x∈[6,10], y∈[0,4]: x>=y holds for every possible pairing.
+        Variable<Double> x = F.create("dec_x"), y = F.create("dec_y");
+        var csp = ConstraintSatisfactionProblem.builder()
+                .variableDomain(x, IntervalDomain.of(6.0, 10.0))
+                .variableDomain(y, IntervalDomain.of(0.0, 4.0))
+                .decreasingConstraint(List.of(x, y))
+                .build();
+        var solution = Solver.Factory.INSTANCE.createSolver(csp).getSolution();
+        assertThat(solution).isPresent();
+        double xVal = (Double) solution.get().getValue(x).orElseThrow();
+        double yVal = (Double) solution.get().getValue(y).orElseThrow();
+        assertThat(xVal).isGreaterThanOrEqualTo(yVal);
+    }
+
+    @Test
     void productConstraint_intervalDomain_resolvedByPropagation() {
         // x is fixed at 2.0; y ∈ [1.0, 8.0]; product == 6.0
         // LEQ clips y.max to k*y.min/productMin = 6*1/2 = 3.0;

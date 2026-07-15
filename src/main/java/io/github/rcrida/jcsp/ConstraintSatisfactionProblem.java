@@ -94,8 +94,18 @@ import java.util.stream.IntStream;
 public class ConstraintSatisfactionProblem {
     /**
      * Constraint types that support {@link io.github.rcrida.jcsp.domains.BoundedDomain} (e.g.
-     * {@link io.github.rcrida.jcsp.domains.IntervalDomain}) variables via interval-arithmetic bounds
-     * propagation. Any other constraint type referencing such a variable is rejected at build time.
+     * {@link io.github.rcrida.jcsp.domains.IntervalDomain}) variables. Any other constraint type
+     * referencing such a variable is rejected at build time.
+     * <p>
+     * Most entries here propagate via interval-arithmetic bounds narrowing. {@link IncreasingConstraint}
+     * and {@link DecreasingConstraint} are the exception: their {@link BinaryDecomposable} pairs only
+     * ever reach {@link io.github.rcrida.jcsp.consistency.arc.AC3}, which skips non-{@code DiscreteDomain}
+     * arcs entirely, so over {@code BoundedDomain} variables they get no propagation at all — correctness
+     * for them rests solely on the final {@code isSatisfiedBy} check every solver path already runs
+     * before returning a solution (e.g. {@link io.github.rcrida.jcsp.solver.SolverDecorator#forcedSolution}),
+     * the same guarantee every other listed constraint falls back on beyond its one upfront propagation
+     * pass in {@link io.github.rcrida.jcsp.solver.BisectionConditioningSolver} (whose own re-propagation
+     * is itself limited to {@code SumConstraint}/{@code LinearConstraint} — see its {@code REPROPAGATORS}).
      * <p>
      * Lists {@link GroundNogoodConstraint} and {@link RangeNogoodConstraint} specifically, not the
      * {@link NogoodConstraint} interface they implement — this check matches on
@@ -103,7 +113,7 @@ public class ConstraintSatisfactionProblem {
      * {@code NogoodConstraint} implementation needs its own entry here too.
      */
     private static final Set<Class<? extends Constraint>> CONTINUOUS_COMPATIBLE_CONSTRAINTS =
-            Set.of(SumConstraint.class, LinearConstraint.class, UnaryComparatorConstraint.class, BinaryComparatorConstraint.class, BinaryOffsetConstraint.class, AbsoluteDifferenceConstraint.class, DivisionConstraint.class, LexConstraint.class, CumulativeConstraint.class, MaxConstraint.class, MinConstraint.class, ProductConstraint.class, DiffnConstraint.class, GroundNogoodConstraint.class, RangeNogoodConstraint.class);
+            Set.of(SumConstraint.class, LinearConstraint.class, UnaryComparatorConstraint.class, BinaryComparatorConstraint.class, BinaryOffsetConstraint.class, AbsoluteDifferenceConstraint.class, DivisionConstraint.class, LexConstraint.class, CumulativeConstraint.class, MaxConstraint.class, MinConstraint.class, ProductConstraint.class, DiffnConstraint.class, GroundNogoodConstraint.class, RangeNogoodConstraint.class, IncreasingConstraint.class, DecreasingConstraint.class);
 
     Map<Variable<?>, Domain<?>> variableDomains;
     // Included in equals/hashCode (via ConstraintGraph's own, which compares constraints/isCyclic/
