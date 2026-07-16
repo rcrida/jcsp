@@ -6,6 +6,7 @@ import lombok.extern.slf4j.Slf4j;
 import io.github.rcrida.jcsp.ConstraintSatisfactionProblem;
 import io.github.rcrida.jcsp.consistency.ConstraintConsistency;
 import io.github.rcrida.jcsp.consistency.fixpoint.FixpointConsistency;
+import io.github.rcrida.jcsp.consistency.fixpoint.NogoodFixpointConsistency;
 import io.github.rcrida.jcsp.consistency.arc.AC3;
 import io.github.rcrida.jcsp.constraints.binary.AbsoluteDifferenceConstraint;
 import io.github.rcrida.jcsp.constraints.binary.BinaryComparatorConstraint;
@@ -33,10 +34,16 @@ import io.github.rcrida.jcsp.constraints.nary.RegularConstraint;
 import io.github.rcrida.jcsp.constraints.nary.SumConstraint;
 import io.github.rcrida.jcsp.constraints.unary.UnaryComparatorConstraint;
 import io.github.rcrida.jcsp.domains.BoundedDomain;
+import io.github.rcrida.jcsp.domains.Domain;
+import io.github.rcrida.jcsp.variables.Variable;
 import org.jspecify.annotations.NonNull;
 
+import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
 
 /**
  * Runs AC3, AllDiff GAC, SumConstraint bounds propagation, LinearConstraint bounds propagation,
@@ -70,7 +77,7 @@ public class PropagationFixpointSolver extends SolverDecorator {
             FixpointConsistency.of(BinaryOffsetConstraint.class),
             FixpointConsistency.of(AbsoluteDifferenceConstraint.class),
             AC3.INSTANCE,
-            FixpointConsistency.of(NogoodConstraint.class),
+            NogoodFixpointConsistency.INSTANCE,
             FixpointConsistency.of(AllDiffConstraint.class),
             FixpointConsistency.of(SumConstraint.class),
             FixpointConsistency.of(LinearConstraint.class),
@@ -100,21 +107,47 @@ public class PropagationFixpointSolver extends SolverDecorator {
      * Runs the full propagator fixpoint without snapping bounded domains. Called by
      * {@link io.github.rcrida.jcsp.solver.Solver.Factory#FULL_PROPAGATION_INFERENCE} to apply
      * all propagators during backtracking search, not just as a preprocessing pass.
+     * <p>
+     * Tracks which variables' domains changed during the previous round and passes that set to
+     * each propagator via {@link ConstraintConsistency#apply(ConstraintSatisfactionProblem, Set)},
+     * so {@link NogoodFixpointConsistency} can skip re-checking nogoods that reference none of
+     * them (see its javadoc). The first round always passes {@code null} ("unknown, assume
+     * everything may have changed"), so every propagator's first pass is a full scan exactly as
+     * before -- only later rounds within the same call benefit.
      */
     static Optional<ConstraintSatisfactionProblem> applyFixpoint(
             @NonNull ConstraintSatisfactionProblem csp) {
         var current = csp;
+        Set<Variable<?>> changedVariables = null;
         boolean changed = true;
         while (changed) {
+            Map<Variable<?>, Domain<?>> before = current.getVariableDomains();
             double domainSumBefore = domainSum(current);
             for (var propagator : PROPAGATORS) {
-                var after = propagator.apply(current);
+                var after = propagator.apply(current, changedVariables);
                 if (after.isEmpty()) return Optional.empty();
                 current = after.get();
             }
             changed = domainSum(current) < domainSumBefore;
+            changedVariables = changed ? changedVariables(before, current.getVariableDomains()) : null;
         }
         return Optional.of(current);
+    }
+
+    /**
+     * Returns every variable whose domain in {@code after} differs from its domain in {@code
+     * before} (added/removed variables cannot occur -- every propagator narrows an existing
+     * domain, never changes the variable set).
+     */
+    private static Set<Variable<?>> changedVariables(Map<Variable<?>, Domain<?>> before,
+                                                       Map<Variable<?>, Domain<?>> after) {
+        Set<Variable<?>> result = new HashSet<>();
+        for (var entry : after.entrySet()) {
+            if (!Objects.equals(entry.getValue(), before.get(entry.getKey()))) {
+                result.add(entry.getKey());
+            }
+        }
+        return result;
     }
 
     /**
