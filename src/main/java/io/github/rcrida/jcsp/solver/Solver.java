@@ -41,10 +41,31 @@ public interface Solver {
     }
 
     interface Factory {
-        /** MAC followed by the full propagator fixpoint (all 17 propagatable constraint types). */
+        /**
+         * MAC followed by the full propagator fixpoint (all 17 propagatable constraint types).
+         * <p>
+         * Seeds {@code applyFixpoint}'s round-1 dirty-variable hint from this call's own inputs,
+         * rather than passing {@code null} (full first-round scan) as before: {@code problem} is
+         * exactly the parent search node's already-converged CSP, since nothing else touches it
+         * between when the parent's own inference call finished and this one starts. So the diff
+         * between {@code problem} and the post-MAC result (via {@link
+         * PropagationFixpointSolver#changedVariables}) is exactly what changed by branching on
+         * {@code variable} plus whatever MAC narrowed as a result -- nothing else could have.
+         * <p>
+         * Doesn't need to separately account for newly-learned nogoods (e.g. one recorded while
+         * backtracking an earlier sibling value at this same node): {@code problem} here is always
+         * {@code cspWithNogoods} from {@code DomWdegLubySearch}, i.e. already {@code
+         * nogoodStore.apply(csp)} -- freshly re-merged with the current nogood set immediately
+         * before this call, for every candidate value, not just the first. Neither {@link
+         * MAC#apply} nor {@link PropagationFixpointSolver#applyFixpoint} ever changes a CSP's
+         * nogood set (both only ever replace domain entries via {@code toBuilder()}), so {@code
+         * problem.getNogoods()} and the post-MAC result's are always identical -- there is no
+         * "newly learned since problem" case to seed for here.
+         */
         Inference FULL_PROPAGATION_INFERENCE = (problem, variable, assignment) ->
                 MAC.INSTANCE.apply(problem, variable, assignment)
-                        .flatMap(PropagationFixpointSolver::applyFixpoint);
+                        .flatMap(afterMac -> PropagationFixpointSolver.applyFixpoint(afterMac,
+                                PropagationFixpointSolver.changedVariables(problem.getVariableDomains(), afterMac.getVariableDomains())));
 
         /** Bisection precision for {@link BisectionConditioningSolver} in the optimization chain. */
         double DEFAULT_BISECTION_EPSILON = 1e-3;

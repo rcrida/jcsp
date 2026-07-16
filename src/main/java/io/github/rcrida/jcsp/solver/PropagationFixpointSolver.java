@@ -37,6 +37,7 @@ import io.github.rcrida.jcsp.domains.BoundedDomain;
 import io.github.rcrida.jcsp.domains.Domain;
 import io.github.rcrida.jcsp.variables.Variable;
 import org.jspecify.annotations.NonNull;
+import org.jspecify.annotations.Nullable;
 
 import java.util.HashSet;
 import java.util.List;
@@ -104,6 +105,16 @@ public class PropagationFixpointSolver extends SolverDecorator {
     boolean snap;
 
     /**
+     * Runs the full propagator fixpoint without snapping bounded domains, with no seed hint for
+     * round 1 (used only for preprocessing, before any search node exists to derive one from).
+     * See {@link #applyFixpoint(ConstraintSatisfactionProblem, Set)}.
+     */
+    static Optional<ConstraintSatisfactionProblem> applyFixpoint(
+            @NonNull ConstraintSatisfactionProblem csp) {
+        return applyFixpoint(csp, null);
+    }
+
+    /**
      * Runs the full propagator fixpoint without snapping bounded domains. Called by
      * {@link io.github.rcrida.jcsp.solver.Solver.Factory#FULL_PROPAGATION_INFERENCE} to apply
      * all propagators during backtracking search, not just as a preprocessing pass.
@@ -111,14 +122,18 @@ public class PropagationFixpointSolver extends SolverDecorator {
      * Tracks which variables' domains changed during the previous round and passes that set to
      * each propagator via {@link ConstraintConsistency#apply(ConstraintSatisfactionProblem, Set)},
      * so {@link NogoodFixpointConsistency} can skip re-checking nogoods that reference none of
-     * them (see its javadoc). The first round always passes {@code null} ("unknown, assume
-     * everything may have changed"), so every propagator's first pass is a full scan exactly as
-     * before -- only later rounds within the same call benefit.
+     * them (see its javadoc). {@code initialSeed} is round 1's dirty-variable hint: {@code
+     * FULL_PROPAGATION_INFERENCE} passes the diff between the pre- and post-MAC domains (plus any
+     * variable of a newly-learned nogood, which must always be checked once) rather than {@code
+     * null}, since at a search node this call's input is exactly the parent's already-converged
+     * CSP -- nothing else could have changed. {@code null} (this class's own preprocessing call,
+     * and any other caller with no such parent to diff against) falls back to a full first-round
+     * scan exactly as before.
      */
     static Optional<ConstraintSatisfactionProblem> applyFixpoint(
-            @NonNull ConstraintSatisfactionProblem csp) {
+            @NonNull ConstraintSatisfactionProblem csp, @Nullable Set<Variable<?>> initialSeed) {
         var current = csp;
-        Set<Variable<?>> changedVariables = null;
+        Set<Variable<?>> changedVariables = initialSeed;
         boolean changed = true;
         while (changed) {
             Map<Variable<?>, Domain<?>> before = current.getVariableDomains();
@@ -137,10 +152,12 @@ public class PropagationFixpointSolver extends SolverDecorator {
     /**
      * Returns every variable whose domain in {@code after} differs from its domain in {@code
      * before} (added/removed variables cannot occur -- every propagator narrows an existing
-     * domain, never changes the variable set).
+     * domain, never changes the variable set). Package-private (not {@code private}) so {@link
+     * io.github.rcrida.jcsp.solver.Solver.Factory#FULL_PROPAGATION_INFERENCE} can reuse it to
+     * compute {@code applyFixpoint}'s round-1 seed from the pre-/post-MAC domains.
      */
-    private static Set<Variable<?>> changedVariables(Map<Variable<?>, Domain<?>> before,
-                                                       Map<Variable<?>, Domain<?>> after) {
+    static Set<Variable<?>> changedVariables(Map<Variable<?>, Domain<?>> before,
+                                              Map<Variable<?>, Domain<?>> after) {
         Set<Variable<?>> result = new HashSet<>();
         for (var entry : after.entrySet()) {
             if (!Objects.equals(entry.getValue(), before.get(entry.getKey()))) {
