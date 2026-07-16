@@ -3,7 +3,6 @@ package io.github.rcrida.jcsp.solver;
 import io.github.rcrida.jcsp.ConstraintSatisfactionProblem;
 import io.github.rcrida.jcsp.assignments.Assignment;
 import io.github.rcrida.jcsp.assignments.NogoodStore;
-import io.github.rcrida.jcsp.assignments.SolverLimits;
 import io.github.rcrida.jcsp.consistency.Inference;
 import io.github.rcrida.jcsp.consistency.arc.MAC;
 import io.github.rcrida.jcsp.domains.BoundedDomain;
@@ -71,16 +70,18 @@ public interface Solver {
         double DEFAULT_BISECTION_EPSILON = 1e-3;
 
         /**
-         * Builds a solver chain tailored for satisfaction with the given search limits.
+         * Builds a solver chain tailored for satisfaction with the given {@link SolverConfig}.
          */
-        BoundSolver createSolver(@NonNull ConstraintSatisfactionProblem csp, @NonNull SolverLimits limits);
+        BoundSolver createSolver(@NonNull ConstraintSatisfactionProblem csp, @NonNull SolverConfig config);
 
         /**
-         * Builds a solver chain tailored for optimization with the given search limits.
+         * Builds a solver chain tailored for optimization with the given {@link SolverConfig}.
+         * ({@code config.getConflictExplainer()} is unused here -- the optimization chain doesn't
+         * do nogood learning at all.)
          */
         BoundSolver createSolver(@NonNull ConstraintSatisfactionProblem csp,
                                  @NonNull ToDoubleFunction<Assignment> objective,
-                                 @NonNull SolverLimits limits);
+                                 @NonNull SolverConfig config);
 
         /**
          * Builds a solver chain tailored for satisfaction. The chain is:
@@ -91,7 +92,7 @@ public interface Solver {
          * intervals to their midpoints, giving one concrete solution for underdetermined continuous systems.
          */
         default BoundSolver createSolver(@NonNull ConstraintSatisfactionProblem csp) {
-            return createSolver(csp, SolverLimits.unlimited());
+            return createSolver(csp, SolverConfig.builder().build());
         }
 
         /**
@@ -110,13 +111,14 @@ public interface Solver {
          */
         default BoundSolver createSolver(@NonNull ConstraintSatisfactionProblem csp,
                                          @NonNull ToDoubleFunction<Assignment> objective) {
-            return createSolver(csp, objective, SolverLimits.unlimited());
+            return createSolver(csp, objective, SolverConfig.builder().build());
         }
 
         Factory INSTANCE = new Factory() {
             @Override
             public BoundSolver createSolver(@NonNull ConstraintSatisfactionProblem csp,
-                                            @NonNull SolverLimits limits) {
+                                            @NonNull SolverConfig config) {
+                val limits = config.getLimits();
                 boolean hasContinuous = csp.getVariableDomains().values().stream()
                         .anyMatch(BoundedDomain.class::isInstance);
                 val treeSolver = new TreeSolver(BFSTopologicalSorter.INSTANCE, DefaultValueOrderer.INSTANCE, TreeUnassignedVariableSelector.Factory.INSTANCE);
@@ -131,7 +133,7 @@ public interface Solver {
                             .inference(FULL_PROPAGATION_INFERENCE)
                             .limits(limits)
                             .nogoodStore(nogoodStore)
-                            .conflictExplainer(MacAndFixpointConflictExplainer.INSTANCE)
+                            .conflictExplainer(config.getConflictExplainer())
                             // Effectively unbounded: getSolution() now reaches Luby-restart search directly
                             // (see BoundSolver#getSolution below), so DEFAULT_MAX_RESTARTS's cap would silently
                             // turn SolverLimits.unlimited() into a bounded search. SolverLimits (node/time)
@@ -177,7 +179,8 @@ public interface Solver {
             @Override
             public BoundSolver createSolver(@NonNull ConstraintSatisfactionProblem csp,
                                             @NonNull ToDoubleFunction<Assignment> objective,
-                                            @NonNull SolverLimits limits) {
+                                            @NonNull SolverConfig config) {
+                val limits = config.getLimits();
                 boolean hasContinuous = csp.getVariableDomains().values().stream()
                         .anyMatch(BoundedDomain.class::isInstance);
                 val branchAndBound = BranchAndBoundSolver.builder()

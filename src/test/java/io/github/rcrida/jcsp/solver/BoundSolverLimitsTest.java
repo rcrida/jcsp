@@ -50,7 +50,8 @@ class BoundSolverLimitsTest {
 
     @Test
     void getSolutionThrowsWhenNodeLimitExceeded() {
-        BoundSolver solver = Solver.Factory.INSTANCE.createSolver(satisfiable(), SolverLimits.ofNodes(1));
+        BoundSolver solver = Solver.Factory.INSTANCE.createSolver(satisfiable(),
+                SolverConfig.builder().limits(SolverLimits.ofNodes(1)).build());
 
         assertThatThrownBy(solver::getSolution)
                 .isInstanceOf(LimitExceededException.class)
@@ -60,7 +61,8 @@ class BoundSolverLimitsTest {
 
     @Test
     void getSolutionThrowsWhenTimeLimitExceeded() {
-        BoundSolver solver = Solver.Factory.INSTANCE.createSolver(satisfiable(), SolverLimits.ofTime(Duration.ofNanos(1)));
+        BoundSolver solver = Solver.Factory.INSTANCE.createSolver(satisfiable(),
+                SolverConfig.builder().limits(SolverLimits.ofTime(Duration.ofNanos(1))).build());
 
         assertThatThrownBy(solver::getSolution)
                 .isInstanceOf(LimitExceededException.class)
@@ -77,15 +79,16 @@ class BoundSolverLimitsTest {
 
     @Test
     void getSolutionsStreamTruncatesSilentlyOnNodeLimit() {
-        BoundSolver solver = Solver.Factory.INSTANCE.createSolver(satisfiable(), SolverLimits.ofNodes(1));
+        BoundSolver solver = Solver.Factory.INSTANCE.createSolver(satisfiable(),
+                SolverConfig.builder().limits(SolverLimits.ofNodes(1)).build());
 
         assertThat(solver.getSolutions().findFirst()).isEmpty();
     }
 
     @Test
     void resetAllowsSubsequentCallToDetectLimit() {
-        SolverLimits limits = SolverLimits.ofNodes(1);
-        BoundSolver solver = Solver.Factory.INSTANCE.createSolver(satisfiable(), limits);
+        SolverConfig config = SolverConfig.builder().limits(SolverLimits.ofNodes(1)).build();
+        BoundSolver solver = Solver.Factory.INSTANCE.createSolver(satisfiable(), config);
 
         assertThatThrownBy(solver::getSolution).isInstanceOf(LimitExceededException.class);
         assertThatThrownBy(solver::getSolution).isInstanceOf(LimitExceededException.class);

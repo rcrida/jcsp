@@ -36,7 +36,7 @@ Traditional Java constraint satisfaction problem (CSP) solvers were designed ove
 - **Flexible constraint types**: unary, binary (equals, not-equals, offset, comparator, logic, element over fixed array, absolute-difference, division, predicate, tuples), and n-ary (AllDiff, AtMostOne, AtLeastN, AtMostN, ExactlyOne, Sum, Product, Linear, Count, Among, Inverse, GlobalCardinality, Cumulative, Max, Min, Element over variables, Tuples, Increasing, Decreasing, Lex, predicate, Circuit, Diffn, Regular)
 - **Boolean domain**: `BooleanDomain` for modelling binary assignment problems (e.g. timetabling as a 0-1 matrix)
 - **Functional style**: immutable value objects, composable solver decorators, and a lazy `Stream<Assignment>` API throughout
-- **Search limits**: `SolverLimits` caps work by node count and/or wall-clock time; `createSolver(csp, limits)` enforces them during search. `getSolution()` throws `LimitExceededException` (carrying `Statistics`) when a limit is hit — distinguishable from a genuine UNSAT result (`Optional.empty()`). `getSolutions()` truncates the stream silently instead
+- **Solver configuration**: `createSolver(csp, config)` takes an optional `SolverConfig` builder bundling search limits and nogood-learning behavior. `SolverLimits` caps work by node count and/or wall-clock time; `getSolution()` throws `LimitExceededException` (carrying `Statistics`) when a limit is hit — distinguishable from a genuine UNSAT result (`Optional.empty()`). `getSolutions()` truncates the stream silently instead. `conflictExplainer` can be set to `NullConflictExplainer.INSTANCE` to disable nogood learning (CDCL) entirely, for problem shapes where learned nogoods rarely get reused
 - **Heuristics**: dom/wdeg variable ordering with Luby restarts (Boussemart et al. 2004) for the satisfaction terminal solver; MRV variable selection for the optimization chain; LCV value ordering; and Minimum Degree variable elimination for tree decomposition
 - **Nogood learning**: the satisfaction terminal solver records a learned nogood (a partial assignment guaranteed to fail) on every domain wipeout, explained by re-running MAC and the propagation fixpoint with reason tracking; future search nodes whose assignment subsumes a learned nogood are pruned immediately, and nogoods persist across Luby restarts. Nogood bookkeeping is cached across search nodes, so a growing nogood set pays for itself in pruning power without a matching rise in per-node overhead
 - **Local search**: `LocalSolver.Factory.INSTANCE` wires the full pipeline (NC + AC3 + bounds/value propagation → independent subproblem decomposition → terminal solver) and supports both satisfaction and optimization. Terminal solver is auto-selected: WalkSAT for all-boolean satisfaction CSPs without counting constraints, LargeNeighborhoodSearch for optimization with `ExactlyOneConstraint`s, and otherwise `RaceLocalSolver` runs MinConflicts and TabuSearch concurrently and returns whichever finds a solution first. All `maxAttempts` restarts run in parallel; independent subproblems are also solved concurrently. Seeded by `RandomAssignmentFactory`, `GreedyAssignmentFactory`, or `FallbackAssignmentFactory` for hybrid restart strategies
@@ -138,19 +138,23 @@ Optional<Assignment> best = Solver.Factory.INSTANCE
 
 `getSolutions()` on the returned `BoundSolver` gives a lazy stream of improving assignments (each strictly better than the previous); the last element is the global optimum found within the bisection resolution.
 
-### Search limits
+### Solver configuration
 
-Pass a `SolverLimits` to `createSolver` to cap the amount of backtracking search performed:
+`createSolver` takes an optional `SolverConfig` — a builder with defaults, so new knobs don't mean new overloads. `SolverConfig.builder().build()` reproduces the unconfigured defaults exactly (unlimited search, standard nogood learning):
 
 ```java
-// Stop after at most 10,000 node assignments
-BoundSolver solver = Solver.Factory.INSTANCE.createSolver(csp, SolverLimits.ofNodes(10_000));
+BoundSolver solver = Solver.Factory.INSTANCE.createSolver(csp,
+    SolverConfig.builder()
+        .limits(SolverLimits.ofNodes(10_000))
+        .build());
+```
 
-// Stop after at most 5 seconds of wall-clock time
-BoundSolver solver = Solver.Factory.INSTANCE.createSolver(csp, SolverLimits.ofTime(Duration.ofSeconds(5)));
+**Search limits** — `SolverLimits` caps work by node count and/or wall-clock time:
 
-// Both together
-BoundSolver solver = Solver.Factory.INSTANCE.createSolver(csp, SolverLimits.of(10_000, Duration.ofSeconds(5)));
+```java
+SolverLimits.ofNodes(10_000)                          // stop after at most 10,000 node assignments
+SolverLimits.ofTime(Duration.ofSeconds(5))             // stop after at most 5 seconds of wall-clock time
+SolverLimits.of(10_000, Duration.ofSeconds(5))         // both together
 ```
 
 When a limit is exceeded, `getSolution()` throws `LimitExceededException` containing `Statistics` (nodes explored, backtracks, etc.) so you can distinguish a limit-hit from a genuine UNSAT:
@@ -166,6 +170,17 @@ try {
 ```
 
 `getSolutions()` truncates the stream silently when a limit is hit — useful for anytime search where partial results are acceptable.
+
+**Disabling nogood learning (CDCL)** — the satisfaction chain's terminal solver learns a nogood on every domain wipeout by default, which pays off when learned nogoods get reused later in the search. For problem shapes where they rarely do (e.g. searches that backtrack very little, or where the same conflict rarely recurs), that explanation cost is pure overhead. Pass `NullConflictExplainer.INSTANCE` to skip it entirely — dom/wdeg variable-ordering weight updates are unaffected, since they're a separate heuristic:
+
+```java
+BoundSolver solver = Solver.Factory.INSTANCE.createSolver(csp,
+    SolverConfig.builder()
+        .conflictExplainer(NullConflictExplainer.INSTANCE)
+        .build());
+```
+
+(`conflictExplainer` only affects the satisfaction chain — the optimization chain's branch-and-bound search doesn't do nogood learning at all.)
 
 ### Constraint builder methods
 
