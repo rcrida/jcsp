@@ -18,6 +18,7 @@ import io.github.rcrida.jcsp.solver.backtrackingsearch.order.LeastConstrainingVa
 import io.github.rcrida.jcsp.variables.Variable;
 
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Random;
@@ -63,11 +64,19 @@ import java.util.Set;
  * explanation computation itself -- neither is about different search decisions, since dom/wdeg
  * weighting and value ordering are unaffected by either knob.
  *
- * <p>Covers two different propagation shapes deliberately: {@link #golombRuler} is dominated by one
- * large {@code AllDiffConstraint} whose GAC pruning touches many variables per round (broad
- * propagation); {@link #randomBinaryCsp} is built entirely from pairwise {@code
- * biPredicateConstraint}s, so only {@code AC3} (pure per-arc revision) and nogoods ever propagate
- * (narrow propagation).
+ * <p>Covers three different shapes deliberately: {@link #golombRuler} is dominated by one large
+ * {@code AllDiffConstraint} whose GAC pruning touches many variables per round (broad propagation),
+ * and is UNSAT (a full search-space proof); {@link #randomBinaryCsp} is built entirely from
+ * pairwise {@code biPredicateConstraint}s, so only {@code AC3} (pure per-arc revision) and nogoods
+ * ever propagate (narrow propagation), and is also UNSAT; {@link #quasigroupCompletion} is a random
+ * Latin-square completion (QCP) instance near the classic Gomes/Selman phase-transition region, and
+ * is SAT -- the search finds a solution rather than proving none exists, exercising nogood learning
+ * as a pruning aid across restarts rather than as an UNSAT-proof accelerant. Unlike the SAT/binary-CSP
+ * encodings QCP hardness is usually studied with, this library's {@code allDiffConstraint} is full
+ * Regin GAC, which turned out strong enough that small/medium orders (n&lt;=16) solve in
+ * milliseconds regardless of hole fraction -- order 20 at a 50% hole fraction was the smallest
+ * instance found (via a throwaway tuning sweep, not committed) that lands in the same few-seconds
+ * range as the other two scenarios.
  *
  * <p>Run via {@code mvn test-compile} then
  * {@code java -cp target/classes:target/test-classes:$(mvn -q dependency:build-classpath -Dmdep.outputFile=/dev/stdout) io.github.rcrida.jcsp.benchmark.NogoodPropagationBenchmark}.
@@ -88,7 +97,9 @@ public final class NogoodPropagationBenchmark {
                 new Scenario("Golomb ruler order=6 length=16 (UNSAT, one below optimal 17)", golombRuler(6, 16)),
                 new Scenario("Golomb ruler order=7 length=24 (UNSAT, one below optimal 25)", golombRuler(7, 24)),
                 new Scenario("Random binary CSP n=26 d=6 t=0.13 seed=42 (UNSAT, narrow AC3-only propagation)",
-                        randomBinaryCsp(26, 6, 0.13, 42L))
+                        randomBinaryCsp(26, 6, 0.13, 42L)),
+                new Scenario("Quasigroup completion n=20 holes=0.5 seed=42 (SAT, phase-transition region)",
+                        quasigroupCompletion(20, 0.5, 42L))
         );
 
         for (Scenario scenario : scenarios) {
@@ -125,29 +136,46 @@ public final class NogoodPropagationBenchmark {
                             java.util.function.Supplier<NogoodStore> storeFactory, ConflictExplainer conflictExplainer) {
         List<Long> millis = new ArrayList<>();
         List<Statistics> stats = new ArrayList<>();
+        String outcome = "?";
         for (int trial = 0; trial < TRIALS; trial++) {
             SolverLimits limits = SolverLimits.ofNodes(nodeLimit);
             Solver chain = buildChain(storeFactory.get(), limits, conflictExplainer);
             long start = System.nanoTime();
             try {
-                chain.getSolution(csp);
+                var result = chain.getSolution(csp);
+                millis.add((System.nanoTime() - start) / 1_000_000);
+                if (limits.isLimitReached()) {
+                    stats.add(limits.getLimitHitStatistics());
+                    outcome = "LIMIT";
+                } else if (result.isPresent()) {
+                    // SAT: the returned Assignment's Statistics reflects the node count of whichever
+                    // Luby restart succeeded, not a cumulative count across earlier failed restarts
+                    // (see DomWdegLubySearch#getSolution) -- fine here since these scenarios succeed
+                    // on the first restart (getStatistics().getRestarts() == 0).
+                    stats.add(result.get().getStatistics());
+                    outcome = "SAT";
+                } else {
+                    // Genuinely UNSAT: DomWdegLubySearch#getSolution returns Optional.empty() with no
+                    // Statistics attached anywhere reachable from this API -- a real gap, not something
+                    // this benchmark can work around without a production-code change.
+                    stats.add(null);
+                    outcome = "UNSAT (no stats exposed by getSolution() on this path)";
+                }
             } catch (LimitExceededException e) {
                 stats.add(e.getStatistics());
                 millis.add((System.nanoTime() - start) / 1_000_000);
-                continue;
+                outcome = "LIMIT";
             }
-            // Finished (SAT or genuinely proven UNSAT) before hitting the node limit -- still timed,
-            // but no longer an apples-to-apples "same node budget" comparison for this trial.
-            millis.add((System.nanoTime() - start) / 1_000_000);
-            stats.add(limits.isLimitReached() ? limits.getLimitHitStatistics() : null);
         }
         double avgMillis = millis.stream().mapToLong(Long::longValue).average().orElse(0);
         Statistics first = stats.isEmpty() ? null : stats.get(0);
-        String nodes = first == null ? "n/a (finished under limit)" : String.valueOf(first.getNodesExplored().get());
+        String nodes = first == null ? "n/a (" + outcome + ")" : String.valueOf(first.getNodesExplored().get());
         String nodesPerSec = (first == null || avgMillis == 0) ? "n/a"
                 : String.format("%.0f", first.getNodesExplored().get() / (avgMillis / 1000));
-        System.out.printf("%-35s avg=%.0fms trials=%s nodesExplored=%-8s nodes/sec=%s%n",
-                label, avgMillis, millis, nodes, nodesPerSec);
+        String backtracks = first == null ? "n/a" : String.valueOf(first.getBacktracks().get());
+        String nogoodsLearned = first == null ? "n/a" : String.valueOf(first.getNogoodsLearned().get());
+        System.out.printf("%-35s avg=%.0fms trials=%s nodesExplored=%-8s nodes/sec=%-6s backtracks=%-6s nogoodsLearned=%s%n",
+                label, avgMillis, millis, nodes, nodesPerSec, backtracks, nogoodsLearned);
     }
 
     /** Mirrors {@code Solver.Factory}'s satisfaction chain, minus the decomposition decorators
@@ -234,5 +262,108 @@ public final class NogoodPropagationBenchmark {
             }
         }
         return builder.build();
+    }
+
+    /**
+     * Quasigroup completion problem (QCP): generates a random order-{@code n} Latin square, clears a
+     * {@code holesFraction} of its cells (seeded), then poses completing the rest as a CSP -- one
+     * variable per cell, domain {@code [0, n-1]}, one {@code allDiffConstraint} per row and per
+     * column, plus an {@code equalsConstraint} fixing every still-filled (non-hole) cell. Always
+     * SAT (the original square is always a valid completion), unlike {@link #golombRuler} and
+     * {@link #randomBinaryCsp}, which are both UNSAT.
+     */
+    private static ConstraintSatisfactionProblem quasigroupCompletion(int n, double holesFraction, long seed) {
+        int[][] latinSquare = randomLatinSquare(n, new Random(seed));
+        Random holeRnd = new Random(seed + 1);
+        boolean[][] hole = new boolean[n][n];
+        for (int i = 0; i < n; i++) {
+            for (int j = 0; j < n; j++) {
+                hole[i][j] = holeRnd.nextDouble() < holesFraction;
+            }
+        }
+
+        Variable.Factory f = Variable.Factory.INSTANCE;
+        @SuppressWarnings("unchecked")
+        Variable<Integer>[][] cells = new Variable[n][n];
+        var builder = ConstraintSatisfactionProblem.builder();
+        for (int i = 0; i < n; i++) {
+            for (int j = 0; j < n; j++) {
+                cells[i][j] = f.create("qcp" + i + "-" + j);
+                builder.variableDomain(cells[i][j], IntRangeDomain.of(0, n - 1));
+            }
+        }
+        for (int i = 0; i < n; i++) {
+            Set<Variable<Integer>> row = new HashSet<>();
+            for (int j = 0; j < n; j++) row.add(cells[i][j]);
+            builder.allDiffConstraint(row);
+        }
+        for (int j = 0; j < n; j++) {
+            Set<Variable<Integer>> column = new HashSet<>();
+            for (int i = 0; i < n; i++) column.add(cells[i][j]);
+            builder.allDiffConstraint(column);
+        }
+        for (int i = 0; i < n; i++) {
+            for (int j = 0; j < n; j++) {
+                if (!hole[i][j]) {
+                    builder.equalsConstraint(cells[i][j], latinSquare[i][j]);
+                }
+            }
+        }
+        return builder.build();
+    }
+
+    /**
+     * Builds a random Latin square by permuting the rows, columns, and symbols of the canonical
+     * cyclic square {@code (i + j) mod n} -- permuting any of the three always yields another valid
+     * Latin square, so this is guaranteed correct by construction without needing to search for one.
+     */
+    private static int[][] randomLatinSquare(int n, Random rnd) {
+        int[][] square = new int[n][n];
+        for (int i = 0; i < n; i++) {
+            for (int j = 0; j < n; j++) {
+                square[i][j] = (i + j) % n;
+            }
+        }
+        shuffleRows(square, rnd);
+        shuffleColumns(square, rnd);
+        int[] symbolPermutation = randomPermutation(n, rnd);
+        for (int i = 0; i < n; i++) {
+            for (int j = 0; j < n; j++) {
+                square[i][j] = symbolPermutation[square[i][j]];
+            }
+        }
+        return square;
+    }
+
+    private static void shuffleRows(int[][] square, Random rnd) {
+        for (int i = square.length - 1; i > 0; i--) {
+            int j = rnd.nextInt(i + 1);
+            int[] tmp = square[i];
+            square[i] = square[j];
+            square[j] = tmp;
+        }
+    }
+
+    private static void shuffleColumns(int[][] square, Random rnd) {
+        for (int j = square.length - 1; j > 0; j--) {
+            int k = rnd.nextInt(j + 1);
+            for (int[] row : square) {
+                int tmp = row[j];
+                row[j] = row[k];
+                row[k] = tmp;
+            }
+        }
+    }
+
+    private static int[] randomPermutation(int n, Random rnd) {
+        int[] permutation = new int[n];
+        for (int i = 0; i < n; i++) permutation[i] = i;
+        for (int i = n - 1; i > 0; i--) {
+            int j = rnd.nextInt(i + 1);
+            int tmp = permutation[i];
+            permutation[i] = permutation[j];
+            permutation[j] = tmp;
+        }
+        return permutation;
     }
 }
