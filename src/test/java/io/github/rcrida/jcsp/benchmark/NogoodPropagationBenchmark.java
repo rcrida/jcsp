@@ -6,10 +6,12 @@ import io.github.rcrida.jcsp.assignments.SolverLimits;
 import io.github.rcrida.jcsp.assignments.Statistics;
 import io.github.rcrida.jcsp.constraints.Operator;
 import io.github.rcrida.jcsp.domains.IntRangeDomain;
+import io.github.rcrida.jcsp.solver.ConflictExplainer;
 import io.github.rcrida.jcsp.solver.DomWdegLubySearch;
 import io.github.rcrida.jcsp.solver.LimitExceededException;
 import io.github.rcrida.jcsp.solver.MacAndFixpointConflictExplainer;
 import io.github.rcrida.jcsp.solver.NodeConsistentSolver;
+import io.github.rcrida.jcsp.solver.NullConflictExplainer;
 import io.github.rcrida.jcsp.solver.PropagationFixpointSolver;
 import io.github.rcrida.jcsp.solver.Solver;
 import io.github.rcrida.jcsp.solver.backtrackingsearch.order.LeastConstrainingValueOrderer;
@@ -36,13 +38,30 @@ import java.util.Set;
  * what actually closed the gap -- see {@code project_jcsp_nogood_dirty_index_result} in project
  * memory for the full trail.
  *
- * <p>Both variants explore the exact same fixed node budget ({@link #NODE_LIMIT}) on the exact same
- * hard CSP, wired identically except for one field: the {@link NogoodStore} capacity. {@code default}
- * uses {@link NogoodStore#forProblem} (production sizing); {@code capped} uses a capacity-1 store,
- * which still learns but immediately evicts, so it approximates "no accumulated nogood cost at all".
- * A wall-clock gap between the two variants under the same node budget is attributable to nogood-store
- * overhead, not to different search decisions (dom/wdeg weighting and value ordering are unaffected
- * by nogood-store capacity).
+ * <p>All three variants explore the exact same fixed node budget ({@link #NODE_LIMIT}) on the exact
+ * same hard CSP, wired identically except for one thing:
+ * <ul>
+ *   <li>{@code default} uses {@link NogoodStore#forProblem} (production sizing) with {@link
+ *       MacAndFixpointConflictExplainer} -- the production configuration.</li>
+ *   <li>{@code capped} uses a capacity-1 {@link NogoodStore}, which still learns but immediately
+ *       evicts, so it approximates "no accumulated nogood-store cost" -- but it still calls {@link
+ *       MacAndFixpointConflictExplainer} on every domain wipeout, re-running MAC and the
+ *       propagation fixpoint with reason tracking, before immediately discarding the result. This
+ *       isolates the copy/merge cost specifically (see the trail above), not the cost of nogood
+ *       <em>learning</em> in general.</li>
+ *   <li>{@code disabled} uses {@link NullConflictExplainer} instead, which returns {@code
+ *       Optional.empty()} unconditionally -- {@code NogoodStore.record} is then never called at
+ *       all, so this is CDCL fully switched off: no explanation computation, no accumulation, no
+ *       copy/merge. Comparing {@code capped} against {@code disabled} isolates {@code
+ *       MacAndFixpointConflictExplainer}'s own per-wipeout cost, which {@code capped} alone can't
+ *       separate out (a distinction first raised, then resolved by adding {@code
+ *       NullConflictExplainer} to the library, in the same investigation this benchmark
+ *       documents).</li>
+ * </ul>
+ * A wall-clock gap between {@code default} and {@code capped} is attributable to nogood-store
+ * copy/merge overhead; a gap between {@code capped} and {@code disabled} is attributable to the
+ * explanation computation itself -- neither is about different search decisions, since dom/wdeg
+ * weighting and value ordering are unaffected by either knob.
  *
  * <p>Covers two different propagation shapes deliberately: {@link #golombRuler} is dominated by one
  * large {@code AllDiffConstraint} whose GAC pruning touches many variables per round (broad
@@ -75,33 +94,40 @@ public final class NogoodPropagationBenchmark {
         for (Scenario scenario : scenarios) {
             System.out.println();
             System.out.println("=== " + scenario.name() + " ===");
-            run("default (NogoodStore.forProblem)", scenario.csp(), NODE_LIMIT, () -> NogoodStore.forProblem(scenario.csp()));
-            run("capped (NogoodStore capacity=1)", scenario.csp(), NODE_LIMIT, () -> new NogoodStore(1));
+            runAllVariants(scenario.csp(), NODE_LIMIT);
         }
 
-        // Forced-truncation comparisons: a node budget small enough that both variants are
+        // Forced-truncation comparisons: a node budget small enough that all variants are
         // guaranteed to hit it (rather than complete the proof), so nodesExplored -- and therefore
         // a nodes/sec regression metric -- is directly comparable rather than "n/a (finished under
         // limit)".
         ConstraintSatisfactionProblem order7 = golombRuler(7, 24);
         System.out.println();
         System.out.println("=== Golomb ruler order=7 length=24, forced truncation at " + FORCED_NODE_LIMIT + " nodes ===");
-        run("default (NogoodStore.forProblem)", order7, FORCED_NODE_LIMIT, () -> NogoodStore.forProblem(order7));
-        run("capped (NogoodStore capacity=1)", order7, FORCED_NODE_LIMIT, () -> new NogoodStore(1));
+        runAllVariants(order7, FORCED_NODE_LIMIT);
 
         ConstraintSatisfactionProblem randomBinary = randomBinaryCsp(26, 6, 0.13, 42L);
         System.out.println();
         System.out.println("=== Random binary CSP n=26 d=6 t=0.13 seed=42, forced truncation at " + FORCED_NODE_LIMIT + " nodes ===");
-        run("default (NogoodStore.forProblem)", randomBinary, FORCED_NODE_LIMIT, () -> NogoodStore.forProblem(randomBinary));
-        run("capped (NogoodStore capacity=1)", randomBinary, FORCED_NODE_LIMIT, () -> new NogoodStore(1));
+        runAllVariants(randomBinary, FORCED_NODE_LIMIT);
     }
 
-    private static void run(String label, ConstraintSatisfactionProblem csp, long nodeLimit, java.util.function.Supplier<NogoodStore> storeFactory) {
+    private static void runAllVariants(ConstraintSatisfactionProblem csp, long nodeLimit) {
+        run("default (NogoodStore.forProblem)", csp, nodeLimit,
+                () -> NogoodStore.forProblem(csp), MacAndFixpointConflictExplainer.INSTANCE);
+        run("capped (NogoodStore capacity=1)", csp, nodeLimit,
+                () -> new NogoodStore(1), MacAndFixpointConflictExplainer.INSTANCE);
+        run("disabled (NullConflictExplainer)", csp, nodeLimit,
+                () -> NogoodStore.forProblem(csp), NullConflictExplainer.INSTANCE);
+    }
+
+    private static void run(String label, ConstraintSatisfactionProblem csp, long nodeLimit,
+                            java.util.function.Supplier<NogoodStore> storeFactory, ConflictExplainer conflictExplainer) {
         List<Long> millis = new ArrayList<>();
         List<Statistics> stats = new ArrayList<>();
         for (int trial = 0; trial < TRIALS; trial++) {
             SolverLimits limits = SolverLimits.ofNodes(nodeLimit);
-            Solver chain = buildChain(storeFactory.get(), limits);
+            Solver chain = buildChain(storeFactory.get(), limits, conflictExplainer);
             long start = System.nanoTime();
             try {
                 chain.getSolution(csp);
@@ -127,13 +153,13 @@ public final class NogoodPropagationBenchmark {
     /** Mirrors {@code Solver.Factory}'s satisfaction chain, minus the decomposition decorators
      * (not needed here: these Golomb ruler instances are a single dense connected component with
      * treewidth above the tree-decomposition threshold, so those decorators would be pure passthrough). */
-    private static Solver buildChain(NogoodStore nogoodStore, SolverLimits limits) {
+    private static Solver buildChain(NogoodStore nogoodStore, SolverLimits limits, ConflictExplainer conflictExplainer) {
         DomWdegLubySearch domWdegLubySearch = DomWdegLubySearch.builder()
                 .domainValuesOrderer(LeastConstrainingValueOrderer.INSTANCE)
                 .inference(Solver.Factory.FULL_PROPAGATION_INFERENCE)
                 .limits(limits)
                 .nogoodStore(nogoodStore)
-                .conflictExplainer(MacAndFixpointConflictExplainer.INSTANCE)
+                .conflictExplainer(conflictExplainer)
                 .maxRestarts(Integer.MAX_VALUE)
                 .build();
         Solver propagationFixpointSolver = PropagationFixpointSolver.builder()
