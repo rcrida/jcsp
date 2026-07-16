@@ -4,6 +4,7 @@ import lombok.val;
 import io.github.rcrida.jcsp.ConstraintSatisfactionProblem;
 import io.github.rcrida.jcsp.constraints.Operator;
 import io.github.rcrida.jcsp.constraints.binary.BinaryComparatorConstraint;
+import io.github.rcrida.jcsp.constraints.binary.BinaryNotEqualsConstraint;
 import io.github.rcrida.jcsp.constraints.binary.BinaryTuplesConstraint;
 import io.github.rcrida.jcsp.constraints.nary.GroundNogoodConstraint;
 import io.github.rcrida.jcsp.domains.DiscreteDomain;
@@ -94,6 +95,22 @@ public class AC3Test {
                 .build();
         val result = AC3.INSTANCE.revise(problem, Arc.of(WA, NT));
         assertThat(((DiscreteDomain<?>) result.get().getDomain(WA)).toList()).isEqualTo(List.of(GREEN));
+    }
+
+    @Test
+    void reviseArcConstraint_threeArgOverload_revisedDomain() {
+        // Same scenario as reviseArc_revisedDomain, but exercising the public 3-arg revise(problem,
+        // arc, constraint) overload directly, which delegates to the Map-based private helper that
+        // applyQueue/explainConflict call with their own progressively-narrowed domains instead.
+        val twoColours = new EnumDomain<>(EnumSet.of(RED, GREEN));
+        val redOnly = new EnumDomain<>(EnumSet.of(RED));
+        val problem = ConstraintSatisfactionProblem.builder()
+                .variableDomain(WA, twoColours)
+                .variableDomain(NT, redOnly)
+                .notEqualsConstraint(WA, NT)
+                .build();
+        val result = AC3.INSTANCE.revise(problem, Arc.of(WA, NT), BinaryNotEqualsConstraint.of(WA, NT));
+        assertThat(result.get().toList()).isEqualTo(List.of(GREEN));
     }
 
     @Test

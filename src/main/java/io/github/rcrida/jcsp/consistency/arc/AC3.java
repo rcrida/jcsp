@@ -9,6 +9,7 @@ import io.github.rcrida.jcsp.constraints.binary.BinaryConstraint;
 import io.github.rcrida.jcsp.constraints.nary.GroundNogoodConstraint;
 import io.github.rcrida.jcsp.constraints.nary.NogoodConstraint;
 import io.github.rcrida.jcsp.domains.DiscreteDomain;
+import io.github.rcrida.jcsp.domains.Domain;
 import io.github.rcrida.jcsp.variables.Variable;
 
 import java.util.*;
@@ -46,13 +47,13 @@ public class AC3 implements ConstraintConsistency {
                 .collect(Collectors.groupingBy(Map.Entry::getKey, Collectors.mapping(Map.Entry::getValue, Collectors.toList())));
         val arcsByTarget = arcConstraints.keySet().stream()
                 .collect(Collectors.groupingBy(Arc::getTo));
-        val variableDomains = new HashMap<>(problem.getVariableDomains());
+        val variableDomains = new HashMap<Variable<?>, Domain<?>>(problem.getVariableDomains());
         while (!queue.isEmpty()) {
             val arc = queue.poll();
             val X_i = arc.getFrom();
             val X_j = arc.getTo();
             for (BinaryConstraint<?, ?> binaryConstraint : arcConstraints.get(arc)) {
-                val optionalRevisedD_i = revise(problem, arc, binaryConstraint);
+                val optionalRevisedD_i = revise(variableDomains, arc, binaryConstraint);
                 if (optionalRevisedD_i.isPresent()) {
                     val revisedD_i = optionalRevisedD_i.get();
                     if (revisedD_i.isEmpty()) {
@@ -72,24 +73,23 @@ public class AC3 implements ConstraintConsistency {
 
     /**
      * Re-runs the same arc-consistency traversal as {@link #applyQueue} (same initial queue, same
-     * arc/constraint grouping, same processing order), stopping at the same domain wipeout, and
-     * attributes it. Deliberately a separate traversal rather than sharing a core loop with
-     * {@link #applyQueue} — mirrors {@code FixpointConsistency}'s {@code apply}/{@code explainConflict}
-     * pair, which are likewise two parallel implementations rather than one shared one.
+     * arc/constraint grouping, same processing order, same progressively-narrowed domain
+     * bookkeeping), stopping at the same domain wipeout, and attributes it. Deliberately a separate
+     * traversal rather than sharing a core loop with {@link #applyQueue} — mirrors {@code
+     * FixpointConsistency}'s {@code apply}/{@code explainConflict} pair, which are likewise two
+     * parallel implementations rather than one shared one.
      * <p>
      * A wipeout on arc {@code (X_i, X_j)} means: {@code revise} found that, of the values currently
-     * in {@code D_i} (as read from {@code problem} — not X_i's declared/original domain, its
-     * current, context-dependent one), none satisfy the constraint against {@code D_j} (likewise
-     * current). Citing only {@code X_j}'s value would be <em>unsound</em> here even when
-     * {@code X_j} is singleton: it would claim the constraint rules out every value {@code X_i}
-     * could <em>ever</em> take, when it only ruled out what was in {@code D_i} <em>at this point
-     * in the search</em> — a claim that doesn't generalise to branches where X_i's domain differs.
-     * The reason is sound only when {@code X_i} is <em>also</em> singleton at this point
-     * ({@link Propagatable#allSingletonReason}): then the wipeout reduces to one concrete pair
-     * violating the (fixed, structural) constraint, which is unconditionally true regardless of
-     * search state. Unlike {@link #applyQueue}, no domain bookkeeping is needed here: {@link #revise}
-     * reads only from {@code problem}, never from any progressively-narrowed map, so the wipeout
-     * point is found identically either way.
+     * in {@code D_i} (as read from this traversal's own progressively-narrowed map — not X_i's
+     * declared/original domain, its current, context-dependent one), none satisfy the constraint
+     * against {@code D_j} (likewise current). Citing only {@code X_j}'s value would be
+     * <em>unsound</em> here even when {@code X_j} is singleton: it would claim the constraint rules
+     * out every value {@code X_i} could <em>ever</em> take, when it only ruled out what was in
+     * {@code D_i} <em>at this point in the search</em> — a claim that doesn't generalise to
+     * branches where X_i's domain differs. The reason is sound only when {@code X_i} is
+     * <em>also</em> singleton at this point ({@link Propagatable#allSingletonReason}): then the
+     * wipeout reduces to one concrete pair violating the (fixed, structural) constraint, which is
+     * unconditionally true regardless of search state.
      * <p>
      * Deliberately ground-only, unlike {@link io.github.rcrida.jcsp.consistency.fixpoint.FixpointConsistency#explainConflict},
      * which additionally falls back to a range-based nogood over a whole failing constraint's
@@ -112,18 +112,20 @@ public class AC3 implements ConstraintConsistency {
                 .collect(Collectors.groupingBy(Map.Entry::getKey, Collectors.mapping(Map.Entry::getValue, Collectors.toList())));
         val arcsByTarget = arcConstraints.keySet().stream()
                 .collect(Collectors.groupingBy(Arc::getTo));
+        val variableDomains = new HashMap<Variable<?>, Domain<?>>(problem.getVariableDomains());
         while (!queue.isEmpty()) {
             val arc = queue.poll();
             val X_i = arc.getFrom();
             val X_j = arc.getTo();
             for (BinaryConstraint<?, ?> binaryConstraint : arcConstraints.get(arc)) {
-                val optionalRevisedD_i = revise(problem, arc, binaryConstraint);
+                val optionalRevisedD_i = revise(variableDomains, arc, binaryConstraint);
                 if (optionalRevisedD_i.isPresent()) {
                     val revisedD_i = optionalRevisedD_i.get();
                     if (revisedD_i.isEmpty()) {
-                        val reason = Propagatable.allSingletonReason(List.of(X_i, X_j), problem.getVariableDomains());
+                        val reason = Propagatable.allSingletonReason(List.of(X_i, X_j), variableDomains);
                         return reason.isEmpty() ? Optional.empty() : Optional.of(GroundNogoodConstraint.of(reason));
                     }
+                    variableDomains.put(X_i, revisedD_i);
                     val X_iNeighbours = arcsByTarget.getOrDefault(X_i, List.of()).stream()
                             .filter(c -> !c.getFrom().equals(X_j))
                             .toList();
@@ -138,9 +140,9 @@ public class AC3 implements ConstraintConsistency {
         val arcConstraints = problem.getAllBinaryConstraints().stream()
                 .filter(bc -> bc.getArcs().anyMatch(arc::equals))
                 .toList();
-        val variableDomains = new HashMap<>(problem.getVariableDomains());
+        val variableDomains = new HashMap<Variable<?>, Domain<?>>(problem.getVariableDomains());
         for (BinaryConstraint<?, ?> binaryConstraint : arcConstraints) {
-            val optionalRevisedD = revise(problem, arc, binaryConstraint);
+            val optionalRevisedD = revise(variableDomains, arc, binaryConstraint);
             if (optionalRevisedD.isPresent()) {
                 val revisedD = optionalRevisedD.get();
                 if (revisedD.isEmpty()) {
@@ -153,9 +155,22 @@ public class AC3 implements ConstraintConsistency {
         return Optional.of(problem.toBuilder().variableDomains(variableDomains).build());
     }
 
+    /**
+     * Reads {@code arc}'s two domains from {@code problem} as it stands at the moment of the call —
+     * the correct behaviour for this method's own external callers (e.g. {@link
+     * io.github.rcrida.jcsp.solver.tree.TreeSolver}), which pass an already-current {@code problem}
+     * per call. {@link #applyQueue} and {@link #explainConflict} instead call the {@link Map}
+     * overload directly with their own progressively-narrowed domains, since a single call to
+     * either of them revises many arcs across many rounds and must see each arc's effect on the
+     * next, not just the domains {@code problem} was built with.
+     */
     public Optional<DiscreteDomain<?>> revise(ConstraintSatisfactionProblem problem, Arc arc, BinaryConstraint<?, ?> constraint) {
-        if (!(problem.getVariableDomains().get(arc.getFrom()) instanceof DiscreteDomain<?> D_i)) return Optional.empty();
-        if (!(problem.getVariableDomains().get(arc.getTo()) instanceof DiscreteDomain<?> D_j)) return Optional.empty();
+        return revise(problem.getVariableDomains(), arc, constraint);
+    }
+
+    private static Optional<DiscreteDomain<?>> revise(Map<Variable<?>, Domain<?>> domains, Arc arc, BinaryConstraint<?, ?> constraint) {
+        if (!(domains.get(arc.getFrom()) instanceof DiscreteDomain<?> D_i)) return Optional.empty();
+        if (!(domains.get(arc.getTo()) instanceof DiscreteDomain<?> D_j)) return Optional.empty();
         val valuesToDelete = D_i.stream()
                 .filter(x -> D_j.stream().noneMatch(y -> constraint.isSatisfiedBy(arc.toAssignment(x, y))))
                 .toList();
