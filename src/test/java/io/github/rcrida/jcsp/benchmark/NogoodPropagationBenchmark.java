@@ -18,6 +18,7 @@ import io.github.rcrida.jcsp.variables.Variable;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Random;
 import java.util.Set;
 
 /**
@@ -34,6 +35,13 @@ import java.util.Set;
  * A wall-clock gap between the two variants under the same node budget is attributable to nogood-store
  * scanning overhead, not to different search decisions (dom/wdeg weighting and value ordering are
  * unaffected by nogood-store capacity).
+ *
+ * <p>Covers two different propagation shapes deliberately: {@link #golombRuler} is dominated by one
+ * large {@code AllDiffConstraint} whose GAC pruning touches many variables per round (broad
+ * propagation); {@link #randomBinaryCsp} is built entirely from pairwise {@code
+ * biPredicateConstraint}s, so only {@code AC3} (pure per-arc revision) and nogoods ever propagate
+ * (narrow propagation) -- the shape {@code NogoodFixpointConsistency}'s dirty-variable filtering was
+ * actually designed for, and the Golomb scenarios alone couldn't distinguish.
  *
  * <p>Run via {@code mvn test-compile} then
  * {@code java -cp target/classes:target/test-classes:$(mvn -q dependency:build-classpath -Dmdep.outputFile=/dev/stdout) io.github.rcrida.jcsp.benchmark.NogoodPropagationBenchmark}.
@@ -52,7 +60,9 @@ public final class NogoodPropagationBenchmark {
         }
         List<Scenario> scenarios = List.of(
                 new Scenario("Golomb ruler order=6 length=16 (UNSAT, one below optimal 17)", golombRuler(6, 16)),
-                new Scenario("Golomb ruler order=7 length=24 (UNSAT, one below optimal 25)", golombRuler(7, 24))
+                new Scenario("Golomb ruler order=7 length=24 (UNSAT, one below optimal 25)", golombRuler(7, 24)),
+                new Scenario("Random binary CSP n=26 d=6 t=0.13 seed=42 (UNSAT, narrow AC3-only propagation)",
+                        randomBinaryCsp(26, 6, 0.13, 42L))
         );
 
         for (Scenario scenario : scenarios) {
@@ -62,14 +72,21 @@ public final class NogoodPropagationBenchmark {
             run("capped (NogoodStore capacity=1)", scenario.csp(), NODE_LIMIT, () -> new NogoodStore(1));
         }
 
-        // Forced-truncation comparison: a node budget small enough that both variants are guaranteed
-        // to hit it (rather than complete the proof), so nodesExplored -- and therefore a nodes/sec
-        // regression metric -- is directly comparable rather than "n/a (finished under limit)".
+        // Forced-truncation comparisons: a node budget small enough that both variants are
+        // guaranteed to hit it (rather than complete the proof), so nodesExplored -- and therefore
+        // a nodes/sec regression metric -- is directly comparable rather than "n/a (finished under
+        // limit)".
         ConstraintSatisfactionProblem order7 = golombRuler(7, 24);
         System.out.println();
         System.out.println("=== Golomb ruler order=7 length=24, forced truncation at " + FORCED_NODE_LIMIT + " nodes ===");
         run("default (NogoodStore.forProblem)", order7, FORCED_NODE_LIMIT, () -> NogoodStore.forProblem(order7));
         run("capped (NogoodStore capacity=1)", order7, FORCED_NODE_LIMIT, () -> new NogoodStore(1));
+
+        ConstraintSatisfactionProblem randomBinary = randomBinaryCsp(26, 6, 0.13, 42L);
+        System.out.println();
+        System.out.println("=== Random binary CSP n=26 d=6 t=0.13 seed=42, forced truncation at " + FORCED_NODE_LIMIT + " nodes ===");
+        run("default (NogoodStore.forProblem)", randomBinary, FORCED_NODE_LIMIT, () -> NogoodStore.forProblem(randomBinary));
+        run("capped (NogoodStore capacity=1)", randomBinary, FORCED_NODE_LIMIT, () -> new NogoodStore(1));
     }
 
     private static void run(String label, ConstraintSatisfactionProblem csp, long nodeLimit, java.util.function.Supplier<NogoodStore> storeFactory) {
@@ -147,6 +164,42 @@ public final class NogoodPropagationBenchmark {
         }
         builder.allDiffConstraint(Set.copyOf(diffs));
         builder.comparatorConstraint(firstGap, Operator.LT, lastGap);
+        return builder.build();
+    }
+
+    /**
+     * Random binary CSP (Model B): {@code n} variables of domain size {@code domainSize}, a
+     * constraint on every pair (full density -- keeps it one connected component, same reasoning
+     * as {@link #golombRuler}), each with a fixed, seeded-random compatibility matrix of the given
+     * {@code tightness} (fraction of value pairs forbidden). Deliberately built from only
+     * {@code biPredicateConstraint} -- no {@code AllDiffConstraint}/{@code LinearConstraint}/etc
+     * -- so the only propagators active are {@code AC3} (pure per-arc, per-value revision) and
+     * {@code NogoodFixpointConsistency}, unlike {@link #golombRuler}'s single large
+     * {@code AllDiffConstraint} whose GAC pruning touches many variables per round. Propagation
+     * here narrows one variable's domain against one neighbour at a time, so the dirty-variable
+     * set after a round should stay much smaller relative to the whole variable set -- the shape
+     * the dirty-index optimization was actually designed for.
+     */
+    private static ConstraintSatisfactionProblem randomBinaryCsp(int n, int domainSize, double tightness, long seed) {
+        Variable.Factory f = Variable.Factory.INSTANCE;
+        List<Variable<Integer>> vars = new ArrayList<>();
+        for (int i = 0; i < n; i++) vars.add(f.create("rv" + i));
+
+        var builder = ConstraintSatisfactionProblem.builder();
+        vars.forEach(v -> builder.variableDomain(v, IntRangeDomain.of(0, domainSize - 1)));
+
+        Random rnd = new Random(seed);
+        for (int i = 0; i < n; i++) {
+            for (int j = i + 1; j < n; j++) {
+                boolean[][] compatible = new boolean[domainSize][domainSize];
+                for (int a = 0; a < domainSize; a++) {
+                    for (int b = 0; b < domainSize; b++) {
+                        compatible[a][b] = rnd.nextDouble() >= tightness;
+                    }
+                }
+                builder.biPredicateConstraint(vars.get(i), vars.get(j), (x, y) -> compatible[x][y]);
+            }
+        }
         return builder.build();
     }
 }
