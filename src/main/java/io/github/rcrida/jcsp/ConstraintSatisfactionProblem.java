@@ -11,6 +11,7 @@ import lombok.Value;
 import lombok.experimental.NonFinal;
 import lombok.val;
 import io.github.rcrida.jcsp.assignments.Assignment;
+import io.github.rcrida.jcsp.assignments.NogoodStore;
 import io.github.rcrida.jcsp.constraints.Constraint;
 import io.github.rcrida.jcsp.constraints.binary.BinaryComparatorConstraint;
 import io.github.rcrida.jcsp.constraints.binary.BinaryLogicConstraint;
@@ -76,6 +77,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Queue;
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.BiPredicate;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
@@ -154,9 +156,18 @@ public class ConstraintSatisfactionProblem {
     // Excluded: nogoods are learned facts accumulated during search, not part of the problem's
     // identity -- two CSPs that differ only in what a search has learned so far are the same problem.
     @EqualsAndHashCode.Exclude Set<NogoodConstraint> nogoods;
-    // Excluded: purely a derived cache of constraintGraph's constraints + nogoods (see mergeNogoods),
-    // already covered transitively by constraintGraph and nogoods above.
+    // Excluded: purely a derived cache of constraintGraph's constraints + nogoods (see
+    // mergedWithNogoods), already covered transitively by constraintGraph and nogoods above.
     @Getter(AccessLevel.NONE) @EqualsAndHashCode.Exclude @ToString.Exclude Set<Constraint> allConstraints;
+    // Mutable-state-inside-@Value cache (same pattern as NogoodStore/SolverLimits), threaded forward
+    // via toBuilder() exactly like constraintGraph is: remembers the single most recent (nogoods
+    // reference, merged result) pair so that repeated calls with the same nogoods Set reference --
+    // which NogoodStore guarantees between nogood-learning events, via its own snapshot cache --
+    // skip rebuilding allConstraints entirely instead of paying for it on every search node.
+    @Getter(AccessLevel.NONE) @EqualsAndHashCode.Exclude @ToString.Exclude AtomicReference<NogoodMergeCache> nogoodMergeCache;
+
+    private record NogoodMergeCache(Set<NogoodConstraint> nogoods, Set<Constraint> merged) {
+    }
 
     /**
      * Constructor ensures constraints reference known variables and determines whether graph is cyclic and/or
@@ -174,9 +185,10 @@ public class ConstraintSatisfactionProblem {
      * @param constraints the structural constraints that will apply to the solution
      * @param constraintGraph pre-computed constraint graph to reuse, or {@code null} to compute fresh
      * @param nogoods learned nogoods folded into {@link #getConstraints()} but excluded from the constraint graph
+     * @param nogoodMergeCache pre-existing merge cache to reuse (see the field javadoc), or {@code null} for a fresh one
      */
     @Builder
-    ConstraintSatisfactionProblem(@Singular("variableDomainEntry") Map<Variable<?>, Domain<?>> variableDomains, @Singular Set<Constraint> constraints, @Nullable ConstraintGraph constraintGraph, @Singular Set<NogoodConstraint> nogoods) {
+    ConstraintSatisfactionProblem(@Singular("variableDomainEntry") Map<Variable<?>, Domain<?>> variableDomains, @Singular Set<Constraint> constraints, @Nullable ConstraintGraph constraintGraph, @Nullable Set<NogoodConstraint> nogoods, @Nullable AtomicReference<NogoodMergeCache> nogoodMergeCache) {
         this.variableDomains = variableDomains;
         if (constraintGraph != null && constraintGraph.getConstraints().equals(constraints)) {
             this.constraintGraph = constraintGraph;
@@ -184,39 +196,64 @@ public class ConstraintSatisfactionProblem {
             validateConstraints(variableDomains, constraints);
             this.constraintGraph = new ConstraintGraph(constraints, variableDomains.keySet());
         }
-        assert nogoods.stream().flatMap(n -> n.getVariables().stream()).allMatch(variableDomains::containsKey)
+        this.nogoods = nogoods == null ? Set.of() : nogoods;
+        assert this.nogoods.stream().flatMap(n -> n.getVariables().stream()).allMatch(variableDomains::containsKey)
                 : "Nogoods reference unknown variables";
-        this.nogoods = nogoods;
-        this.allConstraints = nogoods.isEmpty() ? this.constraintGraph.getConstraints() : mergeNogoods(this.constraintGraph.getConstraints(), nogoods);
+        this.nogoodMergeCache = nogoodMergeCache != null ? nogoodMergeCache : new AtomicReference<>();
+        this.allConstraints = this.nogoods.isEmpty() ? this.constraintGraph.getConstraints() : mergedWithNogoods(this.nogoods);
     }
 
-    private static Set<Constraint> mergeNogoods(Set<Constraint> constraints, Set<NogoodConstraint> nogoods) {
-        val merged = new HashSet<Constraint>(constraints);
+    /**
+     * Returns {@code constraintGraph.getConstraints()} unioned with {@code nogoods}, reusing the
+     * last computed merge from {@link #nogoodMergeCache} when {@code nogoods} is the exact same
+     * {@link Set} reference as last time (a cheap identity check) instead of rebuilding a fresh
+     * {@code HashSet} of every structural constraint plus every nogood on every call. Correct
+     * regardless of hit rate: a reference match can only ever return a result actually computed for
+     * that exact object, so a miss (different nogoods reference) always falls back to a fresh,
+     * correct merge. Relies on {@link NogoodStore#apply} handing back the same cached snapshot
+     * reference across calls where nothing has changed for this cache to have a good hit rate.
+     */
+    private Set<Constraint> mergedWithNogoods(Set<NogoodConstraint> nogoods) {
+        NogoodMergeCache cached = nogoodMergeCache.get();
+        if (cached != null && cached.nogoods() == nogoods) {
+            return cached.merged();
+        }
+        val merged = new HashSet<Constraint>(constraintGraph.getConstraints());
         merged.addAll(nogoods);
-        return Set.copyOf(merged);
+        Set<Constraint> result = Set.copyOf(merged);
+        nogoodMergeCache.set(new NogoodMergeCache(nogoods, result));
+        return result;
     }
 
     /**
      * Returns a builder pre-populated from this instance, sharing the existing {@link ConstraintGraph}
-     * reference and current nogoods. Domain-only modifications via the builder will reuse the constraint
-     * graph without recomputation; modifications to the constraint set will trigger a fresh computation.
+     * reference, current nogoods, and nogood-merge cache. Domain-only modifications via the builder
+     * will reuse the constraint graph without recomputation; modifications to the constraint set
+     * will trigger a fresh computation.
      */
     public ConstraintSatisfactionProblemBuilder toBuilder() {
         return builder()
                 .variableDomains(variableDomains)
                 .constraints(constraintGraph.getConstraints())
                 .constraintGraph(constraintGraph)
-                .nogoods(nogoods);
+                .nogoods(nogoods)
+                .nogoodMergeCache(nogoodMergeCache);
     }
 
     /**
      * Returns this problem with its learned nogoods replaced by {@code newNogoods}. Reuses the existing
      * {@link ConstraintGraph} untouched — see the constructor javadoc for why nogoods never need to
      * affect it — so this never recomputes neighbours, binary decomposition, or cycle/connectivity
-     * analysis; only the flat set returned by {@link #getConstraints()} changes.
+     * analysis; only the flat set returned by {@link #getConstraints()} changes, and only when it
+     * actually needs to: if {@code newNogoods} is the exact same {@link Set} reference already held
+     * by this instance (nothing learned since this CSP was built — the common case for most of a
+     * search tree, since {@link NogoodStore#apply} only ever produces a new reference when something
+     * was actually recorded or evicted), this returns {@code this} directly, skipping the builder,
+     * constructor, and merge entirely.
      */
     public ConstraintSatisfactionProblem withNogoods(@NonNull Set<NogoodConstraint> newNogoods) {
-        return toBuilder().clearNogoods().nogoods(newNogoods).build();
+        if (newNogoods == this.nogoods) return this;
+        return toBuilder().nogoods(newNogoods).build();
     }
 
     private static void validateConstraints(Map<Variable<?>, Domain<?>> variableDomains, Set<Constraint> constraints) {
@@ -462,6 +499,24 @@ public class ConstraintSatisfactionProblem {
     public static class ConstraintSatisfactionProblemBuilder {
         private final Variable.Factory variableFactory = Variable.Factory.INSTANCE;
         private int atLeastNChainCount = 0;
+
+        /**
+         * Adds a single nogood, replacing {@code @Singular}'s generated equivalent (removed so that
+         * {@link #withNogoods} can hand a {@link NogoodStore}-cached snapshot straight through
+         * without the builder silently copying it again — see that method's javadoc). Only used for
+         * small-scale/test construction, never the per-node search hot path, so accumulating via a
+         * fresh {@link HashSet} on each call is fine.
+         */
+        public ConstraintSatisfactionProblemBuilder nogood(@NonNull NogoodConstraint nogood) {
+            if (this.nogoods == null) {
+                this.nogoods = Set.of(nogood);
+            } else {
+                val combined = new HashSet<>(this.nogoods);
+                combined.add(nogood);
+                this.nogoods = Set.copyOf(combined);
+            }
+            return this;
+        }
 
         public <T> Variable<T> createVariable(String name, Domain<T> domain) {
             final var variable = variableFactory.<T>create(name);

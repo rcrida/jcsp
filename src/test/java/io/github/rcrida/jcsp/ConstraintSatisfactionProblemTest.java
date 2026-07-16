@@ -476,6 +476,22 @@ public class ConstraintSatisfactionProblemTest {
     }
 
     @Test
+    void builder_nogood_calledTwice_combinesBothIntoOneSet() {
+        // @Singular's generated equivalent was removed (see the builder method's javadoc); this
+        // exercises its hand-written replacement's "already has some nogoods" combine branch --
+        // every other nogood-related test calls .nogood(x) at most once per builder chain.
+        Variable<Integer> a = VARIABLE_FACTORY.create("A");
+        val first = GroundNogoodConstraint.of(Map.of(a, 1));
+        val second = GroundNogoodConstraint.of(Map.of(a, 2));
+        val csp = ConstraintSatisfactionProblem.builder()
+                .variableDomain(a, IntRangeDomain.of(1, 3))
+                .nogood(first)
+                .nogood(second)
+                .build();
+        assertThat(csp.getNogoods()).containsExactlyInAnyOrder(first, second);
+    }
+
+    @Test
     void toBuilder_carriesNogoodsForward() {
         Variable<Integer> a = VARIABLE_FACTORY.create("A");
         val csp = ConstraintSatisfactionProblem.builder()

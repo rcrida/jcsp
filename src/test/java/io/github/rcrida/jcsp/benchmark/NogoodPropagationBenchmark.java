@@ -22,26 +22,33 @@ import java.util.Random;
 import java.util.Set;
 
 /**
- * Standalone (non-JUnit, not run by surefire/jacoco) harness to isolate how much of a hard search's
- * wall-clock cost is attributable to {@code FixpointConsistency.of(NogoodConstraint.class)} rescanning
- * every accumulated nogood on every propagation round (see {@code PropagationFixpointSolver.PROPAGATORS}
- * and {@code DomWdegLubySearch.searchOne/searchStream}, which call {@code nogoodStore.apply(csp)} on
- * every node).
+ * Standalone (non-JUnit, not run by surefire/jacoco) harness measuring how much of a hard search's
+ * wall-clock cost is attributable to {@code NogoodStore}. Originally built to isolate {@code
+ * NogoodConstraint} propagation cost specifically, but that turned out to be a dead end: two
+ * separate propagation-count optimizations (dirty-variable-index round-2+ filtering, then
+ * cross-node round-1 seeding) each demonstrably reduced how many nogoods got {@code .propagate()}-
+ * checked, yet neither moved this benchmark's numbers at all. The actual cost was one layer
+ * earlier: {@code NogoodStore.apply()} did {@code Set.copyOf(nogoods)} and {@code
+ * ConstraintSatisfactionProblem}'s constructor rebuilt the whole structural-constraints-plus-
+ * nogoods {@code HashSet} from scratch, unconditionally, on every single node, regardless of how
+ * many of those nogoods anyone actually checked afterward. Caching both steps (see {@code
+ * NogoodStore#snapshot} and {@code ConstraintSatisfactionProblem}'s {@code nogoodMergeCache}) is
+ * what actually closed the gap -- see {@code project_jcsp_nogood_dirty_index_result} in project
+ * memory for the full trail.
  *
  * <p>Both variants explore the exact same fixed node budget ({@link #NODE_LIMIT}) on the exact same
  * hard CSP, wired identically except for one field: the {@link NogoodStore} capacity. {@code default}
  * uses {@link NogoodStore#forProblem} (production sizing); {@code capped} uses a capacity-1 store,
- * which still learns but immediately evicts, so it approximates "no accumulated nogood rescanning cost".
+ * which still learns but immediately evicts, so it approximates "no accumulated nogood cost at all".
  * A wall-clock gap between the two variants under the same node budget is attributable to nogood-store
- * scanning overhead, not to different search decisions (dom/wdeg weighting and value ordering are
- * unaffected by nogood-store capacity).
+ * overhead, not to different search decisions (dom/wdeg weighting and value ordering are unaffected
+ * by nogood-store capacity).
  *
  * <p>Covers two different propagation shapes deliberately: {@link #golombRuler} is dominated by one
  * large {@code AllDiffConstraint} whose GAC pruning touches many variables per round (broad
  * propagation); {@link #randomBinaryCsp} is built entirely from pairwise {@code
  * biPredicateConstraint}s, so only {@code AC3} (pure per-arc revision) and nogoods ever propagate
- * (narrow propagation) -- the shape {@code NogoodFixpointConsistency}'s dirty-variable filtering was
- * actually designed for, and the Golomb scenarios alone couldn't distinguish.
+ * (narrow propagation).
  *
  * <p>Run via {@code mvn test-compile} then
  * {@code java -cp target/classes:target/test-classes:$(mvn -q dependency:build-classpath -Dmdep.outputFile=/dev/stdout) io.github.rcrida.jcsp.benchmark.NogoodPropagationBenchmark}.

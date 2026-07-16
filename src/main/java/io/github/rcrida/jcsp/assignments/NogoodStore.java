@@ -11,6 +11,7 @@ import lombok.Value;
 import java.util.Comparator;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicReference;
 
 /**
  * Accumulates learned nogoods during backtracking search, as actual {@link NogoodConstraint}s
@@ -34,14 +35,18 @@ import java.util.concurrent.ConcurrentHashMap;
  * instance is shared across Luby restarts so learned nogoods survive and benefit every subsequent
  * restart.
  * <p>
- * <b>No graph rebuild.</b> {@link #apply} augments a CSP with the recorded nogoods via
- * {@link ConstraintSatisfactionProblem#withNogoods}, which layers nogoods on top of the CSP's
- * existing constraint graph without ever touching it — a {@link NogoodConstraint} never
- * contributes to neighbours, binary decomposition, or cycle/connectivity analysis, so there is
- * nothing to recompute there regardless of how often {@code apply} is called. The flat union of
+ * <b>No graph rebuild, and no redundant merge either.</b> {@link #apply} augments a CSP with the
+ * recorded nogoods via {@link ConstraintSatisfactionProblem#withNogoods}, which layers nogoods on
+ * top of the CSP's existing constraint graph without ever touching it — a {@link NogoodConstraint}
+ * never contributes to neighbours, binary decomposition, or cycle/connectivity analysis, so there
+ * is nothing to recompute there regardless of how often {@code apply} is called. The flat union of
  * structural constraints and nogoods that backs {@link ConstraintSatisfactionProblem#getConstraints()}
- * is still redone on every {@code withNogoods} call, but that is cheap relative to the graph analysis
- * it replaces, so {@code apply} calls it directly rather than caching the result.
+ * used to be rebuilt from scratch on every {@code withNogoods} call regardless of whether anything
+ * had actually changed since the last one — confirmed via {@code NogoodPropagationBenchmark} to be
+ * the dominant per-node cost in long searches, since it scales with total nogood count (up to
+ * {@code 20 * variableCount}) and ran unconditionally. {@link #snapshot} plus {@code
+ * ConstraintSatisfactionProblem}'s own merge cache (keyed on that same stable reference) together
+ * mean the whole pipeline collapses to a couple of reference checks between nogood-learning events.
  * <p>
  * <b>Forgetting policy.</b> The set is deduplicated and capped at {@link #maxNogoods}: once
  * {@link #record} pushes the size over the cap, the largest-arity nogoods are evicted first
@@ -65,6 +70,19 @@ public class NogoodStore {
     @ToString.Exclude
     @Getter(AccessLevel.NONE)
     Set<NogoodConstraint> nogoods = ConcurrentHashMap.newKeySet();
+
+    /**
+     * Caches the last {@link Set#copyOf} snapshot of {@link #nogoods}, invalidated (set to {@code
+     * null}) only inside {@link #record} and {@link #evictIfOverCap} when the set actually
+     * mutates -- not on every {@link #apply} call. Between nogood-learning events (the common case
+     * across most of a search tree), {@code apply} reuses this same immutable reference instead of
+     * re-copying an unboundedly-growing set on every node; {@link ConstraintSatisfactionProblem}'s
+     * own merge cache then keys off this same stable reference to skip its rebuild too.
+     */
+    @EqualsAndHashCode.Exclude
+    @ToString.Exclude
+    @Getter(AccessLevel.NONE)
+    AtomicReference<Set<NogoodConstraint>> snapshot = new AtomicReference<>();
 
     public NogoodStore() {
         this(MIN_MAX_NOGOODS);
@@ -96,6 +114,7 @@ public class NogoodStore {
      */
     public void record(NogoodConstraint nogood) {
         if (nogoods.add(nogood)) {
+            snapshot.set(null);
             evictIfOverCap();
         }
     }
@@ -114,18 +133,26 @@ public class NogoodStore {
                 .sorted(Comparator.comparingInt((NogoodConstraint n) -> n.getVariables().size()).reversed())
                 .limit(excess)
                 .forEach(nogoods::remove);
+        snapshot.set(null);
     }
 
     /**
      * Returns {@code csp} augmented with every nogood constraint recorded so far, via
      * {@link ConstraintSatisfactionProblem#withNogoods}, or {@code csp} unchanged if none have been
      * recorded yet. {@code withNogoods} never rebuilds {@code csp}'s constraint graph — nogoods are
-     * layered on top of it — so this can be called on every node without needing to track what's
-     * already included or cache the result.
+     * layered on top of it. Reuses the cached {@link #snapshot} instead of copying {@link #nogoods}
+     * again when nothing has been recorded/evicted since the last call (see {@link #snapshot}'s
+     * javadoc) — the common case across most of a search tree, where many nodes are visited between
+     * nogood-learning events.
      */
     public ConstraintSatisfactionProblem apply(ConstraintSatisfactionProblem csp) {
         if (nogoods.isEmpty()) return csp;
-        return csp.withNogoods(Set.copyOf(nogoods));
+        Set<NogoodConstraint> current = snapshot.get();
+        if (current == null) {
+            current = Set.copyOf(nogoods);
+            snapshot.set(current);
+        }
+        return csp.withNogoods(current);
     }
 
     public int size() {
