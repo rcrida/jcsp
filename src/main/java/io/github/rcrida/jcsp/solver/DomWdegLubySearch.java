@@ -166,7 +166,11 @@ public class DomWdegLubySearch implements Solver {
         for (Object value : domainValuesOrderer.order(csp, variable, assignment).toList()) {
             Assignment next = assignment.withValue((Variable<Object>) variable, value);
             if (limits.isNodeLimitExceeded(++totalNodes[0]) || limits.isTimeLimitExceeded(deadline)) {
-                Statistics stats = new Statistics();
+                // Reuse next's own Statistics (already carrying real backtracks/nogoodsLearned/
+                // constraintChecks accumulated so far this restart) rather than a fresh, zeroed one --
+                // only nodesExplored needs overwriting, since it tracks this restart's own count while
+                // totalNodes is the cumulative count across every restart that fed into this limit check.
+                Statistics stats = next.getStatistics();
                 stats.getNodesExplored().set((int) Math.min(totalNodes[0], Integer.MAX_VALUE));
                 limits.markLimitReached(stats);
                 throw LimitsExceeded.INSTANCE;

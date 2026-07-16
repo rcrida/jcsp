@@ -4,6 +4,7 @@ import io.github.rcrida.jcsp.ConstraintSatisfactionProblem;
 import io.github.rcrida.jcsp.assignments.Assignment;
 import io.github.rcrida.jcsp.assignments.NogoodStore;
 import io.github.rcrida.jcsp.assignments.SolverLimits;
+import io.github.rcrida.jcsp.assignments.Statistics;
 import io.github.rcrida.jcsp.constraints.nary.GroundNogoodConstraint;
 import io.github.rcrida.jcsp.domains.IntRangeDomain;
 import io.github.rcrida.jcsp.solver.backtrackingsearch.order.LeastConstrainingValueOrderer;
@@ -487,6 +488,46 @@ class DomWdegLubySearchTest {
                 .build();
 
         assertThat(limited.getSolutions(fourQueensCsp()).findFirst()).isEmpty();
+    }
+
+    @Test
+    void limitExceededStatisticsIncludeBacktracksAndNogoodsLearned() {
+        // Same x/y/w1/w2 CSP as nogoodsLearnedStatisticIncrementsOnFailedBranch: x=1 fails (a
+        // nogood is recorded and the branch backtracks), x=2 succeeds. A node limit of 2 lets that
+        // failed x=1 branch fully resolve -- recording the backtrack and the nogood -- before the
+        // limit fires on the very next node (the x=2 attempt). Before the fix, searchOne's
+        // limit-exceeded path reported a fresh, zeroed Statistics here (backtracks=0,
+        // nogoodsLearned=0) despite this real activity already having happened; it should now
+        // reuse the real accumulated Statistics instead.
+        Variable<Integer> x = VF.create("x");
+        Variable<Integer> y = VF.create("y");
+        Variable<Integer> w1 = VF.create("w1");
+        Variable<Integer> w2 = VF.create("w2");
+        ConstraintSatisfactionProblem csp = ConstraintSatisfactionProblem.builder()
+                .variableDomain(x, IntRangeDomain.of(1, 2))
+                .variableDomain(y, IntRangeDomain.of(1, 1))
+                .variableDomain(w1, IntRangeDomain.of(5, 5))
+                .variableDomain(w2, IntRangeDomain.of(6, 6))
+                .notEqualsConstraint(x, y)
+                .notEqualsConstraint(x, w1)
+                .notEqualsConstraint(x, w2)
+                .build();
+
+        DomWdegLubySearch limited = DomWdegLubySearch.builder()
+                .domainValuesOrderer(io.github.rcrida.jcsp.solver.backtrackingsearch.order.DefaultValueOrderer.INSTANCE)
+                .inference(Solver.Factory.FULL_PROPAGATION_INFERENCE)
+                .limits(SolverLimits.ofNodes(2))
+                .build();
+
+        assertThatThrownBy(() -> limited.getSolution(csp))
+                .isInstanceOf(LimitExceededException.class)
+                .extracting(e -> ((LimitExceededException) e).getStatistics())
+                .satisfies(rawStats -> {
+                    Statistics stats = (Statistics) rawStats;
+                    assertThat(stats.getNodesExplored().get()).isEqualTo(2);
+                    assertThat(stats.getBacktracks().get()).isGreaterThan(0);
+                    assertThat(stats.getNogoodsLearned().get()).isGreaterThan(0);
+                });
     }
 
     @Test
