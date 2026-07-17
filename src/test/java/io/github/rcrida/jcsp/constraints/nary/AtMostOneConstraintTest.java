@@ -1,6 +1,8 @@
 package io.github.rcrida.jcsp.constraints.nary;
 
 import io.github.rcrida.jcsp.assignments.Assignment;
+import io.github.rcrida.jcsp.domains.BooleanDomain;
+import io.github.rcrida.jcsp.domains.Domain;
 import io.github.rcrida.jcsp.variables.Variable;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -64,5 +66,58 @@ public class AtMostOneConstraintTest {
     @Test
     void testToString() {
         assertThat(constraint.toString()).isEqualTo("<(variable1, variable2, variable3), AtMostOne>");
+    }
+
+    // --- propagate() ---
+
+    static final Variable.Factory F = Variable.Factory.INSTANCE;
+    static final Domain<Boolean> BOTH = BooleanDomain.INSTANCE;
+    static final Domain<Boolean> TRUE = BooleanDomain.INSTANCE.toBuilder().delete(Boolean.FALSE).build();
+    static final Domain<Boolean> FALSE = BooleanDomain.INSTANCE.toBuilder().delete(Boolean.TRUE).build();
+
+    @Test
+    void propagate_oneDefiniteTrue_forcesPossiblyTrueToFalse() {
+        // a={true}, b={true,false}, c={false} -- one definite true -- force b to false
+        Variable<Boolean> a = F.create("a"), b = F.create("b"), c = F.create("c");
+        var atMostOne = AtMostOneConstraint.builder().variables(Set.of(a, b, c)).build();
+        var result = atMostOne.propagate(Map.of(a, TRUE, b, BOTH, c, FALSE));
+        assertThat(result).isPresent();
+        assertThat(result.get().get(b)).isEqualTo(FALSE);
+    }
+
+    @Test
+    void propagate_infeasible_twoDefiniteTrue() {
+        Variable<Boolean> a = F.create("a"), b = F.create("b");
+        var atMostOne = AtMostOneConstraint.builder().variables(Set.of(a, b)).build();
+        assertThat(atMostOne.propagate(Map.of(a, TRUE, b, TRUE))).isEmpty();
+    }
+
+    @Test
+    void propagate_noChange_zeroDefiniteTrue() {
+        Variable<Boolean> a = F.create("a"), b = F.create("b"), c = F.create("c");
+        var atMostOne = AtMostOneConstraint.builder().variables(Set.of(a, b, c)).build();
+        var result = atMostOne.propagate(Map.of(a, BOTH, b, BOTH, c, FALSE));
+        assertThat(result).isPresent();
+        assertThat(result.get()).isEmpty();
+    }
+
+    // --- propagateWithReasons() ---
+
+    @Test
+    void propagateWithReasons_feasible_returnsEmptyReason() {
+        Variable<Boolean> a = F.create("a"), b = F.create("b"), c = F.create("c");
+        var atMostOne = AtMostOneConstraint.builder().variables(Set.of(a, b, c)).build();
+        var result = atMostOne.propagateWithReasons(Map.of(a, TRUE, b, BOTH, c, FALSE));
+        assertThat(result.isInfeasible()).isFalse();
+        assertThat(result.reason()).isNull();
+    }
+
+    @Test
+    void propagateWithReasons_infeasible_attributesForcedTrueVariables() {
+        Variable<Boolean> a = F.create("a"), b = F.create("b"), c = F.create("c");
+        var atMostOne = AtMostOneConstraint.builder().variables(Set.of(a, b, c)).build();
+        var result = atMostOne.propagateWithReasons(Map.of(a, TRUE, b, TRUE, c, FALSE));
+        assertThat(result.isInfeasible()).isTrue();
+        assertThat(result.reason()).isEqualTo(GroundNogoodConstraint.of(Map.of(a, true, b, true)));
     }
 }

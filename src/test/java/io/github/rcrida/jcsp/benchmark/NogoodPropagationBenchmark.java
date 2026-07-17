@@ -88,28 +88,35 @@ import java.util.Set;
  * (62506ms and 91200ms respectively, neither finishing) -- growth far steeper than any other
  * scenario here. n=7 (6 holes) is used as the full-proof instance.
  *
- * <p><b>{@code pigeonhole}'s three variants come out statistically identical</b> (~8.3s each,
- * identical backtrack counts at forced truncation) -- nogood learning has literally zero effect
- * here, not just a small one. Root cause (see {@code project_jcsp_isconsistent_learning_gap} in
- * project memory for the full trail): {@code DomWdegLubySearch} only calls {@code
- * selector.incrementWeights}/{@code conflictExplainer.explain} inside the branch where {@code
- * inference.apply} (propagation) returns empty. Neither {@code ExactlyOneConstraint} nor {@code
- * AtMostOneConstraint} is registered in {@code PropagationFixpointSolver.PROPAGATORS} -- only their
- * pairwise-NAND {@code BinaryDecomposable} decomposition feeds {@code AC3}, which can force
- * individual variables but can never detect "zero holes assigned true" as a domain wipeout (an
- * inherently global/counting condition, confirmed via {@code ExactlyOneConstraint}'s own javadoc:
- * partial assignments only enforce "at most one true", the "exactly one" check only fires once
- * every variable in the constraint is assigned). So every pigeonhole failure is caught by {@code
- * Assignment#isConsistent}'s direct {@code isSatisfiedBy} check instead, silently bypassing both
- * dom/wdeg weight learning and nogood learning regardless of {@code NogoodStore}/{@code
- * ConflictExplainer} configuration -- there is no dial being exercised at all for this scenario.
- * Two attempted fixes (unconditional weight+nogood learning on {@code isConsistent} failures too;
- * weight-only) were both empirically reverted: the first regressed {@code CryptarithmeticTest}
- * ~30x in wall-clock from nogood-store bloat (low-value full-assignment fallback nogoods costing
- * real ongoing checks), the second still regressed it ~4x <em>and</em> made pigeonhole itself worse
- * (stopped finishing the proof within the 300k-node budget at all). Left as a known, documented
- * gap rather than "fixed" -- see project memory for why both attempts made things worse, not
- * better.
+ * <p><b>{@code pigeonhole}'s three variants originally came out statistically identical</b> (~8.3s
+ * each, identical backtrack counts at forced truncation) -- nogood learning had literally zero
+ * effect. Root cause: {@code DomWdegLubySearch} only calls {@code selector.incrementWeights}/{@code
+ * conflictExplainer.explain} inside the branch where {@code inference.apply} (propagation) returns
+ * empty, and neither {@code ExactlyOneConstraint} nor {@code AtMostOneConstraint} was registered as
+ * a {@link io.github.rcrida.jcsp.consistency.Propagatable} in {@code
+ * PropagationFixpointSolver.PROPAGATORS} -- only their pairwise-NAND {@code BinaryDecomposable}
+ * decomposition fed {@code AC3}, which can force individual variables but can never detect "zero
+ * holes assigned true" as a domain wipeout (an inherently global/counting condition). So every
+ * pigeonhole failure was caught by {@code Assignment#isConsistent}'s direct {@code isSatisfiedBy}
+ * check instead, silently bypassing both learning mechanisms regardless of configuration.
+ *
+ * <p>Two attempts to fix this by changing {@code DomWdegLubySearch}'s failure-handling (calling the
+ * same weight/nogood-learning path from the {@code isConsistent} branch too) were both empirically
+ * reverted: unconditional weight+nogood learning regressed {@code CryptarithmeticTest} ~30x in
+ * wall-clock from nogood-store bloat (low-value full-assignment fallback nogoods costing real
+ * ongoing checks); weight-only still regressed it ~4x <em>and</em> made pigeonhole itself worse.
+ * <b>The fix that actually worked (2026-07-17)</b> was architecturally different: giving {@code
+ * AtMostOneConstraint} (and, via inheritance, {@code ExactlyOneConstraint}) real {@code Propagatable}
+ * implementations -- definite/possible counting exactly like {@code AtLeastNConstraint}/{@code
+ * AtMostNConstraint} already do, with {@code ExactlyOneConstraint} additionally forcing the sole
+ * remaining open variable {@code true} once every other candidate is excluded, propagation the
+ * pairwise-NAND decomposition alone could never provide. Violations now surface as genuine domain
+ * wipeouts through {@code inference.apply}, so {@code DomWdegLubySearch} needed no changes at all --
+ * dom/wdeg weighting and nogood learning both engage naturally. Result: pigeonhole's full UNSAT
+ * proof dropped from ~8.3s (all three variants identical) to 2.45-3.19s, with the variants now
+ * properly diverging ({@code default} 3185ms &gt; {@code capped} 3071ms &gt; {@code disabled}
+ * 2452ms) exactly as the other UNSAT scenarios do. See {@code project_jcsp_isconsistent_learning_gap}
+ * in project memory for the full trail, including why the two reverted attempts made things worse.
  *
  * <p>Run via {@code mvn test-compile} then
  * {@code java -cp target/classes:target/test-classes:$(mvn -q dependency:build-classpath -Dmdep.outputFile=/dev/stdout) io.github.rcrida.jcsp.benchmark.NogoodPropagationBenchmark}.
