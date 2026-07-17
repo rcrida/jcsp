@@ -5,6 +5,7 @@ import io.github.rcrida.jcsp.assignments.NogoodStore;
 import io.github.rcrida.jcsp.assignments.SolverLimits;
 import io.github.rcrida.jcsp.assignments.Statistics;
 import io.github.rcrida.jcsp.constraints.Operator;
+import io.github.rcrida.jcsp.domains.BooleanDomain;
 import io.github.rcrida.jcsp.domains.IntRangeDomain;
 import io.github.rcrida.jcsp.solver.ConflictExplainer;
 import io.github.rcrida.jcsp.solver.DomWdegLubySearch;
@@ -64,7 +65,7 @@ import java.util.Set;
  * explanation computation itself -- neither is about different search decisions, since dom/wdeg
  * weighting and value ordering are unaffected by either knob.
  *
- * <p>Covers three different shapes deliberately: {@link #golombRuler} is dominated by one large
+ * <p>Covers four different shapes deliberately: {@link #golombRuler} is dominated by one large
  * {@code AllDiffConstraint} whose GAC pruning touches many variables per round (broad propagation),
  * and is UNSAT (a full search-space proof); {@link #randomBinaryCsp} is built entirely from
  * pairwise {@code biPredicateConstraint}s, so only {@code AC3} (pure per-arc revision) and nogoods
@@ -76,7 +77,39 @@ import java.util.Set;
  * Regin GAC, which turned out strong enough that small/medium orders (n&lt;=16) solve in
  * milliseconds regardless of hole fraction -- order 20 at a 50% hole fraction was the smallest
  * instance found (via a throwaway tuning sweep, not committed) that lands in the same few-seconds
- * range as the other two scenarios.
+ * range as the other two scenarios. {@link #pigeonhole} is the classic boolean-encoded pigeonhole
+ * principle (n pigeons, n-1 holes via {@code exactlyOneConstraint}/{@code atMostOneConstraint}, not
+ * {@code allDiffConstraint} -- the latter would let Regin's GAC catch the Hall violation in one
+ * propagation step with zero search, making it useless for stressing nogood learning). UNSAT, and
+ * famously hard: Haken (1985) proved the shortest resolution refutation of PHP(n) grows
+ * exponentially in n, which transfers directly to any CDCL-style solver's worst case since CDCL
+ * proofs are themselves resolution proofs. Confirmed empirically via a throwaway tuning sweep (not
+ * committed): n=5/6/7 solved in 115/554/7492ms, but n=8 and n=9 both blew the 300k-node budget
+ * (62506ms and 91200ms respectively, neither finishing) -- growth far steeper than any other
+ * scenario here. n=7 (6 holes) is used as the full-proof instance.
+ *
+ * <p><b>{@code pigeonhole}'s three variants come out statistically identical</b> (~8.3s each,
+ * identical backtrack counts at forced truncation) -- nogood learning has literally zero effect
+ * here, not just a small one. Root cause (see {@code project_jcsp_isconsistent_learning_gap} in
+ * project memory for the full trail): {@code DomWdegLubySearch} only calls {@code
+ * selector.incrementWeights}/{@code conflictExplainer.explain} inside the branch where {@code
+ * inference.apply} (propagation) returns empty. Neither {@code ExactlyOneConstraint} nor {@code
+ * AtMostOneConstraint} is registered in {@code PropagationFixpointSolver.PROPAGATORS} -- only their
+ * pairwise-NAND {@code BinaryDecomposable} decomposition feeds {@code AC3}, which can force
+ * individual variables but can never detect "zero holes assigned true" as a domain wipeout (an
+ * inherently global/counting condition, confirmed via {@code ExactlyOneConstraint}'s own javadoc:
+ * partial assignments only enforce "at most one true", the "exactly one" check only fires once
+ * every variable in the constraint is assigned). So every pigeonhole failure is caught by {@code
+ * Assignment#isConsistent}'s direct {@code isSatisfiedBy} check instead, silently bypassing both
+ * dom/wdeg weight learning and nogood learning regardless of {@code NogoodStore}/{@code
+ * ConflictExplainer} configuration -- there is no dial being exercised at all for this scenario.
+ * Two attempted fixes (unconditional weight+nogood learning on {@code isConsistent} failures too;
+ * weight-only) were both empirically reverted: the first regressed {@code CryptarithmeticTest}
+ * ~30x in wall-clock from nogood-store bloat (low-value full-assignment fallback nogoods costing
+ * real ongoing checks), the second still regressed it ~4x <em>and</em> made pigeonhole itself worse
+ * (stopped finishing the proof within the 300k-node budget at all). Left as a known, documented
+ * gap rather than "fixed" -- see project memory for why both attempts made things worse, not
+ * better.
  *
  * <p>Run via {@code mvn test-compile} then
  * {@code java -cp target/classes:target/test-classes:$(mvn -q dependency:build-classpath -Dmdep.outputFile=/dev/stdout) io.github.rcrida.jcsp.benchmark.NogoodPropagationBenchmark}.
@@ -99,7 +132,9 @@ public final class NogoodPropagationBenchmark {
                 new Scenario("Random binary CSP n=26 d=6 t=0.13 seed=42 (UNSAT, narrow AC3-only propagation)",
                         randomBinaryCsp(26, 6, 0.13, 42L)),
                 new Scenario("Quasigroup completion n=20 holes=0.5 seed=42 (SAT, phase-transition region)",
-                        quasigroupCompletion(20, 0.5, 42L))
+                        quasigroupCompletion(20, 0.5, 42L)),
+                new Scenario("Pigeonhole n=7 pigeons, 6 holes (UNSAT, boolean encoding, resolution-hard)",
+                        pigeonhole(7))
         );
 
         for (Scenario scenario : scenarios) {
@@ -121,6 +156,11 @@ public final class NogoodPropagationBenchmark {
         System.out.println();
         System.out.println("=== Random binary CSP n=26 d=6 t=0.13 seed=42, forced truncation at " + FORCED_NODE_LIMIT + " nodes ===");
         runAllVariants(randomBinary, FORCED_NODE_LIMIT);
+
+        ConstraintSatisfactionProblem pigeonhole7 = pigeonhole(7);
+        System.out.println();
+        System.out.println("=== Pigeonhole n=7 pigeons, 6 holes, forced truncation at " + FORCED_NODE_LIMIT + " nodes ===");
+        runAllVariants(pigeonhole7, FORCED_NODE_LIMIT);
     }
 
     private static void runAllVariants(ConstraintSatisfactionProblem csp, long nodeLimit) {
@@ -365,5 +405,39 @@ public final class NogoodPropagationBenchmark {
             permutation[j] = tmp;
         }
         return permutation;
+    }
+
+    /**
+     * Boolean-encoded pigeonhole principle: {@code n} pigeons into {@code n-1} holes, UNSAT.
+     * Deliberately avoids {@code allDiffConstraint} -- Regin's GAC would catch the Hall violation
+     * in one propagation step with zero search, defeating the point of a nogood-learning
+     * stress-test. Instead uses one boolean variable per (pigeon, hole) pair: {@code
+     * exactlyOneConstraint} forces each pigeon into exactly one hole, {@code atMostOneConstraint}
+     * forbids two pigeons sharing a hole. Famously hard for resolution-based reasoning (Haken 1985)
+     * -- see the class javadoc for measured growth.
+     */
+    private static ConstraintSatisfactionProblem pigeonhole(int n) {
+        int holes = n - 1;
+        Variable.Factory f = Variable.Factory.INSTANCE;
+        @SuppressWarnings("unchecked")
+        Variable<Boolean>[][] inHole = new Variable[n][holes];
+        var builder = ConstraintSatisfactionProblem.builder();
+        for (int i = 0; i < n; i++) {
+            for (int j = 0; j < holes; j++) {
+                inHole[i][j] = f.create("ph" + i + "-" + j);
+                builder.variableDomain(inHole[i][j], BooleanDomain.INSTANCE);
+            }
+        }
+        for (int i = 0; i < n; i++) {
+            Set<Variable<Boolean>> pigeon = new HashSet<>();
+            for (int j = 0; j < holes; j++) pigeon.add(inHole[i][j]);
+            builder.exactlyOneConstraint(pigeon);
+        }
+        for (int j = 0; j < holes; j++) {
+            Set<Variable<Boolean>> hole = new HashSet<>();
+            for (int i = 0; i < n; i++) hole.add(inHole[i][j]);
+            builder.atMostOneConstraint(hole);
+        }
+        return builder.build();
     }
 }
