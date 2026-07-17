@@ -87,4 +87,24 @@ public class BranchAndBoundSolverTest {
         val result = solver(a -> sum(a), SolverLimits.ofTime(Duration.ofNanos(1))).getSolutions(CSP).findFirst();
         assertThat(result).isEmpty();
     }
+
+    @Test
+    void statisticsRemainReadableWhenNodeLimitLeavesNoImprovingSolution() {
+        io.github.rcrida.jcsp.assignments.Statistics statistics = new io.github.rcrida.jcsp.assignments.Statistics();
+        BranchAndBoundSolver limited = BranchAndBoundSolver.builder()
+                .objective(BranchAndBoundSolverTest::sum)
+                .unassignedVariableSelector(MinimumRemainingValuesSelector.INSTANCE)
+                .domainValuesOrderer(DefaultValueOrderer.INSTANCE)
+                .inference((problem, variable, assignment) -> Optional.of(problem))
+                .limits(SolverLimits.ofNodes(1))
+                .statistics(statistics)
+                .build();
+
+        assertThat(limited.getSolutions(CSP).findFirst()).isEmpty();
+
+        // The Statistics field is seeded into the root Assignment, so it's readable via this same
+        // live reference even though the node limit meant no complete Assignment (improving or
+        // otherwise) was ever returned.
+        assertThat(statistics.getNodesExplored().get()).isGreaterThan(0);
+    }
 }

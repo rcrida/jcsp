@@ -8,7 +8,7 @@ import lombok.Value;
 import org.jspecify.annotations.Nullable;
 
 import java.time.Duration;
-import java.util.concurrent.atomic.AtomicReference;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
  * Caps the amount of search work performed by a solver.
@@ -20,6 +20,11 @@ import java.util.concurrent.atomic.AtomicReference;
  *
  * When either limit is exceeded {@link BoundSolver#getSolutions()} truncates the stream silently;
  * {@link BoundSolver#getSolution()} throws {@link io.github.rcrida.jcsp.solver.LimitExceededException}.
+ *
+ * <p>This class only tracks <em>whether</em> a limit was hit, not the {@link Statistics} at that
+ * point — search methods now write into a caller-supplied {@link Statistics} instance directly
+ * (see {@link io.github.rcrida.jcsp.solver.SolverConfig#getStatistics()}), so the caller already
+ * holds a live reference to it regardless of outcome and no separate captured snapshot is needed here.
  */
 @Value
 public class SolverLimits {
@@ -33,7 +38,7 @@ public class SolverLimits {
     @EqualsAndHashCode.Exclude
     @ToString.Exclude
     @Getter(AccessLevel.NONE)
-    AtomicReference<Statistics> limitHitStats = new AtomicReference<>(null);
+    AtomicBoolean limitReached = new AtomicBoolean(false);
 
     private SolverLimits(long nodeLimit, @Nullable Duration timeLimit) {
         if (nodeLimit < 0) throw new IllegalArgumentException("nodeLimit must be non-negative, got: " + nodeLimit);
@@ -73,26 +78,18 @@ public class SolverLimits {
         return deadlineNanos != Long.MAX_VALUE && System.nanoTime() - deadlineNanos >= 0;
     }
 
-    /** Called by search methods the first time a limit is detected. Thread-safe via CAS. */
-    public void markLimitReached(Statistics statistics) {
-        limitHitStats.compareAndSet(null, statistics);
+    /** Called by search methods the first time a limit is detected. */
+    public void markLimitReached() {
+        limitReached.set(true);
     }
 
     /** True after any search method has called {@link #markLimitReached}. */
     public boolean isLimitReached() {
-        return limitHitStats.get() != null;
-    }
-
-    /**
-     * Returns the {@link Statistics} captured when the limit was first hit.
-     * Only valid to call after {@link #isLimitReached()} returns true.
-     */
-    public Statistics getLimitHitStatistics() {
-        return limitHitStats.get();
+        return limitReached.get();
     }
 
     /** Clears the limit-hit flag so this instance can be reused for a new search. */
     public void resetLimitReached() {
-        limitHitStats.set(null);
+        limitReached.set(false);
     }
 }

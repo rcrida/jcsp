@@ -186,30 +186,19 @@ public final class NogoodPropagationBenchmark {
         String outcome = "?";
         for (int trial = 0; trial < TRIALS; trial++) {
             SolverLimits limits = SolverLimits.ofNodes(nodeLimit);
-            Solver chain = buildChain(storeFactory.get(), limits, conflictExplainer);
+            // Statistics is now a shared token seeded into DomWdegLubySearch (see buildChain below)
+            // rather than something only reachable via a returned Assignment -- so it's readable
+            // here regardless of how the search below terminates: SAT, genuine UNSAT, or a limit hit.
+            Statistics statistics = new Statistics();
+            Solver chain = buildChain(storeFactory.get(), limits, conflictExplainer, statistics);
             long start = System.nanoTime();
             try {
                 var result = chain.getSolution(csp);
                 millis.add((System.nanoTime() - start) / 1_000_000);
-                if (limits.isLimitReached()) {
-                    stats.add(limits.getLimitHitStatistics());
-                    outcome = "LIMIT";
-                } else if (result.isPresent()) {
-                    // SAT: the returned Assignment's Statistics reflects the node count of whichever
-                    // Luby restart succeeded, not a cumulative count across earlier failed restarts
-                    // (see DomWdegLubySearch#getSolution) -- fine here since these scenarios succeed
-                    // on the first restart (getStatistics().getRestarts() == 0).
-                    stats.add(result.get().getStatistics());
-                    outcome = "SAT";
-                } else {
-                    // Genuinely UNSAT: DomWdegLubySearch#getSolution returns Optional.empty() with no
-                    // Statistics attached anywhere reachable from this API -- a real gap, not something
-                    // this benchmark can work around without a production-code change.
-                    stats.add(null);
-                    outcome = "UNSAT (no stats exposed by getSolution() on this path)";
-                }
+                outcome = limits.isLimitReached() ? "LIMIT" : result.isPresent() ? "SAT" : "UNSAT";
+                stats.add(statistics);
             } catch (LimitExceededException e) {
-                stats.add(e.getStatistics());
+                stats.add(statistics);
                 millis.add((System.nanoTime() - start) / 1_000_000);
                 outcome = "LIMIT";
             }
@@ -228,13 +217,15 @@ public final class NogoodPropagationBenchmark {
     /** Mirrors {@code Solver.Factory}'s satisfaction chain, minus the decomposition decorators
      * (not needed here: these Golomb ruler instances are a single dense connected component with
      * treewidth above the tree-decomposition threshold, so those decorators would be pure passthrough). */
-    private static Solver buildChain(NogoodStore nogoodStore, SolverLimits limits, ConflictExplainer conflictExplainer) {
+    private static Solver buildChain(NogoodStore nogoodStore, SolverLimits limits, ConflictExplainer conflictExplainer,
+                                     Statistics statistics) {
         DomWdegLubySearch domWdegLubySearch = DomWdegLubySearch.builder()
                 .domainValuesOrderer(LeastConstrainingValueOrderer.INSTANCE)
                 .inference(Solver.Factory.FULL_PROPAGATION_INFERENCE)
                 .limits(limits)
                 .nogoodStore(nogoodStore)
                 .conflictExplainer(conflictExplainer)
+                .statistics(statistics)
                 .maxRestarts(Integer.MAX_VALUE)
                 .build();
         Solver propagationFixpointSolver = PropagationFixpointSolver.builder()

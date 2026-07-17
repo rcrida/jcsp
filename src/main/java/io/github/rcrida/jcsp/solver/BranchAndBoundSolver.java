@@ -7,6 +7,7 @@ import lombok.val;
 import io.github.rcrida.jcsp.ConstraintSatisfactionProblem;
 import io.github.rcrida.jcsp.assignments.Assignment;
 import io.github.rcrida.jcsp.assignments.SolverLimits;
+import io.github.rcrida.jcsp.assignments.Statistics;
 import io.github.rcrida.jcsp.consistency.Inference;
 import io.github.rcrida.jcsp.solver.backtrackingsearch.order.DomainValuesOrderer;
 import io.github.rcrida.jcsp.solver.backtrackingsearch.selector.UnassignedVariableSelector;
@@ -37,13 +38,20 @@ public class BranchAndBoundSolver implements Solver {
     @NonNull ToDoubleFunction<Assignment> objective;
     @Builder.Default
     @NonNull SolverLimits limits = SolverLimits.unlimited();
+    /**
+     * Shared token the root {@link Assignment} is seeded with (instead of a fresh {@code
+     * Assignment.empty()}), so it's readable via {@link SolverConfig#getStatistics()} after the
+     * call regardless of whether an improving solution was ever found.
+     */
+    @Builder.Default
+    @NonNull Statistics statistics = new Statistics();
 
     @Override
     public Stream<Assignment> getSolutions(@NonNull ConstraintSatisfactionProblem csp) {
         log.info("Search space before branch-and-bound = {}", csp.getSearchSpace());
         double[] incumbent = {Double.MAX_VALUE};
         long deadline = limits.deadlineNanos();
-        return search(csp, Assignment.empty(), incumbent, deadline);
+        return search(csp, Assignment.builder().statistics(statistics).build(), incumbent, deadline);
     }
 
     private Stream<Assignment> search(ConstraintSatisfactionProblem csp,
@@ -77,7 +85,7 @@ public class BranchAndBoundSolver implements Solver {
                 .filter(next -> {
                     if (limits.isNodeLimitExceeded(next.getStatistics().getNodesExplored().get())
                             || limits.isTimeLimitExceeded(deadline)) {
-                        limits.markLimitReached(next.getStatistics());
+                        limits.markLimitReached();
                         return false;
                     }
                     return next.isConsistent(csp);

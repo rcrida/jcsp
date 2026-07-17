@@ -37,7 +37,10 @@ import java.util.stream.Stream;
  * budgets, preserving weights across restarts so accumulated failure knowledge steers each new
  * attempt. Returns {@link Optional#empty()} either when the problem is genuinely unsatisfiable
  * (a restart exhausted its budget on the full tree) or when {@link #maxRestarts} restarts were
- * used without completing a full traversal; the two cases are not distinguished.
+ * used without completing a full traversal; the two cases are not distinguished. Either way, the
+ * {@code statistics} field (a shared token seeded into every restart's root {@link Assignment},
+ * not a fresh one per restart) still holds the true cumulative counts across the whole call —
+ * see {@link SolverConfig#getStatistics()} for how a caller retrieves it regardless of outcome.
  * A lightweight {@link BudgetExceeded} sentinel (pre-allocated, no stack trace) unwinds the
  * recursion when the budget is exhausted.
  */
@@ -57,6 +60,14 @@ public class DomWdegLubySearch implements Solver {
     @NonNull SolverLimits limits;
     @NonNull NogoodStore nogoodStore;
     @NonNull ConflictExplainer conflictExplainer;
+    /**
+     * Shared token every root {@link Assignment} (including every Luby restart) is seeded with,
+     * rather than each starting from a fresh {@code Assignment.empty()} -- so it accumulates the
+     * true cumulative counts across the whole search regardless of how it ends (solution, genuine
+     * UNSAT, or a limit hit). Defaults to a fresh {@link Statistics} when not supplied; pass one in
+     * (typically via {@link SolverConfig#getStatistics()}) to read it back after the call.
+     */
+    @NonNull Statistics statistics;
 
     /** Partial builder: sets defaults and validates preconditions in {@code build()}. */
     public static class DomWdegLubySearchBuilder {
@@ -66,11 +77,12 @@ public class DomWdegLubySearch implements Solver {
         private NogoodStore nogoodStore = new NogoodStore();
         private ConflictExplainer conflictExplainer =
                 (csp, variable, assignment) -> Optional.of(GroundNogoodConstraint.of(assignment.getValues()));
+        private Statistics statistics = new Statistics();
 
         public DomWdegLubySearch build() {
             if (lubyUnit <= 0) throw new IllegalArgumentException("lubyUnit must be positive, got: " + lubyUnit);
             if (maxRestarts <= 0) throw new IllegalArgumentException("maxRestarts must be positive, got: " + maxRestarts);
-            return new DomWdegLubySearch(lubyUnit, maxRestarts, domainValuesOrderer, inference, limits, nogoodStore, conflictExplainer);
+            return new DomWdegLubySearch(lubyUnit, maxRestarts, domainValuesOrderer, inference, limits, nogoodStore, conflictExplainer, statistics);
         }
     }
 
@@ -88,22 +100,22 @@ public class DomWdegLubySearch implements Solver {
     public Stream<Assignment> getSolutions(@NonNull ConstraintSatisfactionProblem csp) {
         var selector = new DomWdegVariableSelector(csp.getConstraints());
         long deadline = limits.deadlineNanos();
-        return searchStream(csp, Assignment.empty(), selector, deadline);
+        return searchStream(csp, Assignment.builder().statistics(statistics).build(), selector, deadline);
     }
 
     @Override
     public Optional<Assignment> getSolution(@NonNull ConstraintSatisfactionProblem csp) {
         var selector = new DomWdegVariableSelector(csp.getConstraints());
         long deadline = limits.deadlineNanos();
-        long[] totalNodes = {0}; // cumulative across restarts for the node limit
         for (int k = 1; k <= maxRestarts; k++) {
             long budget = (long) lubyUnit * luby(k);
             int[] failures = {0};
             try {
-                Optional<Assignment> result = searchOne(csp, Assignment.empty(), selector, failures, budget, deadline, totalNodes);
+                Assignment root = Assignment.builder().statistics(statistics).build();
+                Optional<Assignment> result = searchOne(csp, root, selector, failures, budget, deadline);
                 if (result.isPresent()) {
                     log.info("dom/wdeg+Luby: solution found at restart {}", k);
-                    result.get().getStatistics().addRestarts(k - 1);
+                    statistics.addRestarts(k - 1);
                     return result;
                 }
                 log.info("dom/wdeg+Luby: UNSAT confirmed at restart {}", k);
@@ -112,7 +124,7 @@ public class DomWdegLubySearch implements Solver {
                 log.debug("dom/wdeg+Luby: budget {} exceeded at restart {}, restarting", budget, k);
             } catch (LimitsExceeded ignored) {
                 log.info("dom/wdeg+Luby: limit exceeded at restart {}", k);
-                throw new LimitExceededException(limits.getLimitHitStatistics());
+                throw new LimitExceededException(statistics);
             }
         }
         log.warn("dom/wdeg+Luby: exhausted {} restarts without solution", maxRestarts);
@@ -131,7 +143,7 @@ public class DomWdegLubySearch implements Solver {
                     Assignment next = assignment.withValue((Variable<Object>) variable, value);
                     if (limits.isNodeLimitExceeded(next.getStatistics().getNodesExplored().get())
                             || limits.isTimeLimitExceeded(deadline)) {
-                        limits.markLimitReached(next.getStatistics());
+                        limits.markLimitReached();
                         return Stream.empty();
                     }
                     ConstraintSatisfactionProblem cspWithNogoods = nogoodStore.apply(csp);
@@ -159,20 +171,14 @@ public class DomWdegLubySearch implements Solver {
                                            @NonNull DomWdegVariableSelector selector,
                                            int[] failures,
                                            long budget,
-                                           long deadline,
-                                           long[] totalNodes) {
+                                           long deadline) {
         if (assignment.isComplete(csp)) return Optional.of(assignment);
         Variable<?> variable = selector.select(csp, assignment);
         for (Object value : domainValuesOrderer.order(csp, variable, assignment).toList()) {
             Assignment next = assignment.withValue((Variable<Object>) variable, value);
-            if (limits.isNodeLimitExceeded(++totalNodes[0]) || limits.isTimeLimitExceeded(deadline)) {
-                // Reuse next's own Statistics (already carrying real backtracks/nogoodsLearned/
-                // constraintChecks accumulated so far this restart) rather than a fresh, zeroed one --
-                // only nodesExplored needs overwriting, since it tracks this restart's own count while
-                // totalNodes is the cumulative count across every restart that fed into this limit check.
-                Statistics stats = next.getStatistics();
-                stats.getNodesExplored().set((int) Math.min(totalNodes[0], Integer.MAX_VALUE));
-                limits.markLimitReached(stats);
+            if (limits.isNodeLimitExceeded(next.getStatistics().getNodesExplored().get())
+                    || limits.isTimeLimitExceeded(deadline)) {
+                limits.markLimitReached();
                 throw LimitsExceeded.INSTANCE;
             }
             ConstraintSatisfactionProblem cspWithNogoods = nogoodStore.apply(csp);
@@ -191,7 +197,7 @@ public class DomWdegLubySearch implements Solver {
                 if (++failures[0] >= budget) throw BudgetExceeded.INSTANCE;
                 continue;
             }
-            Optional<Assignment> result = searchOne(inferred.get(), next, selector, failures, budget, deadline, totalNodes);
+            Optional<Assignment> result = searchOne(inferred.get(), next, selector, failures, budget, deadline);
             if (result.isPresent()) return result;
         }
         return Optional.empty();

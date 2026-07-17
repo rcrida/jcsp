@@ -90,6 +90,51 @@ class DomWdegLubySearchTest {
     }
 
     @Test
+    void statisticsRemainReadableAfterGenuineUnsatViaGetSolution() {
+        Variable<Integer> x = VF.create("x");
+        Variable<Integer> y = VF.create("y");
+        ConstraintSatisfactionProblem csp = ConstraintSatisfactionProblem.builder()
+                .variableDomain(x, IntRangeDomain.of(1, 1))
+                .variableDomain(y, IntRangeDomain.of(1, 1))
+                .notEqualsConstraint(x, y)
+                .build();
+        Statistics statistics = new Statistics();
+        DomWdegLubySearch limited = DomWdegLubySearch.builder()
+                .domainValuesOrderer(LeastConstrainingValueOrderer.INSTANCE)
+                .inference(Solver.Factory.FULL_PROPAGATION_INFERENCE)
+                .statistics(statistics)
+                .build();
+
+        assertThat(limited.getSolution(csp)).isEmpty();
+
+        // Genuine UNSAT carries no Statistics in its return value (Optional.empty()) -- the whole
+        // point of the shared statistics field is that the caller already holds this same live
+        // reference regardless, so it's still readable and reflects real search activity.
+        assertThat(statistics.getNodesExplored().get()).isGreaterThan(0);
+    }
+
+    @Test
+    void statisticsRemainReadableAfterEmptyGetSolutionsStream() {
+        Variable<Integer> x = VF.create("x");
+        Variable<Integer> y = VF.create("y");
+        ConstraintSatisfactionProblem csp = ConstraintSatisfactionProblem.builder()
+                .variableDomain(x, IntRangeDomain.of(1, 1))
+                .variableDomain(y, IntRangeDomain.of(1, 1))
+                .notEqualsConstraint(x, y)
+                .build();
+        Statistics statistics = new Statistics();
+        DomWdegLubySearch limited = DomWdegLubySearch.builder()
+                .domainValuesOrderer(LeastConstrainingValueOrderer.INSTANCE)
+                .inference(Solver.Factory.FULL_PROPAGATION_INFERENCE)
+                .statistics(statistics)
+                .build();
+
+        assertThat(limited.getSolutions(csp).findFirst()).isEmpty();
+
+        assertThat(statistics.getNodesExplored().get()).isGreaterThan(0);
+    }
+
+    @Test
     void solves4Queens() {
         int n = 4;
         @SuppressWarnings("unchecked")

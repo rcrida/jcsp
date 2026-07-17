@@ -99,33 +99,22 @@ class SolverLimitsTest {
     @Test
     void markLimitReachedSetsIsLimitReachedTrue() {
         SolverLimits limits = SolverLimits.ofNodes(5);
-        limits.markLimitReached(new Statistics());
+        limits.markLimitReached();
         assertThat(limits.isLimitReached()).isTrue();
     }
 
     @Test
-    void getLimitHitStatisticsReturnsMarkedStatistics() {
+    void markLimitReachedIsIdempotent() {
         SolverLimits limits = SolverLimits.ofNodes(5);
-        Statistics stats = new Statistics();
-        stats.getNodesExplored().set(3);
-        limits.markLimitReached(stats);
-        assertThat(limits.getLimitHitStatistics()).isSameAs(stats);
-    }
-
-    @Test
-    void markLimitReachedIsIdempotentFirstWins() {
-        SolverLimits limits = SolverLimits.ofNodes(5);
-        Statistics first = new Statistics();
-        Statistics second = new Statistics();
-        limits.markLimitReached(first);
-        limits.markLimitReached(second);
-        assertThat(limits.getLimitHitStatistics()).isSameAs(first);
+        limits.markLimitReached();
+        limits.markLimitReached();
+        assertThat(limits.isLimitReached()).isTrue();
     }
 
     @Test
     void resetLimitReachedClearsFlag() {
         SolverLimits limits = SolverLimits.ofNodes(5);
-        limits.markLimitReached(new Statistics());
+        limits.markLimitReached();
         limits.resetLimitReached();
         assertThat(limits.isLimitReached()).isFalse();
     }

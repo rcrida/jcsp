@@ -61,7 +61,7 @@ public class TabuSearchSolver implements LocalSolver, CancellableLocalSolver {
     /**
      * Cooperative cancellation, only ever set by {@link RaceLocalSolver} via {@link #withCancellation}.
      * Excluded from equals/hashCode/toString since it's ephemeral race state, not configuration —
-     * same reasoning as {@link io.github.rcrida.jcsp.assignments.SolverLimits}'s limitHitStats field.
+     * same reasoning as {@link io.github.rcrida.jcsp.assignments.SolverLimits}'s limitReached field.
      */
     @Builder.Default
     @EqualsAndHashCode.Exclude

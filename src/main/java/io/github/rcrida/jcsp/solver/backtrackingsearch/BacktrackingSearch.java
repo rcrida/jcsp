@@ -64,7 +64,7 @@ public class BacktrackingSearch implements Solver {
                 .filter(next -> {
                     if (limits.isNodeLimitExceeded(next.getStatistics().getNodesExplored().get())
                             || limits.isTimeLimitExceeded(deadline)) {
-                        limits.markLimitReached(next.getStatistics());
+                        limits.markLimitReached();
                         return false;
                     }
                     if (next.isConsistent(csp)) return true;

@@ -134,6 +134,7 @@ public interface Solver {
                             .limits(limits)
                             .nogoodStore(nogoodStore)
                             .conflictExplainer(config.getConflictExplainer())
+                            .statistics(config.getStatistics())
                             // Effectively unbounded: getSolution() now reaches Luby-restart search directly
                             // (see BoundSolver#getSolution below), so DEFAULT_MAX_RESTARTS's cap would silently
                             // turn SolverLimits.unlimited() into a bounded search. SolverLimits (node/time)
@@ -189,6 +190,7 @@ public interface Solver {
                         .domainValuesOrderer(LeastConstrainingValueOrderer.INSTANCE)
                         .inference(FULL_PROPAGATION_INFERENCE)
                         .limits(limits)
+                        .statistics(config.getStatistics())
                         .build();
                 Solver terminal = hasContinuous
                         ? BisectionConditioningSolver.builder()
