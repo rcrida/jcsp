@@ -6,14 +6,17 @@ import lombok.extern.slf4j.Slf4j;
 import lombok.val;
 import io.github.rcrida.jcsp.ConstraintSatisfactionProblem;
 import io.github.rcrida.jcsp.assignments.Assignment;
+import io.github.rcrida.jcsp.assignments.NogoodStore;
 import io.github.rcrida.jcsp.assignments.SolverLimits;
 import io.github.rcrida.jcsp.assignments.Statistics;
+import io.github.rcrida.jcsp.consistency.ConsistencyResult;
 import io.github.rcrida.jcsp.consistency.Inference;
 import io.github.rcrida.jcsp.solver.backtrackingsearch.order.DomainValuesOrderer;
 import io.github.rcrida.jcsp.solver.backtrackingsearch.selector.UnassignedVariableSelector;
 import io.github.rcrida.jcsp.variables.Variable;
 import org.jspecify.annotations.NonNull;
 
+import java.util.Optional;
 import java.util.function.ToDoubleFunction;
 import java.util.stream.Stream;
 
@@ -27,6 +30,14 @@ import java.util.stream.Stream;
  *
  * <p>The objective is supplied at construction time by {@link Solver.Factory#createSolver(ConstraintSatisfactionProblem, ToDoubleFunction)},
  * so it must return a lower bound on the cost of any completion of a partial assignment.
+ *
+ * <p>Like {@link DomWdegLubySearch}, folds a shared {@link #nogoodStore} into every node: each
+ * candidate value is checked and propagated against {@code nogoodStore.apply(csp)} rather than the
+ * bare {@code csp}, and {@link #inference}'s {@link Inference#applyWithReason} is used instead of
+ * plain {@link Inference#apply} so a domain wipeout's reason (when one can be derived) is recorded
+ * back into the store. This is orthogonal to the incumbent-bound pruning above: a nogood records a
+ * genuine constraint violation (permanently true regardless of the incumbent), while the bound cut
+ * records a cost dominance relative to the current incumbent -- the two prunings compose freely.
  */
 @Slf4j
 @Value
@@ -38,6 +49,8 @@ public class BranchAndBoundSolver implements Solver {
     @NonNull ToDoubleFunction<Assignment> objective;
     @Builder.Default
     @NonNull SolverLimits limits = SolverLimits.unlimited();
+    @Builder.Default
+    @NonNull NogoodStore nogoodStore = new NogoodStore();
     /**
      * Shared token the root {@link Assignment} is seeded with (instead of a fresh {@code
      * Assignment.empty()}), so it's readable via {@link SolverConfig#getStatistics()} after the
@@ -80,6 +93,7 @@ public class BranchAndBoundSolver implements Solver {
                                                  Assignment assignment,
                                                  double[] incumbent,
                                                  long deadline) {
+        ConstraintSatisfactionProblem cspWithNogoods = nogoodStore.apply(csp);
         return domainValuesOrderer.order(csp, variable, assignment)
                 .map(value -> assignment.withValue(variable, value))
                 .filter(next -> {
@@ -88,9 +102,38 @@ public class BranchAndBoundSolver implements Solver {
                         limits.markLimitReached();
                         return false;
                     }
-                    return next.isConsistent(csp);
+                    if (!next.isConsistent(cspWithNogoods)) {
+                        next.getStatistics().incrementBacktracks();
+                        return false;
+                    }
+                    return true;
                 })
-                .flatMap(next -> inference.apply(csp, variable, next).stream()
-                        .flatMap(c -> search(c, next, incumbent, deadline)));
+                .flatMap(next -> inferOrExplain(cspWithNogoods, variable, next)
+                        .map(inferred -> search(inferred, next, incumbent, deadline))
+                        .orElseGet(Stream::empty));
+    }
+
+    /**
+     * Calls {@link #inference}'s {@link Inference#applyWithReason} unconditionally, mirroring
+     * {@link DomWdegLubySearch#inferOrExplain}: whatever {@link Inference} is configured is
+     * polymorphically responsible for both propagating and, on failure, explaining itself in one
+     * pass. A {@code null} {@link ConsistencyResult#reason()} means the configured {@link
+     * Inference} doesn't want a nogood recorded for this failure (see
+     * {@link Inference#withoutReasonTracking}) -- this method has no fallback of its own for that
+     * case, since choosing whether/how to explain is entirely {@code inference}'s job.
+     */
+    private Optional<ConstraintSatisfactionProblem> inferOrExplain(ConstraintSatisfactionProblem cspWithNogoods,
+                                                                     Variable<?> variable,
+                                                                     Assignment next) {
+        ConsistencyResult inferred = inference.applyWithReason(cspWithNogoods, variable, next);
+        if (inferred.isInfeasible()) {
+            if (inferred.reason() != null) {
+                nogoodStore.record(inferred.reason());
+                next.getStatistics().incrementNogoodsLearned();
+            }
+            next.getStatistics().incrementBacktracks();
+            return Optional.empty();
+        }
+        return Optional.of(inferred.problem());
     }
 }
