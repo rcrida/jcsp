@@ -107,10 +107,6 @@ public class ConstraintSatisfactionProblem {
      * re-propagation is itself limited to {@code SumConstraint}/{@code LinearConstraint} — see its
      * {@code REPROPAGATORS}):
      * <ul>
-     *   <li>{@link IncreasingConstraint}/{@link DecreasingConstraint} — their {@link BinaryDecomposable}
-     *       pairs only ever reach {@link io.github.rcrida.jcsp.consistency.arc.AC3}, which skips
-     *       non-{@code DiscreteDomain} arcs entirely, so they get no propagation over
-     *       {@code BoundedDomain} variables at all.</li>
      *   <li>{@link io.github.rcrida.jcsp.constraints.unary.UnaryPredicateConstraint} — {@code NodeConsistency}
      *       already gates on {@code instanceof DiscreteDomain} and no-ops otherwise.</li>
      *   <li>{@link io.github.rcrida.jcsp.constraints.binary.BinaryPredicateConstraint},

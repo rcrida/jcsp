@@ -14,8 +14,10 @@ import io.github.rcrida.jcsp.constraints.nary.AtMostOneConstraint;
 import io.github.rcrida.jcsp.constraints.nary.CountConstraint;
 import io.github.rcrida.jcsp.constraints.nary.CircuitConstraint;
 import io.github.rcrida.jcsp.constraints.nary.CumulativeConstraint;
+import io.github.rcrida.jcsp.constraints.nary.DecreasingConstraint;
 import io.github.rcrida.jcsp.constraints.nary.DiffnConstraint;
 import io.github.rcrida.jcsp.constraints.nary.GlobalCardinalityConstraint;
+import io.github.rcrida.jcsp.constraints.nary.IncreasingConstraint;
 import io.github.rcrida.jcsp.constraints.nary.InverseConstraint;
 import io.github.rcrida.jcsp.constraints.nary.LexConstraint;
 import io.github.rcrida.jcsp.constraints.nary.LinearConstraint;
@@ -88,7 +90,9 @@ public interface LocalSolver {
                 FixpointConsistency.of(DivisionConstraint.class),
                 FixpointConsistency.of(CircuitConstraint.class),
                 FixpointConsistency.of(DiffnConstraint.class),
-                FixpointConsistency.of(RegularConstraint.class)
+                FixpointConsistency.of(RegularConstraint.class),
+                FixpointConsistency.of(IncreasingConstraint.class),
+                FixpointConsistency.of(DecreasingConstraint.class)
         );
 
         Factory INSTANCE = (maxAttempts, maxSteps, initialAssignmentFactory) -> {
