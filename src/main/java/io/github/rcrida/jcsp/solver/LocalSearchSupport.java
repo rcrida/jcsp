@@ -25,14 +25,21 @@ final class LocalSearchSupport {
 
     // Use binary decompositions where available (preserves per-pair granularity for AllDiff,
     // ExactlyOne, etc.) and fall through to the original n-ary constraint where no binary
-    // decomposition exists (e.g. AtLeastN, AtMostN) so they are never silently dropped.
-    // Unary constraints have no binary form and are included directly.
+    // decomposition exists (e.g. AtLeastN, AtMostN) so they are never silently dropped. Also
+    // include the original n-ary constraint alongside its decomposition whenever that
+    // decomposition is only a partial stand-in (BinaryDecomposable#isDecompositionComplete()
+    // false, e.g. ExactlyOneConstraint's "at least one" half or CircuitConstraint's no-sub-tour
+    // condition) — otherwise a whole-constraint violation the decomposition can't express (e.g.
+    // every ExactlyOne slot variable false) would never contribute any conflict weight at all,
+    // leaving the search with no signal to escape it. Unary constraints have no binary form and
+    // are included directly.
     static Stream<Constraint> conflictConstraints(@NonNull ConstraintSatisfactionProblem csp) {
         Stream<Constraint> binaryAndUnary = Stream.concat(
                 csp.getAllBinaryConstraints().stream(),
                 csp.getConstraints().stream().filter(c -> c instanceof UnaryConstraint));
         Stream<Constraint> nonDecomposableNary = csp.getConstraints().stream()
-                .filter(c -> c instanceof NaryConstraint && (!(c instanceof BinaryDecomposable bd) || bd.getAsBinaryConstraints().isEmpty()));
+                .filter(c -> c instanceof NaryConstraint
+                        && (!(c instanceof BinaryDecomposable bd) || bd.getAsBinaryConstraints().isEmpty() || !bd.isDecompositionComplete()));
         return Stream.concat(binaryAndUnary, nonDecomposableNary);
     }
 

@@ -79,8 +79,12 @@ public class WalkSATSolver implements LocalSolver {
                 return Optional.of(current);
             }
             var snapshot = current;
+            // conflictConstraints is a faithful stand-in for csp's full constraint set (every
+            // BinaryDecomposable's decomposition is either complete or backed by inclusion of the
+            // original — see LocalSearchSupport#conflictConstraints), so with completeness held by
+            // every candidate assignment here, this can never be empty once isSolution(csp) above
+            // has already reported false for the same snapshot.
             var unsatisfied = constraints.stream().filter(c -> !c.isSatisfiedBy(snapshot)).toList();
-            if (unsatisfied.isEmpty()) break;
             var constraint = unsatisfied.get(ThreadLocalRandom.current().nextInt(unsatisfied.size()));
             var vars = constraint.getVariables().stream()
                     .filter(v -> csp.getVariableDomains().containsKey(v))

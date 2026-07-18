@@ -38,6 +38,17 @@ public class ExactlyOneConstraint extends AtMostOneConstraint {
     }
 
     /**
+     * The inherited pairwise-NAND decomposition only rules out two-or-more-true; it says nothing
+     * about zero-true, so it is not a sound stand-in for this constraint's full "exactly one true"
+     * semantics — unlike {@link AtMostOneConstraint}, whose own weaker "at most one" semantics the
+     * same decomposition does fully capture.
+     */
+    @Override
+    public boolean isDecompositionComplete() {
+        return false;
+    }
+
+    /**
      * Same "at most one" reasoning as {@link AtMostOneConstraint#propagate} (infeasible above one
      * definite true, force the rest false once exactly one is true) plus the dual "at least one"
      * case once zero are yet definitely true: infeasible once no variable can still become true,

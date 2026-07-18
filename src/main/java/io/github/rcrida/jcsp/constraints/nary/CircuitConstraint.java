@@ -72,6 +72,17 @@ public class CircuitConstraint extends NaryConstraint implements Propagatable, B
     }
 
     /**
+     * All-different successors is a permutation, but a permutation may validly consist of several
+     * disjoint sub-cycles rather than one Hamiltonian circuit through every node — the pairwise
+     * decomposition above says nothing about sub-tours, so it is not a sound stand-in for this
+     * constraint's full semantics.
+     */
+    @Override
+    public boolean isDecompositionComplete() {
+        return false;
+    }
+
+    /**
      * Outcome of one propagation pass, shared by {@link #propagate} and {@link #explainInfeasible}
      * so each pass's narrowing/failure-detection logic lives in exactly one place. {@code updated}
      * (passed into every pass method) is mutated in place with any narrowed domains regardless of
