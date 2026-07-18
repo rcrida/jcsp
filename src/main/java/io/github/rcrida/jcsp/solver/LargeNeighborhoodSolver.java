@@ -20,7 +20,6 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.Random;
 import java.util.Set;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.function.ToDoubleFunction;
@@ -127,7 +126,7 @@ public class LargeNeighborhoodSolver implements LocalSolver {
 
     private List<List<Variable<Boolean>>> pickSlots(@NonNull List<List<Variable<Boolean>>> slots, int k) {
         var shuffled = new ArrayList<>(slots);
-        Collections.shuffle(shuffled, new Random(ThreadLocalRandom.current().nextLong()));
+        Collections.shuffle(shuffled, ThreadLocalRandom.current());
         return shuffled.subList(0, k);
     }
 

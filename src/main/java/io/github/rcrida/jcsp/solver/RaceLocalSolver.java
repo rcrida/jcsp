@@ -80,7 +80,16 @@ public class RaceLocalSolver implements LocalSolver {
             try {
                 return promise.join();
             } catch (CompletionException e) {
-                throw (RuntimeException) e.getCause();
+                // A delegate can throw an Error (e.g. an assert failure elsewhere in the solver
+                // chain), not just a RuntimeException — rethrow either as-is instead of blindly
+                // casting to RuntimeException, which would mask the real failure behind a
+                // ClassCastException. supplyAsync's task signature permits no checked exceptions,
+                // so the cause is always one of these two.
+                var cause = e.getCause();
+                if (cause instanceof RuntimeException re) {
+                    throw re;
+                }
+                throw (Error) cause;
             } finally {
                 cancellation.cancel();
             }

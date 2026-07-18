@@ -111,6 +111,19 @@ public class RaceLocalSolverTest {
     }
 
     @Test
+    void errorInADelegatePropagatesUnwrapped() {
+        // An Error (e.g. an assert failure) must propagate as-is, not get mangled into a
+        // ClassCastException by a cast that assumes every delegate failure is a RuntimeException.
+        LocalSolver throwing = csp -> {
+            throw new AssertionError("boom");
+        };
+        val solver = RaceLocalSolver.builder().delegate(throwing).build();
+        assertThatThrownBy(() -> solver.getLocalSolution(CSP))
+                .isInstanceOf(AssertionError.class)
+                .hasMessage("boom");
+    }
+
+    @Test
     void emptyDelegateList_throwsAssertionError() {
         val solver = RaceLocalSolver.builder().build();
         assertThatThrownBy(() -> solver.getLocalSolution(CSP)).isInstanceOf(AssertionError.class);
