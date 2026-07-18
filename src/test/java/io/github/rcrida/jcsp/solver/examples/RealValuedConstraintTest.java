@@ -4,6 +4,7 @@ import io.github.rcrida.jcsp.solver.Solver;
 import io.github.rcrida.jcsp.ConstraintSatisfactionProblem;
 import io.github.rcrida.jcsp.assignments.Assignment;
 import io.github.rcrida.jcsp.constraints.Operator;
+import io.github.rcrida.jcsp.constraints.nary.AllDiffConstraint;
 import io.github.rcrida.jcsp.constraints.unary.UnaryComparatorConstraint;
 import io.github.rcrida.jcsp.domains.BooleanDomain;
 import io.github.rcrida.jcsp.domains.IntRangeDomain;
@@ -16,6 +17,7 @@ import java.util.Map;
 import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.api.Assertions.within;
 
 /**
@@ -444,10 +446,11 @@ public class RealValuedConstraintTest {
 
     @Test
     void increasingConstraint_intervalDomain_disjointRangesAlwaysSatisfied() {
-        // x∈[0,4], y∈[6,10]: x<=y holds for every possible pairing, so no propagation is needed —
-        // increasingConstraint gets none over IntervalDomain (its BinaryComparatorConstraint
-        // decomposition only reaches AC3, which skips non-discrete domains); correctness here
-        // rests entirely on the final isSatisfiedBy check after both midpoints are snapped.
+        // x∈[0,4], y∈[6,10]: x<=y holds for every possible pairing. IncreasingConstraint's own
+        // OrderingPropagation pass leaves both domains untouched here (x's max of 4 already sits
+        // below y's min of 6, so neither bound needs tightening) rather than snapping to a
+        // specific point, but the constraint is genuinely satisfied at any pair of values drawn
+        // from the two disjoint ranges, not merely at whatever point each gets snapped to.
         Variable<Double> x = F.create("inc_x"), y = F.create("inc_y");
         var csp = ConstraintSatisfactionProblem.builder()
                 .variableDomain(x, IntervalDomain.of(0.0, 4.0))
@@ -463,8 +466,10 @@ public class RealValuedConstraintTest {
 
     @Test
     void increasingConstraint_intervalDomain_infeasible_returnsNoSolutions() {
-        // x∈[6,10], y∈[0,4]: x<=y is impossible for any pairing (x.min > y.max); no propagator
-        // detects this up front, but the midpoint-snapped candidate still fails isSatisfiedBy.
+        // x∈[6,10], y∈[0,4]: x<=y is impossible for any pairing (x.min > y.max).
+        // IncreasingConstraint's own OrderingPropagation pass catches this directly: x's running
+        // min-floor (6) exceeds y's running max-ceiling (4), so propagate() reports infeasible
+        // during preprocessing, before any bisection/snapping is needed.
         Variable<Double> x = F.create("inc_inf_x"), y = F.create("inc_inf_y");
         var csp = ConstraintSatisfactionProblem.builder()
                 .variableDomain(x, IntervalDomain.of(6.0, 10.0))
@@ -684,5 +689,21 @@ public class RealValuedConstraintTest {
                 .elementVariableConstraint(index, result, List.of(v1, v2, v3))
                 .build();
         assertThat(Solver.Factory.INSTANCE.createSolver(csp).getSolutions()).isEmpty();
+    }
+
+    @Test
+    void reifyConstraint_bodyIncompatibleWithIntervalDomain_rejectedAtBuildTime() {
+        // AllDiffConstraint is explicitly rejected over IntervalDomain when used directly
+        // (density-of-reals argument — see CONTINUOUS_COMPATIBLE_CONSTRAINTS). Wrapping it inside
+        // reifyConstraint must not let it bypass that check: the body is never registered as a
+        // top-level constraint, so validateContinuousCompatibility has to recurse into it.
+        Variable<Double> x = F.create("reif_ad_x"), y = F.create("reif_ad_y");
+        Variable<Boolean> b = F.create("reif_ad_b");
+        var builder = ConstraintSatisfactionProblem.builder()
+                .variableDomain(x, IntervalDomain.of(0.0, 10.0))
+                .variableDomain(y, IntervalDomain.of(0.0, 10.0))
+                .variableDomain(b, BooleanDomain.INSTANCE)
+                .reifyConstraint(b, AllDiffConstraint.<Double>builder().variables(Set.of(x, y)).build());
+        assertThatThrownBy(builder::build).isInstanceOf(IllegalArgumentException.class);
     }
 }

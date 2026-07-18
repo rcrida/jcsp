@@ -269,18 +269,40 @@ public class ConstraintSatisfactionProblem {
             return;
         }
         for (Constraint constraint : constraints) {
-            if (CONTINUOUS_COMPATIBLE_CONSTRAINTS.contains(constraint.getClass())) {
-                continue;
-            }
-            val incompatible = constraint.getVariables().stream()
-                    .filter(boundedVariables::contains)
-                    .collect(Collectors.toSet());
-            if (!incompatible.isEmpty()) {
-                throw new IllegalArgumentException(String.format(
-                        "Variables %s use a BoundedDomain (e.g. IntervalDomain) but are referenced by " +
-                                "unsupported constraint %s; only %s support BoundedDomain variables",
-                        incompatible, constraint.getClass().getSimpleName(), CONTINUOUS_COMPATIBLE_CONSTRAINTS));
-            }
+            validateContinuousCompatibility(constraint, boundedVariables);
+        }
+    }
+
+    /**
+     * {@link ReifiedConstraint}/{@link ImplicationConstraint} wrap an arbitrary {@code body}
+     * constraint that is never registered as a top-level member of {@code constraints} (see
+     * {@link ReifiedConstraint#of}) — only the wrapper itself is. Both wrapper types are
+     * themselves whitelisted in {@link #CONTINUOUS_COMPATIBLE_CONSTRAINTS} unconditionally (they
+     * do no propagation of their own over the body), so without this recursion an incompatible
+     * body constraint (e.g. {@code allDiffConstraint}/{@code circuitConstraint} over a
+     * {@code BoundedDomain} variable, both explicitly rejected when used directly) would silently
+     * bypass the whitelist check entirely by being wrapped in a reification.
+     */
+    private static void validateContinuousCompatibility(Constraint constraint, Set<Variable<?>> boundedVariables) {
+        if (constraint instanceof ReifiedConstraint reified) {
+            validateContinuousCompatibility(reified.getBody(), boundedVariables);
+            return;
+        }
+        if (constraint instanceof ImplicationConstraint implication) {
+            validateContinuousCompatibility(implication.getBody(), boundedVariables);
+            return;
+        }
+        if (CONTINUOUS_COMPATIBLE_CONSTRAINTS.contains(constraint.getClass())) {
+            return;
+        }
+        val incompatible = constraint.getVariables().stream()
+                .filter(boundedVariables::contains)
+                .collect(Collectors.toSet());
+        if (!incompatible.isEmpty()) {
+            throw new IllegalArgumentException(String.format(
+                    "Variables %s use a BoundedDomain (e.g. IntervalDomain) but are referenced by " +
+                            "unsupported constraint %s; only %s support BoundedDomain variables",
+                    incompatible, constraint.getClass().getSimpleName(), CONTINUOUS_COMPATIBLE_CONSTRAINTS));
         }
     }
 

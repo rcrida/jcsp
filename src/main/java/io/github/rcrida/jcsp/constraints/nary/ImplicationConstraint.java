@@ -1,6 +1,7 @@
 package io.github.rcrida.jcsp.constraints.nary;
 
 import lombok.EqualsAndHashCode;
+import lombok.Getter;
 import lombok.Value;
 import lombok.experimental.SuperBuilder;
 import io.github.rcrida.jcsp.assignments.Assignment;
@@ -22,7 +23,7 @@ import java.util.Set;
 @EqualsAndHashCode(callSuper = true)
 public class ImplicationConstraint extends NaryConstraint {
     @NonNull private final Variable<Boolean> indicator;
-    @NonNull private final Constraint body;
+    @Getter @NonNull private final Constraint body;
 
     public static ImplicationConstraint of(@NonNull Variable<Boolean> indicator, @NonNull Constraint body) {
         Set<Variable<?>> vars = new HashSet<>(body.getVariables());

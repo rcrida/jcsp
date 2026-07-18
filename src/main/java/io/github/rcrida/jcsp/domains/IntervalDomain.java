@@ -16,11 +16,32 @@ import java.util.Optional;
  * {@link io.github.rcrida.jcsp.constraints.binary.AbsoluteDifferenceConstraint},
  * {@link io.github.rcrida.jcsp.constraints.binary.BinaryComparatorConstraint},
  * {@link io.github.rcrida.jcsp.constraints.binary.BinaryOffsetConstraint},
- * {@link io.github.rcrida.jcsp.constraints.nary.CumulativeConstraint}.
+ * {@link io.github.rcrida.jcsp.constraints.binary.DivisionConstraint} (positive domains only),
+ * {@link io.github.rcrida.jcsp.constraints.nary.CumulativeConstraint},
  * {@link io.github.rcrida.jcsp.constraints.nary.LexConstraint},
  * {@link io.github.rcrida.jcsp.constraints.nary.LinearConstraint},
  * {@link io.github.rcrida.jcsp.constraints.nary.MaxConstraint},
+ * {@link io.github.rcrida.jcsp.constraints.nary.MinConstraint},
+ * {@link io.github.rcrida.jcsp.constraints.nary.ProductConstraint} (positive domains only),
  * {@link io.github.rcrida.jcsp.constraints.nary.SumConstraint},
+ * {@link io.github.rcrida.jcsp.constraints.nary.DiffnConstraint} (origin variables),
+ * {@link io.github.rcrida.jcsp.constraints.nary.IncreasingConstraint},
+ * {@link io.github.rcrida.jcsp.constraints.nary.DecreasingConstraint},
+ * {@link io.github.rcrida.jcsp.constraints.nary.GroundNogoodConstraint},
+ * {@link io.github.rcrida.jcsp.constraints.nary.RangeNogoodConstraint}.
+ * <p>
+ * Also accepted, but without dedicated bounds propagation of their own — correctness for these
+ * rests on the final {@code isSatisfiedBy} check once every {@code BoundedDomain} variable has
+ * been resolved to a concrete point (see {@link io.github.rcrida.jcsp.solver.PropagationFixpointSolver}'s
+ * midpoint snapping and {@link io.github.rcrida.jcsp.solver.BisectionConditioningSolver}'s bisection):
+ * {@link io.github.rcrida.jcsp.constraints.unary.UnaryPredicateConstraint},
+ * {@link io.github.rcrida.jcsp.constraints.binary.BinaryPredicateConstraint},
+ * {@link io.github.rcrida.jcsp.constraints.nary.PredicateConstraint},
+ * {@link io.github.rcrida.jcsp.constraints.nary.ReifiedConstraint},
+ * {@link io.github.rcrida.jcsp.constraints.nary.ImplicationConstraint} (whose {@code body} must
+ * itself be one of the constraints listed here),
+ * {@link io.github.rcrida.jcsp.constraints.nary.NaryElementConstraint}.
+ * <p>
  * Any other constraint type referencing an {@code IntervalDomain} variable is rejected at
  * build time with {@link IllegalArgumentException}.
  */
