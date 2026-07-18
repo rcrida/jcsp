@@ -32,4 +32,30 @@ public interface Inference {
                 .map(ConsistencyResult::feasible)
                 .orElseGet(() -> ConsistencyResult.infeasible(GroundNogoodConstraint.of(assignment.getValues())));
     }
+
+    /**
+     * Wraps {@code delegate} so {@link #applyWithReason} never derives a reason on failure (a
+     * {@code null} one, not this interface's default assignment-wide fallback), letting a caller
+     * that always calls {@code applyWithReason} still get a true zero-explanation-cost path -- the
+     * returned wrapper calls {@code delegate}'s plain {@link #apply}, never {@code
+     * delegate.applyWithReason}, so whatever (possibly non-trivial) reason-derivation {@code
+     * delegate} itself might otherwise do is skipped entirely, not just discarded.
+     */
+    static Inference withoutReasonTracking(Inference delegate) {
+        return new Inference() {
+            @Override
+            public Optional<ConstraintSatisfactionProblem> apply(ConstraintSatisfactionProblem problem,
+                                                                  Variable<?> variable, Assignment assignment) {
+                return delegate.apply(problem, variable, assignment);
+            }
+
+            @Override
+            public ConsistencyResult applyWithReason(ConstraintSatisfactionProblem problem,
+                                                      Variable<?> variable, Assignment assignment) {
+                return apply(problem, variable, assignment)
+                        .map(ConsistencyResult::feasible)
+                        .orElseGet(() -> ConsistencyResult.infeasible(null));
+            }
+        };
+    }
 }

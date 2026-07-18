@@ -214,12 +214,14 @@ public final class NogoodPropagationBenchmark {
      * treewidth above the tree-decomposition threshold, so those decorators would be pure passthrough). */
     private static Solver buildChain(NogoodStore nogoodStore, SolverLimits limits, boolean nogoodLearningEnabled,
                                      Statistics statistics) {
+        io.github.rcrida.jcsp.consistency.Inference inference = nogoodLearningEnabled
+                ? Solver.Factory.FULL_PROPAGATION_INFERENCE
+                : io.github.rcrida.jcsp.consistency.Inference.withoutReasonTracking(Solver.Factory.FULL_PROPAGATION_INFERENCE);
         DomWdegLubySearch domWdegLubySearch = DomWdegLubySearch.builder()
                 .domainValuesOrderer(LeastConstrainingValueOrderer.INSTANCE)
-                .inference(Solver.Factory.FULL_PROPAGATION_INFERENCE)
+                .inference(inference)
                 .limits(limits)
                 .nogoodStore(nogoodStore)
-                .nogoodLearningEnabled(nogoodLearningEnabled)
                 .statistics(statistics)
                 .maxRestarts(Integer.MAX_VALUE)
                 .build();

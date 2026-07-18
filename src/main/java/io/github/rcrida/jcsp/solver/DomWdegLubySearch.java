@@ -60,13 +60,6 @@ public class DomWdegLubySearch implements Solver {
     @NonNull SolverLimits limits;
     @NonNull NogoodStore nogoodStore;
     /**
-     * When {@code false}, disables nogood learning (CDCL) entirely: only {@link Inference#apply}
-     * is ever called, never {@link Inference#applyWithReason} -- skipping explanation computation
-     * altogether, not just its accumulation, for problem shapes where learned nogoods rarely get
-     * reused.
-     */
-    boolean nogoodLearningEnabled;
-    /**
      * Shared token every root {@link Assignment} (including every Luby restart) is seeded with,
      * rather than each starting from a fresh {@code Assignment.empty()} -- so it accumulates the
      * true cumulative counts across the whole search regardless of how it ends (solution, genuine
@@ -81,13 +74,12 @@ public class DomWdegLubySearch implements Solver {
         private int maxRestarts = DEFAULT_MAX_RESTARTS;
         private SolverLimits limits = SolverLimits.unlimited();
         private NogoodStore nogoodStore = new NogoodStore();
-        private boolean nogoodLearningEnabled = true;
         private Statistics statistics = new Statistics();
 
         public DomWdegLubySearch build() {
             if (lubyUnit <= 0) throw new IllegalArgumentException("lubyUnit must be positive, got: " + lubyUnit);
             if (maxRestarts <= 0) throw new IllegalArgumentException("maxRestarts must be positive, got: " + maxRestarts);
-            return new DomWdegLubySearch(lubyUnit, maxRestarts, domainValuesOrderer, inference, limits, nogoodStore, nogoodLearningEnabled, statistics);
+            return new DomWdegLubySearch(lubyUnit, maxRestarts, domainValuesOrderer, inference, limits, nogoodStore, statistics);
         }
     }
 
@@ -163,33 +155,25 @@ public class DomWdegLubySearch implements Solver {
     }
 
     /**
-     * When {@link #nogoodLearningEnabled} is {@code false}, calls plain {@link Inference#apply} --
-     * {@link Inference#applyWithReason} is never invoked, skipping explanation computation
-     * entirely rather than just discarding its result. Otherwise calls {@link
-     * Inference#applyWithReason} directly: whatever {@code inference} implementation is configured
-     * is polymorphically responsible for both propagating and, on failure, explaining itself in
-     * one pass -- {@link Inference#applyWithReason}'s own contract guarantees a non-null reason
-     * whenever it reports infeasible (its default falls back to the current assignment; {@code
-     * Solver.Factory#FULL_PROPAGATION_INFERENCE} overrides it with something tighter), so there is
-     * nothing left for this method to fall back to itself.
+     * Calls {@link #inference}'s {@link Inference#applyWithReason} unconditionally -- whatever
+     * {@code Inference} is configured is polymorphically responsible for both propagating and, on
+     * failure, explaining itself in one pass. A {@code null} {@link ConsistencyResult#reason()}
+     * means the configured {@code Inference} doesn't want a nogood recorded for this failure at
+     * all (see {@link Inference#withoutReasonTracking}, used to disable CDCL for a true
+     * zero-explanation-cost path); this method has no fallback of its own to reach for in that
+     * case, since choosing whether/how to explain is entirely {@code inference}'s job now.
      */
     private Optional<ConstraintSatisfactionProblem> inferOrExplain(ConstraintSatisfactionProblem cspWithNogoods,
                                                                     Variable<?> variable,
                                                                     Assignment next,
                                                                     DomWdegVariableSelector selector) {
-        if (!nogoodLearningEnabled) {
-            Optional<ConstraintSatisfactionProblem> inferred = inference.apply(cspWithNogoods, variable, next);
-            if (inferred.isEmpty()) {
-                selector.incrementWeights(cspWithNogoods, variable, next);
-                next.getStatistics().incrementBacktracks();
-            }
-            return inferred;
-        }
         ConsistencyResult inferred = inference.applyWithReason(cspWithNogoods, variable, next);
         if (inferred.isInfeasible()) {
             selector.incrementWeights(cspWithNogoods, variable, next);
-            nogoodStore.record(inferred.reason());
-            next.getStatistics().incrementNogoodsLearned();
+            if (inferred.reason() != null) {
+                nogoodStore.record(inferred.reason());
+                next.getStatistics().incrementNogoodsLearned();
+            }
             next.getStatistics().incrementBacktracks();
             return Optional.empty();
         }

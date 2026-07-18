@@ -156,6 +156,14 @@ public interface Solver {
                 boolean hasContinuous = csp.getVariableDomains().values().stream()
                         .anyMatch(BoundedDomain.class::isInstance);
                 val treeSolver = new TreeSolver(BFSTopologicalSorter.INSTANCE, DefaultValueOrderer.INSTANCE, TreeUnassignedVariableSelector.Factory.INSTANCE);
+                // Deciding which Inference to hand DomWdegLubySearch lives here, not inside
+                // DomWdegLubySearch itself: config.isNogoodLearningEnabled() picks between the real
+                // reason-deriving FULL_PROPAGATION_INFERENCE and a wrapper that never does, so
+                // DomWdegLubySearch's own search loop stays free of any "should I explain" branch --
+                // it just calls Inference#applyWithReason and reacts to whatever reason comes back.
+                val inference = config.isNogoodLearningEnabled()
+                        ? FULL_PROPAGATION_INFERENCE
+                        : Inference.withoutReasonTracking(FULL_PROPAGATION_INFERENCE);
                 // Built fresh per sub-problem (not shared) so each independent sub-problem gets its own
                 // NogoodStore, correctly sized and scoped to just its own variables -- see
                 // IndependentSubproblemSolver's javadoc for why sharing one across sub-problems is unsound.
@@ -164,10 +172,9 @@ public interface Solver {
                     val nogoodStore = NogoodStore.forProblem(sub);
                     val domWdegLubySearch = DomWdegLubySearch.builder()
                             .domainValuesOrderer(LeastConstrainingValueOrderer.INSTANCE)
-                            .inference(FULL_PROPAGATION_INFERENCE)
+                            .inference(inference)
                             .limits(limits)
                             .nogoodStore(nogoodStore)
-                            .nogoodLearningEnabled(config.isNogoodLearningEnabled())
                             .statistics(config.getStatistics())
                             // Effectively unbounded: getSolution() now reaches Luby-restart search directly
                             // (see BoundSolver#getSolution below), so DEFAULT_MAX_RESTARTS's cap would silently

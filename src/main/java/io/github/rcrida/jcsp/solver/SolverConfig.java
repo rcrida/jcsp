@@ -17,8 +17,13 @@ import org.jspecify.annotations.NonNull;
  * <p>
  * {@code nogoodLearningEnabled} only affects the satisfaction chain ({@code DomWdegLubySearch}) --
  * the optimization chain's {@code BranchAndBoundSolver} doesn't do nogood learning at all, so it's
- * silently unused there. Set it to {@code false} to disable CDCL entirely -- no explanation
- * computation, no accumulation -- e.g. for problem shapes where learned nogoods rarely get reused.
+ * silently unused there. {@code Solver.Factory} reads this once, at construction time, to decide
+ * which {@code Inference} to hand {@code DomWdegLubySearch} -- {@code
+ * FULL_PROPAGATION_INFERENCE} when {@code true}, or {@link
+ * io.github.rcrida.jcsp.consistency.Inference#withoutReasonTracking} wrapping it when {@code
+ * false} -- rather than {@code DomWdegLubySearch} itself branching on a flag; either way {@code
+ * false} disables CDCL entirely: no explanation computation, no accumulation, e.g. for problem
+ * shapes where learned nogoods rarely get reused.
  * <p>
  * {@code statistics} is the shared token search writes into for the entire life of the returned
  * {@code BoundSolver}: every top-level search node -- across every independent subproblem and,

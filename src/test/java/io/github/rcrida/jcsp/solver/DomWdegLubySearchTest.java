@@ -175,9 +175,9 @@ class DomWdegLubySearchTest {
     void nogoodLearningDisabled_solvesWithoutRecordingNogoods() {
         // Same x/y/w1/w2 CSP as nogoodsLearnedStatisticIncrementsOnFailedBranch: with
         // DefaultValueOrderer, x=1 fails deterministically (y's domain wiped, a backtrack) before
-        // x=2 succeeds -- covering both outcomes of inferOrExplain's nogoodLearningEnabled=false
-        // branch (Inference#apply called directly, never applyWithReason) in one deterministic run,
-        // and confirming nothing ever gets recorded into the store.
+        // x=2 succeeds -- covering both outcomes of Inference.withoutReasonTracking's wrapped
+        // applyWithReason (its own apply() delegate returning empty vs present) in one
+        // deterministic run, and confirming nothing ever gets recorded into the store.
         Variable<Integer> x = VF.create("nlx");
         Variable<Integer> y = VF.create("nly");
         Variable<Integer> w1 = VF.create("nlw1");
@@ -195,9 +195,8 @@ class DomWdegLubySearchTest {
         NogoodStore store = new NogoodStore();
         DomWdegLubySearch solver = DomWdegLubySearch.builder()
                 .domainValuesOrderer(io.github.rcrida.jcsp.solver.backtrackingsearch.order.DefaultValueOrderer.INSTANCE)
-                .inference(Solver.Factory.FULL_PROPAGATION_INFERENCE)
+                .inference(Inference.withoutReasonTracking(Solver.Factory.FULL_PROPAGATION_INFERENCE))
                 .nogoodStore(store)
-                .nogoodLearningEnabled(false)
                 .build();
 
         Optional<Assignment> solution = solver.getSolution(csp);
