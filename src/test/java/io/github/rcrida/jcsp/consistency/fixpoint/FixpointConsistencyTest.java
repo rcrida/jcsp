@@ -38,4 +38,19 @@ public class FixpointConsistencyTest {
                 .build();
         assertThat(FixpointConsistency.of(SumConstraint.class).explainConflict(csp)).isEmpty();
     }
+
+    @Test
+    void explainConflict_infeasibleConstraint_returnsReason() {
+        // SumConstraint(x+y≤3) with x,y∈{5..5}: infeasible on the very first propagate() call, so
+        // explainConflict's isInfeasible() ternary branch (as opposed to the empty/feasible one
+        // covered above) is exercised, via applyWithReason's own reason derivation.
+        Variable<Integer> x = Variable.Factory.INSTANCE.create("x");
+        Variable<Integer> y = Variable.Factory.INSTANCE.create("y");
+        var csp = ConstraintSatisfactionProblem.builder()
+                .variableDomain(x, IntRangeDomain.of(5, 5))
+                .variableDomain(y, IntRangeDomain.of(5, 5))
+                .sumConstraint(Set.of(x, y), Operator.LEQ, 3)
+                .build();
+        assertThat(FixpointConsistency.of(SumConstraint.class).explainConflict(csp)).isPresent();
+    }
 }

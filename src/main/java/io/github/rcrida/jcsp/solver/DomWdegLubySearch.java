@@ -5,8 +5,8 @@ import io.github.rcrida.jcsp.assignments.Assignment;
 import io.github.rcrida.jcsp.assignments.NogoodStore;
 import io.github.rcrida.jcsp.assignments.SolverLimits;
 import io.github.rcrida.jcsp.assignments.Statistics;
+import io.github.rcrida.jcsp.consistency.ConsistencyResult;
 import io.github.rcrida.jcsp.consistency.Inference;
-import io.github.rcrida.jcsp.constraints.nary.GroundNogoodConstraint;
 import io.github.rcrida.jcsp.solver.backtrackingsearch.order.DomainValuesOrderer;
 import io.github.rcrida.jcsp.solver.backtrackingsearch.selector.DomWdegVariableSelector;
 import io.github.rcrida.jcsp.variables.Variable;
@@ -59,7 +59,13 @@ public class DomWdegLubySearch implements Solver {
     @NonNull Inference inference;
     @NonNull SolverLimits limits;
     @NonNull NogoodStore nogoodStore;
-    @NonNull ConflictExplainer conflictExplainer;
+    /**
+     * When {@code false}, disables nogood learning (CDCL) entirely: only {@link Inference#apply}
+     * is ever called, never {@link Inference#applyWithReason} -- skipping explanation computation
+     * altogether, not just its accumulation, for problem shapes where learned nogoods rarely get
+     * reused.
+     */
+    boolean nogoodLearningEnabled;
     /**
      * Shared token every root {@link Assignment} (including every Luby restart) is seeded with,
      * rather than each starting from a fresh {@code Assignment.empty()} -- so it accumulates the
@@ -75,14 +81,13 @@ public class DomWdegLubySearch implements Solver {
         private int maxRestarts = DEFAULT_MAX_RESTARTS;
         private SolverLimits limits = SolverLimits.unlimited();
         private NogoodStore nogoodStore = new NogoodStore();
-        private ConflictExplainer conflictExplainer =
-                (csp, variable, assignment) -> Optional.of(GroundNogoodConstraint.of(assignment.getValues()));
+        private boolean nogoodLearningEnabled = true;
         private Statistics statistics = new Statistics();
 
         public DomWdegLubySearch build() {
             if (lubyUnit <= 0) throw new IllegalArgumentException("lubyUnit must be positive, got: " + lubyUnit);
             if (maxRestarts <= 0) throw new IllegalArgumentException("maxRestarts must be positive, got: " + maxRestarts);
-            return new DomWdegLubySearch(lubyUnit, maxRestarts, domainValuesOrderer, inference, limits, nogoodStore, conflictExplainer, statistics);
+            return new DomWdegLubySearch(lubyUnit, maxRestarts, domainValuesOrderer, inference, limits, nogoodStore, nogoodLearningEnabled, statistics);
         }
     }
 
@@ -151,18 +156,44 @@ public class DomWdegLubySearch implements Solver {
                         next.getStatistics().incrementBacktracks();
                         return Stream.empty();
                     }
-                    Optional<ConstraintSatisfactionProblem> inferred = inference.apply(cspWithNogoods, variable, next);
-                    if (inferred.isEmpty()) {
-                        selector.incrementWeights(cspWithNogoods, variable, next);
-                        conflictExplainer.explain(cspWithNogoods, variable, next).ifPresent(nogood -> {
-                            nogoodStore.record(nogood);
-                            next.getStatistics().incrementNogoodsLearned();
-                        });
-                        next.getStatistics().incrementBacktracks();
-                        return Stream.empty();
-                    }
-                    return searchStream(inferred.get(), next, selector, deadline);
+                    return inferOrExplain(cspWithNogoods, variable, next, selector)
+                            .map(inferredCsp -> searchStream(inferredCsp, next, selector, deadline))
+                            .orElseGet(Stream::empty);
                 });
+    }
+
+    /**
+     * When {@link #nogoodLearningEnabled} is {@code false}, calls plain {@link Inference#apply} --
+     * {@link Inference#applyWithReason} is never invoked, skipping explanation computation
+     * entirely rather than just discarding its result. Otherwise calls {@link
+     * Inference#applyWithReason} directly: whatever {@code inference} implementation is configured
+     * is polymorphically responsible for both propagating and, on failure, explaining itself in
+     * one pass -- {@link Inference#applyWithReason}'s own contract guarantees a non-null reason
+     * whenever it reports infeasible (its default falls back to the current assignment; {@code
+     * Solver.Factory#FULL_PROPAGATION_INFERENCE} overrides it with something tighter), so there is
+     * nothing left for this method to fall back to itself.
+     */
+    private Optional<ConstraintSatisfactionProblem> inferOrExplain(ConstraintSatisfactionProblem cspWithNogoods,
+                                                                    Variable<?> variable,
+                                                                    Assignment next,
+                                                                    DomWdegVariableSelector selector) {
+        if (!nogoodLearningEnabled) {
+            Optional<ConstraintSatisfactionProblem> inferred = inference.apply(cspWithNogoods, variable, next);
+            if (inferred.isEmpty()) {
+                selector.incrementWeights(cspWithNogoods, variable, next);
+                next.getStatistics().incrementBacktracks();
+            }
+            return inferred;
+        }
+        ConsistencyResult inferred = inference.applyWithReason(cspWithNogoods, variable, next);
+        if (inferred.isInfeasible()) {
+            selector.incrementWeights(cspWithNogoods, variable, next);
+            nogoodStore.record(inferred.reason());
+            next.getStatistics().incrementNogoodsLearned();
+            next.getStatistics().incrementBacktracks();
+            return Optional.empty();
+        }
+        return Optional.of(inferred.problem());
     }
 
     @SuppressWarnings("unchecked")
@@ -186,14 +217,8 @@ public class DomWdegLubySearch implements Solver {
                 next.getStatistics().incrementBacktracks();
                 continue;
             }
-            Optional<ConstraintSatisfactionProblem> inferred = inference.apply(cspWithNogoods, variable, next);
+            Optional<ConstraintSatisfactionProblem> inferred = inferOrExplain(cspWithNogoods, variable, next, selector);
             if (inferred.isEmpty()) {
-                selector.incrementWeights(cspWithNogoods, variable, next);
-                conflictExplainer.explain(cspWithNogoods, variable, next).ifPresent(nogood -> {
-                    nogoodStore.record(nogood);
-                    next.getStatistics().incrementNogoodsLearned();
-                });
-                next.getStatistics().incrementBacktracks();
                 if (++failures[0] >= budget) throw BudgetExceeded.INSTANCE;
                 continue;
             }

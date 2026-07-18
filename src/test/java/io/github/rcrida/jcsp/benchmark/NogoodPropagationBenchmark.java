@@ -7,12 +7,9 @@ import io.github.rcrida.jcsp.assignments.Statistics;
 import io.github.rcrida.jcsp.constraints.Operator;
 import io.github.rcrida.jcsp.domains.BooleanDomain;
 import io.github.rcrida.jcsp.domains.IntRangeDomain;
-import io.github.rcrida.jcsp.solver.ConflictExplainer;
 import io.github.rcrida.jcsp.solver.DomWdegLubySearch;
 import io.github.rcrida.jcsp.solver.LimitExceededException;
-import io.github.rcrida.jcsp.solver.MacAndFixpointConflictExplainer;
 import io.github.rcrida.jcsp.solver.NodeConsistentSolver;
-import io.github.rcrida.jcsp.solver.NullConflictExplainer;
 import io.github.rcrida.jcsp.solver.PropagationFixpointSolver;
 import io.github.rcrida.jcsp.solver.Solver;
 import io.github.rcrida.jcsp.solver.backtrackingsearch.order.LeastConstrainingValueOrderer;
@@ -43,22 +40,20 @@ import java.util.Set;
  * <p>All three variants explore the exact same fixed node budget ({@link #NODE_LIMIT}) on the exact
  * same hard CSP, wired identically except for one thing:
  * <ul>
- *   <li>{@code default} uses {@link NogoodStore#forProblem} (production sizing) with {@link
- *       MacAndFixpointConflictExplainer} -- the production configuration.</li>
+ *   <li>{@code default} uses {@link NogoodStore#forProblem} (production sizing) with nogood
+ *       learning enabled -- the production configuration.</li>
  *   <li>{@code capped} uses a capacity-1 {@link NogoodStore}, which still learns but immediately
- *       evicts, so it approximates "no accumulated nogood-store cost" -- but it still calls {@link
- *       MacAndFixpointConflictExplainer} on every domain wipeout, re-running MAC and the
- *       propagation fixpoint with reason tracking, before immediately discarding the result. This
- *       isolates the copy/merge cost specifically (see the trail above), not the cost of nogood
- *       <em>learning</em> in general.</li>
- *   <li>{@code disabled} uses {@link NullConflictExplainer} instead, which returns {@code
- *       Optional.empty()} unconditionally -- {@code NogoodStore.record} is then never called at
- *       all, so this is CDCL fully switched off: no explanation computation, no accumulation, no
- *       copy/merge. Comparing {@code capped} against {@code disabled} isolates {@code
- *       MacAndFixpointConflictExplainer}'s own per-wipeout cost, which {@code capped} alone can't
- *       separate out (a distinction first raised, then resolved by adding {@code
- *       NullConflictExplainer} to the library, in the same investigation this benchmark
- *       documents).</li>
+ *       evicts, so it approximates "no accumulated nogood-store cost" -- but {@code
+ *       Solver.Factory#FULL_PROPAGATION_INFERENCE}'s {@code applyWithReason} still derives a
+ *       reason on every domain wipeout before it's immediately discarded. This isolates the
+ *       copy/merge cost specifically (see the trail above), not the cost of nogood <em>learning</em>
+ *       in general.</li>
+ *   <li>{@code disabled} sets {@code nogoodLearningEnabled(false)} instead, so only {@code
+ *       Inference#apply} is ever called, never {@code applyWithReason} -- {@code NogoodStore.record}
+ *       is then never called at all, so this is CDCL fully switched off: no explanation
+ *       computation, no accumulation, no copy/merge. Comparing {@code capped} against {@code
+ *       disabled} isolates the reason-derivation cost itself, which {@code capped} alone can't
+ *       separate out.</li>
  * </ul>
  * A wall-clock gap between {@code default} and {@code capped} is attributable to nogood-store
  * copy/merge overhead; a gap between {@code capped} and {@code disabled} is attributable to the
@@ -172,15 +167,15 @@ public final class NogoodPropagationBenchmark {
 
     private static void runAllVariants(ConstraintSatisfactionProblem csp, long nodeLimit) {
         run("default (NogoodStore.forProblem)", csp, nodeLimit,
-                () -> NogoodStore.forProblem(csp), MacAndFixpointConflictExplainer.INSTANCE);
+                () -> NogoodStore.forProblem(csp), true);
         run("capped (NogoodStore capacity=1)", csp, nodeLimit,
-                () -> new NogoodStore(1), MacAndFixpointConflictExplainer.INSTANCE);
-        run("disabled (NullConflictExplainer)", csp, nodeLimit,
-                () -> NogoodStore.forProblem(csp), NullConflictExplainer.INSTANCE);
+                () -> new NogoodStore(1), true);
+        run("disabled (nogoodLearningEnabled=false)", csp, nodeLimit,
+                () -> NogoodStore.forProblem(csp), false);
     }
 
     private static void run(String label, ConstraintSatisfactionProblem csp, long nodeLimit,
-                            java.util.function.Supplier<NogoodStore> storeFactory, ConflictExplainer conflictExplainer) {
+                            java.util.function.Supplier<NogoodStore> storeFactory, boolean nogoodLearningEnabled) {
         List<Long> millis = new ArrayList<>();
         List<Statistics> stats = new ArrayList<>();
         String outcome = "?";
@@ -190,7 +185,7 @@ public final class NogoodPropagationBenchmark {
             // rather than something only reachable via a returned Assignment -- so it's readable
             // here regardless of how the search below terminates: SAT, genuine UNSAT, or a limit hit.
             Statistics statistics = new Statistics();
-            Solver chain = buildChain(storeFactory.get(), limits, conflictExplainer, statistics);
+            Solver chain = buildChain(storeFactory.get(), limits, nogoodLearningEnabled, statistics);
             long start = System.nanoTime();
             try {
                 var result = chain.getSolution(csp);
@@ -217,14 +212,14 @@ public final class NogoodPropagationBenchmark {
     /** Mirrors {@code Solver.Factory}'s satisfaction chain, minus the decomposition decorators
      * (not needed here: these Golomb ruler instances are a single dense connected component with
      * treewidth above the tree-decomposition threshold, so those decorators would be pure passthrough). */
-    private static Solver buildChain(NogoodStore nogoodStore, SolverLimits limits, ConflictExplainer conflictExplainer,
+    private static Solver buildChain(NogoodStore nogoodStore, SolverLimits limits, boolean nogoodLearningEnabled,
                                      Statistics statistics) {
         DomWdegLubySearch domWdegLubySearch = DomWdegLubySearch.builder()
                 .domainValuesOrderer(LeastConstrainingValueOrderer.INSTANCE)
                 .inference(Solver.Factory.FULL_PROPAGATION_INFERENCE)
                 .limits(limits)
                 .nogoodStore(nogoodStore)
-                .conflictExplainer(conflictExplainer)
+                .nogoodLearningEnabled(nogoodLearningEnabled)
                 .statistics(statistics)
                 .maxRestarts(Integer.MAX_VALUE)
                 .build();

@@ -52,7 +52,7 @@ import java.util.concurrent.atomic.AtomicReference;
  * {@link #record} pushes the size over the cap, the largest-arity nogoods are evicted first
  * (ties broken arbitrarily). Arity is used as a proxy for reusability rather than a fixed "too
  * big" cutoff, because there is no size threshold that's meaningful across problems of different
- * scale — a nogood's largest source, {@link io.github.rcrida.jcsp.solver.MacAndFixpointConflictExplainer}'s
+ * scale — a nogood's largest source, {@link io.github.rcrida.jcsp.consistency.Inference#applyWithReason}'s
  * full-assignment fallback, is bounded by search depth, not a constant. Evicting is always safe:
  * nogoods are derived facts, never a source of truth, so forgetting one at worst costs re-deriving
  * the same failure later — never correctness. {@link #forProblem} scales the cap itself to the
@@ -108,8 +108,8 @@ public class NogoodStore {
     /**
      * Records a nogood constraint, deduplicated via {@link Set#add} (see the class javadoc for
      * why a {@code Set} rather than a {@code List}). Callers typically get {@code nogood} from
-     * {@link io.github.rcrida.jcsp.solver.ConflictExplainer#explain}'s {@code Optional} — there is
-     * no "empty nogood" case to guard against here any more, since a {@link NogoodConstraint} is
+     * {@link io.github.rcrida.jcsp.consistency.Inference#applyWithReason}'s {@code ConsistencyResult}
+     * — there is no "empty nogood" case to guard against here, since a {@link NogoodConstraint} is
      * non-empty by construction (see e.g. {@link io.github.rcrida.jcsp.constraints.nary.GroundNogoodConstraint#of}).
      */
     public void record(NogoodConstraint nogood) {

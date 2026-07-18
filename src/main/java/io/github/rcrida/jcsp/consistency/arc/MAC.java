@@ -3,6 +3,7 @@ package io.github.rcrida.jcsp.consistency.arc;
 import lombok.val;
 import io.github.rcrida.jcsp.ConstraintSatisfactionProblem;
 import io.github.rcrida.jcsp.assignments.Assignment;
+import io.github.rcrida.jcsp.consistency.ConsistencyResult;
 import io.github.rcrida.jcsp.consistency.Inference;
 import io.github.rcrida.jcsp.constraints.binary.BinaryConstraint;
 import io.github.rcrida.jcsp.domains.AssignedDomain;
@@ -42,6 +43,27 @@ public class MAC implements Inference {
                 .collect(Collectors.toSet());
         val queue = new ArrayDeque<>(variableConstraints);
         return AC3.INSTANCE.applyQueue(
+                problem.toBuilder().variableDomain((Variable<Object>) variable, new AssignedDomain(value)).build(),
+                queue);
+    }
+
+    /**
+     * Single-pass combination of {@link #apply} and re-deriving a reason for a wipeout: delegates
+     * to {@link AC3#applyQueueWithReason}, which computes a reason inline at the exact arc a
+     * wipeout is found rather than a second, from-scratch traversal — identical arc-revision cost
+     * to {@link #apply} on the feasible path.
+     */
+    @Override
+    @SuppressWarnings("unchecked")
+    public ConsistencyResult applyWithReason(ConstraintSatisfactionProblem problem, Variable<?> variable, Assignment assignment) {
+        val value = assignment.getValue(variable).orElseThrow();
+        val variableConstraints = problem.getAllBinaryConstraints().stream()
+                .flatMap(BinaryConstraint::getArcs)
+                .filter(arc -> isBinaryConstraintToX_i(arc, variable))
+                .filter(arc -> isNotAlreadyAssignedX_j(assignment, arc))
+                .collect(Collectors.toSet());
+        val queue = new ArrayDeque<>(variableConstraints);
+        return AC3.INSTANCE.applyQueueWithReason(
                 problem.toBuilder().variableDomain((Variable<Object>) variable, new AssignedDomain(value)).build(),
                 queue);
     }

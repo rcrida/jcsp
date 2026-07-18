@@ -112,6 +112,20 @@ public class PropagationFixpointSolverTest {
     }
 
     @Test
+    void explainConflict_infeasibleCsp_returnsReason() {
+        // SumConstraint(x+y≤3) with x,y∈{5..5}: infeasible on the very first propagator round, so
+        // explainConflict's isInfeasible() ternary branch (as opposed to the feasible one covered
+        // above) is exercised.
+        Variable<Integer> x = F.create("icx"), y = F.create("icy");
+        var csp = ConstraintSatisfactionProblem.builder()
+                .variableDomain(x, IntRangeDomain.of(5, 5))
+                .variableDomain(y, IntRangeDomain.of(5, 5))
+                .sumConstraint(Set.of(x, y), Operator.LEQ, 3)
+                .build();
+        assertThat(PropagationFixpointSolver.explainConflict(csp)).isPresent();
+    }
+
+    @Test
     void applyFixpointWithSeed_skipsNogoodOutsideSeed_fullScanCatchesIt() {
         // A nogood (x=1, y=2) already falsified by the given domains. Seeding round 1 with a set
         // that excludes both x and y means applyFixpoint(csp, seed) must skip checking it entirely

@@ -3,6 +3,7 @@ package io.github.rcrida.jcsp.consistency.arc;
 import lombok.extern.slf4j.Slf4j;
 import lombok.val;
 import io.github.rcrida.jcsp.ConstraintSatisfactionProblem;
+import io.github.rcrida.jcsp.consistency.ConsistencyResult;
 import io.github.rcrida.jcsp.consistency.ConstraintConsistency;
 import io.github.rcrida.jcsp.consistency.Propagatable;
 import io.github.rcrida.jcsp.constraints.binary.BinaryConstraint;
@@ -11,6 +12,7 @@ import io.github.rcrida.jcsp.constraints.nary.NogoodConstraint;
 import io.github.rcrida.jcsp.domains.DiscreteDomain;
 import io.github.rcrida.jcsp.domains.Domain;
 import io.github.rcrida.jcsp.variables.Variable;
+import org.jspecify.annotations.Nullable;
 
 import java.util.*;
 import java.util.stream.Collectors;
@@ -72,26 +74,47 @@ public class AC3 implements ConstraintConsistency {
     }
 
     /**
-     * Re-runs the same arc-consistency traversal as {@link #applyQueue} (same initial queue, same
-     * arc/constraint grouping, same processing order, same progressively-narrowed domain
-     * bookkeeping), stopping at the same domain wipeout, and attributes it. Deliberately a separate
-     * traversal rather than sharing a core loop with {@link #applyQueue} — mirrors {@code
-     * FixpointConsistency}'s {@code apply}/{@code explainConflict} pair, which are likewise two
-     * parallel implementations rather than one shared one.
+     * Thin wrapper over {@link #applyQueueWithReason}, kept for direct callers/tests and for
+     * {@link ConstraintConsistency}'s own default {@code applyWithReason} fallback: returns {@link
+     * Optional#empty()} when no wipeout occurred.
+     */
+    @Override
+    public Optional<NogoodConstraint> explainConflict(ConstraintSatisfactionProblem problem) {
+        val allArcs = problem.getAllBinaryConstraints().stream()
+                .flatMap(BinaryConstraint::getArcs)
+                .collect(Collectors.toSet());
+        ConsistencyResult result = applyQueueWithReason(problem, new ArrayDeque<>(allArcs));
+        return result.isInfeasible() ? Optional.ofNullable(result.reason()) : Optional.empty();
+    }
+
+    @Override
+    public ConsistencyResult applyWithReason(ConstraintSatisfactionProblem problem,
+                                             @Nullable Set<Variable<?>> changedSinceLastRun) {
+        val allArcs = problem.getAllBinaryConstraints().stream()
+                .flatMap(BinaryConstraint::getArcs)
+                .collect(Collectors.toSet());
+        return applyQueueWithReason(problem, new ArrayDeque<>(allArcs));
+    }
+
+    /**
+     * Single-pass combination of {@link #applyQueue} and the old separate {@code explainConflict}
+     * traversal: identical arc-revision bookkeeping and cost on the feasible path as {@link
+     * #applyQueue} — {@link #revise} is called exactly the same number of times either way — and
+     * only at the exact arc/point a wipeout is found does it compute a reason, instead of a second,
+     * from-scratch replay.
      * <p>
      * A wipeout on arc {@code (X_i, X_j)} means: {@code revise} found that, of the values currently
-     * in {@code D_i} (as read from this traversal's own progressively-narrowed map — not X_i's
-     * declared/original domain, its current, context-dependent one), none satisfy the constraint
-     * against {@code D_j} (likewise current). Citing only {@code X_j}'s value would be
-     * <em>unsound</em> here even when {@code X_j} is singleton: it would claim the constraint rules
-     * out every value {@code X_i} could <em>ever</em> take, when it only ruled out what was in
-     * {@code D_i} <em>at this point in the search</em> — a claim that doesn't generalise to
-     * branches where X_i's domain differs. The reason is sound only when {@code X_i} is
-     * <em>also</em> singleton at this point ({@link Propagatable#allSingletonReason}): then the
-     * wipeout reduces to one concrete pair violating the (fixed, structural) constraint, which is
-     * unconditionally true regardless of search state.
+     * in {@code D_i} (this traversal's own progressively-narrowed map — not X_i's declared/original
+     * domain, its current, context-dependent one), none satisfy the constraint against {@code D_j}
+     * (likewise current). Citing only {@code X_j}'s value would be <em>unsound</em> here even when
+     * {@code X_j} is singleton: it would claim the constraint rules out every value {@code X_i}
+     * could <em>ever</em> take, when it only ruled out what was in {@code D_i} <em>at this point in
+     * the search</em> — a claim that doesn't generalise to branches where X_i's domain differs. The
+     * reason is sound only when {@code X_i} is <em>also</em> singleton at this point ({@link
+     * Propagatable#allSingletonReason}): then the wipeout reduces to one concrete pair violating the
+     * (fixed, structural) constraint, unconditionally true regardless of search state.
      * <p>
-     * Deliberately ground-only, unlike {@link io.github.rcrida.jcsp.consistency.fixpoint.FixpointConsistency#explainConflict},
+     * Deliberately ground-only, unlike {@link io.github.rcrida.jcsp.consistency.fixpoint.FixpointConsistency#applyWithReason},
      * which additionally falls back to a range-based nogood over a whole failing constraint's
      * variables when the ground reason is empty. That fallback's soundness argument rests on
      * {@link Propagatable#propagate} directly reporting infeasibility for a constraint given its
@@ -99,12 +122,7 @@ public class AC3 implements ConstraintConsistency {
      * single constraint's own {@code propagate} call, so extending the same argument here would
      * need separate justification not attempted in this pass.
      */
-    @Override
-    public Optional<NogoodConstraint> explainConflict(ConstraintSatisfactionProblem problem) {
-        val allArcs = problem.getAllBinaryConstraints().stream()
-                .flatMap(BinaryConstraint::getArcs)
-                .collect(Collectors.toSet());
-        val queue = new ArrayDeque<>(allArcs);
+    public ConsistencyResult applyQueueWithReason(ConstraintSatisfactionProblem problem, Queue<Arc> queue) {
         val allBinaryConstraints = problem.getAllBinaryConstraints();
         val arcConstraints = allBinaryConstraints.stream()
                 .flatMap(binaryConstraint -> binaryConstraint.getArcs()
@@ -123,7 +141,7 @@ public class AC3 implements ConstraintConsistency {
                     val revisedD_i = optionalRevisedD_i.get();
                     if (revisedD_i.isEmpty()) {
                         val reason = Propagatable.allSingletonReason(List.of(X_i, X_j), variableDomains);
-                        return reason.isEmpty() ? Optional.empty() : Optional.of(GroundNogoodConstraint.of(reason));
+                        return ConsistencyResult.infeasible(reason.isEmpty() ? null : GroundNogoodConstraint.of(reason));
                     }
                     variableDomains.put(X_i, revisedD_i);
                     val X_iNeighbours = arcsByTarget.getOrDefault(X_i, List.of()).stream()
@@ -133,7 +151,7 @@ public class AC3 implements ConstraintConsistency {
                 }
             }
         }
-        return Optional.empty();
+        return ConsistencyResult.feasible(problem.toBuilder().variableDomains(variableDomains).build());
     }
 
     public Optional<ConstraintSatisfactionProblem> revise(ConstraintSatisfactionProblem problem, Arc arc) {

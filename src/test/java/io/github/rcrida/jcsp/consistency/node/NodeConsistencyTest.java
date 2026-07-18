@@ -64,6 +64,37 @@ public class NodeConsistencyTest {
     }
 
     @Test
+    void applyWithReason_usesInheritedDefault_feasibleDelegatesToApply() {
+        // NodeConsistency doesn't override applyWithReason either -- ConstraintConsistency's
+        // default (apply, then map to a feasible ConsistencyResult) is what runs here.
+        val domain = new EnumDomain<>(EnumSet.of(Colour.RED, Colour.GREEN));
+        val builder = ConstraintSatisfactionProblem.builder();
+        val WA = builder.createVariable("WA", domain);
+        builder.notEqualsConstraint(WA, Colour.BLUE);
+        val problem = builder.build();
+        var result = NodeConsistency.INSTANCE.applyWithReason(problem, null);
+        assertThat(result.isInfeasible()).isFalse();
+        assertThat(result.problem()).isEqualTo(NodeConsistency.INSTANCE.apply(problem).orElseThrow());
+    }
+
+    @Test
+    void applyWithReason_usesInheritedDefault_infeasibleFallsBackToExplainConflict() {
+        // On failure, ConstraintConsistency's default delegates to explainConflict -- which
+        // NodeConsistency also doesn't override, so the reason is always null here.
+        val domain = EnumDomain.allOf(Colour.class);
+        val builder = ConstraintSatisfactionProblem.builder();
+        val SA = builder.createVariable("SA", domain);
+        builder
+                .notEqualsConstraint(SA, Colour.RED)
+                .notEqualsConstraint(SA, Colour.GREEN)
+                .notEqualsConstraint(SA, Colour.BLUE);
+        val problem = builder.build();
+        var result = NodeConsistency.INSTANCE.applyWithReason(problem, null);
+        assertThat(result.isInfeasible()).isTrue();
+        assertThat(result.reason()).isNull();
+    }
+
+    @Test
     void noRevisionsRequired() {
         val domain = new EnumDomain<>(EnumSet.of(Colour.RED, Colour.GREEN));
         val builder = ConstraintSatisfactionProblem.builder();

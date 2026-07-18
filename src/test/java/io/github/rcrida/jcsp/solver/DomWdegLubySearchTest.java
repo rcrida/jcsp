@@ -5,6 +5,8 @@ import io.github.rcrida.jcsp.assignments.Assignment;
 import io.github.rcrida.jcsp.assignments.NogoodStore;
 import io.github.rcrida.jcsp.assignments.SolverLimits;
 import io.github.rcrida.jcsp.assignments.Statistics;
+import io.github.rcrida.jcsp.consistency.ConsistencyResult;
+import io.github.rcrida.jcsp.consistency.Inference;
 import io.github.rcrida.jcsp.constraints.nary.GroundNogoodConstraint;
 import io.github.rcrida.jcsp.domains.IntRangeDomain;
 import io.github.rcrida.jcsp.solver.backtrackingsearch.order.LeastConstrainingValueOrderer;
@@ -167,6 +169,44 @@ class DomWdegLubySearchTest {
                 assertThat(Math.abs(placed.get(i) - placed.get(j))).isNotEqualTo(j - i);
             }
         }
+    }
+
+    @Test
+    void nogoodLearningDisabled_solvesWithoutRecordingNogoods() {
+        // Same x/y/w1/w2 CSP as nogoodsLearnedStatisticIncrementsOnFailedBranch: with
+        // DefaultValueOrderer, x=1 fails deterministically (y's domain wiped, a backtrack) before
+        // x=2 succeeds -- covering both outcomes of inferOrExplain's nogoodLearningEnabled=false
+        // branch (Inference#apply called directly, never applyWithReason) in one deterministic run,
+        // and confirming nothing ever gets recorded into the store.
+        Variable<Integer> x = VF.create("nlx");
+        Variable<Integer> y = VF.create("nly");
+        Variable<Integer> w1 = VF.create("nlw1");
+        Variable<Integer> w2 = VF.create("nlw2");
+        ConstraintSatisfactionProblem csp = ConstraintSatisfactionProblem.builder()
+                .variableDomain(x, IntRangeDomain.of(1, 2))
+                .variableDomain(y, IntRangeDomain.of(1, 1))
+                .variableDomain(w1, IntRangeDomain.of(5, 5))
+                .variableDomain(w2, IntRangeDomain.of(6, 6))
+                .notEqualsConstraint(x, y)
+                .notEqualsConstraint(x, w1)
+                .notEqualsConstraint(x, w2)
+                .build();
+
+        NogoodStore store = new NogoodStore();
+        DomWdegLubySearch solver = DomWdegLubySearch.builder()
+                .domainValuesOrderer(io.github.rcrida.jcsp.solver.backtrackingsearch.order.DefaultValueOrderer.INSTANCE)
+                .inference(Solver.Factory.FULL_PROPAGATION_INFERENCE)
+                .nogoodStore(store)
+                .nogoodLearningEnabled(false)
+                .build();
+
+        Optional<Assignment> solution = solver.getSolution(csp);
+
+        assertThat(solution).isPresent();
+        assertThat(solution.get().getValue(x).orElseThrow()).isEqualTo(2);
+        assertThat(solution.get().getStatistics().getNogoodsLearned().get()).isZero();
+        assertThat(solution.get().getStatistics().getBacktracks().get()).isGreaterThan(0);
+        assertThat(store.apply(csp)).isEqualTo(csp);
     }
 
     @Test
@@ -352,11 +392,12 @@ class DomWdegLubySearchTest {
     }
 
     @Test
-    void getSolutionUsesConflictExplainerNotRawAssignment() {
+    void getSolutionUsesInferenceProvidedReasonNotRawAssignment() {
         // Same setup as nogoodsAreRecordedDuringSearch, but via getSolution() (the Luby-restart
-        // path). A custom conflictExplainer always reports the sentinel {x=99} instead of the
-        // real assigned value. If searchOne recorded next.getValues() directly (the pre-fix
-        // behaviour) the store would hold a NogoodConstraint over {x=1}, not {x=99}.
+        // path), and with a custom Inference (decorating FULL_PROPAGATION_INFERENCE) whose
+        // applyWithReason always reports the sentinel {x=99} instead of whatever the real failure
+        // would derive. If inferOrExplain recorded next.getValues() directly rather than trusting
+        // inference's own reason, the store would hold a nogood over {x=1}, not {x=99}.
         Variable<Integer> x = VF.create("x");
         Variable<Integer> y = VF.create("y");
         ConstraintSatisfactionProblem csp = ConstraintSatisfactionProblem.builder()
@@ -365,13 +406,26 @@ class DomWdegLubySearchTest {
                 .notEqualsConstraint(x, y)
                 .build();
 
+        Inference sentinelInference = new Inference() {
+            @Override
+            public Optional<ConstraintSatisfactionProblem> apply(ConstraintSatisfactionProblem c, Variable<?> variable, Assignment assignment) {
+                return Solver.Factory.FULL_PROPAGATION_INFERENCE.apply(c, variable, assignment);
+            }
+
+            @Override
+            public ConsistencyResult applyWithReason(ConstraintSatisfactionProblem c, Variable<?> variable, Assignment assignment) {
+                ConsistencyResult result = Solver.Factory.FULL_PROPAGATION_INFERENCE.applyWithReason(c, variable, assignment);
+                return result.isInfeasible()
+                        ? ConsistencyResult.infeasible(GroundNogoodConstraint.of(java.util.Map.of(x, 99)))
+                        : result;
+            }
+        };
+
         NogoodStore store = new NogoodStore();
         DomWdegLubySearch solver = DomWdegLubySearch.builder()
                 .domainValuesOrderer(LeastConstrainingValueOrderer.INSTANCE)
-                .inference(Solver.Factory.FULL_PROPAGATION_INFERENCE)
+                .inference(sentinelInference)
                 .nogoodStore(store)
-                .conflictExplainer((c, variable, assignment) ->
-                        Optional.of(GroundNogoodConstraint.of(java.util.Map.of(x, 99))))
                 .build();
 
         assertThat(solver.getSolution(csp)).isEmpty();
@@ -433,7 +487,6 @@ class DomWdegLubySearchTest {
                 .domainValuesOrderer(io.github.rcrida.jcsp.solver.backtrackingsearch.order.DefaultValueOrderer.INSTANCE)
                 .inference(Solver.Factory.FULL_PROPAGATION_INFERENCE)
                 .nogoodStore(store)
-                .conflictExplainer(MacAndFixpointConflictExplainer.INSTANCE)
                 .build();
 
         List<Assignment> solutions = solver.getSolutions(csp).toList();

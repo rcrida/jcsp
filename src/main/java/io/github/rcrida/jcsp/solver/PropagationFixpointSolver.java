@@ -4,6 +4,7 @@ import lombok.EqualsAndHashCode;
 import lombok.experimental.SuperBuilder;
 import lombok.extern.slf4j.Slf4j;
 import io.github.rcrida.jcsp.ConstraintSatisfactionProblem;
+import io.github.rcrida.jcsp.consistency.ConsistencyResult;
 import io.github.rcrida.jcsp.consistency.ConstraintConsistency;
 import io.github.rcrida.jcsp.consistency.fixpoint.FixpointConsistency;
 import io.github.rcrida.jcsp.consistency.fixpoint.NogoodFixpointConsistency;
@@ -170,26 +171,40 @@ public class PropagationFixpointSolver extends SolverDecorator {
     }
 
     /**
-     * Re-runs the propagation fixpoint to explain a conflict. Applies each propagator in order;
-     * when one signals infeasibility, calls its {@link ConstraintConsistency#explainConflict}
-     * to obtain the nogood, or {@link Optional#empty()} if no explanation is available.
-     * Only called after {@link #applyFixpoint} has already returned empty for the same CSP.
+     * Thin wrapper over {@link #applyFixpointWithReason}, kept for direct callers/tests: returns
+     * the nogood that explains a conflict, or {@link Optional#empty()} if the fixpoint converges
+     * feasibly instead.
      */
     static Optional<NogoodConstraint> explainConflict(@NonNull ConstraintSatisfactionProblem csp) {
+        ConsistencyResult result = applyFixpointWithReason(csp, null);
+        return result.isInfeasible() ? Optional.ofNullable(result.reason()) : Optional.empty();
+    }
+
+    /**
+     * Single-pass combination of {@link #applyFixpoint} and the old separate {@code explainConflict}
+     * traversal: identical loop and seeding as {@link #applyFixpoint} — each propagator's {@link
+     * ConstraintConsistency#applyWithReason} costs the same as {@link ConstraintConsistency#apply}
+     * on the feasible path (see each propagator's own {@code applyWithReason} override) — and only
+     * the propagator that actually signals infeasibility contributes a reason, computed as part of
+     * this same pass rather than a second, from-scratch, unseeded replay.
+     */
+    static ConsistencyResult applyFixpointWithReason(
+            @NonNull ConstraintSatisfactionProblem csp, @Nullable Set<Variable<?>> initialSeed) {
         var current = csp;
+        Set<Variable<?>> changedVariables = initialSeed;
         boolean changed = true;
         while (changed) {
+            Map<Variable<?>, Domain<?>> before = current.getVariableDomains();
             double domainSumBefore = domainSum(current);
             for (var propagator : PROPAGATORS) {
-                var after = propagator.apply(current);
-                if (after.isEmpty()) {
-                    return propagator.explainConflict(current);
-                }
-                current = after.get();
+                ConsistencyResult after = propagator.applyWithReason(current, changedVariables);
+                if (after.isInfeasible()) return after;
+                current = after.problem();
             }
             changed = domainSum(current) < domainSumBefore;
+            changedVariables = changed ? changedVariables(before, current.getVariableDomains()) : null;
         }
-        return Optional.empty();
+        return ConsistencyResult.feasible(current);
     }
 
     @Override

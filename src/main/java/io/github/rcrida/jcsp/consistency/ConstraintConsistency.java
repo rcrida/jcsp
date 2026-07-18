@@ -42,4 +42,23 @@ public interface ConstraintConsistency {
     default Optional<NogoodConstraint> explainConflict(ConstraintSatisfactionProblem csp) {
         return Optional.empty();
     }
+
+    /**
+     * Variant of {@link #apply(ConstraintSatisfactionProblem, Set)} that also explains a failure as
+     * part of the same pass, rather than requiring a caller to separately re-derive one afterward via
+     * {@link #explainConflict}. The default preserves that two-step fallback (apply, then on failure
+     * explainConflict) for any implementor that doesn't override it; {@link
+     * io.github.rcrida.jcsp.consistency.fixpoint.FixpointConsistency}, {@link
+     * io.github.rcrida.jcsp.consistency.arc.AC3}, and {@link
+     * io.github.rcrida.jcsp.consistency.fixpoint.NogoodFixpointConsistency} override it with a
+     * genuine single traversal instead: each calls its underlying {@code propagate}/{@code revise}
+     * exactly once per constraint/arc — identical cost to {@link #apply} on the feasible path — and
+     * only computes a reason at the exact point a wipeout is found, never as a separate replay.
+     */
+    default ConsistencyResult applyWithReason(ConstraintSatisfactionProblem csp,
+                                              @Nullable Set<Variable<?>> changedSinceLastRun) {
+        return apply(csp, changedSinceLastRun)
+                .map(ConsistencyResult::feasible)
+                .orElseGet(() -> ConsistencyResult.infeasible(explainConflict(csp).orElse(null)));
+    }
 }

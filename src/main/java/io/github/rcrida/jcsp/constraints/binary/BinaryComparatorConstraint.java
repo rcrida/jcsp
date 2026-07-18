@@ -128,8 +128,8 @@ public class BinaryComparatorConstraint<T extends Comparable<T>> extends BinaryC
      *     is typically caught during preprocessing — {@code PropagationFixpointSolver}'s
      *     snap-then-reconverge loop, run once before search — which reports the CSP UNSAT
      *     directly from the solver-decorator chain without ever invoking
-     *     {@code MacAndFixpointConflictExplainer} (that only runs inside
-     *     {@code DomWdegLubySearch}'s search loop).</li>
+     *     {@code Inference#applyWithReason} (that only runs inside {@code DomWdegLubySearch}'s
+     *     search loop).</li>
      *     <li>Mixed discrete/bounded pairs: the one case with real payoff. By the time search
      *     runs, the bounded side is already snapped to a singleton; if a live discrete variable's
      *     search-time assignment then conflicts with it, MAC wraps that assignment in a singleton

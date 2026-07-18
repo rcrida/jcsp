@@ -9,7 +9,7 @@ import io.github.rcrida.jcsp.consistency.Propagatable;
  * differently — {@link GroundNogoodConstraint} forbids one specific value per variable
  * ({@code OR(x1 != v1, ..., xk != vk)}); a future generalized/interval implementation could forbid
  * a whole sub-domain per variable instead. {@link io.github.rcrida.jcsp.assignments.NogoodStore},
- * {@link io.github.rcrida.jcsp.solver.ConflictExplainer}, and
+ * {@link io.github.rcrida.jcsp.consistency.Inference}, and
  * {@link io.github.rcrida.jcsp.ConstraintSatisfactionProblem} all operate on this interface rather
  * than any single implementation, so new nogood shapes can be added without touching them.
  */

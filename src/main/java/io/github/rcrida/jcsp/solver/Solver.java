@@ -3,9 +3,12 @@ package io.github.rcrida.jcsp.solver;
 import io.github.rcrida.jcsp.ConstraintSatisfactionProblem;
 import io.github.rcrida.jcsp.assignments.Assignment;
 import io.github.rcrida.jcsp.assignments.NogoodStore;
+import io.github.rcrida.jcsp.consistency.ConsistencyResult;
 import io.github.rcrida.jcsp.consistency.Inference;
 import io.github.rcrida.jcsp.consistency.arc.MAC;
+import io.github.rcrida.jcsp.constraints.nary.GroundNogoodConstraint;
 import io.github.rcrida.jcsp.domains.BoundedDomain;
+import io.github.rcrida.jcsp.variables.Variable;
 import io.github.rcrida.jcsp.solver.backtrackingsearch.order.DefaultValueOrderer;
 import io.github.rcrida.jcsp.solver.backtrackingsearch.order.LeastConstrainingValueOrderer;
 import io.github.rcrida.jcsp.solver.backtrackingsearch.selector.MinimumRemainingValuesSelector;
@@ -60,11 +63,42 @@ public interface Solver {
          * nogood set (both only ever replace domain entries via {@code toBuilder()}), so {@code
          * problem.getNogoods()} and the post-MAC result's are always identical -- there is no
          * "newly learned since problem" case to seed for here.
+         * <p>
+         * A named singleton (not a lambda) so it can additionally override {@link
+         * Inference#applyWithReason}: a genuine single pass combining propagation and, on failure,
+         * explanation, computed inline at the exact point of the wipeout instead of a separate,
+         * from-scratch re-derivation. Falls back to the current assignment (matching {@link
+         * Inference#applyWithReason}'s own default) whenever neither MAC nor the fixpoint could
+         * derive anything tighter -- e.g. a wipeout on a non-singleton neighbour, or a Hall-set
+         * violation over ungapped-but-non-singleton domains that even {@code RangeNogoodConstraint}'s
+         * gaplessness gate declines to cite.
          */
-        Inference FULL_PROPAGATION_INFERENCE = (problem, variable, assignment) ->
-                MAC.INSTANCE.apply(problem, variable, assignment)
+        Inference FULL_PROPAGATION_INFERENCE = new Inference() {
+            @Override
+            public Optional<ConstraintSatisfactionProblem> apply(ConstraintSatisfactionProblem problem,
+                                                                  Variable<?> variable, Assignment assignment) {
+                return MAC.INSTANCE.apply(problem, variable, assignment)
                         .flatMap(afterMac -> PropagationFixpointSolver.applyFixpoint(afterMac,
                                 PropagationFixpointSolver.changedVariables(problem.getVariableDomains(), afterMac.getVariableDomains())));
+            }
+
+            @Override
+            public ConsistencyResult applyWithReason(ConstraintSatisfactionProblem problem,
+                                                      Variable<?> variable, Assignment assignment) {
+                ConsistencyResult macResult = MAC.INSTANCE.applyWithReason(problem, variable, assignment);
+                if (macResult.isInfeasible()) {
+                    return macResult.reason() != null ? macResult
+                            : ConsistencyResult.infeasible(GroundNogoodConstraint.of(assignment.getValues()));
+                }
+                ConstraintSatisfactionProblem afterMac = macResult.problem();
+                ConsistencyResult fixpointResult = PropagationFixpointSolver.applyFixpointWithReason(afterMac,
+                        PropagationFixpointSolver.changedVariables(problem.getVariableDomains(), afterMac.getVariableDomains()));
+                if (fixpointResult.isInfeasible() && fixpointResult.reason() == null) {
+                    return ConsistencyResult.infeasible(GroundNogoodConstraint.of(assignment.getValues()));
+                }
+                return fixpointResult;
+            }
+        };
 
         /** Bisection precision for {@link BisectionConditioningSolver} in the optimization chain. */
         double DEFAULT_BISECTION_EPSILON = 1e-3;
@@ -76,7 +110,7 @@ public interface Solver {
 
         /**
          * Builds a solver chain tailored for optimization with the given {@link SolverConfig}.
-         * ({@code config.getConflictExplainer()} is unused here -- the optimization chain doesn't
+         * ({@code config.isNogoodLearningEnabled()} is unused here -- the optimization chain doesn't
          * do nogood learning at all.)
          */
         BoundSolver createSolver(@NonNull ConstraintSatisfactionProblem csp,
@@ -133,7 +167,7 @@ public interface Solver {
                             .inference(FULL_PROPAGATION_INFERENCE)
                             .limits(limits)
                             .nogoodStore(nogoodStore)
-                            .conflictExplainer(config.getConflictExplainer())
+                            .nogoodLearningEnabled(config.isNogoodLearningEnabled())
                             .statistics(config.getStatistics())
                             // Effectively unbounded: getSolution() now reaches Luby-restart search directly
                             // (see BoundSolver#getSolution below), so DEFAULT_MAX_RESTARTS's cap would silently

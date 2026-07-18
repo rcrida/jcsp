@@ -1,8 +1,8 @@
 package io.github.rcrida.jcsp.consistency.fixpoint;
 
 import io.github.rcrida.jcsp.ConstraintSatisfactionProblem;
+import io.github.rcrida.jcsp.consistency.ConsistencyResult;
 import io.github.rcrida.jcsp.consistency.ConstraintConsistency;
-import io.github.rcrida.jcsp.consistency.PropagationResult;
 import io.github.rcrida.jcsp.constraints.nary.NogoodConstraint;
 import io.github.rcrida.jcsp.domains.Domain;
 import io.github.rcrida.jcsp.variables.Variable;
@@ -103,30 +103,47 @@ public final class NogoodFixpointConsistency implements ConstraintConsistency {
     }
 
     /**
-     * Unlike {@link FixpointConsistency#explainConflict}'s generic two-tier reasoning, there is
-     * only ever one tier here: every {@link NogoodConstraint} implementation's own {@code
-     * explainInfeasible} unconditionally returns {@code Optional.of(this)} — a falsified nogood is
-     * always its own sound explanation, with no singleton-gating or other condition under which it
-     * would return empty — so {@link PropagationResult#reason()} is never {@code null} on the
-     * infeasible branch below; {@link Optional#ofNullable} is used anyway rather than an unchecked
-     * {@link Optional#of} so this stays correct even if a future {@code NogoodConstraint}
-     * implementation doesn't uphold that guarantee. Always scans every nogood (no {@code changed}
-     * hint) since this is a cold path, only reached once a conflict is already known to exist.
+     * Thin wrapper over {@link #applyWithReason}, kept for direct callers/tests and for {@link
+     * ConstraintConsistency}'s own default {@code applyWithReason} fallback. Always scans every
+     * nogood ({@code null} hint, matching {@link #relevant}'s "unknown, full scan" semantics) since
+     * this is a cold path, only reached once a conflict is already known to exist.
      */
     @Override
     public Optional<NogoodConstraint> explainConflict(ConstraintSatisfactionProblem csp) {
+        ConsistencyResult result = applyWithReason(csp, null);
+        return result.isInfeasible() ? Optional.ofNullable(result.reason()) : Optional.empty();
+    }
+
+    /**
+     * Single-pass combination of {@link #apply} and the old separate {@code explainConflict}
+     * traversal: calls each nogood's plain {@link io.github.rcrida.jcsp.consistency.Propagatable#propagate}
+     * exactly once — identical cost to {@link #apply} on the feasible path — and only on the nogood
+     * that actually causes a wipeout does it call {@link
+     * io.github.rcrida.jcsp.consistency.Propagatable#explainInfeasible}. Unlike {@link
+     * FixpointConsistency#applyWithReason}'s generic two-tier reasoning, there is only ever one
+     * tier here: every {@link NogoodConstraint} implementation's own {@code explainInfeasible}
+     * unconditionally returns {@code Optional.of(this)} — a falsified nogood is always its own
+     * sound explanation, with no singleton-gating or other condition under which it would return
+     * empty.
+     */
+    @Override
+    public ConsistencyResult applyWithReason(ConstraintSatisfactionProblem csp,
+                                             @Nullable Set<Variable<?>> changedSinceLastRun) {
         Set<NogoodConstraint> nogoods = csp.getNogoods();
-        if (nogoods.isEmpty()) return Optional.empty();
+        if (nogoods.isEmpty()) return ConsistencyResult.feasible(csp);
+        Collection<NogoodConstraint> toCheck = relevant(nogoods, changedSinceLastRun);
+        if (toCheck.isEmpty()) return ConsistencyResult.feasible(csp);
         var current = csp;
         boolean changed = true;
         while (changed) {
             changed = false;
-            for (NogoodConstraint constraint : nogoods) {
-                PropagationResult result = constraint.propagateWithReasons(current.getVariableDomains());
-                if (result.isInfeasible()) {
-                    return Optional.ofNullable(result.reason());
+            for (NogoodConstraint constraint : toCheck) {
+                var result = constraint.propagate(current.getVariableDomains());
+                if (result.isEmpty()) {
+                    return ConsistencyResult.infeasible(
+                            constraint.explainInfeasible(current.getVariableDomains()).orElse(null));
                 }
-                var updates = result.updatedDomains();
+                var updates = result.get();
                 if (!updates.isEmpty()) {
                     var builder = current.toBuilder();
                     for (var entry : updates.entrySet()) {
@@ -137,6 +154,6 @@ public final class NogoodFixpointConsistency implements ConstraintConsistency {
                 }
             }
         }
-        return Optional.empty();
+        return ConsistencyResult.feasible(current);
     }
 }
