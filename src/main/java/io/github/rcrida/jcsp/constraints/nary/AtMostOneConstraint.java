@@ -25,6 +25,13 @@ import java.util.Set;
  * Represents the "at most one" constraint for boolean variables in a constraint satisfaction problem (CSP).
  * This constraint ensures that at most one of the involved variables is assigned {@code true}.
  * Suitable for use with {@link io.github.rcrida.jcsp.domains.BooleanDomain}.
+ * <p>
+ * Implements {@link Propagatable} (as does {@link ExactlyOneConstraint}) in addition to the
+ * inherited pairwise-NAND {@link BinaryDecomposable} decomposition: without it, a violation of
+ * this constraint is only ever caught by {@link io.github.rcrida.jcsp.assignments.Assignment#isConsistent}'s
+ * direct {@code isSatisfiedBy} check, never by propagation — and search-time dom/wdeg weight
+ * updates and nogood learning are both gated on a propagation-detected domain wipeout, so a
+ * constraint that never propagates never contributes to either, regardless of solver configuration.
  */
 @SuperBuilder
 public class AtMostOneConstraint extends UniformNaryConstraint<Boolean> implements BinaryDecomposable, Propagatable {

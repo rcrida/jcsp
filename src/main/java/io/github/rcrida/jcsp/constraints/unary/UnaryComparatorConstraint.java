@@ -17,6 +17,13 @@ import java.util.Optional;
  * Satisfied when {@code variable <op> value}, e.g. {@code x >= 3} or {@code x != 0}.
  * Implements {@link Propagatable} to clip {@link BoundedDomain} bounds; discrete domains are
  * handled by {@link io.github.rcrida.jcsp.consistency.node.NodeConsistency}.
+ * <p>
+ * Deliberately does not override {@link Propagatable#explainInfeasible}: {@link #propagate} only
+ * ever acts on {@link BoundedDomain}, and every {@link BoundedDomain} is fully resolved or
+ * rejected by the satisfaction chain's preprocessing (node consistency, then the propagation
+ * fixpoint with interval snapping) strictly before search-time nogood learning ever runs — so this
+ * propagator's own infeasibility path is unreachable once search begins, and an override would be
+ * dead code under this project's coverage requirement.
  */
 @SuperBuilder
 @EqualsAndHashCode(callSuper = true)

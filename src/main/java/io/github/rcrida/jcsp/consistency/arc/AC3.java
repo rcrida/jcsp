@@ -186,6 +186,17 @@ public class AC3 implements ConstraintConsistency {
         return revise(problem.getVariableDomains(), arc, constraint);
     }
 
+    /**
+     * Reads from whichever {@code domains} map it is handed, rather than re-reading a frozen
+     * {@code ConstraintSatisfactionProblem} snapshot. Until 2026-07-16, {@link #applyQueue}/{@link
+     * #applyQueueWithReason} called the 3-arg {@code revise} overload with the original, unchanging
+     * {@code problem} parameter instead of their own progressively-narrowed map; since {@code revise}
+     * is a pure function of the domains it's given, a given {@code (arc, constraint)} pair then
+     * always produced the same result no matter how many times it was requeued — letting a
+     * sufficiently dense/cyclic binary-constraint graph re-trigger the same neighbour-requeue
+     * forever. Confirmed as a genuine hang, not just a slowdown: a 12-variable complete-graph binary
+     * CSP with an unlucky tightness never returned, while 10 variables solved in 42ms.
+     */
     private static Optional<DiscreteDomain<?>> revise(Map<Variable<?>, Domain<?>> domains, Arc arc, BinaryConstraint<?, ?> constraint) {
         if (!(domains.get(arc.getFrom()) instanceof DiscreteDomain<?> D_i)) return Optional.empty();
         if (!(domains.get(arc.getTo()) instanceof DiscreteDomain<?> D_j)) return Optional.empty();
