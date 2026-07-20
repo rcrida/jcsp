@@ -25,6 +25,7 @@ import io.github.rcrida.jcsp.constraints.nary.LinearConstraint;
 import io.github.rcrida.jcsp.constraints.nary.MaxConstraint;
 import io.github.rcrida.jcsp.constraints.nary.MinConstraint;
 import io.github.rcrida.jcsp.constraints.nary.NaryElementConstraint;
+import io.github.rcrida.jcsp.constraints.nary.NValueConstraint;
 import io.github.rcrida.jcsp.constraints.nary.ProductConstraint;
 import io.github.rcrida.jcsp.constraints.nary.NaryTuplesConstraint;
 import io.github.rcrida.jcsp.constraints.nary.RegularConstraint;
@@ -83,6 +84,7 @@ public interface LocalSolver {
                 FixpointConsistency.of(AtMostOneConstraint.class),
                 FixpointConsistency.of(CumulativeConstraint.class),
                 FixpointConsistency.of(GlobalCardinalityConstraint.class),
+                FixpointConsistency.of(NValueConstraint.class),
                 FixpointConsistency.of(LexConstraint.class),
                 FixpointConsistency.of(MaxConstraint.class),
                 FixpointConsistency.of(MinConstraint.class),

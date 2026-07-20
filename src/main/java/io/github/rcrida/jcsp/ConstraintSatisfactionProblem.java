@@ -44,6 +44,7 @@ import io.github.rcrida.jcsp.constraints.nary.IncreasingConstraint;
 import io.github.rcrida.jcsp.constraints.nary.LinearConstraint;
 import io.github.rcrida.jcsp.constraints.nary.GroundNogoodConstraint;
 import io.github.rcrida.jcsp.constraints.nary.NaryElementConstraint;
+import io.github.rcrida.jcsp.constraints.nary.NValueConstraint;
 import io.github.rcrida.jcsp.constraints.nary.NogoodConstraint;
 import io.github.rcrida.jcsp.constraints.nary.RangeNogoodConstraint;
 import io.github.rcrida.jcsp.constraints.nary.ProductConstraint;
@@ -1090,6 +1091,21 @@ public class ConstraintSatisfactionProblem {
          */
         public <T> ConstraintSatisfactionProblemBuilder globalCardinalityConstraint(@NonNull Set<Variable<T>> variables, @NonNull Map<T, Integer> cardinality) {
             return this.constraint(GlobalCardinalityConstraint.of(variables, cardinality));
+        }
+
+        /**
+         * Create an nvalue constraint: {@code count} equals the number of distinct values taken
+         * by {@code variables}. Unlike other counting constraints, {@code count} is a genuine
+         * decision variable rather than a fixed constant, so it can be handed directly to an
+         * optimization objective to minimise the number of distinct values used. Equivalent to
+         * MiniZinc's {@code nvalue(count, variables)} constraint.
+         *
+         * @param variables the variables to constrain
+         * @param count     the variable bound to the number of distinct values taken by {@code variables}
+         * @return the builder
+         */
+        public <T> ConstraintSatisfactionProblemBuilder nValueConstraint(@NonNull Set<Variable<T>> variables, @NonNull Variable<Integer> count) {
+            return this.constraint(NValueConstraint.of(variables, count));
         }
 
         /**
