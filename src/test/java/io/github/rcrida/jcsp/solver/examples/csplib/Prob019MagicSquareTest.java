@@ -1,4 +1,4 @@
-package io.github.rcrida.jcsp.solver.examples;
+package io.github.rcrida.jcsp.solver.examples.csplib;
 import io.github.rcrida.jcsp.solver.Solver;
 
 import lombok.val;
@@ -29,7 +29,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  * There are exactly 8 distinct solutions (one fundamental solution under the
  * 8 symmetries of the square).
  */
-public class MagicSquareTest {
+public class Prob019MagicSquareTest {
     static final int N = 3;
     static final int MAGIC = N * (N * N + 1) / 2; // 15
     static final String[] INDICES = {"1", "2", "3"};

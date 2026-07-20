@@ -1,4 +1,4 @@
-package io.github.rcrida.jcsp.solver.examples;
+package io.github.rcrida.jcsp.solver.examples.csplib;
 
 import io.github.rcrida.jcsp.solver.Solver;
 
@@ -30,7 +30,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  * the classic way: the ruler is satisfiable with marks bounded by 11, and unsatisfiable
  * with marks bounded by 10.
  */
-public class GolombRulerTest {
+public class Prob006GolombRulerTest {
     static final Variable.Factory F = Variable.Factory.INSTANCE;
     static final int N = 5;
     static final int OPTIMAL_LENGTH = 11;
@@ -86,7 +86,7 @@ public class GolombRulerTest {
         // Exactly two order-5 Golomb rulers of length 11 exist up to reflection:
         // {0,1,4,9,11} and {0,2,7,8,11}.
         assertThat(solutions).hasSize(2);
-        solutions.forEach(GolombRulerTest::assertValidRuler);
+        solutions.forEach(Prob006GolombRulerTest::assertValidRuler);
         solutions.forEach(s -> assertThat(s.getValue(MARKS.get(N - 1))).hasValue(OPTIMAL_LENGTH));
     }
 

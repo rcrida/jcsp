@@ -1,4 +1,4 @@
-package io.github.rcrida.jcsp.solver.examples;
+package io.github.rcrida.jcsp.solver.examples.csplib;
 import io.github.rcrida.jcsp.solver.Solver;
 
 import lombok.val;
@@ -31,7 +31,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  * {x1,x2}, {x1,x3}, {x1,x4}, {x2,x3}, {x2,x4} — 10 in total.
  * Optimal selection: {x2, x4} with weight 10 and value 12.
  */
-public class KnapsackTest {
+public class Prob133KnapsackTest {
     static final Variable.Factory F = Variable.Factory.INSTANCE;
     static final Variable<Integer> X1 = F.create("x1");
     static final Variable<Integer> X2 = F.create("x2");

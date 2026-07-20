@@ -232,7 +232,7 @@ public final class NogoodPropagationBenchmark {
         return NodeConsistentSolver.builder().inner(propagationFixpointSolver).build();
     }
 
-    /** Same construction as {@code GolombRulerTest}, parameterized so different orders can be compared. */
+    /** Same construction as {@code Prob006GolombRulerTest}, parameterized so different orders can be compared. */
     private static ConstraintSatisfactionProblem golombRuler(int n, int maxLength) {
         Variable.Factory f = Variable.Factory.INSTANCE;
         List<Variable<Integer>> marks = new ArrayList<>();

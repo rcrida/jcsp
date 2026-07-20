@@ -1,4 +1,4 @@
-package io.github.rcrida.jcsp.solver.examples;
+package io.github.rcrida.jcsp.solver.examples.csplib;
 import io.github.rcrida.jcsp.solver.Solver;
 
 import lombok.val;
@@ -19,7 +19,7 @@ import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-public class NQueensTest {
+public class Prob054NQueensTest {
     static int N = 8;
     static Domain DOMAIN = IntRangeDomain.of(1, N);
     static Variable[] VARIABLES;

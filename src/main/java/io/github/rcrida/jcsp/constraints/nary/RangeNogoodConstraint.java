@@ -78,7 +78,7 @@ public class RangeNogoodConstraint extends NaryConstraint implements NogoodConst
      * {@code {2,3,4}} would satisfy "contained in {@code [1,5]}" without ever being a subset of the
      * domain that actually caused the original infeasibility, silently generalising the nogood past
      * what was proven and over-pruning the search (caught via a real regression: this exact gap
-     * made {@code NQueensTest} drop from 92 solutions to 80 once {@link AllDiffConstraint} started
+     * made {@code Prob054NQueensTest} drop from 92 solutions to 80 once {@link AllDiffConstraint} started
      * citing Hall-violating subsets — which are gapped almost by definition — through this method).
      */
     @SuppressWarnings({"unchecked", "rawtypes"})
