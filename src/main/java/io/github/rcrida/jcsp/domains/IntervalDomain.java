@@ -28,7 +28,13 @@ import java.util.Optional;
  * {@link io.github.rcrida.jcsp.constraints.nary.IncreasingConstraint},
  * {@link io.github.rcrida.jcsp.constraints.nary.DecreasingConstraint},
  * {@link io.github.rcrida.jcsp.constraints.nary.GroundNogoodConstraint},
- * {@link io.github.rcrida.jcsp.constraints.nary.RangeNogoodConstraint}.
+ * {@link io.github.rcrida.jcsp.constraints.nary.RangeNogoodConstraint},
+ * {@link io.github.rcrida.jcsp.constraints.nary.ReifiedConstraint},
+ * {@link io.github.rcrida.jcsp.constraints.nary.ImplicationConstraint} (both indirectly: no
+ * bounds arithmetic of their own, but when their indicator is forced {@code true} they delegate
+ * straight to a {@link io.github.rcrida.jcsp.consistency.Propagatable} body's own
+ * {@code propagate}, so a body like {@link io.github.rcrida.jcsp.constraints.unary.UnaryComparatorConstraint}
+ * still gets real interval narrowing through the reification/implication).
  * <p>
  * Also accepted, but without dedicated bounds propagation of their own — correctness for these
  * rests on the final {@code isSatisfiedBy} check once every {@code BoundedDomain} variable has
@@ -37,9 +43,6 @@ import java.util.Optional;
  * {@link io.github.rcrida.jcsp.constraints.unary.UnaryPredicateConstraint},
  * {@link io.github.rcrida.jcsp.constraints.binary.BinaryPredicateConstraint},
  * {@link io.github.rcrida.jcsp.constraints.nary.PredicateConstraint},
- * {@link io.github.rcrida.jcsp.constraints.nary.ReifiedConstraint},
- * {@link io.github.rcrida.jcsp.constraints.nary.ImplicationConstraint} (whose {@code body} must
- * itself be one of the constraints listed here),
  * {@link io.github.rcrida.jcsp.constraints.nary.NaryElementConstraint}.
  * <p>
  * Any other constraint type referencing an {@code IntervalDomain} variable is rejected at

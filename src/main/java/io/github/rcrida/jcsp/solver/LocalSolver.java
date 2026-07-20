@@ -17,6 +17,7 @@ import io.github.rcrida.jcsp.constraints.nary.CumulativeConstraint;
 import io.github.rcrida.jcsp.constraints.nary.DecreasingConstraint;
 import io.github.rcrida.jcsp.constraints.nary.DiffnConstraint;
 import io.github.rcrida.jcsp.constraints.nary.GlobalCardinalityConstraint;
+import io.github.rcrida.jcsp.constraints.nary.ImplicationConstraint;
 import io.github.rcrida.jcsp.constraints.nary.IncreasingConstraint;
 import io.github.rcrida.jcsp.constraints.nary.InverseConstraint;
 import io.github.rcrida.jcsp.constraints.nary.LexConstraint;
@@ -27,6 +28,7 @@ import io.github.rcrida.jcsp.constraints.nary.NaryElementConstraint;
 import io.github.rcrida.jcsp.constraints.nary.ProductConstraint;
 import io.github.rcrida.jcsp.constraints.nary.NaryTuplesConstraint;
 import io.github.rcrida.jcsp.constraints.nary.RegularConstraint;
+import io.github.rcrida.jcsp.constraints.nary.ReifiedConstraint;
 import io.github.rcrida.jcsp.constraints.binary.AbsoluteDifferenceConstraint;
 import io.github.rcrida.jcsp.constraints.binary.BinaryComparatorConstraint;
 import io.github.rcrida.jcsp.constraints.binary.BinaryOffsetConstraint;
@@ -92,7 +94,9 @@ public interface LocalSolver {
                 FixpointConsistency.of(DiffnConstraint.class),
                 FixpointConsistency.of(RegularConstraint.class),
                 FixpointConsistency.of(IncreasingConstraint.class),
-                FixpointConsistency.of(DecreasingConstraint.class)
+                FixpointConsistency.of(DecreasingConstraint.class),
+                FixpointConsistency.of(ReifiedConstraint.class),
+                FixpointConsistency.of(ImplicationConstraint.class)
         );
 
         Factory INSTANCE = (maxAttempts, maxSteps, initialAssignmentFactory) -> {
