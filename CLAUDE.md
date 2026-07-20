@@ -222,7 +222,7 @@ Classic CSP problems serve as end-to-end integration tests in `io.github.rcrida.
 - `AustraliaMapColouringTest` — graph coloring; also demonstrates `countConstraint` and `globalCardinalityConstraint`
 - `Prob054NQueensTest` — N-Queens placement; also demonstrates `increasingConstraint` for symmetry breaking
 - `Prob019MagicSquareTest` — magic square; demonstrates `sumConstraint` and `lexConstraint` for symmetry breaking
-- `SudokuTest` — Sudoku solving
+- `Prob057KillerSudokuTest` — Killer Sudoku: standard Sudoku plus a full partition of all 81 cells into sum/all-different "cages", no given digits; instance transcribed from CSPLib's reference model
 - `CryptarithmeticTest` — alphametic puzzle solving
 - `ZebraPuzzleTest` — Einstein's Zebra puzzle
 - `TwoSumTest` — two-sum via `elementConstraint` (fixed array)
@@ -237,11 +237,11 @@ Classic CSP problems serve as end-to-end integration tests in `io.github.rcrida.
 - `RealValuedConstraintTest` — `IntervalDomain` variables solved by bounds propagation; covers `sumConstraint`, `linearConstraint`, `comparatorConstraint` (unary and binary), `offsetConstraint`, `lexConstraint`, `cumulativeConstraint`, `maxConstraint`, `minConstraint`, `productConstraint`, and `divisionConstraint` over interval domains
 - `ContinuousOptimizationTest` — continuous optimization via `createSolver(csp, objective).getSolution()` over `IntervalDomain` variables; bisection explores the feasible region down to `DEFAULT_BISECTION_EPSILON`
 - `PythagoreanTriplesTest` — enumerates Pythagorean triples via `productConstraint` and `sumConstraint`
-- `TravelingSalesmanTest` — TSP modelled via `circuitConstraint` with optimization
+- `Prob075ProductMatrixTspTest` — Product Matrix TSP: edge cost i→j is C[i]*P[j] for arbitrary vectors C,P, modelled via `circuitConstraint` with optimization; expected optimum verified by exhaustive brute force since the asymmetric cost matrix has no closed-form optimal tour
 - `RectanglePackingTest` — packs four rectangles into a 3×3 bounding box via `diffnConstraint`; 12 solutions
 - `NurseSchedulingTest` — 5-day nurse shift schedule (Day/Night/Rest) with DFA-encoded rules (no work after Night, ≤2 consecutive work days) via `regularConstraint`; 79 solutions
 - `Prob006GolombRulerTest` — order-5 Golomb ruler; pairwise mark distances materialised as `linearConstraint`-defined auxiliary variables, deduplicated via `allDiffConstraint`; proves the known-optimal length 11 (OEIS A003022) by satisfiability at 11 vs. unsatisfiability at 10, avoiding the need for a hand-verified branch-and-bound lower bound
-- `JobShopSchedulingTest` — 2-job, 2-machine job-shop scheduling optimized for makespan; within-job precedence via `offsetConstraint`, same-machine mutual exclusion modelled as `cumulativeConstraint` with capacity 1 (a disjunctive/unary resource is a cumulative one with limit 1)
+- `Prob061JobShopSchedulingTest` — 2-job, 2-machine job-shop scheduling optimized for makespan (job-shop is a special case of CSPLib prob061, RCPSP); within-job precedence via `offsetConstraint`, same-machine mutual exclusion modelled as `cumulativeConstraint` with capacity 1 (a disjunctive/unary resource is a cumulative one with limit 1)
 
 ### Benchmarking
 

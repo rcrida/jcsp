@@ -1,4 +1,4 @@
-package io.github.rcrida.jcsp.solver.examples;
+package io.github.rcrida.jcsp.solver.examples.csplib;
 
 import io.github.rcrida.jcsp.solver.Solver;
 
@@ -17,23 +17,35 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.offset;
 
 /**
- * N-city TSP with cities placed equidistantly on a unit circle (regular N-gon),
- * modelled via circuitConstraint: succ[i] is the 1-indexed successor of city i+1.
- * The optimal tour visits them in order around the perimeter — total distance N × 2sin(π/N).
+ * Product Matrix Travelling Salesman Problem (CSPLib prob075): given two length-N vectors
+ * {@code C} and {@code P}, the cost of the directed edge from city {@code i} to city
+ * {@code j != i} is the product {@code C[i] * P[j]} — an asymmetric cost matrix with no
+ * geometric interpretation, unlike a Euclidean TSP. Modelled via {@code circuitConstraint}:
+ * {@code succ[i]} is the 1-indexed successor of city {@code i}.
+ * <p>
+ * {@code C} and {@code P} are arbitrary positive integers chosen so no two candidate tours tie
+ * for optimal (confirmed by exhaustive brute force over all {@code (N-1)!} tours, see
+ * {@code OPTIMAL_TOUR_COST}'s Javadoc) — the resulting instance has no closed-form optimum the
+ * way a regular-polygon Euclidean TSP does, so the expected optimum is a verified constant
+ * rather than a derived formula.
  */
-public class TravelingSalesmanTest {
+public class Prob075ProductMatrixTspTest {
     static final Variable.Factory F = Variable.Factory.INSTANCE;
-    static final int N = 12;
+    static final int N = 6;
 
-    static final double[][] CITIES = IntStream.range(0, N)
-            .mapToObj(i -> new double[]{Math.cos(2 * Math.PI * i / N), Math.sin(2 * Math.PI * i / N)})
-            .toArray(double[][]::new);
+    static final int[] C = {2, 5, 1, 7, 3, 4};
+    static final int[] P = {4, 1, 6, 2, 8, 3};
 
     static final List<Variable<Integer>> SUCC = IntStream.range(0, N)
             .mapToObj(i -> F.<Integer>create("succ" + i))
             .toList();
 
-    static final double OPTIMAL_TOUR_LENGTH = N * 2 * Math.sin(Math.PI / N);
+    /**
+     * Verified by exhaustive brute force over all {@code (N-1)! = 120} distinct tours (fixing
+     * city 0 as the start, since a circuit's cost is rotation-invariant): the true optimum is
+     * 64.0, with the next-best tour costing 70.0 — a clear, tie-free minimum.
+     */
+    static final double OPTIMAL_TOUR_COST = 64.0;
 
     static final ConstraintSatisfactionProblem TSP = buildTsp();
 
@@ -44,21 +56,19 @@ public class TravelingSalesmanTest {
         return builder.build();
     }
 
-    static double dist(int a, int b) {
-        double dx = CITIES[a][0] - CITIES[b][0];
-        double dy = CITIES[a][1] - CITIES[b][1];
-        return Math.sqrt(dx * dx + dy * dy);
+    static double edgeCost(int i, int j) {
+        return (double) C[i] * P[j];
     }
 
     // Reduced cost matrix lower bound: fixed edges contribute their exact cost;
     // for the remaining freedom, each city's minimum outgoing (row) and minimum
     // incoming (column) edge after row reduction are summed as a tight lower bound.
-    static double tourLength(Assignment a) {
+    static double tourCost(Assignment a) {
         double INF = Double.MAX_VALUE / 2;
         double[][] cost = new double[N][N];
         for (int i = 0; i < N; i++)
             for (int j = 0; j < N; j++)
-                cost[i][j] = i == j ? INF : dist(i, j);
+                cost[i][j] = i == j ? INF : edgeCost(i, j);
 
         boolean[] rowFixed = new boolean[N];
         boolean[] colFixed = new boolean[N];
@@ -68,7 +78,7 @@ public class TravelingSalesmanTest {
             Optional<Integer> succVal = a.getValue(SUCC.get(i));
             if (succVal.isPresent()) {
                 int j = succVal.get() - 1;
-                lb += dist(i, j);
+                lb += edgeCost(i, j);
                 rowFixed[i] = true;
                 colFixed[j] = true;
                 for (int k = 0; k < N; k++) {
@@ -99,19 +109,19 @@ public class TravelingSalesmanTest {
     }
 
     @Test
-    void optimize_findsShortestTour() {
-        val result = Solver.Factory.INSTANCE.createSolver(TSP, TravelingSalesmanTest::tourLength).getSolution();
+    void optimize_findsCheapestTour() {
+        val result = Solver.Factory.INSTANCE.createSolver(TSP, Prob075ProductMatrixTspTest::tourCost).getSolution();
         assertThat(result).isPresent();
-        assertThat(tourLength(result.get())).isCloseTo(OPTIMAL_TOUR_LENGTH, offset(1e-9));
+        assertThat(tourCost(result.get())).isCloseTo(OPTIMAL_TOUR_COST, offset(1e-9));
     }
 
     @Test
     void getSolutions_returnsImprovingTours() {
-        val improving = Solver.Factory.INSTANCE.createSolver(TSP, TravelingSalesmanTest::tourLength).getSolutions().toList();
+        val improving = Solver.Factory.INSTANCE.createSolver(TSP, Prob075ProductMatrixTspTest::tourCost).getSolutions().toList();
         assertThat(improving).isNotEmpty();
         for (int i = 1; i < improving.size(); i++) {
-            assertThat(tourLength(improving.get(i))).isLessThan(tourLength(improving.get(i - 1)));
+            assertThat(tourCost(improving.get(i))).isLessThan(tourCost(improving.get(i - 1)));
         }
-        assertThat(tourLength(improving.getLast())).isCloseTo(OPTIMAL_TOUR_LENGTH, offset(1e-9));
+        assertThat(tourCost(improving.getLast())).isCloseTo(OPTIMAL_TOUR_COST, offset(1e-9));
     }
 }
