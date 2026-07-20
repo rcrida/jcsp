@@ -1,4 +1,4 @@
-package io.github.rcrida.jcsp.solver.examples;
+package io.github.rcrida.jcsp.solver.examples.csplib;
 
 import io.github.rcrida.jcsp.solver.Solver;
 
@@ -16,7 +16,11 @@ import java.util.List;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * Classic 2-job, 2-machine job-shop scheduling problem, optimized for makespan.
+ * Classic 2-job, 2-machine job-shop scheduling problem, optimized for makespan. Job-shop
+ * scheduling is a special case of CSPLib prob061 (RCPSP — Resource-Constrained Project
+ * Scheduling Problem): activities under precedence constraints competing for renewable
+ * resources, here two unary/disjunctive resources (the machines) instead of RCPSP's general
+ * multi-capacity ones.
  * <pre>
  *   Job 1: machine A (3) -> machine B (2)
  *   Job 2: machine B (2) -> machine A (4)
@@ -38,7 +42,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  * so {@link #makespan} is written as an admissible lower bound rather than a value that
  * requires every variable to be assigned.
  */
-public class JobShopSchedulingTest {
+public class Prob061JobShopSchedulingTest {
     static final Variable.Factory F = Variable.Factory.INSTANCE;
 
     static final int DUR_11 = 3; // job1, machine A
@@ -84,14 +88,14 @@ public class JobShopSchedulingTest {
 
     @Test
     void optimize_findsMinimumMakespan() {
-        val result = Solver.Factory.INSTANCE.createSolver(CSP, JobShopSchedulingTest::makespan).getSolution();
+        val result = Solver.Factory.INSTANCE.createSolver(CSP, Prob061JobShopSchedulingTest::makespan).getSolution();
         assertThat(result).isPresent();
         assertThat(makespan(result.get())).isEqualTo(STATIC_LOWER_BOUND);
     }
 
     @Test
     void optimalSolutionRespectsPrecedenceAndMachineExclusion() {
-        val solution = Solver.Factory.INSTANCE.createSolver(CSP, JobShopSchedulingTest::makespan).getSolution().orElseThrow();
+        val solution = Solver.Factory.INSTANCE.createSolver(CSP, Prob061JobShopSchedulingTest::makespan).getSolution().orElseThrow();
         int s11 = solution.getValue(START_11).orElseThrow();
         int s12 = solution.getValue(START_12).orElseThrow();
         int s21 = solution.getValue(START_21).orElseThrow();
@@ -105,7 +109,7 @@ public class JobShopSchedulingTest {
 
     @Test
     void getSolutions_returnsImprovingMakespans() {
-        val improving = Solver.Factory.INSTANCE.createSolver(CSP, JobShopSchedulingTest::makespan).getSolutions().toList();
+        val improving = Solver.Factory.INSTANCE.createSolver(CSP, Prob061JobShopSchedulingTest::makespan).getSolutions().toList();
         assertThat(improving).isNotEmpty();
         for (int i = 1; i < improving.size(); i++) {
             assertThat(makespan(improving.get(i))).isLessThan(makespan(improving.get(i - 1)));
