@@ -228,6 +228,7 @@ Classic CSP problems serve as end-to-end integration tests in `io.github.rcrida.
 - `TwoSumTest` — two-sum via `elementConstraint` (fixed array)
 - `PermutationSquareTest` — involution puzzle: find all permutations of {1..4} satisfying p(p(i))=i, modelled via `elementVariableConstraint`; 10 solutions
 - `Prob133KnapsackTest` — binary knapsack via `linearConstraint` (feasibility + optimisation)
+- `Prob034WarehouseLocationTest` — Warehouse Location Problem ("compact" variant): minimise `sum(supplyCost) + nValueConstraint(warehousesUsed) * fixedCost`; demonstrates that only a genuine distinct-value count (not `globalCardinalityConstraint`'s fixed per-value quotas) can express "minimise how many warehouses end up used", since the naive cheapest-per-store assignment is provably suboptimal once opening a warehouse has its own cost
 - `MenuCombinationTest` — extensional constraints via `tuplesConstraint`
 - `SprintSchedulingTest` — resource-constrained scheduling via `cumulativeConstraint`
 - `ReificationTest` — soft constraints via `reifyConstraint` / `impliesConstraint`
