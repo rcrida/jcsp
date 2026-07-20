@@ -162,21 +162,27 @@ public class LargeNeighborhoodSolverTest {
 
     @Test
     void slotWithAllSingletonDomains_isExcludedFromNeighborhood() {
-        // x has singleton domain {false} → ExactlyOne({x}) becomes empty after filtering → excluded
-        // ExactlyOne({y,z}) is still relaxed, but ExactlyOne({x}) is permanently violated
-        // → no feasible solution exists, returns empty
-        Variable<Boolean> x = F.create("x");
+        // x1, x2 both have singleton domain {false} → ExactlyOne({x1,x2}) becomes empty after
+        // filtering → excluded from the neighborhood entirely, so LNS can never relax it. (A
+        // single-variable set would get simplified by the builder into a UnaryValueConstraint
+        // instead of a real ExactlyOneConstraint — see exactlyOneConstraint's Javadoc — so this
+        // needs >=2 variables to actually reach extractSlots's empty-slot filter.)
+        // ExactlyOne({y,z}) is still relaxed, but ExactlyOne({x1,x2}) is permanently violated
+        // (both fixed false, so it can never have exactly one true) → no feasible solution
+        // exists, returns empty, regardless of what LNS does with {y,z}.
+        Variable<Boolean> x1 = F.create("x1"), x2 = F.create("x2");
         Variable<Boolean> y = F.create("y"), z = F.create("z");
         var singletonFalse = DomainObjectSet.<Boolean>builder().value(false).build();
         var csp = ConstraintSatisfactionProblem.builder()
-                .variableDomain(x, singletonFalse)
+                .variableDomain(x1, singletonFalse)
+                .variableDomain(x2, singletonFalse)
                 .variableDomain(y, BooleanDomain.INSTANCE)
                 .variableDomain(z, BooleanDomain.INSTANCE)
-                .exactlyOneConstraint(Set.of(x))
+                .exactlyOneConstraint(Set.of(x1, x2))
                 .exactlyOneConstraint(Set.of(y, z))
                 .build();
         InitialAssignmentFactory factory = csp0 ->
-                Assignment.builder().value(x, false).value(y, true).value(z, false).build();
+                Assignment.builder().value(x1, false).value(x2, false).value(y, true).value(z, false).build();
         assertThat(LargeNeighborhoodSolver.of(1, 5, factory).getLocalSolution(csp)).isEmpty();
     }
 
