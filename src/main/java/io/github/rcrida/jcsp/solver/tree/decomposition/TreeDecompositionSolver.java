@@ -76,7 +76,7 @@ public class TreeDecompositionSolver extends SolverDecorator {
                 .max()
                 .orElse(1);
         int maxDomainSize = (int) Math.min(Math.pow(d, targetTreewidth), MAX_DOMAIN_SIZE_CAP);
-        log.info("d={}, targetTreewidth={}, maxDomainSize={}", d, targetTreewidth, maxDomainSize);
+        log.debug("d={}, targetTreewidth={}, maxDomainSize={}", d, targetTreewidth, maxDomainSize);
         return treeDecomposer.decompose(csp, maxDomainSize)
                 .filter(treeCsp -> shouldApplyDecomposition(treeCsp, csp));
     }
@@ -114,7 +114,7 @@ public class TreeDecompositionSolver extends SolverDecorator {
                 .orElse(BigInteger.ONE);
         BigInteger treeComplexity = maxCliqueDomain.pow(2).multiply(BigInteger.valueOf(k));
         BigInteger searchSpace = originalCsp.getSearchSpace();
-        log.info("tree decomposition -> {}, search space -> {}", treeComplexity, searchSpace);
+        log.debug("tree decomposition -> {}, search space -> {}", treeComplexity, searchSpace);
         return treeComplexity.compareTo(searchSpace) < 0;
     }
 

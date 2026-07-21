@@ -41,7 +41,7 @@ public class TreeSolver implements Solver {
         val finalTcsp = current;
         val unassignedVariableSelector = selectorFactory.createSelector(X);
         Domain<?> rootDomain = finalTcsp.getDomain(root);
-        log.info("Domain {}", rootDomain);
+        log.debug("Domain {}", rootDomain);
         val start = Assignment.empty();
         return (rootDomain instanceof DiscreteDomain<?> dd ? dd.stream() : rootDomain.singleValue().stream())
                 .<Assignment>map(value -> start.withValue(root, value))
@@ -55,7 +55,7 @@ public class TreeSolver implements Solver {
     Stream<Assignment> populateAssignment(@NonNull ConstraintSatisfactionProblem tcsp, @NonNull Assignment assignment, @NonNull TreeUnassignedVariableSelector selector) {
         log.debug("Searching tree with assignment: {}", assignment);
         if (assignment.isComplete(tcsp)) {
-            log.info("Found tree solution {}", assignment);
+            log.debug("Found tree solution {}", assignment);
             return Stream.of(assignment);
         }
         val variable = selector.select(tcsp, assignment);

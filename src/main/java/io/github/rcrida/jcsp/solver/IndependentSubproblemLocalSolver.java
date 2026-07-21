@@ -39,7 +39,7 @@ public class IndependentSubproblemLocalSolver implements LocalSolver {
                 .map(subproblems -> {
                     log.info("Solving {} independent subproblems", subproblems.size());
                     return subproblems.parallelStream()
-                            .peek(sub -> log.info("Solving subproblem {}", sub))
+                            .peek(sub -> log.debug("Solving subproblem {}", sub))
                             .map(solver)
                             .reduce((a1, a2) -> a1.flatMap(r1 -> a2.map(r1::merge)))
                             .orElse(Optional.empty());

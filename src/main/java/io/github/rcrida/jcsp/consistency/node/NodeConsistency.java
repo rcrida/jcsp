@@ -52,7 +52,7 @@ public class NodeConsistency implements ConstraintConsistency {
             }
         }
         val nodeConsistentProblem = builder.build();
-        log.info("Node consistent problem {}", nodeConsistentProblem);
+        log.debug("Node consistent problem {}", nodeConsistentProblem);
         return Optional.of(nodeConsistentProblem);
     }
 

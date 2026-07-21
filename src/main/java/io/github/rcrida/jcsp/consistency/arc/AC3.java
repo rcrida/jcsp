@@ -59,7 +59,7 @@ public class AC3 implements ConstraintConsistency {
                 if (optionalRevisedD_i.isPresent()) {
                     val revisedD_i = optionalRevisedD_i.get();
                     if (revisedD_i.isEmpty()) {
-                        log.warn("Domain of variable {} is empty after AC3", X_i);
+                        log.debug("Domain of variable {} is empty after AC3", X_i);
                         return Optional.empty();
                     }
                     variableDomains.put(X_i, revisedD_i);
@@ -164,7 +164,7 @@ public class AC3 implements ConstraintConsistency {
             if (optionalRevisedD.isPresent()) {
                 val revisedD = optionalRevisedD.get();
                 if (revisedD.isEmpty()) {
-                    log.warn("Domain of variable {} is empty after revising arc {}", arc.getFrom(), arc);
+                    log.debug("Domain of variable {} is empty after revising arc {}", arc.getFrom(), arc);
                     return Optional.empty();
                 }
                 variableDomains.put(arc.getFrom(), revisedD);

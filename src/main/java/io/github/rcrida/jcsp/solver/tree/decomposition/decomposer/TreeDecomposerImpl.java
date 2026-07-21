@@ -84,7 +84,7 @@ public class TreeDecomposerImpl implements TreeDecomposer {
                     .map(BigInteger::valueOf)
                     .reduce(BigInteger.ONE, BigInteger::multiply);
             if (cliqueDomainMaxSize.compareTo(BigInteger.valueOf(maxDomainSize)) > 0) {
-                log.info("Maximum clique domain size {} exceeded by {}", maxDomainSize, cliqueDomainMaxSize);
+                log.debug("Maximum clique domain size {} exceeded by {}", maxDomainSize, cliqueDomainMaxSize);
                 return Optional.empty();
             }
             val cliqueDomain = new AssignmentDomain(cliqueVariableDomains, csp);
@@ -159,11 +159,11 @@ public class TreeDecomposerImpl implements TreeDecomposer {
                 neighbours.get(n).remove(pick);
             }
         }
-        log.info("Bags = {}", bags);
+        log.debug("Bags = {}", bags);
 
         // Extract unique inclusion-maximal cliques from recorded bags
         Set<Set<Variable<?>>> cliques = new HashSet<>(bags);
-        log.info("cliques = {}", cliques);
+        log.debug("cliques = {}", cliques);
 
         // remove those that are subset of another
         List<Set<Variable<?>>> maximal = new ArrayList<>(cliques);
@@ -175,7 +175,7 @@ public class TreeDecomposerImpl implements TreeDecomposer {
             }
             return false;
         });
-        log.info("Maximal = {}", maximal);
+        log.debug("Maximal = {}", maximal);
         return maximal;
     }
 
@@ -223,7 +223,7 @@ public class TreeDecomposerImpl implements TreeDecomposer {
                 tree.get(e.b).add(e.a);
             }
         }
-        log.info("Clique tree = {}", tree);
+        log.debug("Clique tree = {}", tree);
         return tree;
     }
 }

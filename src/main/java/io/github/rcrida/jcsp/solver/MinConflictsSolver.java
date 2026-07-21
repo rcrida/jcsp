@@ -207,7 +207,7 @@ public class MinConflictsSolver implements LocalSolver, CancellableLocalSolver {
                 .map(Map.Entry::getKey)
                 .toList();
         T value = candidates.get(ThreadLocalRandom.current().nextInt(candidates.size()));
-        log.info("{} -> {}", variable, value);
+        log.debug("{} -> {}", variable, value);
         return current.toBuilder().value(variable, value).build();
     }
 

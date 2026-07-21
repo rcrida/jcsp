@@ -73,7 +73,7 @@ public class IndependentSubproblemSolver implements Solver {
                     return subproblems.stream()
                             // solve the bigger problems first so that the smaller problems are the ones cached and replayed
                             .sorted(Comparator.comparing(ConstraintSatisfactionProblem::getSearchSpace).reversed())
-                            .peek(sub -> log.info("Solving subproblem {}", sub))
+                            .peek(sub -> log.debug("Solving subproblem {}", sub))
                             .map(s -> new LazyList<>(innerFactory.apply(s).getSolutions(s)))
                             .reduce((ll1, ll2) -> new LazyList<>(ll1.stream().flatMap(a1 -> ll2.stream().map(a1::merge))))
                             .map(LazyList::stream)

@@ -54,7 +54,7 @@ public class CutsetConditioningSolver extends SolverDecorator {
          * @return the tree problem with variable domains constrained to be consistent with the cutset assignment.
          */
         public Optional<ConstraintSatisfactionProblem> constrainTree(@NonNull Assignment cutsetAssignment) {
-            log.info("Constrain tree with cycle cutset {}", cutsetAssignment);
+            log.debug("Constrain tree with cycle cutset {}", cutsetAssignment);
             val variableDomains = new HashMap<>(tree.getVariableDomains());
             for (Constraint constraint : overlappingConstraints) {
                 val overlappingVariables = new HashSet<>(constraint.getVariables());
@@ -63,14 +63,14 @@ public class CutsetConditioningSolver extends SolverDecorator {
                     val D_i = (DiscreteDomain<?>) variableDomains.get(X_i);
                     val revisedDomain = revise(X_i, D_i, cutsetAssignment, constraint);
                     if (revisedDomain.isEmpty()) {
-                        log.warn("Domain of variable {} is empty during cutset conditioning", X_i);
+                        log.debug("Domain of variable {} is empty during cutset conditioning", X_i);
                         return Optional.empty();
                     }
                     variableDomains.put(X_i, revisedDomain);
                 }
             }
             val constrainedTree = tree.toBuilder().variableDomains(variableDomains).build();
-            log.info("Constrained tree {}", constrainedTree);
+            log.debug("Constrained tree {}", constrainedTree);
             return Optional.of(constrainedTree);
         }
 
@@ -184,7 +184,7 @@ public class CutsetConditioningSolver extends SolverDecorator {
             overlappingConstraints.removeAll(cycleCutset.getConstraints());
             overlappingConstraints.removeAll(tree.getConstraints());
             val decomposition = new Decomposition(cycleCutset, tree, overlappingConstraints);
-            log.info("Found decomposition {}", decomposition);
+            log.debug("Found decomposition {}", decomposition);
             return Optional.of(decomposition);
         }
         return Optional.empty();
@@ -206,7 +206,7 @@ public class CutsetConditioningSolver extends SolverDecorator {
         val c = cycleCutsetSize;
         val cspComplexity = csp.getSearchSpace().doubleValue();
         val cutsetConditioningComplexity = Math.pow(d, c) * (n - c) * Math.pow(d, 2);
-        log.info("csp -> {}, cutset -> {}", cspComplexity, cutsetConditioningComplexity);
+        log.debug("csp -> {}, cutset -> {}", cspComplexity, cutsetConditioningComplexity);
         return cutsetConditioningComplexity < cspComplexity;
     }
 }

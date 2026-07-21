@@ -55,7 +55,7 @@ public class BacktrackingSearch implements Solver {
     private Stream<Assignment> searchStream(ConstraintSatisfactionProblem csp, Assignment assignment, long deadline) {
         log.debug("Searching with assignment: {}", assignment);
         if (assignment.isComplete(csp)) {
-            log.info("Found solution: {}", assignment);
+            log.debug("Found solution: {}", assignment);
             return Stream.of(assignment);
         }
         val variable = unassignedVariableSelector.select(csp, assignment);

@@ -58,7 +58,7 @@ public final class FixpointConsistency implements ConstraintConsistency {
             for (Propagatable constraint : constraints) {
                 var result = constraint.propagate(current.getVariableDomains());
                 if (result.isEmpty()) {
-                    log.warn("{}: infeasible detected", name);
+                    log.debug("{}: infeasible detected", name);
                     return Optional.empty();
                 }
                 var updates = result.get();

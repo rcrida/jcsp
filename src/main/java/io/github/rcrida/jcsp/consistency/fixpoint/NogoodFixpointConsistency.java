@@ -65,7 +65,7 @@ public final class NogoodFixpointConsistency implements ConstraintConsistency {
             for (NogoodConstraint constraint : toCheck) {
                 var result = constraint.propagate(current.getVariableDomains());
                 if (result.isEmpty()) {
-                    log.warn("NogoodConstraint: infeasible detected");
+                    log.debug("NogoodConstraint: infeasible detected");
                     return Optional.empty();
                 }
                 var updates = result.get();
