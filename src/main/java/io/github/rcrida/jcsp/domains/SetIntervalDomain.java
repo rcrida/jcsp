@@ -3,8 +3,7 @@ package io.github.rcrida.jcsp.domains;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 
-import java.util.Collections;
-import java.util.LinkedHashSet;
+import java.util.HashSet;
 import java.util.Optional;
 import java.util.Set;
 
@@ -14,13 +13,45 @@ import java.util.Set;
  * are not enumerated — narrowing proceeds via {@link #withLowerBound}, {@link #withUpperBound},
  * and {@link #withCardinality} instead, the set-CP analogue of how {@link IntervalDomain} narrows
  * without enumerating every {@code double} in its range.
+ * <p>
+ * Bounds are wrapped via {@link Set#copyOf}, not {@code LinkedHashSet}: unlike {@link
+ * IntRangeDomain}/{@link EnumDomain}, which build their own canonical ascending order internally
+ * before construction, this record takes whatever {@code Set<E>} a caller passes in directly —
+ * wrapping that in a {@code LinkedHashSet} would only freeze in whatever order the caller's set
+ * already had (e.g. {@code Set.of(...)}'s randomized per-JVM-run order), not derive a
+ * deterministic one, so it isn't worth the extra structure. {@code E} is unbounded (no {@code
+ * Comparable} guarantee), so there's no canonical order to derive here anyway; any future consumer
+ * that needs deterministic enumeration (e.g. a branching search picking "the next candidate
+ * element") sorts explicitly at its own call site instead, the same way {@link #formatSet} already
+ * does for display.
  */
 public record SetIntervalDomain<E>(Set<E> lowerBound, Set<E> upperBound, int minCardinality, int maxCardinality)
         implements SetBoundedDomain<E> {
 
+    /**
+     * Beyond wrapping the bounds defensively, this also applies a domain-intrinsic tightening
+     * that holds regardless of which constraint (if any) is doing the narrowing: once {@code
+     * |lowerBound| == maxCardinality}, no further element can ever be added without exceeding the
+     * cardinality cap, so {@code upperBound} collapses to exactly {@code lowerBound}; symmetrically,
+     * once {@code |upperBound| == minCardinality}, no candidate can be dropped without falling
+     * short of it, so {@code lowerBound} expands to exactly {@code upperBound}. Both conditions are
+     * evaluated against the bounds as originally passed in (not against each other's result), so
+     * this is safe to apply unconditionally — if both happen to hold simultaneously, {@code
+     * lowerBound ⊆ upperBound} (guaranteed by every caller: {@link #of} asserts it, {@link
+     * #withLowerBound}/{@link #withUpperBound} only narrow towards it) forces {@code |lowerBound| =
+     * |upperBound|}, which for a subset relationship between finite sets means they were already
+     * equal. This runs on every construction path, including {@link #of}, since an
+     * un-tightened-but-equivalent domain is never wrong, just less informative than it could
+     * immediately be — e.g. it's what lets a set variable resolve to a singleton through
+     * propagation alone, without needing a dedicated branching search stage.
+     */
     public SetIntervalDomain {
-        lowerBound = Collections.unmodifiableSet(new LinkedHashSet<>(lowerBound));
-        upperBound = Collections.unmodifiableSet(new LinkedHashSet<>(upperBound));
+        lowerBound = Set.copyOf(lowerBound);
+        upperBound = Set.copyOf(upperBound);
+        boolean forceUpperToLower = lowerBound.size() == maxCardinality;
+        boolean forceLowerToUpper = upperBound.size() == minCardinality;
+        if (forceUpperToLower) upperBound = lowerBound;
+        if (forceLowerToUpper) lowerBound = upperBound;
     }
 
     /**
@@ -63,14 +94,14 @@ public record SetIntervalDomain<E>(Set<E> lowerBound, Set<E> upperBound, int min
 
     @Override
     public SetIntervalDomain<E> withLowerBound(@NonNull Set<E> forcedIn) {
-        var newLower = new LinkedHashSet<>(lowerBound);
+        var newLower = new HashSet<>(lowerBound);
         newLower.addAll(forcedIn);
         return new SetIntervalDomain<>(newLower, upperBound, minCardinality, maxCardinality);
     }
 
     @Override
     public SetIntervalDomain<E> withUpperBound(@NonNull Set<E> restrictedTo) {
-        var newUpper = new LinkedHashSet<>(upperBound);
+        var newUpper = new HashSet<>(upperBound);
         newUpper.retainAll(restrictedTo);
         return new SetIntervalDomain<>(lowerBound, newUpper, minCardinality, maxCardinality);
     }

@@ -70,6 +70,22 @@ public class SetIntervalDomainTest {
     }
 
     @Test
+    void withLowerBound_reachingMaxCardinality_forcesUpperBoundDown() {
+        // Forcing lowerBound to size 1 while maxCardinality is 1 means no further element can
+        // ever be added, so the domain-intrinsic tightening should collapse upperBound to match.
+        var d = SetIntervalDomain.of(Set.of(), Set.of(1, 2, 3), 0, 1).withLowerBound(Set.of(1));
+        assertThat(d.getUpperBound()).isEqualTo(Set.of(1));
+    }
+
+    @Test
+    void withUpperBound_reachingMinCardinality_forcesLowerBoundUp() {
+        // Narrowing upperBound to size 2 while minCardinality is 2 means no candidate can ever be
+        // dropped, so the domain-intrinsic tightening should expand lowerBound to match.
+        var d = SetIntervalDomain.of(Set.of(), Set.of(1, 2, 3), 2, 3).withUpperBound(Set.of(1, 2));
+        assertThat(d.getLowerBound()).isEqualTo(Set.of(1, 2));
+    }
+
+    @Test
     void withLowerBound_elementOutsideUpperBound_producesEmptyDomain() {
         var d = SetIntervalDomain.of(Set.of(), Set.of(1, 2), 0, 2).withLowerBound(Set.of(3));
         assertThat(d.isEmpty()).isTrue();
