@@ -10,7 +10,7 @@ import lombok.Getter;
  *
  * <p>Callers can distinguish a genuine UNSAT result ({@link java.util.Optional#empty()})
  * from a limit-hit (this exception) and inspect how much work was done via
- * {@link #getStatistics()}.
+ * {@code getStatistics()}.
  *
  * <p>Only thrown from {@link BoundSolver#getSolution()}, not from
  * {@link BoundSolver#getSolutions()}, which truncates the stream silently instead.

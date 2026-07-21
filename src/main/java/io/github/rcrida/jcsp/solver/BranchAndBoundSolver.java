@@ -53,7 +53,7 @@ public class BranchAndBoundSolver implements Solver {
     @NonNull NogoodStore nogoodStore = new NogoodStore();
     /**
      * Shared token the root {@link Assignment} is seeded with (instead of a fresh {@code
-     * Assignment.empty()}), so it's readable via {@link SolverConfig#getStatistics()} after the
+     * Assignment.empty()}), so it's readable via {@code SolverConfig.getStatistics()} after the
      * call regardless of whether an improving solution was ever found.
      */
     @Builder.Default

@@ -40,7 +40,7 @@ import java.util.stream.Stream;
  * used without completing a full traversal; the two cases are not distinguished. Either way, the
  * {@code statistics} field (a shared token seeded into every restart's root {@link Assignment},
  * not a fresh one per restart) still holds the true cumulative counts across the whole call —
- * see {@link SolverConfig#getStatistics()} for how a caller retrieves it regardless of outcome.
+ * see {@code SolverConfig.getStatistics()} for how a caller retrieves it regardless of outcome.
  * A lightweight {@link BudgetExceeded} sentinel (pre-allocated, no stack trace) unwinds the
  * recursion when the budget is exhausted.
  */
@@ -64,7 +64,7 @@ public class DomWdegLubySearch implements Solver {
      * rather than each starting from a fresh {@code Assignment.empty()} -- so it accumulates the
      * true cumulative counts across the whole search regardless of how it ends (solution, genuine
      * UNSAT, or a limit hit). Defaults to a fresh {@link Statistics} when not supplied; pass one in
-     * (typically via {@link SolverConfig#getStatistics()}) to read it back after the call.
+     * (typically via {@code SolverConfig.getStatistics()}) to read it back after the call.
      */
     @NonNull Statistics statistics;
 

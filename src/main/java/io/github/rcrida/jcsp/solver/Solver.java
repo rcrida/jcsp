@@ -105,7 +105,7 @@ public interface Solver {
 
         /**
          * Picks between the real reason-deriving {@link #FULL_PROPAGATION_INFERENCE} and a wrapper
-         * that never derives one, per {@link SolverConfig#isNogoodLearningEnabled()}. Shared by both
+         * that never derives one, per {@code SolverConfig.isNogoodLearningEnabled()}. Shared by both
          * chains' wiring below so the choice lives in exactly one place: the terminal solvers
          * ({@code DomWdegLubySearch}, {@code BranchAndBoundSolver}) stay free of any "should I
          * explain" branch of their own -- they just call {@link Inference#applyWithReason} and react

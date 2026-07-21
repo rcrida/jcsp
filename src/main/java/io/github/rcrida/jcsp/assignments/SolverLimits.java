@@ -18,12 +18,12 @@ import java.util.concurrent.atomic.AtomicBoolean;
  *   <li>{@code timeLimit} — maximum wall-clock duration ({@code null} = unlimited)</li>
  * </ul>
  *
- * When either limit is exceeded {@link BoundSolver#getSolutions()} truncates the stream silently;
- * {@link BoundSolver#getSolution()} throws {@link io.github.rcrida.jcsp.solver.LimitExceededException}.
+ * When either limit is exceeded {@link io.github.rcrida.jcsp.solver.BoundSolver#getSolutions()} truncates the stream silently;
+ * {@link io.github.rcrida.jcsp.solver.BoundSolver#getSolution()} throws {@link io.github.rcrida.jcsp.solver.LimitExceededException}.
  *
  * <p>This class only tracks <em>whether</em> a limit was hit, not the {@link Statistics} at that
  * point — search methods now write into a caller-supplied {@link Statistics} instance directly
- * (see {@link io.github.rcrida.jcsp.solver.SolverConfig#getStatistics()}), so the caller already
+ * (see {@code io.github.rcrida.jcsp.solver.SolverConfig.getStatistics()}), so the caller already
  * holds a live reference to it regardless of outcome and no separate captured snapshot is needed here.
  */
 @Value
