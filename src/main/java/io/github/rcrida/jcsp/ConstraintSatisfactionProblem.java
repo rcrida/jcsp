@@ -24,6 +24,7 @@ import io.github.rcrida.jcsp.constraints.binary.BinaryOffsetConstraint;
 import io.github.rcrida.jcsp.constraints.binary.BinaryPredicateConstraint;
 import io.github.rcrida.jcsp.constraints.binary.BinaryEqualsConstraint;
 import io.github.rcrida.jcsp.constraints.binary.BinaryNotEqualsConstraint;
+import io.github.rcrida.jcsp.constraints.binary.SubsetConstraint;
 import io.github.rcrida.jcsp.constraints.Operator;
 import io.github.rcrida.jcsp.constraints.nary.AllDiffConstraint;
 import io.github.rcrida.jcsp.constraints.nary.AmongConstraint;
@@ -69,6 +70,7 @@ import io.github.rcrida.jcsp.domains.BooleanDomain;
 import io.github.rcrida.jcsp.domains.BoundedDomain;
 import io.github.rcrida.jcsp.domains.Domain;
 import io.github.rcrida.jcsp.domains.IntRangeDomain;
+import io.github.rcrida.jcsp.domains.SetBoundedDomain;
 import io.github.rcrida.jcsp.variables.Variable;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
@@ -147,6 +149,16 @@ public class ConstraintSatisfactionProblem {
      */
     private static final Set<Class<? extends Constraint>> CONTINUOUS_COMPATIBLE_CONSTRAINTS =
             Set.of(SumBoundConstraint.class, SumVariableConstraint.class, LinearBoundConstraint.class, LinearVariableConstraint.class, UnaryComparatorConstraint.class, BinaryComparatorConstraint.class, BinaryOffsetConstraint.class, AbsoluteDifferenceConstraint.class, DivisionConstraint.class, LexConstraint.class, CumulativeConstraint.class, MaxConstraint.class, MinConstraint.class, ProductConstraint.class, DiffnConstraint.class, GroundNogoodConstraint.class, RangeNogoodConstraint.class, IncreasingConstraint.class, DecreasingConstraint.class, UnaryPredicateConstraint.class, BinaryPredicateConstraint.class, PredicateConstraint.class, ReifiedConstraint.class, ImplicationConstraint.class, NaryElementConstraint.class);
+
+    /**
+     * Constraint types that support {@link io.github.rcrida.jcsp.domains.SetBoundedDomain} (e.g.
+     * {@link io.github.rcrida.jcsp.domains.SetIntervalDomain}) variables. Any other constraint
+     * type referencing such a variable is rejected at build time — the set-CP analogue of {@link
+     * #CONTINUOUS_COMPATIBLE_CONSTRAINTS}, checked via the same generalised {@link
+     * #validateDomainKindCompatibility} this class uses for both.
+     */
+    private static final Set<Class<? extends Constraint>> SET_COMPATIBLE_CONSTRAINTS =
+            Set.of(SubsetConstraint.class);
 
     Map<Variable<?>, Domain<?>> variableDomains;
     // Included in equals/hashCode (via ConstraintGraph's own, which compares constraints/isCyclic/
@@ -265,15 +277,30 @@ public class ConstraintSatisfactionProblem {
             throw new IllegalArgumentException(String.format("Constraints reference unknown variables %s", unknownVariables));
         }
 
-        val boundedVariables = variableDomains.entrySet().stream()
-                .filter(e -> e.getValue() instanceof BoundedDomain<?>)
+        validateDomainKindCompatibility(variableDomains, constraints, BoundedDomain.class,
+                CONTINUOUS_COMPATIBLE_CONSTRAINTS, "BoundedDomain (e.g. IntervalDomain)");
+        validateDomainKindCompatibility(variableDomains, constraints, SetBoundedDomain.class,
+                SET_COMPATIBLE_CONSTRAINTS, "SetBoundedDomain (e.g. SetIntervalDomain)");
+    }
+
+    /**
+     * Shared by both {@link #CONTINUOUS_COMPATIBLE_CONSTRAINTS} and {@link
+     * #SET_COMPATIBLE_CONSTRAINTS}: any variable whose domain is an instance of {@code domainKind}
+     * may only be referenced by a constraint in {@code compatibleConstraints}, or building the CSP
+     * fails fast with {@link IllegalArgumentException}.
+     */
+    private static void validateDomainKindCompatibility(Map<Variable<?>, Domain<?>> variableDomains, Set<Constraint> constraints,
+                                                          Class<?> domainKind, Set<Class<? extends Constraint>> compatibleConstraints,
+                                                          String domainKindDescription) {
+        val restrictedVariables = variableDomains.entrySet().stream()
+                .filter(e -> domainKind.isInstance(e.getValue()))
                 .map(Map.Entry::getKey)
                 .collect(Collectors.toSet());
-        if (boundedVariables.isEmpty()) {
+        if (restrictedVariables.isEmpty()) {
             return;
         }
         for (Constraint constraint : constraints) {
-            validateContinuousCompatibility(constraint, boundedVariables);
+            validateCompatibility(constraint, restrictedVariables, compatibleConstraints, domainKindDescription);
         }
     }
 
@@ -287,26 +314,26 @@ public class ConstraintSatisfactionProblem {
      * {@code BoundedDomain} variable, both explicitly rejected when used directly) would silently
      * bypass the whitelist check entirely by being wrapped in a reification.
      */
-    private static void validateContinuousCompatibility(Constraint constraint, Set<Variable<?>> boundedVariables) {
+    private static void validateCompatibility(Constraint constraint, Set<Variable<?>> restrictedVariables,
+                                                Set<Class<? extends Constraint>> compatibleConstraints, String domainKindDescription) {
         if (constraint instanceof ReifiedConstraint reified) {
-            validateContinuousCompatibility(reified.getBody(), boundedVariables);
+            validateCompatibility(reified.getBody(), restrictedVariables, compatibleConstraints, domainKindDescription);
             return;
         }
         if (constraint instanceof ImplicationConstraint implication) {
-            validateContinuousCompatibility(implication.getBody(), boundedVariables);
+            validateCompatibility(implication.getBody(), restrictedVariables, compatibleConstraints, domainKindDescription);
             return;
         }
-        if (CONTINUOUS_COMPATIBLE_CONSTRAINTS.contains(constraint.getClass())) {
+        if (compatibleConstraints.contains(constraint.getClass())) {
             return;
         }
         val incompatible = constraint.getVariables().stream()
-                .filter(boundedVariables::contains)
+                .filter(restrictedVariables::contains)
                 .collect(Collectors.toSet());
         if (!incompatible.isEmpty()) {
             throw new IllegalArgumentException(String.format(
-                    "Variables %s use a BoundedDomain (e.g. IntervalDomain) but are referenced by " +
-                            "unsupported constraint %s; only %s support BoundedDomain variables",
-                    incompatible, constraint.getClass().getSimpleName(), CONTINUOUS_COMPATIBLE_CONSTRAINTS));
+                    "Variables %s use a %s but are referenced by unsupported constraint %s; only %s support it",
+                    incompatible, domainKindDescription, constraint.getClass().getSimpleName(), compatibleConstraints));
         }
     }
 
@@ -836,6 +863,17 @@ public class ConstraintSatisfactionProblem {
          */
         public <T> ConstraintSatisfactionProblemBuilder notEqualsConstraint(@NonNull Variable<T> left, @NonNull Variable<T> right) {
             return this.constraint(BinaryNotEqualsConstraint.of(left, right));
+        }
+
+        /**
+         * Create a binary constraint over set variables: {@code left ⊆ right}.
+         *
+         * @param left the variable required to be a subset of {@code right}
+         * @param right the variable required to be a superset of {@code left}
+         * @return the builder
+         */
+        public <E> ConstraintSatisfactionProblemBuilder subsetConstraint(@NonNull Variable<Set<E>> left, @NonNull Variable<Set<E>> right) {
+            return this.constraint(SubsetConstraint.of(left, right));
         }
 
         /**
