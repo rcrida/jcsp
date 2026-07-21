@@ -33,17 +33,17 @@ import java.util.stream.Collectors;
  */
 @SuperBuilder
 @EqualsAndHashCode(callSuper = true)
-public class LinearConstraint<N extends Number> extends NaryConstraint implements Propagatable {
+public class LinearBoundConstraint<N extends Number> extends NaryConstraint implements Propagatable {
     private static final Set<Operator> PROPAGATING_OPERATORS = EnumSet.of(Operator.EQ, Operator.LEQ, Operator.GEQ);
 
     @NonNull private final Map<Variable<N>, N> coefficients;
     @NonNull private final Operator operator;
     @NonNull private final N bound;
 
-    public static <N extends Number> LinearConstraint<N> of(@NonNull Map<Variable<N>, N> coefficients,
+    public static <N extends Number> LinearBoundConstraint<N> of(@NonNull Map<Variable<N>, N> coefficients,
                                                             @NonNull Operator operator,
                                                             @NonNull N bound) {
-        return LinearConstraint.<N>builder()
+        return LinearBoundConstraint.<N>builder()
                 .variables(coefficients.keySet())
                 .coefficients(Map.copyOf(coefficients))
                 .operator(operator)

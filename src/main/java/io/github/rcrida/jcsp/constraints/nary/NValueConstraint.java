@@ -28,7 +28,7 @@ import java.util.stream.Collectors;
  * {@code trackedVariables.size()}).
  * <p>
  * {@code count} is a genuine decision variable rather than a fixed constant + {@link
- * io.github.rcrida.jcsp.constraints.Operator}, unlike e.g. {@code SumConstraint}. This lets a
+ * io.github.rcrida.jcsp.constraints.Operator}, unlike e.g. {@code SumBoundConstraint}. This lets a
  * caller hand {@code count} directly to an optimization objective ({@code a ->
  * (Integer) a.getValue(count).orElseThrow()}) to minimise the number of distinct values used —
  * the motivating use case (course/template/slab "minimise resources used" problems) for this

@@ -3,7 +3,11 @@ package io.github.rcrida.jcsp.constraints;
 import io.github.rcrida.jcsp.domains.BoundedDomain;
 import io.github.rcrida.jcsp.domains.DiscreteDomain;
 import io.github.rcrida.jcsp.domains.Domain;
+import io.github.rcrida.jcsp.variables.Variable;
 
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 /**
@@ -53,5 +57,93 @@ public final class NumericBounds {
             }
         }
         return builder == null ? Optional.empty() : Optional.of(builder.build());
+    }
+
+    /**
+     * Bounds-consistency propagation for {@code sum(coefficients[i]*variables[i]) <op> target},
+     * used by {@link io.github.rcrida.jcsp.constraints.nary.SumVariableConstraint} (all
+     * coefficients {@code 1.0}) and {@link io.github.rcrida.jcsp.constraints.nary.LinearVariableConstraint}
+     * (real per-variable coefficients). Generalises the same per-term contribution/feasibility/
+     * narrowing shape those constraints' bound-comparing siblings ({@code SumBoundConstraint},
+     * {@code LinearBoundConstraint}) already implement, treating {@code target} as one additional
+     * term with coefficient {@code -1.0} and comparing the combined total against the constant
+     * {@code 0} — {@code sum(vars) <op> target} rearranges to {@code sum(vars) - target <op> 0}
+     * for every operator (subtraction never flips inequality direction, unlike multiplying by a
+     * negative). Working entirely in {@code double} (via {@link #min}/{@link #max}/{@link #narrow})
+     * rather than through a typed coefficient map is what makes this fully generic over {@code N}:
+     * unlike a {@code Map<Variable<N>, N>}, a raw {@code double} coefficient never needs an
+     * {@code N}-typed constant synthesized for it.
+     * <p>
+     * Only {@link Operator#EQ}, {@link Operator#LEQ}, and {@link Operator#GEQ} propagate (matching
+     * every other propagator in this codebase); other operators return a no-op update.
+     *
+     * @return {@link Optional#empty()} if infeasible, otherwise the (possibly empty) map of
+     *         variables — from {@code variables} and/or {@code target} — whose domains were narrowed
+     */
+    @SuppressWarnings("unchecked")
+    public static <N extends Number> Optional<Map<Variable<?>, Domain<?>>> propagateWeightedSumVsTarget(
+            List<Variable<N>> variables, double[] coefficients, Variable<N> target,
+            Operator operator, Map<Variable<?>, Domain<?>> domains) {
+        if (operator != Operator.EQ && operator != Operator.LEQ && operator != Operator.GEQ) {
+            return Optional.of(Map.of());
+        }
+
+        int n = variables.size();
+        double[] mins = new double[n];
+        double[] maxs = new double[n];
+        for (int i = 0; i < n; i++) {
+            Domain<N> dom = (Domain<N>) domains.get(variables.get(i));
+            double domMin = min(dom), domMax = max(dom);
+            mins[i] = coefficients[i] >= 0 ? coefficients[i] * domMin : coefficients[i] * domMax;
+            maxs[i] = coefficients[i] >= 0 ? coefficients[i] * domMax : coefficients[i] * domMin;
+        }
+
+        Domain<N> targetDomain = (Domain<N>) domains.get(target);
+        double targetMin = min(targetDomain), targetMax = max(targetDomain);
+        // target is the (n+1)th term, coefficient -1
+        double targetMinContrib = -targetMax;
+        double targetMaxContrib = -targetMin;
+
+        double totalMin = targetMinContrib, totalMax = targetMaxContrib;
+        for (int i = 0; i < n; i++) { totalMin += mins[i]; totalMax += maxs[i]; }
+
+        if ((operator == Operator.EQ && (0 < totalMin || 0 > totalMax)) ||
+            (operator == Operator.LEQ && 0 < totalMin) ||
+            (operator == Operator.GEQ && 0 > totalMax)) return Optional.empty();
+
+        Map<Variable<?>, Domain<?>> updated = new HashMap<>();
+        for (int i = 0; i < n; i++) {
+            if (coefficients[i] == 0) continue;
+            double restMin = totalMin - mins[i];
+            double restMax = totalMax - maxs[i];
+            double newMin, newMax;
+            if (coefficients[i] > 0) {
+                newMax = (operator != Operator.GEQ) ? (0 - restMin) / coefficients[i] : Double.POSITIVE_INFINITY;
+                newMin = (operator != Operator.LEQ) ? (0 - restMax) / coefficients[i] : Double.NEGATIVE_INFINITY;
+            } else {
+                newMin = (operator != Operator.GEQ) ? (0 - restMin) / coefficients[i] : Double.NEGATIVE_INFINITY;
+                newMax = (operator != Operator.LEQ) ? (0 - restMax) / coefficients[i] : Double.POSITIVE_INFINITY;
+            }
+            Domain<N> dom = (Domain<N>) domains.get(variables.get(i));
+            var pruned = narrow(dom, newMin, newMax);
+            if (pruned.isPresent()) {
+                if (pruned.get().isEmpty()) return Optional.empty();
+                updated.put(variables.get(i), pruned.get());
+            }
+        }
+
+        {
+            double restMin = totalMin - targetMinContrib;
+            double restMax = totalMax - targetMaxContrib;
+            double newMin = (operator != Operator.GEQ) ? (0 - restMin) / -1.0 : Double.NEGATIVE_INFINITY;
+            double newMax = (operator != Operator.LEQ) ? (0 - restMax) / -1.0 : Double.POSITIVE_INFINITY;
+            var pruned = narrow(targetDomain, newMin, newMax);
+            if (pruned.isPresent()) {
+                if (pruned.get().isEmpty()) return Optional.empty();
+                updated.put(target, pruned.get());
+            }
+        }
+
+        return Optional.of(updated);
     }
 }

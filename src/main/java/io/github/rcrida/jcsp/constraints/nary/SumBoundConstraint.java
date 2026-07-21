@@ -29,15 +29,15 @@ import java.util.stream.Collectors;
  */
 @SuperBuilder
 @EqualsAndHashCode(callSuper = true)
-public class SumConstraint<N extends Number> extends UniformNaryConstraint<N> implements Propagatable {
+public class SumBoundConstraint<N extends Number> extends UniformNaryConstraint<N> implements Propagatable {
     private static final Set<Operator> PROPAGATING_OPERATORS = EnumSet.of(Operator.EQ, Operator.LEQ, Operator.GEQ);
     @NonNull private final N bound;
     @NonNull private final Operator operator;
 
-    public static <N extends Number> SumConstraint<N> of(@NonNull Set<Variable<N>> variables,
+    public static <N extends Number> SumBoundConstraint<N> of(@NonNull Set<Variable<N>> variables,
                                                          @NonNull Operator operator,
                                                          @NonNull N bound) {
-        return SumConstraint.<N>builder()
+        return SumBoundConstraint.<N>builder()
                 .variables(variables)
                 .operator(operator)
                 .bound(bound)

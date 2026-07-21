@@ -22,7 +22,8 @@ import io.github.rcrida.jcsp.constraints.nary.ImplicationConstraint;
 import io.github.rcrida.jcsp.constraints.nary.IncreasingConstraint;
 import io.github.rcrida.jcsp.constraints.nary.InverseConstraint;
 import io.github.rcrida.jcsp.constraints.nary.LexConstraint;
-import io.github.rcrida.jcsp.constraints.nary.LinearConstraint;
+import io.github.rcrida.jcsp.constraints.nary.LinearBoundConstraint;
+import io.github.rcrida.jcsp.constraints.nary.LinearVariableConstraint;
 import io.github.rcrida.jcsp.constraints.nary.MaxConstraint;
 import io.github.rcrida.jcsp.constraints.nary.MinConstraint;
 import io.github.rcrida.jcsp.constraints.nary.NaryElementConstraint;
@@ -35,7 +36,8 @@ import io.github.rcrida.jcsp.constraints.binary.AbsoluteDifferenceConstraint;
 import io.github.rcrida.jcsp.constraints.binary.BinaryComparatorConstraint;
 import io.github.rcrida.jcsp.constraints.binary.BinaryOffsetConstraint;
 import io.github.rcrida.jcsp.constraints.binary.DivisionConstraint;
-import io.github.rcrida.jcsp.constraints.nary.SumConstraint;
+import io.github.rcrida.jcsp.constraints.nary.SumBoundConstraint;
+import io.github.rcrida.jcsp.constraints.nary.SumVariableConstraint;
 import io.github.rcrida.jcsp.constraints.unary.UnaryComparatorConstraint;
 import io.github.rcrida.jcsp.solver.assignmentfactory.InitialAssignmentFactory;
 import lombok.val;
@@ -75,8 +77,10 @@ public interface LocalSolver {
                 FixpointConsistency.of(BinaryOffsetConstraint.class),
                 FixpointConsistency.of(AbsoluteDifferenceConstraint.class),
                 AC3.INSTANCE,
-                FixpointConsistency.of(SumConstraint.class),
-                FixpointConsistency.of(LinearConstraint.class),
+                FixpointConsistency.of(SumBoundConstraint.class),
+                FixpointConsistency.of(SumVariableConstraint.class),
+                FixpointConsistency.of(LinearBoundConstraint.class),
+                FixpointConsistency.of(LinearVariableConstraint.class),
                 FixpointConsistency.of(CountConstraint.class),
                 FixpointConsistency.of(InverseConstraint.class),
                 FixpointConsistency.of(AmongConstraint.class),

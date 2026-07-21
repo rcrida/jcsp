@@ -114,7 +114,7 @@ public class BisectionConditioningSolverTest {
 
     @Test
     void bisects_oneInfeasibleBranch() {
-        // x+y=3.5, x∈[0,2], y∈[0,2] — SumConstraint Double bound triggers propagateDouble
+        // x+y=3.5, x∈[0,2], y∈[0,2] — SumBoundConstraint Double bound triggers propagateDouble
         // Bisect x at mid=1.0:
         //   left  [0,1]: y must be in [2.5,∞) ∩ [0,2] → empty → infeasible (exercises repropagate empty branch)
         //   right [1,2]: propagation narrows both to [1.5,2]; bisection continues to epsilon, producing solutions

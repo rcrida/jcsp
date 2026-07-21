@@ -100,7 +100,7 @@ public class PropagationFixpointSolverTest {
 
     @Test
     void explainConflict_feasibleCsp_returnsEmptyMap() {
-        // SumConstraint reduces domains in first pass (changed=true branch) but doesn't fail.
+        // SumBoundConstraint reduces domains in first pass (changed=true branch) but doesn't fail.
         // Second pass: no further progress (changed=false branch) → while exits → Map.of().
         Variable<Integer> x = F.create("ecx"), y = F.create("ecy");
         var csp = ConstraintSatisfactionProblem.builder()
@@ -113,7 +113,7 @@ public class PropagationFixpointSolverTest {
 
     @Test
     void explainConflict_infeasibleCsp_returnsReason() {
-        // SumConstraint(x+y≤3) with x,y∈{5..5}: infeasible on the very first propagator round, so
+        // SumBoundConstraint(x+y≤3) with x,y∈{5..5}: infeasible on the very first propagator round, so
         // explainConflict's isInfeasible() ternary branch (as opposed to the feasible one covered
         // above) is exercised.
         Variable<Integer> x = F.create("icx"), y = F.create("icy");

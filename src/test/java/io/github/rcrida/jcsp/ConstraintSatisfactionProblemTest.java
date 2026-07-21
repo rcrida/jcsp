@@ -10,6 +10,7 @@ import io.github.rcrida.jcsp.constraints.unary.UnaryValueConstraint;
 import io.github.rcrida.jcsp.domains.BooleanDomain;
 import io.github.rcrida.jcsp.domains.Domain;
 import io.github.rcrida.jcsp.domains.IntRangeDomain;
+import io.github.rcrida.jcsp.solver.Solver;
 import io.github.rcrida.jcsp.solver.examples.AustraliaMapColouringTest;
 import io.github.rcrida.jcsp.variables.Variable;
 import org.junit.jupiter.api.Test;
@@ -267,6 +268,57 @@ public class ConstraintSatisfactionProblemTest {
                 .linearConstraint(Map.of(a, 2, b, 3), Operator.EQ, 12)
                 .build();
         assertThat(csp.getConstraints()).hasSize(1);
+    }
+
+    @Test
+    void builder_sumConstraintWithVariableTarget() {
+        Variable<Integer> a = VARIABLE_FACTORY.create("A");
+        Variable<Integer> b = VARIABLE_FACTORY.create("B");
+        Variable<Integer> target = VARIABLE_FACTORY.create("target");
+        val csp = ConstraintSatisfactionProblem.builder()
+                .variableDomain(a, IntRangeDomain.of(0, 10))
+                .variableDomain(b, IntRangeDomain.of(0, 10))
+                .variableDomain(target, IntRangeDomain.of(0, 20))
+                .sumConstraint(Set.of(a, b), Operator.EQ, target)
+                .build();
+        assertThat(csp.getConstraints()).hasSize(1);
+    }
+
+    @Test
+    void builder_linearConstraintWithVariableTarget() {
+        Variable<Integer> a = VARIABLE_FACTORY.create("A");
+        Variable<Integer> b = VARIABLE_FACTORY.create("B");
+        Variable<Integer> target = VARIABLE_FACTORY.create("target");
+        val csp = ConstraintSatisfactionProblem.builder()
+                .variableDomain(a, IntRangeDomain.of(0, 5))
+                .variableDomain(b, IntRangeDomain.of(0, 5))
+                .variableDomain(target, IntRangeDomain.of(0, 30))
+                .linearConstraint(Map.of(a, 2, b, 3), Operator.EQ, target)
+                .build();
+        assertThat(csp.getConstraints()).hasSize(1);
+    }
+
+    @Test
+    void sumConstraintWithVariableTarget_propagatesBidirectionally() {
+        // a in [0,3], b in [0,3], target pre-narrowed to [0,4] -> forces a+b<=4, and since a,b are
+        // otherwise free, the solver must only return solutions respecting the (pre-narrowed)
+        // target's upper bound, not the full [0,6] the unconstrained sum could otherwise reach
+        Variable<Integer> a = VARIABLE_FACTORY.create("A");
+        Variable<Integer> b = VARIABLE_FACTORY.create("B");
+        Variable<Integer> target = VARIABLE_FACTORY.create("target");
+        val csp = ConstraintSatisfactionProblem.builder()
+                .variableDomain(a, IntRangeDomain.of(0, 3))
+                .variableDomain(b, IntRangeDomain.of(0, 3))
+                .variableDomain(target, IntRangeDomain.of(0, 4))
+                .sumConstraint(Set.of(a, b), Operator.EQ, target)
+                .build();
+        val solutions = Solver.Factory.INSTANCE.createSolver(csp).getSolutions().toList();
+        assertThat(solutions).isNotEmpty();
+        for (Assignment solution : solutions) {
+            int sum = solution.getValue(a).orElseThrow() + solution.getValue(b).orElseThrow();
+            assertThat(sum).isEqualTo(solution.getValue(target).orElseThrow());
+            assertThat(sum).isLessThanOrEqualTo(4);
+        }
     }
 
     @Test

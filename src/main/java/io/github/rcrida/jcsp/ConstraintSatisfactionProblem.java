@@ -42,7 +42,8 @@ import io.github.rcrida.jcsp.constraints.nary.MaxConstraint;
 import io.github.rcrida.jcsp.constraints.nary.MinConstraint;
 import io.github.rcrida.jcsp.constraints.nary.DecreasingConstraint;
 import io.github.rcrida.jcsp.constraints.nary.IncreasingConstraint;
-import io.github.rcrida.jcsp.constraints.nary.LinearConstraint;
+import io.github.rcrida.jcsp.constraints.nary.LinearBoundConstraint;
+import io.github.rcrida.jcsp.constraints.nary.LinearVariableConstraint;
 import io.github.rcrida.jcsp.constraints.nary.GroundNogoodConstraint;
 import io.github.rcrida.jcsp.constraints.nary.NaryElementConstraint;
 import io.github.rcrida.jcsp.constraints.nary.NValueConstraint;
@@ -50,7 +51,8 @@ import io.github.rcrida.jcsp.constraints.nary.NogoodConstraint;
 import io.github.rcrida.jcsp.constraints.nary.RangeNogoodConstraint;
 import io.github.rcrida.jcsp.constraints.nary.ProductConstraint;
 import io.github.rcrida.jcsp.constraints.nary.NaryTuplesConstraint;
-import io.github.rcrida.jcsp.constraints.nary.SumConstraint;
+import io.github.rcrida.jcsp.constraints.nary.SumBoundConstraint;
+import io.github.rcrida.jcsp.constraints.nary.SumVariableConstraint;
 import io.github.rcrida.jcsp.constraints.nary.AtMostOneConstraint;
 import io.github.rcrida.jcsp.constraints.nary.ExactlyOneConstraint;
 import io.github.rcrida.jcsp.constraints.nary.ImplicationConstraint;
@@ -106,7 +108,7 @@ public class ConstraintSatisfactionProblem {
      * runs before returning a solution (e.g. {@link io.github.rcrida.jcsp.solver.SolverDecorator#forcedSolution})
      * — the same fallback guarantee every other listed constraint relies on beyond its one upfront
      * propagation pass in {@link io.github.rcrida.jcsp.solver.BisectionConditioningSolver} (whose own
-     * re-propagation is itself limited to {@code SumConstraint}/{@code LinearConstraint} — see its
+     * re-propagation is itself limited to {@code SumBoundConstraint}/{@code LinearBoundConstraint} — see its
      * {@code REPROPAGATORS}):
      * <ul>
      *   <li>{@link io.github.rcrida.jcsp.constraints.unary.UnaryPredicateConstraint} — {@code NodeConsistency}
@@ -144,7 +146,7 @@ public class ConstraintSatisfactionProblem {
      * {@code NogoodConstraint} implementation needs its own entry here too.
      */
     private static final Set<Class<? extends Constraint>> CONTINUOUS_COMPATIBLE_CONSTRAINTS =
-            Set.of(SumConstraint.class, LinearConstraint.class, UnaryComparatorConstraint.class, BinaryComparatorConstraint.class, BinaryOffsetConstraint.class, AbsoluteDifferenceConstraint.class, DivisionConstraint.class, LexConstraint.class, CumulativeConstraint.class, MaxConstraint.class, MinConstraint.class, ProductConstraint.class, DiffnConstraint.class, GroundNogoodConstraint.class, RangeNogoodConstraint.class, IncreasingConstraint.class, DecreasingConstraint.class, UnaryPredicateConstraint.class, BinaryPredicateConstraint.class, PredicateConstraint.class, ReifiedConstraint.class, ImplicationConstraint.class, NaryElementConstraint.class);
+            Set.of(SumBoundConstraint.class, SumVariableConstraint.class, LinearBoundConstraint.class, LinearVariableConstraint.class, UnaryComparatorConstraint.class, BinaryComparatorConstraint.class, BinaryOffsetConstraint.class, AbsoluteDifferenceConstraint.class, DivisionConstraint.class, LexConstraint.class, CumulativeConstraint.class, MaxConstraint.class, MinConstraint.class, ProductConstraint.class, DiffnConstraint.class, GroundNogoodConstraint.class, RangeNogoodConstraint.class, IncreasingConstraint.class, DecreasingConstraint.class, UnaryPredicateConstraint.class, BinaryPredicateConstraint.class, PredicateConstraint.class, ReifiedConstraint.class, ImplicationConstraint.class, NaryElementConstraint.class);
 
     Map<Variable<?>, Domain<?>> variableDomains;
     // Included in equals/hashCode (via ConstraintGraph's own, which compares constraints/isCyclic/
@@ -963,7 +965,20 @@ public class ConstraintSatisfactionProblem {
          * @return the builder
          */
         public <N extends Number> ConstraintSatisfactionProblemBuilder sumConstraint(@NonNull Set<Variable<N>> variables, @NonNull Operator operator, @NonNull N bound) {
-            return this.constraint(SumConstraint.of(variables, operator, bound));
+            return this.constraint(SumBoundConstraint.of(variables, operator, bound));
+        }
+
+        /**
+         * Create a constraint that compares the sum of a set of numeric variables to a variable
+         * target, rather than a fixed bound: {@code v1 + v2 + ... + vn <op> target}.
+         *
+         * @param variables the numeric variables to sum
+         * @param operator  the comparison operator (e.g. {@link Operator#EQ}, {@link Operator#LEQ})
+         * @param target    the variable to compare the sum against
+         * @return the builder
+         */
+        public <N extends Number> ConstraintSatisfactionProblemBuilder sumConstraint(@NonNull Set<Variable<N>> variables, @NonNull Operator operator, @NonNull Variable<N> target) {
+            return this.constraint(SumVariableConstraint.of(variables, operator, target));
         }
 
         /**
@@ -1035,7 +1050,20 @@ public class ConstraintSatisfactionProblem {
          * @return the builder
          */
         public <N extends Number> ConstraintSatisfactionProblemBuilder linearConstraint(@NonNull Map<Variable<N>, N> coefficients, @NonNull Operator operator, @NonNull N bound) {
-            return this.constraint(LinearConstraint.of(coefficients, operator, bound));
+            return this.constraint(LinearBoundConstraint.of(coefficients, operator, bound));
+        }
+
+        /**
+         * Create a weighted-sum (linear) constraint compared to a variable target, rather than a
+         * fixed bound: {@code a1*v1 + a2*v2 + ... <op> target}.
+         *
+         * @param coefficients map from variable to its numeric coefficient
+         * @param operator     the comparison operator (e.g. {@link Operator#EQ}, {@link Operator#LEQ})
+         * @param target       the variable to compare the weighted sum against
+         * @return the builder
+         */
+        public <N extends Number> ConstraintSatisfactionProblemBuilder linearConstraint(@NonNull Map<Variable<N>, N> coefficients, @NonNull Operator operator, @NonNull Variable<N> target) {
+            return this.constraint(LinearVariableConstraint.of(coefficients, operator, target));
         }
 
         /**

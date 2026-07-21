@@ -29,7 +29,8 @@ import io.github.rcrida.jcsp.constraints.nary.ImplicationConstraint;
 import io.github.rcrida.jcsp.constraints.nary.IncreasingConstraint;
 import io.github.rcrida.jcsp.constraints.nary.InverseConstraint;
 import io.github.rcrida.jcsp.constraints.nary.LexConstraint;
-import io.github.rcrida.jcsp.constraints.nary.LinearConstraint;
+import io.github.rcrida.jcsp.constraints.nary.LinearBoundConstraint;
+import io.github.rcrida.jcsp.constraints.nary.LinearVariableConstraint;
 import io.github.rcrida.jcsp.constraints.nary.MaxConstraint;
 import io.github.rcrida.jcsp.constraints.nary.MinConstraint;
 import io.github.rcrida.jcsp.constraints.nary.NaryElementConstraint;
@@ -39,7 +40,8 @@ import io.github.rcrida.jcsp.constraints.nary.ProductConstraint;
 import io.github.rcrida.jcsp.constraints.nary.NaryTuplesConstraint;
 import io.github.rcrida.jcsp.constraints.nary.RegularConstraint;
 import io.github.rcrida.jcsp.constraints.nary.ReifiedConstraint;
-import io.github.rcrida.jcsp.constraints.nary.SumConstraint;
+import io.github.rcrida.jcsp.constraints.nary.SumBoundConstraint;
+import io.github.rcrida.jcsp.constraints.nary.SumVariableConstraint;
 import io.github.rcrida.jcsp.constraints.unary.UnaryComparatorConstraint;
 import io.github.rcrida.jcsp.domains.BoundedDomain;
 import io.github.rcrida.jcsp.domains.Domain;
@@ -55,7 +57,7 @@ import java.util.Optional;
 import java.util.Set;
 
 /**
- * Runs AC3, AllDiff GAC, SumConstraint bounds propagation, LinearConstraint bounds propagation,
+ * Runs AC3, AllDiff GAC, SumBoundConstraint bounds propagation, LinearBoundConstraint bounds propagation,
  * CountConstraint value propagation, InverseConstraint arc consistency, and AmongConstraint
  * value-set propagation in a combined fixpoint loop.
  *
@@ -88,8 +90,10 @@ public class PropagationFixpointSolver extends SolverDecorator {
             AC3.INSTANCE,
             NogoodFixpointConsistency.INSTANCE,
             FixpointConsistency.of(AllDiffConstraint.class),
-            FixpointConsistency.of(SumConstraint.class),
-            FixpointConsistency.of(LinearConstraint.class),
+            FixpointConsistency.of(SumBoundConstraint.class),
+            FixpointConsistency.of(SumVariableConstraint.class),
+            FixpointConsistency.of(LinearBoundConstraint.class),
+            FixpointConsistency.of(LinearVariableConstraint.class),
             FixpointConsistency.of(CountConstraint.class),
             FixpointConsistency.of(InverseConstraint.class),
             FixpointConsistency.of(AmongConstraint.class),

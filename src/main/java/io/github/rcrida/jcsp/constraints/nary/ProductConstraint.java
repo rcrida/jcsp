@@ -120,8 +120,8 @@ public class ProductConstraint<N extends Number> extends UniformNaryConstraint<N
 
     /**
      * On infeasibility, the product's violation depends on the combined product of every
-     * variable, not any single variable in isolation — like {@link SumConstraint}/
-     * {@link LinearConstraint} and unlike {@link MaxConstraint}/{@link MinConstraint}, a product
+     * variable, not any single variable in isolation — like {@link SumBoundConstraint}/
+     * {@link LinearBoundConstraint} and unlike {@link MaxConstraint}/{@link MinConstraint}, a product
      * has no monotonic "one value alone already breaks the bound" case (a single large factor
      * says nothing about the bound without knowing the other factors too). See
      * {@link Propagatable#allSingletonReason} for why the fully collective explanation is the

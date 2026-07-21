@@ -4,8 +4,10 @@ import io.github.rcrida.jcsp.ConstraintSatisfactionProblem;
 import io.github.rcrida.jcsp.assignments.Assignment;
 import io.github.rcrida.jcsp.consistency.ConstraintConsistency;
 import io.github.rcrida.jcsp.consistency.fixpoint.FixpointConsistency;
-import io.github.rcrida.jcsp.constraints.nary.LinearConstraint;
-import io.github.rcrida.jcsp.constraints.nary.SumConstraint;
+import io.github.rcrida.jcsp.constraints.nary.LinearBoundConstraint;
+import io.github.rcrida.jcsp.constraints.nary.LinearVariableConstraint;
+import io.github.rcrida.jcsp.constraints.nary.SumBoundConstraint;
+import io.github.rcrida.jcsp.constraints.nary.SumVariableConstraint;
 import io.github.rcrida.jcsp.domains.BoundedDomain;
 import io.github.rcrida.jcsp.domains.IntervalDomain;
 import io.github.rcrida.jcsp.variables.Variable;
@@ -38,8 +40,10 @@ import java.util.stream.Stream;
 public class BisectionConditioningSolver extends SolverDecorator {
 
     private static final List<ConstraintConsistency> REPROPAGATORS = List.of(
-            FixpointConsistency.of(SumConstraint.class),
-            FixpointConsistency.of(LinearConstraint.class)
+            FixpointConsistency.of(SumBoundConstraint.class),
+            FixpointConsistency.of(SumVariableConstraint.class),
+            FixpointConsistency.of(LinearBoundConstraint.class),
+            FixpointConsistency.of(LinearVariableConstraint.class)
     );
 
     @NonNull ToDoubleFunction<Assignment> objective;

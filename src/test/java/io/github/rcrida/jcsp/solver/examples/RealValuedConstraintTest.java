@@ -25,7 +25,7 @@ import static org.assertj.core.api.Assertions.within;
  * food/transport are unknowns over {@code [0, 100]}. A {@code sumConstraint} forces
  * {@code rent + food == 100}, and a {@code linearConstraint} forces
  * {@code rent + 5*transport == 120}. Both unknowns are resolved to singleton intervals
- * purely by SumConstraint/LinearConstraint bounds propagation — no backtracking search needed.
+ * purely by SumBoundConstraint/LinearBoundConstraint bounds propagation — no backtracking search needed.
  */
 public class RealValuedConstraintTest {
     static final Variable.Factory F = Variable.Factory.INSTANCE;

@@ -268,7 +268,7 @@ public final class NogoodPropagationBenchmark {
      * constraint on every pair (full density -- keeps it one connected component, same reasoning
      * as {@link #golombRuler}), each with a fixed, seeded-random compatibility matrix of the given
      * {@code tightness} (fraction of value pairs forbidden). Deliberately built from only
-     * {@code biPredicateConstraint} -- no {@code AllDiffConstraint}/{@code LinearConstraint}/etc
+     * {@code biPredicateConstraint} -- no {@code AllDiffConstraint}/{@code LinearBoundConstraint}/etc
      * -- so the only propagators active are {@code AC3} (pure per-arc, per-value revision) and
      * {@code NogoodFixpointConsistency}, unlike {@link #golombRuler}'s single large
      * {@code AllDiffConstraint} whose GAC pruning touches many variables per round. Propagation

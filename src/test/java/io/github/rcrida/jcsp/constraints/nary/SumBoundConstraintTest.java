@@ -17,22 +17,22 @@ import java.util.concurrent.atomic.AtomicInteger;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-public class SumConstraintTest {
+public class SumBoundConstraintTest {
     static final Variable.Factory F = Variable.Factory.INSTANCE;
 
     Variable<Integer> v1 = F.create("v1");
     Variable<Integer> v2 = F.create("v2");
     Variable<Integer> v3 = F.create("v3");
 
-    SumConstraint<Integer> eq10;
-    SumConstraint<Integer> leq10;
-    SumConstraint<Integer> geq10;
+    SumBoundConstraint<Integer> eq10;
+    SumBoundConstraint<Integer> leq10;
+    SumBoundConstraint<Integer> geq10;
 
     @BeforeEach
     void setUp() {
-        eq10  = SumConstraint.of(Set.of(v1, v2, v3), Operator.EQ,  10);
-        leq10 = SumConstraint.of(Set.of(v1, v2, v3), Operator.LEQ, 10);
-        geq10 = SumConstraint.of(Set.of(v1, v2, v3), Operator.GEQ, 10);
+        eq10  = SumBoundConstraint.of(Set.of(v1, v2, v3), Operator.EQ,  10);
+        leq10 = SumBoundConstraint.of(Set.of(v1, v2, v3), Operator.LEQ, 10);
+        geq10 = SumBoundConstraint.of(Set.of(v1, v2, v3), Operator.GEQ, 10);
     }
 
     @Test
@@ -94,13 +94,13 @@ public class SumConstraintTest {
 
     @Test
     void of_createsEquivalentConstraint() {
-        assertThat(SumConstraint.of(Set.of(v1, v2, v3), Operator.EQ, 10)).isEqualTo(eq10);
+        assertThat(SumBoundConstraint.of(Set.of(v1, v2, v3), Operator.EQ, 10)).isEqualTo(eq10);
     }
 
     @Test
     void sum_byte() {
         Variable<Byte> a = F.create("a"), b = F.create("b");
-        var c = SumConstraint.of(Set.of(a, b), Operator.EQ, (byte) 3);
+        var c = SumBoundConstraint.of(Set.of(a, b), Operator.EQ, (byte) 3);
         assertThat(c.isSatisfiedBy(Assignment.of(Map.of(a, (byte) 1, b, (byte) 2)))).isTrue();
         assertThat(c.isSatisfiedBy(Assignment.of(Map.of(a, (byte) 2, b, (byte) 2)))).isFalse();
     }
@@ -108,7 +108,7 @@ public class SumConstraintTest {
     @Test
     void sum_short() {
         Variable<Short> a = F.create("a"), b = F.create("b");
-        var c = SumConstraint.of(Set.of(a, b), Operator.EQ, (short) 30);
+        var c = SumBoundConstraint.of(Set.of(a, b), Operator.EQ, (short) 30);
         assertThat(c.isSatisfiedBy(Assignment.of(Map.of(a, (short) 10, b, (short) 20)))).isTrue();
         assertThat(c.isSatisfiedBy(Assignment.of(Map.of(a, (short) 10, b, (short) 10)))).isFalse();
     }
@@ -116,7 +116,7 @@ public class SumConstraintTest {
     @Test
     void sum_long() {
         Variable<Long> a = F.create("a"), b = F.create("b");
-        var c = SumConstraint.of(Set.of(a, b), Operator.EQ, 3L);
+        var c = SumBoundConstraint.of(Set.of(a, b), Operator.EQ, 3L);
         assertThat(c.isSatisfiedBy(Assignment.of(Map.of(a, 1L, b, 2L)))).isTrue();
         assertThat(c.isSatisfiedBy(Assignment.of(Map.of(a, 2L, b, 2L)))).isFalse();
     }
@@ -124,7 +124,7 @@ public class SumConstraintTest {
     @Test
     void sum_float() {
         Variable<Float> a = F.create("a"), b = F.create("b");
-        var c = SumConstraint.of(Set.of(a, b), Operator.EQ, 3.0f);
+        var c = SumBoundConstraint.of(Set.of(a, b), Operator.EQ, 3.0f);
         assertThat(c.isSatisfiedBy(Assignment.of(Map.of(a, 1.5f, b, 1.5f)))).isTrue();
         assertThat(c.isSatisfiedBy(Assignment.of(Map.of(a, 1.0f, b, 1.0f)))).isFalse();
     }
@@ -132,7 +132,7 @@ public class SumConstraintTest {
     @Test
     void sum_double() {
         Variable<Double> a = F.create("a"), b = F.create("b");
-        var c = SumConstraint.of(Set.of(a, b), Operator.EQ, 3.0);
+        var c = SumBoundConstraint.of(Set.of(a, b), Operator.EQ, 3.0);
         assertThat(c.isSatisfiedBy(Assignment.of(Map.of(a, 1.5, b, 1.5)))).isTrue();
         assertThat(c.isSatisfiedBy(Assignment.of(Map.of(a, 1.0, b, 1.0)))).isFalse();
     }
@@ -145,7 +145,7 @@ public class SumConstraintTest {
         // new_max(v1) = 15 - min(v2) - min(v3) = 15 - 1 - 1 = 13 → capped at 9 (no change)
         // After assigning v2=8, v3=6: new_max(v1) = 15-8-6 = 1, new_min(v1) = 15-8-6 = 1 → v1 = {1}
         Variable<Integer> v3 = F.create("v3");
-        var c = SumConstraint.of(Set.of(v1, v2, v3), Operator.EQ, 15);
+        var c = SumBoundConstraint.of(Set.of(v1, v2, v3), Operator.EQ, 15);
         var domains = Map.<Variable<?>, io.github.rcrida.jcsp.domains.Domain<?>>of(
                 v1, IntRangeDomain.of(1, 9),
                 v2, IntRangeDomain.of(8, 8),
@@ -159,7 +159,7 @@ public class SumConstraintTest {
     @Test
     void propagate_leq_tightensUpperBound() {
         // v1∈{1..9}, v2∈{5..5}: sum ≤ 8 → new_max(v1) = 8 - 5 = 3
-        var c = SumConstraint.of(Set.of(v1, v2), Operator.LEQ, 8);
+        var c = SumBoundConstraint.of(Set.of(v1, v2), Operator.LEQ, 8);
         var domains = Map.<Variable<?>, io.github.rcrida.jcsp.domains.Domain<?>>of(
                 v1, IntRangeDomain.of(1, 9),
                 v2, IntRangeDomain.of(5, 5));
@@ -172,7 +172,7 @@ public class SumConstraintTest {
     @Test
     void propagate_geq_tightensLowerBound() {
         // v1∈{1..9}, v2∈{5..5}: sum ≥ 8 → new_min(v1) = 8 - 5 = 3
-        var c = SumConstraint.of(Set.of(v1, v2), Operator.GEQ, 8);
+        var c = SumBoundConstraint.of(Set.of(v1, v2), Operator.GEQ, 8);
         var domains = Map.<Variable<?>, io.github.rcrida.jcsp.domains.Domain<?>>of(
                 v1, IntRangeDomain.of(1, 9),
                 v2, IntRangeDomain.of(5, 5));
@@ -184,7 +184,7 @@ public class SumConstraintTest {
 
     @Test
     void propagate_otherOperator_returnsNoChange() {
-        var c = SumConstraint.of(Set.of(v1, v2), Operator.NEQ, 5);
+        var c = SumBoundConstraint.of(Set.of(v1, v2), Operator.NEQ, 5);
         var domains = Map.<Variable<?>, io.github.rcrida.jcsp.domains.Domain<?>>of(
                 v1, IntRangeDomain.of(1, 9),
                 v2, IntRangeDomain.of(1, 9));
@@ -196,7 +196,7 @@ public class SumConstraintTest {
     @Test
     void propagate_eq_infeasible_kAboveMax() {
         // v1∈{1..3}, v2∈{1..3}: max sum = 6 < 10 → infeasible
-        var c = SumConstraint.of(Set.of(v1, v2), Operator.EQ, 10);
+        var c = SumBoundConstraint.of(Set.of(v1, v2), Operator.EQ, 10);
         var domains = Map.<Variable<?>, io.github.rcrida.jcsp.domains.Domain<?>>of(
                 v1, IntRangeDomain.of(1, 3),
                 v2, IntRangeDomain.of(1, 3));
@@ -206,7 +206,7 @@ public class SumConstraintTest {
     @Test
     void propagate_leq_infeasible() {
         // v1∈{5..9}, v2∈{5..9}: min sum = 10 > 8 → infeasible for LEQ
-        var c = SumConstraint.of(Set.of(v1, v2), Operator.LEQ, 8);
+        var c = SumBoundConstraint.of(Set.of(v1, v2), Operator.LEQ, 8);
         var domains = Map.<Variable<?>, io.github.rcrida.jcsp.domains.Domain<?>>of(
                 v1, IntRangeDomain.of(5, 9),
                 v2, IntRangeDomain.of(5, 9));
@@ -216,7 +216,7 @@ public class SumConstraintTest {
     @Test
     void propagate_geq_infeasible() {
         // v1∈{1..3}, v2∈{1..3}: max sum = 6 < 10 → infeasible for GEQ
-        var c = SumConstraint.of(Set.of(v1, v2), Operator.GEQ, 10);
+        var c = SumBoundConstraint.of(Set.of(v1, v2), Operator.GEQ, 10);
         var domains = Map.<Variable<?>, io.github.rcrida.jcsp.domains.Domain<?>>of(
                 v1, IntRangeDomain.of(1, 3),
                 v2, IntRangeDomain.of(1, 3));
@@ -226,7 +226,7 @@ public class SumConstraintTest {
     @Test
     void propagate_noChange_returnsEmptyMap() {
         // Wide domains — no pruning possible
-        var c = SumConstraint.of(Set.of(v1, v2), Operator.EQ, 10);
+        var c = SumBoundConstraint.of(Set.of(v1, v2), Operator.EQ, 10);
         var domains = Map.<Variable<?>, io.github.rcrida.jcsp.domains.Domain<?>>of(
                 v1, IntRangeDomain.of(1, 9),
                 v2, IntRangeDomain.of(1, 9));
@@ -242,7 +242,7 @@ public class SumConstraintTest {
         Variable<Double> d1 = F.create("d1");
         Variable<Double> d2 = F.create("d2");
         Variable<Double> d3 = F.create("d3");
-        var c = SumConstraint.of(Set.of(d1, d2, d3), Operator.EQ, 10.0);
+        var c = SumBoundConstraint.of(Set.of(d1, d2, d3), Operator.EQ, 10.0);
         var domains = Map.<Variable<?>, io.github.rcrida.jcsp.domains.Domain<?>>of(
                 d1, IntervalDomain.of(0.0, 10.0),
                 d2, IntervalDomain.of(3.0, 3.0),
@@ -258,7 +258,7 @@ public class SumConstraintTest {
     void propagateDouble_leq_tightensUpperBound() {
         Variable<Double> d1 = F.create("d1");
         Variable<Double> d2 = F.create("d2");
-        var c = SumConstraint.of(Set.of(d1, d2), Operator.LEQ, 8.0);
+        var c = SumBoundConstraint.of(Set.of(d1, d2), Operator.LEQ, 8.0);
         var domains = Map.<Variable<?>, io.github.rcrida.jcsp.domains.Domain<?>>of(
                 d1, IntervalDomain.of(0.0, 10.0),
                 d2, IntervalDomain.of(5.0, 5.0));
@@ -271,7 +271,7 @@ public class SumConstraintTest {
     void propagateDouble_geq_tightensLowerBound() {
         Variable<Double> d1 = F.create("d1");
         Variable<Double> d2 = F.create("d2");
-        var c = SumConstraint.of(Set.of(d1, d2), Operator.GEQ, 8.0);
+        var c = SumBoundConstraint.of(Set.of(d1, d2), Operator.GEQ, 8.0);
         var domains = Map.<Variable<?>, io.github.rcrida.jcsp.domains.Domain<?>>of(
                 d1, IntervalDomain.of(0.0, 10.0),
                 d2, IntervalDomain.of(5.0, 5.0));
@@ -284,7 +284,7 @@ public class SumConstraintTest {
     void propagateDouble_infeasible_kAboveMax() {
         Variable<Double> d1 = F.create("d1");
         Variable<Double> d2 = F.create("d2");
-        var c = SumConstraint.of(Set.of(d1, d2), Operator.EQ, 10.0);
+        var c = SumBoundConstraint.of(Set.of(d1, d2), Operator.EQ, 10.0);
         var domains = Map.<Variable<?>, io.github.rcrida.jcsp.domains.Domain<?>>of(
                 d1, IntervalDomain.of(0.0, 3.0),
                 d2, IntervalDomain.of(0.0, 3.0));
@@ -296,7 +296,7 @@ public class SumConstraintTest {
         // d1,d2 ∈ [5,9]: min sum = 10 > 8 → infeasible for EQ
         Variable<Double> d1 = F.create("d1");
         Variable<Double> d2 = F.create("d2");
-        var c = SumConstraint.of(Set.of(d1, d2), Operator.EQ, 8.0);
+        var c = SumBoundConstraint.of(Set.of(d1, d2), Operator.EQ, 8.0);
         var domains = Map.<Variable<?>, io.github.rcrida.jcsp.domains.Domain<?>>of(
                 d1, IntervalDomain.of(5.0, 9.0),
                 d2, IntervalDomain.of(5.0, 9.0));
@@ -308,7 +308,7 @@ public class SumConstraintTest {
         // d1,d2 ∈ [5,9]: min sum = 10 > 8 → infeasible for LEQ
         Variable<Double> d1 = F.create("d1");
         Variable<Double> d2 = F.create("d2");
-        var c = SumConstraint.of(Set.of(d1, d2), Operator.LEQ, 8.0);
+        var c = SumBoundConstraint.of(Set.of(d1, d2), Operator.LEQ, 8.0);
         var domains = Map.<Variable<?>, io.github.rcrida.jcsp.domains.Domain<?>>of(
                 d1, IntervalDomain.of(5.0, 9.0),
                 d2, IntervalDomain.of(5.0, 9.0));
@@ -320,7 +320,7 @@ public class SumConstraintTest {
         // d1,d2 ∈ [0,3]: max sum = 6 < 10 → infeasible for GEQ
         Variable<Double> d1 = F.create("d1");
         Variable<Double> d2 = F.create("d2");
-        var c = SumConstraint.of(Set.of(d1, d2), Operator.GEQ, 10.0);
+        var c = SumBoundConstraint.of(Set.of(d1, d2), Operator.GEQ, 10.0);
         var domains = Map.<Variable<?>, io.github.rcrida.jcsp.domains.Domain<?>>of(
                 d1, IntervalDomain.of(0.0, 3.0),
                 d2, IntervalDomain.of(0.0, 3.0));
@@ -331,7 +331,7 @@ public class SumConstraintTest {
     void propagateDouble_noChange_returnsEmptyMap() {
         Variable<Double> d1 = F.create("d1");
         Variable<Double> d2 = F.create("d2");
-        var c = SumConstraint.of(Set.of(d1, d2), Operator.EQ, 10.0);
+        var c = SumBoundConstraint.of(Set.of(d1, d2), Operator.EQ, 10.0);
         var domains = Map.<Variable<?>, io.github.rcrida.jcsp.domains.Domain<?>>of(
                 d1, IntervalDomain.of(0.0, 10.0),
                 d2, IntervalDomain.of(0.0, 10.0));
@@ -345,7 +345,7 @@ public class SumConstraintTest {
         // d1 is an IntervalDomain, d2 is a plain enumerable Domain<Double>; d1 + d2 == 10
         Variable<Double> d1 = F.create("d1");
         Variable<Double> d2 = F.create("d2");
-        var c = SumConstraint.of(Set.of(d1, d2), Operator.EQ, 10.0);
+        var c = SumBoundConstraint.of(Set.of(d1, d2), Operator.EQ, 10.0);
         var domains = Map.<Variable<?>, io.github.rcrida.jcsp.domains.Domain<?>>of(
                 d1, IntervalDomain.of(0.0, 10.0),
                 d2, io.github.rcrida.jcsp.domains.DomainObjectSet.<Double>builder().value(2.0).value(8.0).build());
@@ -363,7 +363,7 @@ public class SumConstraintTest {
         // which excludes both 0.0 and 1.0 → infeasible per-variable.
         Variable<Double> d1 = F.create("d1");
         Variable<Double> d2 = F.create("d2");
-        var c = SumConstraint.of(Set.of(d1, d2), Operator.EQ, 10.0);
+        var c = SumBoundConstraint.of(Set.of(d1, d2), Operator.EQ, 10.0);
         var domains = Map.<Variable<?>, io.github.rcrida.jcsp.domains.Domain<?>>of(
                 d1, io.github.rcrida.jcsp.domains.DomainObjectSet.<Double>builder().value(0.0).value(1.0).build(),
                 d2, IntervalDomain.of(9.2, 9.8));
@@ -375,7 +375,7 @@ public class SumConstraintTest {
         // f1 ∈ {0..9} (Float), f2 fixed at 5.0f; f1 + f2 == 8.0f → f1 narrowed to {3.0f}
         Variable<Float> f1 = F.create("f1");
         Variable<Float> f2 = F.create("f2");
-        var c = SumConstraint.of(Set.of(f1, f2), Operator.EQ, 8.0f);
+        var c = SumBoundConstraint.of(Set.of(f1, f2), Operator.EQ, 8.0f);
         var f1Domain = io.github.rcrida.jcsp.domains.DomainObjectSet.<Float>builder();
         for (float v = 0f; v <= 9f; v++) f1Domain.value(v);
         var domains = Map.<Variable<?>, io.github.rcrida.jcsp.domains.Domain<?>>of(
@@ -418,7 +418,7 @@ public class SumConstraintTest {
     void propagateWithReasons_notAllSingleton_initialCheckInfeasible_returnsEmptyReason() {
         // v1,v2∈{1..3}, EQ 10: max sum = 6 < 10 → infeasible, but neither is pinned, so an
         // unlisted open-domain variable can't be ruled out — falls back to empty.
-        var c = SumConstraint.of(Set.of(v1, v2), Operator.EQ, 10);
+        var c = SumBoundConstraint.of(Set.of(v1, v2), Operator.EQ, 10);
         var domains = Map.<Variable<?>, Domain<?>>of(
                 v1, IntRangeDomain.of(1, 3),
                 v2, IntRangeDomain.of(1, 3));
@@ -432,7 +432,7 @@ public class SumConstraintTest {
         // v1 enumerable {0,1}, v2∈{9..9} (singleton); v1 + v2 == 10.
         // Globally feasible (totalMin=9, totalMax=10), but v1 must narrow to {1}, which is
         // present — use a domain where the required value is absent instead.
-        var c = SumConstraint.of(Set.of(v1, v2), Operator.EQ, 10);
+        var c = SumBoundConstraint.of(Set.of(v1, v2), Operator.EQ, 10);
         var domains = Map.<Variable<?>, Domain<?>>of(
                 v1, io.github.rcrida.jcsp.domains.DomainObjectSet.<Integer>builder().value(0).value(4).build(),
                 v2, IntRangeDomain.of(9, 9));
@@ -446,7 +446,7 @@ public class SumConstraintTest {
     @Test
     void sum_unsupportedBoundType() {
         Variable<Number> a = F.create("a"), b = F.create("b");
-        var c = SumConstraint.<Number>builder()
+        var c = SumBoundConstraint.<Number>builder()
                 .variables(Set.of(a, b))
                 .bound(new AtomicInteger(3))
                 .operator(Operator.EQ)
