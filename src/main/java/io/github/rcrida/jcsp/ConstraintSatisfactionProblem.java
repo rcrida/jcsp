@@ -28,6 +28,7 @@ import io.github.rcrida.jcsp.constraints.Operator;
 import io.github.rcrida.jcsp.constraints.nary.AllDiffConstraint;
 import io.github.rcrida.jcsp.constraints.nary.AmongConstraint;
 import io.github.rcrida.jcsp.constraints.nary.Automaton;
+import io.github.rcrida.jcsp.constraints.nary.BinPackingConstraint;
 import io.github.rcrida.jcsp.constraints.nary.CircuitConstraint;
 import io.github.rcrida.jcsp.constraints.nary.DiffnConstraint;
 import io.github.rcrida.jcsp.constraints.nary.RegularConstraint;
@@ -1106,6 +1107,25 @@ public class ConstraintSatisfactionProblem {
          */
         public <T> ConstraintSatisfactionProblemBuilder nValueConstraint(@NonNull Set<Variable<T>> variables, @NonNull Variable<Integer> count) {
             return this.constraint(NValueConstraint.of(variables, count));
+        }
+
+        /**
+         * Create a bin-packing constraint: each item is assigned to a bin ({@code bin[i]})
+         * without any bin's total item weight exceeding its capacity. {@code weights} and
+         * {@code capacities} are fixed data, not variables. Equivalent to MiniZinc's
+         * {@code bin_packing_capa(capacities, bin, weights)} constraint. Pair with {@link
+         * #nValueConstraint} over the same {@code bin} variables to additionally minimise the
+         * number of bins used.
+         *
+         * @param bin        the bin-assignment variable for each item (0-indexed bin number)
+         * @param weights    the fixed weight of each item
+         * @param capacities the fixed capacity of each bin
+         * @return the builder
+         */
+        public ConstraintSatisfactionProblemBuilder binPackingConstraint(@NonNull List<Variable<Integer>> bin,
+                                                                          @NonNull List<Integer> weights,
+                                                                          @NonNull List<Integer> capacities) {
+            return this.constraint(BinPackingConstraint.of(bin, weights, capacities));
         }
 
         /**

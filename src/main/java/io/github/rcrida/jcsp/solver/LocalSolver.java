@@ -11,6 +11,7 @@ import io.github.rcrida.jcsp.constraints.nary.ExactlyOneConstraint;
 import io.github.rcrida.jcsp.constraints.nary.AmongConstraint;
 import io.github.rcrida.jcsp.constraints.nary.AtMostNConstraint;
 import io.github.rcrida.jcsp.constraints.nary.AtMostOneConstraint;
+import io.github.rcrida.jcsp.constraints.nary.BinPackingConstraint;
 import io.github.rcrida.jcsp.constraints.nary.CountConstraint;
 import io.github.rcrida.jcsp.constraints.nary.CircuitConstraint;
 import io.github.rcrida.jcsp.constraints.nary.CumulativeConstraint;
@@ -82,6 +83,7 @@ public interface LocalSolver {
                 FixpointConsistency.of(AtLeastNConstraint.class),
                 FixpointConsistency.of(AtMostNConstraint.class),
                 FixpointConsistency.of(AtMostOneConstraint.class),
+                FixpointConsistency.of(BinPackingConstraint.class),
                 FixpointConsistency.of(CumulativeConstraint.class),
                 FixpointConsistency.of(GlobalCardinalityConstraint.class),
                 FixpointConsistency.of(NValueConstraint.class),
