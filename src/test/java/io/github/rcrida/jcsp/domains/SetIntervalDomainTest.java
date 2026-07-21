@@ -1,0 +1,207 @@
+package io.github.rcrida.jcsp.domains;
+
+import org.junit.jupiter.api.Test;
+
+import java.util.Set;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+
+public class SetIntervalDomainTest {
+
+    @Test
+    void of_lowerBoundNotSubsetOfUpperBound_throwsAssertionError() {
+        assertThatThrownBy(() -> SetIntervalDomain.of(Set.of(1, 2), Set.of(1), 0, 2))
+                .isInstanceOf(AssertionError.class)
+                .hasMessageContaining("must be a subset of");
+    }
+
+    @Test
+    void of_negativeMinCardinality_throwsAssertionError() {
+        assertThatThrownBy(() -> SetIntervalDomain.of(Set.of(), Set.of(1, 2), -1, 2))
+                .isInstanceOf(AssertionError.class)
+                .hasMessageContaining("must not be negative");
+    }
+
+    @Test
+    void of_minCardinalityExceedsMaxCardinality_throwsAssertionError() {
+        assertThatThrownBy(() -> SetIntervalDomain.of(Set.of(), Set.of(1, 2), 2, 1))
+                .isInstanceOf(AssertionError.class)
+                .hasMessageContaining("must be less than or equal to");
+    }
+
+    @Test
+    void of_lowerBoundExceedsMaxCardinality_throwsAssertionError() {
+        assertThatThrownBy(() -> SetIntervalDomain.of(Set.of(1, 2), Set.of(1, 2, 3), 0, 1))
+                .isInstanceOf(AssertionError.class)
+                .hasMessageContaining("must not exceed maxCardinality");
+    }
+
+    @Test
+    void of_upperBoundBelowMinCardinality_throwsAssertionError() {
+        assertThatThrownBy(() -> SetIntervalDomain.of(Set.of(), Set.of(1, 2), 3, 3))
+                .isInstanceOf(AssertionError.class)
+                .hasMessageContaining("must be at least minCardinality");
+    }
+
+    @Test
+    void of_universeOnly_defaultsToEmptyLowerBoundFullUpperBoundAndFullCardinalityRange() {
+        var d = SetIntervalDomain.of(Set.of(1, 2, 3));
+        assertThat(d.getLowerBound()).isEmpty();
+        assertThat(d.getUpperBound()).isEqualTo(Set.of(1, 2, 3));
+        assertThat(d.getMinCardinality()).isZero();
+        assertThat(d.getMaxCardinality()).isEqualTo(3);
+    }
+
+    @Test
+    void gettersReturnConstructedBounds() {
+        var d = SetIntervalDomain.of(Set.of(1), Set.of(1, 2, 3), 1, 2);
+        assertThat(d.getLowerBound()).isEqualTo(Set.of(1));
+        assertThat(d.getUpperBound()).isEqualTo(Set.of(1, 2, 3));
+        assertThat(d.getMinCardinality()).isEqualTo(1);
+        assertThat(d.getMaxCardinality()).isEqualTo(2);
+    }
+
+    @Test
+    void withLowerBound_unionsForcedInElements() {
+        var d = SetIntervalDomain.of(Set.of(1), Set.of(1, 2, 3), 0, 3).withLowerBound(Set.of(2));
+        assertThat(d.getLowerBound()).isEqualTo(Set.of(1, 2));
+        assertThat(d.getUpperBound()).isEqualTo(Set.of(1, 2, 3));
+    }
+
+    @Test
+    void withLowerBound_elementOutsideUpperBound_producesEmptyDomain() {
+        var d = SetIntervalDomain.of(Set.of(), Set.of(1, 2), 0, 2).withLowerBound(Set.of(3));
+        assertThat(d.isEmpty()).isTrue();
+    }
+
+    @Test
+    void withUpperBound_intersectsCandidates() {
+        var d = SetIntervalDomain.of(Set.of(1), Set.of(1, 2, 3), 0, 3).withUpperBound(Set.of(1, 2));
+        assertThat(d.getUpperBound()).isEqualTo(Set.of(1, 2));
+        assertThat(d.getLowerBound()).isEqualTo(Set.of(1));
+    }
+
+    @Test
+    void withUpperBound_excludesLowerBoundElement_producesEmptyDomain() {
+        var d = SetIntervalDomain.of(Set.of(1), Set.of(1, 2, 3), 0, 3).withUpperBound(Set.of(2, 3));
+        assertThat(d.isEmpty()).isTrue();
+    }
+
+    @Test
+    void withCardinality_narrowsToIntersection() {
+        var d = SetIntervalDomain.of(Set.of(), Set.of(1, 2, 3), 0, 3).withCardinality(1, 2);
+        assertThat(d.getMinCardinality()).isEqualTo(1);
+        assertThat(d.getMaxCardinality()).isEqualTo(2);
+    }
+
+    @Test
+    void withCardinality_widerRangeDoesNotExpandDomain() {
+        var d = SetIntervalDomain.of(Set.of(), Set.of(1, 2, 3), 1, 2).withCardinality(0, 3);
+        assertThat(d.getMinCardinality()).isEqualTo(1);
+        assertThat(d.getMaxCardinality()).isEqualTo(2);
+    }
+
+    @Test
+    void contains_nonSet_returnsFalse() {
+        var d = SetIntervalDomain.of(Set.of(1, 2, 3));
+        assertThat(d.contains("not a set")).isFalse();
+    }
+
+    @Test
+    void contains_cardinalityOutOfRange_returnsFalse() {
+        var d = SetIntervalDomain.of(Set.of(), Set.of(1, 2, 3), 1, 2);
+        assertThat(d.contains(Set.of())).isFalse();
+        assertThat(d.contains(Set.of(1, 2, 3))).isFalse();
+    }
+
+    @Test
+    void contains_missingLowerBoundElement_returnsFalse() {
+        var d = SetIntervalDomain.of(Set.of(1), Set.of(1, 2, 3), 0, 3);
+        assertThat(d.contains(Set.of(2))).isFalse();
+    }
+
+    @Test
+    void contains_elementOutsideUpperBound_returnsFalse() {
+        var d = SetIntervalDomain.of(Set.of(), Set.of(1, 2), 0, 3);
+        assertThat(d.contains(Set.of(1, 3))).isFalse();
+    }
+
+    @Test
+    void contains_validValue_returnsTrue() {
+        var d = SetIntervalDomain.of(Set.of(1), Set.of(1, 2, 3), 1, 2);
+        assertThat(d.contains(Set.of(1, 2))).isTrue();
+    }
+
+    @Test
+    void isEmpty_falseForValidDomain() {
+        assertThat(SetIntervalDomain.of(Set.of(1), Set.of(1, 2, 3), 1, 2).isEmpty()).isFalse();
+    }
+
+    @Test
+    void isEmpty_trueWhenLowerBoundEscapesUpperBound() {
+        var d = SetIntervalDomain.of(Set.of(), Set.of(1, 2), 0, 2).withLowerBound(Set.of(3));
+        assertThat(d.isEmpty()).isTrue();
+    }
+
+    @Test
+    void isEmpty_trueWhenCardinalityRangeContradictory() {
+        var d = SetIntervalDomain.of(Set.of(), Set.of(1, 2, 3), 0, 3).withCardinality(2, 3).withCardinality(0, 1);
+        assertThat(d.isEmpty()).isTrue();
+    }
+
+    @Test
+    void isEmpty_trueWhenLowerBoundExceedsMaxCardinality() {
+        var d = SetIntervalDomain.of(Set.of(1, 2), Set.of(1, 2, 3), 0, 3).withCardinality(0, 1);
+        assertThat(d.isEmpty()).isTrue();
+    }
+
+    @Test
+    void isEmpty_trueWhenUpperBoundBelowMinCardinality() {
+        // withCardinality only narrows via intersection, so minCardinality=2 is fixed from
+        // construction; shrinking the upper bound below it in isolation (lowerBound stays a
+        // subset, cardinality range stays internally consistent) isolates this exact branch.
+        var d = SetIntervalDomain.of(Set.of(), Set.of(1, 2, 3), 2, 3).withUpperBound(Set.of(1));
+        assertThat(d.isEmpty()).isTrue();
+    }
+
+    @Test
+    void size_singletonReturnsOne() {
+        var d = SetIntervalDomain.of(Set.of(1, 2), Set.of(1, 2), 0, 2);
+        assertThat(d.size()).isEqualTo(1);
+    }
+
+    @Test
+    void size_nonSingletonReturnsMaxValue() {
+        var d = SetIntervalDomain.of(Set.of(1), Set.of(1, 2, 3), 0, 3);
+        assertThat(d.size()).isEqualTo(Integer.MAX_VALUE);
+    }
+
+    @Test
+    void isSingleton_trueWhenLowerBoundEqualsUpperBound() {
+        assertThat(SetIntervalDomain.of(Set.of(1, 2), Set.of(1, 2), 0, 2).isSingleton()).isTrue();
+    }
+
+    @Test
+    void isSingleton_falseWhenBoundsDiffer() {
+        assertThat(SetIntervalDomain.of(Set.of(1), Set.of(1, 2), 0, 2).isSingleton()).isFalse();
+    }
+
+    @Test
+    void isSingleton_falseWhenEmptyDespiteEqualBounds() {
+        var d = SetIntervalDomain.of(Set.of(1, 2), Set.of(1, 2), 0, 2).withCardinality(5, 5);
+        assertThat(d.isSingleton()).isFalse();
+    }
+
+    @Test
+    void singleValue_presentOnlyForSingleton() {
+        assertThat(SetIntervalDomain.of(Set.of(1, 2), Set.of(1, 2), 0, 2).singleValue()).contains(Set.of(1, 2));
+        assertThat(SetIntervalDomain.of(Set.of(1), Set.of(1, 2), 0, 2).singleValue()).isEmpty();
+    }
+
+    @Test
+    void testToString() {
+        var d = SetIntervalDomain.of(Set.of(1), Set.of(1, 2), 0, 2);
+        assertThat(d.toString()).isEqualTo("[[1] subsetOf S subsetOf [1, 2], |S| in [0, 2]]");
+    }
+}

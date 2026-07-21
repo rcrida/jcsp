@@ -66,15 +66,13 @@ public class IntervalDomainTest {
     @Test
     void withBounds_narrowsToIntersection() {
         var d = IntervalDomain.of(1.0, 10.0).withBounds(3.0, 7.0);
-        assertThat(d).isInstanceOf(BoundedDomain.class);
-        var bd = (BoundedDomain<Double>) d;
-        assertThat(bd.getMin()).isEqualTo(3.0);
-        assertThat(bd.getMax()).isEqualTo(7.0);
+        assertThat(d.getMin()).isEqualTo(3.0);
+        assertThat(d.getMax()).isEqualTo(7.0);
     }
 
     @Test
     void withBounds_widerBoundsDoNotExpandDomain() {
-        var d = (BoundedDomain<Double>) IntervalDomain.of(3.0, 7.0).withBounds(0.0, 10.0);
+        var d = IntervalDomain.of(3.0, 7.0).withBounds(0.0, 10.0);
         assertThat(d.getMin()).isEqualTo(3.0);
         assertThat(d.getMax()).isEqualTo(7.0);
     }

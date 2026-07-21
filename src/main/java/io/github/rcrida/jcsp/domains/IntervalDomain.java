@@ -66,7 +66,7 @@ public record IntervalDomain(double min, double max) implements BoundedDomain<Do
     }
 
     @Override
-    public Domain<Double> withBounds(@NonNull Double newMin, @NonNull Double newMax) {
+    public IntervalDomain withBounds(@NonNull Double newMin, @NonNull Double newMax) {
         return new IntervalDomain(Math.max(min, newMin), Math.min(max, newMax));
     }
 
