@@ -24,8 +24,8 @@ import java.util.Optional;
  * reversed variable list, since {@code v[0] >= v[1] >= ... >= v[n-1]} holds iff the reverse is
  * non-decreasing.
  * <p>
- * Works uniformly over {@link BoundedDomain} (via {@code getMin}/{@code getMax}/{@code withBounds},
- * all already {@code T}-typed — no {@code double} conversion needed) and {@link DiscreteDomain}
+ * Works uniformly over {@link BoundedDomain} (via {@code getMin}/{@code getMax}, {@code T}-typed;
+ * {@code withBounds} itself takes {@code double} — see {@link #narrow}) and {@link DiscreteDomain}
  * (via natural ordering and value deletion), so an ordering over non-numeric {@code Comparable}
  * types (e.g. {@link String} or enum variables) gets real propagation too, not just numeric chains.
  */
@@ -61,7 +61,7 @@ final class OrderingPropagation {
      * @return {@link Optional#empty()} if the domain is unchanged, otherwise the narrowed
      *         domain (which may itself be {@link Domain#isEmpty() empty}, signalling infeasibility)
      */
-    @SuppressWarnings({"unchecked", "rawtypes"})
+    @SuppressWarnings("unchecked")
     static <T extends Comparable<T>> Optional<Domain<T>> narrow(Domain<T> domain, T newMin, T newMax) {
         if (domain instanceof BoundedDomain<?> bounded) {
             T curMin = (T) bounded.getMin();
@@ -69,14 +69,14 @@ final class OrderingPropagation {
             T lo = curMin.compareTo(newMin) >= 0 ? curMin : newMin;
             T hi = curMax.compareTo(newMax) <= 0 ? curMax : newMax;
             if (lo.equals(curMin) && hi.equals(curMax)) return Optional.empty();
-            BoundedDomain raw = bounded;
-            // Raw-type erasure of withBounds(T, T) is withBounds(Number, Number) — BoundedDomain's
-            // own bound is <T extends Number & Comparable<T>> — but this method's T is only known
-            // as Comparable<T> (matching Increasing/DecreasingConstraint's own bound), so lo/hi need
-            // an explicit cast to Number: legal since Comparable is a non-final interface that
-            // Number subtypes (Integer, Double, ...) do implement, and every BoundedDomain's actual
-            // values are one of those subtypes at runtime.
-            return Optional.of((Domain<T>) raw.withBounds((Number) lo, (Number) hi));
+            // This method's T is only known as Comparable<T> (matching Increasing/
+            // DecreasingConstraint's own bound), but withBounds takes double -- widening via Number
+            // is legal since Comparable is a non-final interface that Number subtypes (Integer,
+            // Double, ...) do implement, and every BoundedDomain's actual values are one of those
+            // subtypes at runtime.
+            double newMinD = ((Number) lo).doubleValue();
+            double newMaxD = ((Number) hi).doubleValue();
+            return Optional.of((Domain<T>) bounded.withBounds(newMinD, newMaxD));
         }
 
         DiscreteDomain<T> discrete = (DiscreteDomain<T>) domain;

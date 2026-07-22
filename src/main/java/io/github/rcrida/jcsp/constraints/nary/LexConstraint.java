@@ -204,25 +204,23 @@ public class LexConstraint<T extends Comparable<T>> extends NaryConstraint imple
         return ((DiscreteDomain<T>) domain).stream().min(Comparator.naturalOrder()).orElseThrow();
     }
 
-    @SuppressWarnings({"unchecked", "rawtypes"})
+    @SuppressWarnings("unchecked")
     private static <T extends Comparable<T>> Domain<T> clipUpper(Domain<T> domain, T max, boolean strict) {
         if (domain instanceof BoundedDomain<?> bd) {
             double newMax = ((Number) max).doubleValue();
             if (newMax >= bd.getMax().doubleValue()) return domain;
-            BoundedDomain raw = bd;
-            return (Domain<T>) raw.withBounds(bd.getMin().doubleValue(), newMax);
+            return (Domain<T>) bd.withBounds(bd.getMin().doubleValue(), newMax);
         }
         Predicate<T> keep = strict ? v -> v.compareTo(max) < 0 : v -> v.compareTo(max) <= 0;
         return prune((DiscreteDomain<T>) domain, keep);
     }
 
-    @SuppressWarnings({"unchecked", "rawtypes"})
+    @SuppressWarnings("unchecked")
     private static <T extends Comparable<T>> Domain<T> clipLower(Domain<T> domain, T min, boolean strict) {
         if (domain instanceof BoundedDomain<?> bd) {
             double newMin = ((Number) min).doubleValue();
             if (newMin <= bd.getMin().doubleValue()) return domain;
-            BoundedDomain raw = bd;
-            return (Domain<T>) raw.withBounds(newMin, bd.getMax().doubleValue());
+            return (Domain<T>) bd.withBounds(newMin, bd.getMax().doubleValue());
         }
         Predicate<T> keep = strict ? v -> v.compareTo(min) > 0 : v -> v.compareTo(min) >= 0;
         return prune((DiscreteDomain<T>) domain, keep);

@@ -6,6 +6,7 @@ import io.github.rcrida.jcsp.domains.Domain;
 import io.github.rcrida.jcsp.domains.DiscreteDomain;
 import io.github.rcrida.jcsp.domains.DomainObjectSet;
 import io.github.rcrida.jcsp.domains.IntRangeDomain;
+import io.github.rcrida.jcsp.domains.NumericDiscreteDomain;
 import io.github.rcrida.jcsp.domains.IntervalDomain;
 import lombok.val;
 import io.github.rcrida.jcsp.assignments.Assignment;
@@ -213,8 +214,8 @@ public class BinaryOffsetConstraintTest {
         // non-empty numeric range, but neither 0 nor 10 lies in it -> narrowing empties l even
         // though the fast newLMin<=newLMax check alone would not have caught this
         Variable<Integer> l = Variable.Factory.INSTANCE.create("l_off_gap"), r = Variable.Factory.INSTANCE.create("r_off_gap");
-        var lDomain = new IntRangeDomain(Set.of(0, 10));
-        var rDomain = new IntRangeDomain(Set.of(4, 5));
+        var lDomain = NumericDiscreteDomain.of(0, 10);
+        var rDomain = NumericDiscreteDomain.of(4, 5);
         var result = BinaryOffsetConstraint.of(l, 0, Operator.EQ, r).propagate(Map.of(l, lDomain, r, rDomain));
         assertThat(result).isEmpty();
     }
@@ -223,8 +224,8 @@ public class BinaryOffsetConstraintTest {
         // l={4,5}, r={0,10} (gap domain), l+0==r: l is unchanged (already within [4,5]), but r
         // narrows to [4,5] and neither 0 nor 10 lies in it -> narrowing empties r this time
         Variable<Integer> l = Variable.Factory.INSTANCE.create("l_off_gap2"), r = Variable.Factory.INSTANCE.create("r_off_gap2");
-        var lDomain = new IntRangeDomain(Set.of(4, 5));
-        var rDomain = new IntRangeDomain(Set.of(0, 10));
+        var lDomain = NumericDiscreteDomain.of(4, 5);
+        var rDomain = NumericDiscreteDomain.of(0, 10);
         var result = BinaryOffsetConstraint.of(l, 0, Operator.EQ, r).propagate(Map.of(l, lDomain, r, rDomain));
         assertThat(result).isEmpty();
     }

@@ -6,6 +6,7 @@ import io.github.rcrida.jcsp.domains.Domain;
 import io.github.rcrida.jcsp.domains.DiscreteDomain;
 import io.github.rcrida.jcsp.domains.DomainObjectSet;
 import io.github.rcrida.jcsp.domains.IntRangeDomain;
+import io.github.rcrida.jcsp.domains.NumericDiscreteDomain;
 import io.github.rcrida.jcsp.domains.IntervalDomain;
 import io.github.rcrida.jcsp.variables.Variable;
 import org.junit.jupiter.api.Test;
@@ -129,8 +130,8 @@ public class AbsoluteDifferenceConstraintTest {
         // non-empty numeric range, but neither 0 nor 10 lies in it -> narrowing empties l even
         // though the fast newLMin<=newLMax check alone would not have caught this
         Variable<Integer> l = F.create("l_gap"), r = F.create("r_gap");
-        var lDomain = new IntRangeDomain(Set.of(0, 10));
-        var rDomain = new IntRangeDomain(Set.of(4, 5));
+        var lDomain = NumericDiscreteDomain.of(0, 10);
+        var rDomain = NumericDiscreteDomain.of(4, 5);
         var result = AbsoluteDifferenceConstraint.of(l, r, Operator.LEQ, 1).propagate(Map.of(l, lDomain, r, rDomain));
         assertThat(result).isEmpty();
     }
@@ -139,8 +140,8 @@ public class AbsoluteDifferenceConstraintTest {
         // l={4,5}, r={0,10} (gap domain), |l-r|<=1: l is unchanged (already within [4,5]), but r
         // narrows to [3,6] and neither 0 nor 10 lies in it -> narrowing empties r this time
         Variable<Integer> l = F.create("l_gap2"), r = F.create("r_gap2");
-        var lDomain = new IntRangeDomain(Set.of(4, 5));
-        var rDomain = new IntRangeDomain(Set.of(0, 10));
+        var lDomain = NumericDiscreteDomain.of(4, 5);
+        var rDomain = NumericDiscreteDomain.of(0, 10);
         var result = AbsoluteDifferenceConstraint.of(l, r, Operator.LEQ, 1).propagate(Map.of(l, lDomain, r, rDomain));
         assertThat(result).isEmpty();
     }

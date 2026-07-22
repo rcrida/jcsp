@@ -6,6 +6,7 @@ import io.github.rcrida.jcsp.domains.DiscreteDomain;
 import io.github.rcrida.jcsp.domains.Domain;
 import io.github.rcrida.jcsp.domains.DomainObjectSet;
 import io.github.rcrida.jcsp.domains.IntRangeDomain;
+import io.github.rcrida.jcsp.domains.NumericDiscreteDomain;
 import io.github.rcrida.jcsp.domains.IntervalDomain;
 import io.github.rcrida.jcsp.solver.Solver;
 import io.github.rcrida.jcsp.variables.Variable;
@@ -135,9 +136,9 @@ public class DecreasingConstraintTest {
         // v2={5} forces the running ceiling to 5 by the time it reaches v3; v4={4} forces the
         // running floor to 4 back through v3 — v3's gap domain {0,10} has neither value in
         // [4,5], so narrowing empties it.
-        var v2Domain = new IntRangeDomain(Set.of(5));
-        var v3Domain = new IntRangeDomain(Set.of(0, 10));
-        var v4Domain = new IntRangeDomain(Set.of(4));
+        var v2Domain = NumericDiscreteDomain.of(5);
+        var v3Domain = NumericDiscreteDomain.of(0, 10);
+        var v4Domain = NumericDiscreteDomain.of(4);
         var result = constraint.propagate(Map.of(v1, IntRangeDomain.of(0, 10), v2, v2Domain, v3, v3Domain, v4, v4Domain));
         assertThat(result).isEmpty();
     }
@@ -190,8 +191,8 @@ public class DecreasingConstraintTest {
         // v4) exceeds the running ceiling (3, from v1) — the violation is attributed to v1 and
         // v4 directly, skipping v2/v3 entirely.
         var result = constraint.explainInfeasible(Map.of(
-                v1, new IntRangeDomain(Set.of(3)), v2, IntRangeDomain.of(0, 20),
-                v3, IntRangeDomain.of(0, 20), v4, new IntRangeDomain(Set.of(10))));
+                v1, NumericDiscreteDomain.of(3), v2, IntRangeDomain.of(0, 20),
+                v3, IntRangeDomain.of(0, 20), v4, NumericDiscreteDomain.of(10)));
         assertThat(result).isEqualTo(Optional.of(GroundNogoodConstraint.of(Map.of(v1, 3, v4, 10))));
     }
 
@@ -201,7 +202,7 @@ public class DecreasingConstraintTest {
         // individually sufficient, so no sound explanation is produced (caller falls back further).
         var result = constraint.explainInfeasible(Map.of(
                 v1, IntRangeDomain.of(0, 3), v2, IntRangeDomain.of(0, 20),
-                v3, IntRangeDomain.of(0, 20), v4, new IntRangeDomain(Set.of(10))));
+                v3, IntRangeDomain.of(0, 20), v4, NumericDiscreteDomain.of(10)));
         assertThat(result).isEmpty();
     }
 

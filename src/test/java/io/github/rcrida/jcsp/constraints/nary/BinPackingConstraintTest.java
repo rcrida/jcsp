@@ -4,6 +4,7 @@ import io.github.rcrida.jcsp.ConstraintSatisfactionProblem;
 import io.github.rcrida.jcsp.assignments.Assignment;
 import io.github.rcrida.jcsp.domains.Domain;
 import io.github.rcrida.jcsp.domains.IntRangeDomain;
+import io.github.rcrida.jcsp.domains.NumericDiscreteDomain;
 import io.github.rcrida.jcsp.solver.Solver;
 import io.github.rcrida.jcsp.variables.Variable;
 import org.junit.jupiter.api.BeforeEach;
@@ -15,7 +16,6 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -66,7 +66,7 @@ public class BinPackingConstraintTest {
         // v1={0} definite (load[0]=6); v2,v3={1,2} open, weight 6 -> neither bin1 nor bin2 has
         // any definite load yet, so 6<=10 in both -> nothing to prune
         var domains = Map.<Variable<?>, Domain<?>>of(
-                v1, BIN_0, v2, new IntRangeDomain(Set.of(1, 2)), v3, new IntRangeDomain(Set.of(1, 2)));
+                v1, BIN_0, v2, NumericDiscreteDomain.of(1, 2), v3, NumericDiscreteDomain.of(1, 2));
         var result = constraint.propagate(domains);
         assertThat(result).isPresent();
         assertThat(result.get()).isEmpty();
@@ -76,18 +76,18 @@ public class BinPackingConstraintTest {
     void propagate_prunesOneCandidateBin_staysOpen() {
         // v1={0} definite (load[0]=6); v2={0,1,2} open, weight 6 -> bin0: 6+6=12>10 (pruned),
         // bin1: 0+6=6<=10 (kept), bin2: 0+6=6<=10 (kept) -> v2 narrows to {1,2}, still open
-        var domains = Map.<Variable<?>, Domain<?>>of(v1, BIN_0, v2, new IntRangeDomain(Set.of(0, 1, 2)));
+        var domains = Map.<Variable<?>, Domain<?>>of(v1, BIN_0, v2, NumericDiscreteDomain.of(0, 1, 2));
         var c = BinPackingConstraint.of(List.of(v1, v2), List.of(WEIGHT, WEIGHT), CAPACITIES);
         var result = c.propagate(domains);
         assertThat(result).isPresent();
-        assertThat(result.get().get(v2)).isEqualTo(new IntRangeDomain(Set.of(1, 2)));
+        assertThat(result.get().get(v2)).isEqualTo(NumericDiscreteDomain.of(1, 2));
     }
 
     @Test
     void propagate_prunesDownToForcedSingleton() {
         // v1={0} definite (load[0]=6); v2={0,1} open, weight 6 -> bin0 pruned (12>10), bin1 kept
         // -> v2 forced to singleton {1}
-        var domains = Map.<Variable<?>, Domain<?>>of(v1, BIN_0, v2, new IntRangeDomain(Set.of(0, 1)));
+        var domains = Map.<Variable<?>, Domain<?>>of(v1, BIN_0, v2, NumericDiscreteDomain.of(0, 1));
         var c = BinPackingConstraint.of(List.of(v1, v2), List.of(WEIGHT, WEIGHT), CAPACITIES);
         var result = c.propagate(domains);
         assertThat(result).isPresent();
@@ -106,7 +106,7 @@ public class BinPackingConstraintTest {
     void propagate_infeasible_openItemDomainEmptiedByPruning() {
         // v1={0}, v2={1} definite (load[0]=6, load[1]=6, neither individually overloaded);
         // v3={0,1} open, weight 6 -> bin0: 6+6=12>10 (pruned), bin1: 6+6=12>10 (pruned) -> empty
-        var domains = Map.<Variable<?>, Domain<?>>of(v1, BIN_0, v2, BIN_1, v3, new IntRangeDomain(Set.of(0, 1)));
+        var domains = Map.<Variable<?>, Domain<?>>of(v1, BIN_0, v2, BIN_1, v3, NumericDiscreteDomain.of(0, 1));
         assertThat(constraint.propagate(domains)).isEmpty();
     }
 
@@ -115,7 +115,7 @@ public class BinPackingConstraintTest {
     @Test
     void propagateWithReasons_feasible_returnsEmptyReason() {
         var domains = Map.<Variable<?>, Domain<?>>of(
-                v1, BIN_0, v2, new IntRangeDomain(Set.of(1, 2)), v3, new IntRangeDomain(Set.of(1, 2)));
+                v1, BIN_0, v2, NumericDiscreteDomain.of(1, 2), v3, NumericDiscreteDomain.of(1, 2));
         var result = constraint.propagateWithReasons(domains);
         assertThat(result.isInfeasible()).isFalse();
         assertThat(result.reason()).isNull();
@@ -138,7 +138,7 @@ public class BinPackingConstraintTest {
         // No bin's definiteLoad exceeds capacity individually (6<=10 in both bin0 and bin1) --
         // only the combined per-item pruning empties v3's domain, which is deliberately
         // unexplainable (see the class Javadoc).
-        var domains = Map.<Variable<?>, Domain<?>>of(v1, BIN_0, v2, BIN_1, v3, new IntRangeDomain(Set.of(0, 1)));
+        var domains = Map.<Variable<?>, Domain<?>>of(v1, BIN_0, v2, BIN_1, v3, NumericDiscreteDomain.of(0, 1));
         var result = constraint.propagateWithReasons(domains);
         assertThat(result.isInfeasible()).isTrue();
         assertThat(result.reason()).isNull();

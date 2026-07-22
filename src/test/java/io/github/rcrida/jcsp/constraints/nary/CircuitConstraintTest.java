@@ -3,14 +3,13 @@ package io.github.rcrida.jcsp.constraints.nary;
 import io.github.rcrida.jcsp.ConstraintSatisfactionProblem;
 import io.github.rcrida.jcsp.assignments.Assignment;
 import io.github.rcrida.jcsp.domains.Domain;
-import io.github.rcrida.jcsp.domains.IntRangeDomain;
+import io.github.rcrida.jcsp.domains.NumericDiscreteDomain;
 import io.github.rcrida.jcsp.solver.Solver;
 import io.github.rcrida.jcsp.variables.Variable;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -23,8 +22,8 @@ public class CircuitConstraintTest {
     Variable<Integer> s2 = F.create("s2");
     Variable<Integer> s3 = F.create("s3");
 
-    static IntRangeDomain dom(Integer... values) {
-        return new IntRangeDomain(Set.of(values));
+    static NumericDiscreteDomain<Integer> dom(Integer... values) {
+        return NumericDiscreteDomain.of(values);
     }
 
     // --- factory ---

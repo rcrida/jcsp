@@ -9,6 +9,7 @@ import io.github.rcrida.jcsp.consistency.ConsistencyResult;
 import io.github.rcrida.jcsp.consistency.Inference;
 import io.github.rcrida.jcsp.constraints.nary.GroundNogoodConstraint;
 import io.github.rcrida.jcsp.domains.IntRangeDomain;
+import io.github.rcrida.jcsp.domains.NumericDiscreteDomain;
 import io.github.rcrida.jcsp.solver.backtrackingsearch.order.LeastConstrainingValueOrderer;
 import io.github.rcrida.jcsp.variables.Variable;
 import org.junit.jupiter.api.Test;
@@ -467,7 +468,7 @@ class DomWdegLubySearchTest {
         // first, creating two separate subtrees; three dummy notEquals constraints against
         // singleton decoys give w weighted degree 3, ratio 2/3.
         ConstraintSatisfactionProblem csp = ConstraintSatisfactionProblem.builder()
-                .variableDomain(w, new IntRangeDomain(Set.of(10, 20)))
+                .variableDomain(w, NumericDiscreteDomain.of(10, 20))
                 .variableDomain(a, IntRangeDomain.of(1, 2))
                 .variableDomain(b, IntRangeDomain.of(1, 4))
                 .variableDomain(c, IntRangeDomain.of(1, 4))

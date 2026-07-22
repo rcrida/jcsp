@@ -48,7 +48,6 @@ public class UnaryComparatorConstraint<N extends Number & Comparable<N>> extends
     }
 
     @Override
-    @SuppressWarnings({"unchecked", "rawtypes"})
     public Optional<Map<Variable<?>, Domain<?>>> propagate(Map<Variable<?>, Domain<?>> domains) {
         Domain<?> domain = domains.get(getVariable());
         if (!(domain instanceof BoundedDomain<?> bounded)) return Optional.of(Map.of());
@@ -59,7 +58,6 @@ public class UnaryComparatorConstraint<N extends Number & Comparable<N>> extends
         double newMax = (operator == Operator.LEQ || operator == Operator.LT || operator == Operator.EQ) ? Math.min(hi, v) : hi;
         if (newMin > newMax) return Optional.empty();
         if (newMin == lo && newMax == hi) return Optional.of(Map.of());
-        BoundedDomain raw = bounded;
-        return Optional.of(Map.of(getVariable(), raw.withBounds(newMin, newMax)));
+        return Optional.of(Map.of(getVariable(), bounded.withBounds(newMin, newMax)));
     }
 }

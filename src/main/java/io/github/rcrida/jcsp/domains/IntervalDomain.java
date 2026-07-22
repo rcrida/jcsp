@@ -1,6 +1,5 @@
 package io.github.rcrida.jcsp.domains;
 
-import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 
 import java.util.Optional;
@@ -66,7 +65,7 @@ public record IntervalDomain(double min, double max) implements BoundedDomain<Do
     }
 
     @Override
-    public IntervalDomain withBounds(@NonNull Double newMin, @NonNull Double newMax) {
+    public IntervalDomain withBounds(double newMin, double newMax) {
         return new IntervalDomain(Math.max(min, newMin), Math.min(max, newMax));
     }
 

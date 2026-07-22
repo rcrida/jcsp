@@ -122,8 +122,8 @@ public class BisectionConditioningSolver extends SolverDecorator {
     private static Optional<ConstraintSatisfactionProblem> narrow(ConstraintSatisfactionProblem csp,
                                                                    Variable<?> target,
                                                                    double lo, double hi) {
-        BoundedDomain raw = (BoundedDomain) csp.getDomain(target);
-        var narrowedDomain = raw.withBounds(lo, hi);
+        BoundedDomain<?> bounded = (BoundedDomain<?>) csp.getDomain(target);
+        var narrowedDomain = bounded.withBounds(lo, hi);
         return repropagate(csp.toBuilder()
                 .variableDomainEntry((Variable) target, narrowedDomain)
                 .build());

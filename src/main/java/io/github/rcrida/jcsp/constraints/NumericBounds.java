@@ -1,8 +1,8 @@
 package io.github.rcrida.jcsp.constraints;
 
-import io.github.rcrida.jcsp.domains.BoundedDomain;
 import io.github.rcrida.jcsp.domains.DiscreteDomain;
 import io.github.rcrida.jcsp.domains.Domain;
+import io.github.rcrida.jcsp.domains.NumericDomain;
 import io.github.rcrida.jcsp.variables.Variable;
 
 import java.util.HashMap;
@@ -11,21 +11,23 @@ import java.util.Map;
 import java.util.Optional;
 
 /**
- * Shared bounds extraction and narrowing for {@code double}-based propagation.
- * Handles both {@link BoundedDomain} domains (e.g. {@link io.github.rcrida.jcsp.domains.IntervalDomain}),
- * narrowed via {@link BoundedDomain#withBounds}, and plain enumerable domains, narrowed by deleting
- * out-of-range values.
+ * Shared bounds extraction and narrowing for {@code double}-based propagation. Dispatches through
+ * {@link NumericDomain} where available — implemented by both {@link
+ * io.github.rcrida.jcsp.domains.BoundedDomain} (e.g. {@link io.github.rcrida.jcsp.domains.IntervalDomain})
+ * and {@link io.github.rcrida.jcsp.domains.IntRangeDomain} — falling back to a plain enumerable
+ * {@link DiscreteDomain} scan for domain kinds that don't implement it (e.g. {@link
+ * io.github.rcrida.jcsp.domains.DomainObjectSet}).
  */
 public final class NumericBounds {
     private NumericBounds() {}
 
     public static <N extends Number> double min(Domain<N> domain) {
-        if (domain instanceof BoundedDomain<?> bounded) return bounded.getMin().doubleValue();
+        if (domain instanceof NumericDomain<N> numeric) return numeric.getMin().doubleValue();
         return ((DiscreteDomain<N>) domain).stream().mapToDouble(Number::doubleValue).min().orElseThrow();
     }
 
     public static <N extends Number> double max(Domain<N> domain) {
-        if (domain instanceof BoundedDomain<?> bounded) return bounded.getMax().doubleValue();
+        if (domain instanceof NumericDomain<N> numeric) return numeric.getMax().doubleValue();
         return ((DiscreteDomain<N>) domain).stream().mapToDouble(Number::doubleValue).max().orElseThrow();
     }
 
@@ -35,16 +37,11 @@ public final class NumericBounds {
      * @return {@link Optional#empty()} if the domain is unchanged, otherwise the narrowed
      *         domain (which may itself be {@link Domain#isEmpty() empty}, signalling infeasibility)
      */
-    @SuppressWarnings({"unchecked", "rawtypes"})
+    @SuppressWarnings("unchecked")
     public static <N extends Number> Optional<Domain<N>> narrow(Domain<N> domain, double newMin, double newMax) {
-        if (domain instanceof BoundedDomain<?> bounded) {
-            double curMin = bounded.getMin().doubleValue();
-            double curMax = bounded.getMax().doubleValue();
-            double lo = Math.max(curMin, newMin);
-            double hi = Math.min(curMax, newMax);
-            if (lo == curMin && hi == curMax) return Optional.empty();
-            BoundedDomain raw = bounded;
-            return Optional.of((Domain<N>) raw.withBounds(lo, hi));
+        if (domain instanceof NumericDomain<N> numeric) {
+            NumericDomain<N> narrowed = numeric.withBounds(newMin, newMax);
+            return narrowed.equals(domain) ? Optional.empty() : Optional.of((Domain<N>) narrowed);
         }
 
         DiscreteDomain<N> discrete = (DiscreteDomain<N>) domain;

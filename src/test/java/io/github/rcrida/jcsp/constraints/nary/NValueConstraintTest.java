@@ -4,6 +4,7 @@ import io.github.rcrida.jcsp.ConstraintSatisfactionProblem;
 import io.github.rcrida.jcsp.assignments.Assignment;
 import io.github.rcrida.jcsp.domains.Domain;
 import io.github.rcrida.jcsp.domains.IntRangeDomain;
+import io.github.rcrida.jcsp.domains.NumericDiscreteDomain;
 import io.github.rcrida.jcsp.solver.Solver;
 import io.github.rcrida.jcsp.variables.Variable;
 import org.junit.jupiter.api.BeforeEach;
@@ -96,7 +97,7 @@ public class NValueConstraintTest {
         // count={3}==upperBound, openVars.size(2)<=openValues.size(2) -> v2,v3 lose value 1
         var c = NValueConstraint.of(Set.of(v1, v2, v3), count);
         var domains = Map.<Variable<?>, Domain<?>>of(
-                v1, IntRangeDomain.of(1, 1), v2, IntRangeDomain.of(1, 2), v3, new IntRangeDomain(Set.of(1, 3)),
+                v1, IntRangeDomain.of(1, 1), v2, IntRangeDomain.of(1, 2), v3, NumericDiscreteDomain.of(1, 3),
                 count, IntRangeDomain.of(3, 3));
         var result = c.propagate(domains);
         assertThat(result).isPresent();
@@ -116,7 +117,7 @@ public class NValueConstraintTest {
         var c = NValueConstraint.of(Set.of(v1, v2, v3, v4), count);
         var domains = Map.<Variable<?>, Domain<?>>of(
                 v1, IntRangeDomain.of(1, 1), v2, IntRangeDomain.of(2, 2), v3, IntRangeDomain.of(1, 2),
-                v4, new IntRangeDomain(Set.of(1, 3)), count, IntRangeDomain.of(2, 2));
+                v4, NumericDiscreteDomain.of(1, 3), count, IntRangeDomain.of(2, 2));
         var result = c.propagate(domains);
         assertThat(result).isPresent();
         assertThat(result.get()).containsOnly(Map.entry(v4, IntRangeDomain.of(1, 1)));
@@ -267,7 +268,7 @@ public class NValueConstraintTest {
         // both sides (0 < lowerBound, 5 > upperBound) -- no single-sided reason applies
         var c = NValueConstraint.of(Set.of(v1, v2), count);
         var domains = Map.<Variable<?>, Domain<?>>of(
-                v1, IntRangeDomain.of(1, 1), v2, IntRangeDomain.of(2, 3), count, new IntRangeDomain(Set.of(0, 5)));
+                v1, IntRangeDomain.of(1, 1), v2, IntRangeDomain.of(2, 3), count, NumericDiscreteDomain.of(0, 5));
         var result = c.propagateWithReasons(domains);
         assertThat(result.isInfeasible()).isTrue();
         assertThat(result.reason()).isNull();

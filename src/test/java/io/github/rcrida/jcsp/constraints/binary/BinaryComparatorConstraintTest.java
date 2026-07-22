@@ -6,6 +6,7 @@ import io.github.rcrida.jcsp.constraints.nary.GroundNogoodConstraint;
 import io.github.rcrida.jcsp.domains.DiscreteDomain;
 import io.github.rcrida.jcsp.domains.Domain;
 import io.github.rcrida.jcsp.domains.IntRangeDomain;
+import io.github.rcrida.jcsp.domains.NumericDiscreteDomain;
 import io.github.rcrida.jcsp.domains.IntervalDomain;
 import io.github.rcrida.jcsp.variables.Variable;
 import org.junit.jupiter.api.Test;
@@ -161,8 +162,8 @@ public class BinaryComparatorConstraintTest {
         // both bounds symmetrically (unlike LEQ/GEQ, which anchor one bound at l's own extreme),
         // so a gap domain can empty here.
         Variable<Integer> l = F.create("l_gap"), r = F.create("r_gap");
-        var lDomain = new IntRangeDomain(Set.of(0, 10));
-        var rDomain = new IntRangeDomain(Set.of(4, 5));
+        var lDomain = NumericDiscreteDomain.of(0, 10);
+        var rDomain = NumericDiscreteDomain.of(4, 5);
         var result = BinaryComparatorConstraint.of(l, Operator.EQ, r).propagate(Map.of(l, lDomain, r, rDomain));
         assertThat(result).isEmpty();
     }
@@ -171,8 +172,8 @@ public class BinaryComparatorConstraintTest {
         // l={4,5}, r={0,10} (gap domain), l==r: l is unchanged (already within [4,5]), but r
         // narrows to [4,5] and neither 0 nor 10 lies in it -> narrowing empties r this time
         Variable<Integer> l = F.create("l_gap2"), r = F.create("r_gap2");
-        var lDomain = new IntRangeDomain(Set.of(4, 5));
-        var rDomain = new IntRangeDomain(Set.of(0, 10));
+        var lDomain = NumericDiscreteDomain.of(4, 5);
+        var rDomain = NumericDiscreteDomain.of(0, 10);
         var result = BinaryComparatorConstraint.of(l, Operator.EQ, r).propagate(Map.of(l, lDomain, r, rDomain));
         assertThat(result).isEmpty();
     }
