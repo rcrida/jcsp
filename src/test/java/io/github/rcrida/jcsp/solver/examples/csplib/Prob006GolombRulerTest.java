@@ -54,8 +54,8 @@ public class Prob006GolombRulerTest {
             for (int j = i + 1; j < N; j++) {
                 Variable<Integer> d = F.create("d" + i + j);
                 builder.variableDomain(d, IntRangeDomain.of(1, maxLength));
-                // d = marks[j] - marks[i]  <->  marks[j] - marks[i] - d == 0
-                builder.linearConstraint(Map.of(MARKS.get(j), 1, MARKS.get(i), -1, d, -1), Operator.EQ, 0);
+                // d = marks[j] - marks[i]
+                builder.linearConstraint(Map.of(MARKS.get(j), 1, MARKS.get(i), -1), Operator.EQ, d);
                 diffs.add(d);
                 if (i == 0 && j == 1) firstGap = d;
                 if (i == N - 2 && j == N - 1) lastGap = d;

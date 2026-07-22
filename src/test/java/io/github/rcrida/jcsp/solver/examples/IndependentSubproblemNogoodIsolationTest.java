@@ -47,7 +47,7 @@ public class IndependentSubproblemNogoodIsolationTest {
             for (int j = i + 1; j < order; j++) {
                 Variable<Integer> d = F.create(prefix + "_d" + i + j);
                 builder.variableDomain(d, IntRangeDomain.of(1, maxLength));
-                builder.linearConstraint(Map.of(marks.get(j), 1, marks.get(i), -1, d, -1), Operator.EQ, 0);
+                builder.linearConstraint(Map.of(marks.get(j), 1, marks.get(i), -1), Operator.EQ, d);
                 diffs.add(d);
                 if (i == 0 && j == 1) firstGap = d;
                 if (i == order - 2 && j == order - 1) lastGap = d;

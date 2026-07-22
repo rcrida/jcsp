@@ -22,7 +22,8 @@ import static org.assertj.core.api.Assertions.assertThat;
  *
  * For each fixed a, the search finds all (b, c) with a ≤ b < c using:
  *   productConstraint({c−b, c+b}, EQ, a²)  — constant bound per a value
- * plus two linearConstraints that define the auxiliary variables.
+ * plus a linearConstraint and a sumConstraint (each using their variable-target overload)
+ * that define the auxiliary variables.
  */
 public class PythagoreanTriplesTest {
 
@@ -48,10 +49,10 @@ public class PythagoreanTriplesTest {
                 .variableDomain(c,    IntRangeDomain.of(a + 1, cMax))
                 .variableDomain(diff, IntRangeDomain.of(1, cMax - a))
                 .variableDomain(sumV, IntRangeDomain.of(2 * a + 1, bMax + cMax))
-                // diff = c − b  ↔  c − b − diff = 0
-                .linearConstraint(Map.of(c, 1, b, -1, diff, -1), Operator.EQ, 0)
-                // sumV = c + b  ↔  c + b − sumV = 0
-                .linearConstraint(Map.of(c, 1, b, 1, sumV, -1), Operator.EQ, 0)
+                // diff = c − b
+                .linearConstraint(Map.of(c, 1, b, -1), Operator.EQ, diff)
+                // sumV = c + b
+                .sumConstraint(Set.of(c, b), Operator.EQ, sumV)
                 // (c − b)(c + b) = a²
                 .productConstraint(Set.of(diff, sumV), Operator.EQ, aSquared)
                 .build();
