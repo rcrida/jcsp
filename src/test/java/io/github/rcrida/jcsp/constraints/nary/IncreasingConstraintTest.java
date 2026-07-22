@@ -187,6 +187,27 @@ public class IncreasingConstraintTest {
     }
 
     @Test
+    void propagate_nonNumericComparableChain_prunesBothBelowMinAndAboveMax() {
+        // s1={"c"}, s3={"d"} (both singleton) pin s2's narrowed range to ["c","d"]; s2's own domain
+        // has values on both sides of that range ("a","b" below "c"; "e","z" above "d") plus the
+        // endpoints themselves, so a single narrow() call deletes more than one value and deletes
+        // from both directions -- unlike propagate_nonNumericComparableChain_stillPropagates above,
+        // which only ever exercises a single above-max deletion.
+        Variable<String> s1 = Variable.Factory.INSTANCE.create("s1b");
+        Variable<String> s2 = Variable.Factory.INSTANCE.create("s2b");
+        Variable<String> s3 = Variable.Factory.INSTANCE.create("s3b");
+        var chain = IncreasingConstraint.of(List.of(s1, s2, s3));
+        Domain<String> d1 = DomainObjectSet.<String>builder().value("c").build();
+        Domain<String> d2 = DomainObjectSet.<String>builder()
+                .value("a").value("b").value("c").value("d").value("e").value("z").build();
+        Domain<String> d3 = DomainObjectSet.<String>builder().value("d").build();
+        var result = chain.propagate(Map.of(s1, d1, s2, d2, s3, d3)).orElseThrow();
+        assertThat(((DomainObjectSet<String>) result.get(s2)).values()).containsExactlyInAnyOrder("c", "d");
+        assertThat(result.containsKey(s1)).isFalse();
+        assertThat(result.containsKey(s3)).isFalse();
+    }
+
+    @Test
     void explainInfeasible_citesNonAdjacentSingletonPair() {
         // v1={10} (singleton), v2/v3 wide open, v4={3} (singleton): the running floor (10, from
         // v1) exceeds the running ceiling (3, from v4) by the time both reach position 0 — the

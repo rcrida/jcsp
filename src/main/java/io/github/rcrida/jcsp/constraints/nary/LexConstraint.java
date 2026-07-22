@@ -6,6 +6,7 @@ import io.github.rcrida.jcsp.constraints.Operator;
 import io.github.rcrida.jcsp.domains.BoundedDomain;
 import io.github.rcrida.jcsp.domains.DiscreteDomain;
 import io.github.rcrida.jcsp.domains.Domain;
+import io.github.rcrida.jcsp.domains.NumericDomain;
 import io.github.rcrida.jcsp.variables.Variable;
 import lombok.EqualsAndHashCode;
 import lombok.Singular;
@@ -194,13 +195,13 @@ public class LexConstraint<T extends Comparable<T>> extends NaryConstraint imple
 
     @SuppressWarnings("unchecked")
     private static <T extends Comparable<T>> T domainMax(Domain<T> domain) {
-        if (domain instanceof BoundedDomain<?> bd) return (T) bd.getMax();
+        if (domain instanceof NumericDomain<?> nd) return (T) nd.getMax();
         return ((DiscreteDomain<T>) domain).stream().max(Comparator.naturalOrder()).orElseThrow();
     }
 
     @SuppressWarnings("unchecked")
     private static <T extends Comparable<T>> T domainMin(Domain<T> domain) {
-        if (domain instanceof BoundedDomain<?> bd) return (T) bd.getMin();
+        if (domain instanceof NumericDomain<?> nd) return (T) nd.getMin();
         return ((DiscreteDomain<T>) domain).stream().min(Comparator.naturalOrder()).orElseThrow();
     }
 
