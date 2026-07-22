@@ -33,7 +33,7 @@ Traditional Java constraint satisfaction problem (CSP) solvers were designed ove
 - **Multiple solving strategies**: backtracking search, tree solver, cutset conditioning, tree decomposition, and independent subproblem decomposition
 - **Optimization**: branch-and-bound search via `createSolver(csp, objective)` — returns a `BoundSolver` whose `getSolution()` finds the global optimum and `getSolutions()` streams improving assignments
 - **Consistency preprocessing**: AC3 arc consistency, node consistency, AllDiff GAC (Régin 1994), SumBoundConstraint/SumVariableConstraint and LinearBoundConstraint/LinearVariableConstraint bounds propagation, CountConstraint and AmongConstraint value-set propagation, InverseConstraint arc consistency, AtLeastN/AtMostN/AtMostOne/ExactlyOne boolean forcing, CumulativeConstraint timetabling propagation, GlobalCardinalityConstraint value propagation, NValueConstraint bounds-consistency propagation, BinPackingConstraint per-bin load propagation, LexConstraint bounds propagation, MaxConstraint and MinConstraint bounds propagation, ProductConstraint bounds propagation, DivisionConstraint bounds propagation, NaryElementConstraint domain filtering, NaryTuplesConstraint table GAC, CircuitConstraint Hamiltonian propagation, DiffnConstraint compulsory-part propagation, RegularConstraint forward-backward DP propagation, IncreasingConstraint/DecreasingConstraint bounds consistency, and ReifiedConstraint/ImplicationConstraint delegated propagation — all run in a combined fixpoint loop so each propagator benefits from the others' reductions
-- **Flexible constraint types**: unary, binary (equals, not-equals, offset, comparator, logic, element over fixed array, absolute-difference, division, predicate, tuples), and n-ary (AllDiff, AtMostOne, AtLeastN, AtMostN, ExactlyOne, Sum, Product, Linear, Count, Among, Inverse, GlobalCardinality, NValue, Cumulative, BinPacking, Max, Min, Element over variables, Tuples, Increasing, Decreasing, Lex, predicate, Circuit, Diffn, Regular)
+- **Flexible constraint types**: unary, binary (equals, not-equals, offset, comparator, logic, element over fixed array, absolute-difference, division, predicate, tuples, subset, disjoint, intersection-cardinality), and n-ary (AllDiff, AtMostOne, AtLeastN, AtMostN, ExactlyOne, Sum, Product, Linear, Count, Among, Inverse, GlobalCardinality, NValue, Cumulative, BinPacking, Max, Min, Element over variables, Tuples, Increasing, Decreasing, Lex, predicate, Circuit, Diffn, Regular)
 - **Boolean domain**: `BooleanDomain` for modelling binary assignment problems (e.g. timetabling as a 0-1 matrix)
 - **Functional style**: immutable value objects, composable solver decorators, and a lazy `Stream<Assignment>` API throughout
 - **Solver configuration**: `createSolver(csp, config)` takes an optional `SolverConfig` builder bundling search limits and nogood-learning behavior. `SolverLimits` caps work by node count and/or wall-clock time; `getSolution()` throws `LimitExceededException` (carrying `Statistics`) when a limit is hit — distinguishable from a genuine UNSAT result (`Optional.empty()`). `getSolutions()` truncates the stream silently instead. `nogoodLearningEnabled(false)` disables nogood learning (CDCL) entirely, for problem shapes where learned nogoods rarely get reused
@@ -44,6 +44,7 @@ Traditional Java constraint satisfaction problem (CSP) solvers were designed ove
 - **Reification**: `ReifiedConstraint` (`b <-> body`) and `ImplicationConstraint` (`b -> body`) introduce boolean indicator variables that capture constraint satisfaction — enables soft constraints, counting satisfaction, and conditional constraints via `csp.reifyConstraint(b, constraint)` and `csp.impliesConstraint(b, constraint)`. Both propagate: once the indicator is forced `true`, a `Propagatable` body's own propagation is delegated to directly (so `b <-> AllDiff(...)` or `b -> Sum(...) == k` narrow domains, not just check the final assignment), and the indicator itself is narrowed when that's sound
 - **Real-valued variables**: `IntervalDomain` represents a continuous `[min, max]` range of `double`s. `SumBoundConstraint`, `SumVariableConstraint`, `LinearBoundConstraint`, `LinearVariableConstraint`, `UnaryComparatorConstraint`, `BinaryComparatorConstraint`, `BinaryOffsetConstraint`, `AbsoluteDifferenceConstraint`, `DivisionConstraint`, `ProductConstraint`, `LexConstraint`, `MaxConstraint`, `MinConstraint`, `CumulativeConstraint`, `DiffnConstraint` (origin variables), and `IncreasingConstraint`/`DecreasingConstraint` all propagate over interval bounds, so many continuous problems are solved entirely by propagation. `ReifiedConstraint`/`ImplicationConstraint` get the same interval narrowing indirectly, by delegating to a `Propagatable` body once their indicator is resolved. `UnaryPredicateConstraint`, `BinaryPredicateConstraint`, `PredicateConstraint`, and `NaryElementConstraint` also accept `IntervalDomain` variables (no dedicated interval propagation, but resolved correctly via search plus the final satisfaction check)
 - **Continuous optimization**: `createSolver(csp, objective)` auto-detects `IntervalDomain` variables and explores their feasible region via `BisectionConditioningSolver` — recursively bisecting intervals to within `DEFAULT_BISECTION_EPSILON (1e-3)`, repropagating bounds at each step, then filtering the resulting feasible points by the objective; `getSolution()` returns the global optimum and `getSolutions()` streams improving assignments
+- **Set variables**: `SetIntervalDomain` models a set-CP variable — a `[lowerBound, upperBound]` "set interval" under subset ordering plus an independent cardinality range, rather than enumerating every candidate subset. `SubsetConstraint`, `DisjointConstraint`, and `IntersectionCardinalityConstraint` propagate over it; `createSolver` auto-detects set variables and runs real backtracking search (`SetBranchingSolver`) in both the satisfaction and optimization chains for whatever a propagation-only pass can't fully resolve
 
 ## Usage
 
@@ -139,6 +140,26 @@ Optional<Assignment> best = Solver.Factory.INSTANCE
 
 `getSolutions()` on the returned `BoundSolver` gives a lazy stream of improving assignments (each strictly better than the previous); the last element is the global optimum found within the bisection resolution.
 
+### Set variables
+
+`SetIntervalDomain` models a set-CP variable: the set of every possible `Set<E>` value `S` such that `lowerBound ⊆ S ⊆ upperBound` and `minCardinality <= |S| <= maxCardinality`, rather than enumerating every candidate subset. Construction always supplies an ordering — either `E extends Comparable<E>` (natural order) or an explicit `Comparator<E>` — so bounds stay deterministically sorted through every narrowing step, no matter how the domain reaches its final state:
+
+```java
+Variable<Set<String>> groupA = F.create("groupA");
+Variable<Set<String>> groupB = F.create("groupB");
+Set<String> golfers = Set.of("Alice", "Bob", "Carol", "Dave");
+
+ConstraintSatisfactionProblem csp = ConstraintSatisfactionProblem.builder()
+    .variableDomain(groupA, SetIntervalDomain.of(Set.of(), golfers, 2, 2))  // exactly 2 golfers
+    .variableDomain(groupB, SetIntervalDomain.of(Set.of(), golfers, 2, 2))
+    .disjointConstraint(groupA, groupB)                                     // no golfer in both groups
+    .build();
+
+Solver.Factory.INSTANCE.createSolver(csp).getSolutions().forEach(System.out::println);
+```
+
+`SubsetConstraint` (`left ⊆ right`), `DisjointConstraint` (`left ∩ right = ∅`), and `IntersectionCardinalityConstraint` (`|left ∩ right| op bound` — e.g. "these two groups share at most one member across the whole schedule", `IntersectionCardinalityConstraint`'s only propagating operators are `LEQ`/`LT`) are the supported constraint types; any other constraint referencing a `SetIntervalDomain` variable is rejected with `IllegalArgumentException` at build time. `createSolver` auto-detects set variables and runs real backtracking search (`SetBranchingSolver`) — unlike `IntervalDomain`, an arbitrary choice among a set variable's undetermined elements isn't safe to snap to a single value, since set constraints are inherently combinatorial rather than smooth — in both the satisfaction and optimization chains for whatever propagation alone can't fully resolve. See `Prob010SocialGolfersTest` for a complete worked example (CSPLib's Social Golfers problem).
+
 ### Solver configuration
 
 `createSolver` takes an optional `SolverConfig` — a builder with defaults, so new knobs don't mean new overloads. `SolverConfig.builder().build()` reproduces the unconfigured defaults exactly (unlimited search, standard nogood learning):
@@ -205,6 +226,9 @@ builder.elementVariableConstraint(index, result, vars)      // result = vars[ind
 builder.comparatorConstraint(v1, Operator.LEQ, v2)          // v1 <= v2  (any Comparable type; also EQ, NEQ, LT, GT, GEQ)
 builder.logicConstraint(b1, LogicOperator.OR,  b2)          // b1 || b2  (Boolean vars; AND, OR, XOR, NAND, NOR, XNOR)
 builder.biPredicateConstraint(v1, v2, biPredicate)          // biPredicate.test(v1, v2)
+builder.subsetConstraint(left, right)                       // left ⊆ right  (set variables — Variable<Set<E>>)
+builder.disjointConstraint(left, right)                     // left ∩ right = ∅  (set variables)
+builder.intersectionCardinalityConstraint(left, right, Operator.LEQ, 1)  // |left ∩ right| <= 1  (set variables; only LEQ/LT propagate)
 ```
 
 **N-ary**
@@ -251,18 +275,18 @@ builder.impliesConstraint(b, constraint)                    // b -> constraint  
 
 **Satisfaction** (`createSolver(csp)`):
 ```
-NodeConsistency → PropagationFixpoint(AC3 ↔ AllDiff GAC ↔ SumBounds ↔ LinearBounds ↔ CountValue ↔ InverseArc ↔ AmongValue ↔ AtLeastN/AtMostN ↔ CumulativeTimetable ↔ GlobalCardinalityValue ↔ LexBounds ↔ MaxBounds ↔ MinBounds ↔ ElementDomains ↔ TuplesGAC ↔ ProductBounds ↔ DivisionBounds ↔ CircuitPropagation ↔ DiffnCompulsoryParts ↔ RegularDP ↔ ReifiedPropagation ↔ ImplicationPropagation)
-    → IndependentSubproblems → TreeDecomposition → CutsetConditioning
+NodeConsistency → PropagationFixpoint(AC3 ↔ AllDiff GAC ↔ SumBounds ↔ LinearBounds ↔ CountValue ↔ InverseArc ↔ AmongValue ↔ AtLeastN/AtMostN ↔ CumulativeTimetable ↔ GlobalCardinalityValue ↔ LexBounds ↔ MaxBounds ↔ MinBounds ↔ ElementDomains ↔ TuplesGAC ↔ ProductBounds ↔ DivisionBounds ↔ CircuitPropagation ↔ DiffnCompulsoryParts ↔ RegularDP ↔ ReifiedPropagation ↔ ImplicationPropagation ↔ SetBounds)
+    → SetBranching (set variables only) → IndependentSubproblems → TreeDecomposition → CutsetConditioning
     → TreeSolver / DomWdegLubySearch(dom/wdeg + Luby restarts + MAC + nogood learning)
 ```
-For problems with `IntervalDomain` variables the fixpoint snaps non-singleton intervals to their midpoints, giving one concrete solution.
+For problems with `IntervalDomain` variables the fixpoint snaps non-singleton intervals to their midpoints, giving one concrete solution. `IntervalDomain` and `SetIntervalDomain` (set) variables are handled independently — a CSP can freely mix both kinds.
 
 **Optimization** (`createSolver(csp, objective)`):
 ```
 NodeConsistency → PropagationFixpoint → BisectionConditioning (continuous only)
-    → BranchAndBound(MAC + full propagator fixpoint + nogood learning)
+    → SetBranching (set variables only) → BranchAndBound(MAC + full propagator fixpoint + nogood learning)
 ```
-The fixpoint leaves intervals open for bisection. `BisectionConditioningSolver` bisects each non-singleton interval to within `DEFAULT_BISECTION_EPSILON`, repropagating bounds at each step; for purely discrete CSPs it is a passthrough. `BranchAndBound` then handles remaining discrete variables — like `DomWdegLubySearch` below, it folds a `NogoodStore` into its own search, so a domain wipeout's explanation (when one can be derived) is recorded and reused for the rest of the search; this is orthogonal to its own incumbent-bound pruning (`objective(partial) >= incumbent`), since a nogood records a genuine constraint violation while the bound cut records cost dominance relative to the current incumbent.
+The fixpoint leaves intervals open for bisection. `BisectionConditioningSolver` bisects each non-singleton interval to within `DEFAULT_BISECTION_EPSILON`, repropagating bounds at each step; for purely discrete CSPs it is a passthrough. `SetBranchingSolver` does the analogous job for set variables, but via real branch-and-backtrack search rather than snapping — an arbitrary choice among a set variable's undetermined elements isn't safe to treat as "close enough", unlike a numeric midpoint. `BranchAndBound` then handles remaining discrete variables — like `DomWdegLubySearch` below, it folds a `NogoodStore` into its own search, so a domain wipeout's explanation (when one can be derived) is recorded and reused for the rest of the search; this is orthogonal to its own incumbent-bound pruning (`objective(partial) >= incumbent`), since a nogood records a genuine constraint violation while the bound cut records cost dominance relative to the current incumbent.
 
 `PropagationFixpoint` runs all propagators in a combined fixpoint loop — each can expose new reductions the others exploit. Many highly-constrained problems (e.g. Zebra, Sudoku, MagicSquare) are solved entirely by propagation without any backtracking. During search, `FULL_PROPAGATION_INFERENCE` fires all propagators (including AllDiff GAC, GCC, cumulative timetabling, table GAC, element domain filtering, and bounds propagators) to global fixpoint at every search node — not just during preprocessing.
 
@@ -319,7 +343,7 @@ InitialAssignmentFactory factory = FallbackAssignmentFactory.builder()
 <dependency>
     <groupId>io.github.rcrida</groupId>
     <artifactId>jcsp</artifactId>
-    <version>2.35.0</version>
+    <version>2.36.0</version>
 </dependency>
 ```
 
