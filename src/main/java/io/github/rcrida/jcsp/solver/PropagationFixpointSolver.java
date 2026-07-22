@@ -14,6 +14,8 @@ import io.github.rcrida.jcsp.constraints.binary.BinaryComparatorConstraint;
 import io.github.rcrida.jcsp.constraints.binary.BinaryOffsetConstraint;
 import io.github.rcrida.jcsp.constraints.binary.DivisionConstraint;
 import io.github.rcrida.jcsp.constraints.binary.SubsetConstraint;
+import io.github.rcrida.jcsp.constraints.binary.DisjointConstraint;
+import io.github.rcrida.jcsp.constraints.binary.IntersectionCardinalityConstraint;
 import io.github.rcrida.jcsp.constraints.nary.AllDiffConstraint;
 import io.github.rcrida.jcsp.constraints.nary.AmongConstraint;
 import io.github.rcrida.jcsp.constraints.nary.AtLeastNConstraint;
@@ -119,7 +121,9 @@ public class PropagationFixpointSolver extends SolverDecorator {
             FixpointConsistency.of(DecreasingConstraint.class),
             FixpointConsistency.of(ReifiedConstraint.class),
             FixpointConsistency.of(ImplicationConstraint.class),
-            FixpointConsistency.of(SubsetConstraint.class)
+            FixpointConsistency.of(SubsetConstraint.class),
+            FixpointConsistency.of(DisjointConstraint.class),
+            FixpointConsistency.of(IntersectionCardinalityConstraint.class)
     );
 
     /** When true, snaps non-singleton bounded domains to midpoints after propagation converges. */

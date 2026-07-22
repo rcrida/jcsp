@@ -25,6 +25,8 @@ import io.github.rcrida.jcsp.constraints.binary.BinaryPredicateConstraint;
 import io.github.rcrida.jcsp.constraints.binary.BinaryEqualsConstraint;
 import io.github.rcrida.jcsp.constraints.binary.BinaryNotEqualsConstraint;
 import io.github.rcrida.jcsp.constraints.binary.SubsetConstraint;
+import io.github.rcrida.jcsp.constraints.binary.DisjointConstraint;
+import io.github.rcrida.jcsp.constraints.binary.IntersectionCardinalityConstraint;
 import io.github.rcrida.jcsp.constraints.Operator;
 import io.github.rcrida.jcsp.constraints.nary.AllDiffConstraint;
 import io.github.rcrida.jcsp.constraints.nary.AmongConstraint;
@@ -158,7 +160,7 @@ public class ConstraintSatisfactionProblem {
      * #validateDomainKindCompatibility} this class uses for both.
      */
     private static final Set<Class<? extends Constraint>> SET_COMPATIBLE_CONSTRAINTS =
-            Set.of(SubsetConstraint.class);
+            Set.of(SubsetConstraint.class, DisjointConstraint.class, IntersectionCardinalityConstraint.class);
 
     Map<Variable<?>, Domain<?>> variableDomains;
     // Included in equals/hashCode (via ConstraintGraph's own, which compares constraints/isCyclic/
@@ -874,6 +876,34 @@ public class ConstraintSatisfactionProblem {
          */
         public <E> ConstraintSatisfactionProblemBuilder subsetConstraint(@NonNull Variable<Set<E>> left, @NonNull Variable<Set<E>> right) {
             return this.constraint(SubsetConstraint.of(left, right));
+        }
+
+        /**
+         * Create a binary constraint over set variables: {@code left ∩ right = ∅}.
+         *
+         * @param left first set variable of the pair
+         * @param right second set variable of the pair
+         * @return the builder
+         */
+        public <E> ConstraintSatisfactionProblemBuilder disjointConstraint(@NonNull Variable<Set<E>> left, @NonNull Variable<Set<E>> right) {
+            return this.constraint(DisjointConstraint.of(left, right));
+        }
+
+        /**
+         * Create a binary constraint over set variables: {@code |left ∩ right| op bound}. E.g. CSPLib's
+         * Social Golfers "no two groups share more than one player across weeks" is {@code
+         * intersectionCardinalityConstraint(groupA, groupB, Operator.LEQ, 1)} between every pair of
+         * groups drawn from different weeks.
+         *
+         * @param left first set variable of the pair
+         * @param right second set variable of the pair
+         * @param operator comparison applied to the intersection's size
+         * @param bound the value the intersection's size is compared against
+         * @return the builder
+         */
+        public <E> ConstraintSatisfactionProblemBuilder intersectionCardinalityConstraint(
+                @NonNull Variable<Set<E>> left, @NonNull Variable<Set<E>> right, @NonNull Operator operator, int bound) {
+            return this.constraint(IntersectionCardinalityConstraint.of(left, right, operator, bound));
         }
 
         /**
