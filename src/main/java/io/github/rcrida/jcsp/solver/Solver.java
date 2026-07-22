@@ -8,6 +8,7 @@ import io.github.rcrida.jcsp.consistency.Inference;
 import io.github.rcrida.jcsp.consistency.arc.MAC;
 import io.github.rcrida.jcsp.constraints.nary.GroundNogoodConstraint;
 import io.github.rcrida.jcsp.domains.BoundedDomain;
+import io.github.rcrida.jcsp.domains.SetBoundedDomain;
 import io.github.rcrida.jcsp.variables.Variable;
 import io.github.rcrida.jcsp.solver.backtrackingsearch.order.DefaultValueOrderer;
 import io.github.rcrida.jcsp.solver.backtrackingsearch.order.LeastConstrainingValueOrderer;
@@ -167,6 +168,8 @@ public interface Solver {
                 val limits = config.getLimits();
                 boolean hasContinuous = csp.getVariableDomains().values().stream()
                         .anyMatch(BoundedDomain.class::isInstance);
+                boolean hasSets = csp.getVariableDomains().values().stream()
+                        .anyMatch(SetBoundedDomain.class::isInstance);
                 val treeSolver = new TreeSolver(BFSTopologicalSorter.INSTANCE, DefaultValueOrderer.INSTANCE, TreeUnassignedVariableSelector.Factory.INSTANCE);
                 val inference = nogoodLearningInference(config);
                 // Built fresh per sub-problem (not shared) so each independent sub-problem gets its own
@@ -199,8 +202,11 @@ public interface Solver {
                             .build();
                 };
                 val independentSubproblemSolver = IndependentSubproblemSolver.builder().innerFactory(innerFactory).build();
+                Solver afterPropagation = hasSets
+                        ? SetBranchingSolver.builder().inner(independentSubproblemSolver).build()
+                        : independentSubproblemSolver;
                 val propagationFixpointSolver = PropagationFixpointSolver.builder()
-                        .inner(independentSubproblemSolver)
+                        .inner(afterPropagation)
                         .snap(hasContinuous)
                         .build();
                 Solver chain = NodeConsistentSolver.builder().inner(propagationFixpointSolver).build();
@@ -230,6 +236,8 @@ public interface Solver {
                 val limits = config.getLimits();
                 boolean hasContinuous = csp.getVariableDomains().values().stream()
                         .anyMatch(BoundedDomain.class::isInstance);
+                boolean hasSets = csp.getVariableDomains().values().stream()
+                        .anyMatch(SetBoundedDomain.class::isInstance);
                 val branchAndBound = BranchAndBoundSolver.builder()
                         .objective(objective)
                         .unassignedVariableSelector(MinimumRemainingValuesSelector.INSTANCE)
@@ -246,8 +254,11 @@ public interface Solver {
                                 .objective(objective)
                                 .build()
                         : branchAndBound;
+                Solver afterPropagation = hasSets
+                        ? SetBranchingSolver.builder().inner(terminal).objective(objective).build()
+                        : terminal;
                 val propagationFixpointSolver = PropagationFixpointSolver.builder()
-                        .inner(terminal)
+                        .inner(afterPropagation)
                         .snap(false)
                         .build();
                 Solver chain = NodeConsistentSolver.builder().inner(propagationFixpointSolver).build();
