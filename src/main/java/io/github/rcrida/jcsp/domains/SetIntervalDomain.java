@@ -32,26 +32,43 @@ public record SetIntervalDomain<E>(Set<E> lowerBound, Set<E> upperBound, int min
      * Beyond wrapping the bounds defensively, this also applies a domain-intrinsic tightening
      * that holds regardless of which constraint (if any) is doing the narrowing: once {@code
      * |lowerBound| == maxCardinality}, no further element can ever be added without exceeding the
-     * cardinality cap, so {@code upperBound} collapses to exactly {@code lowerBound}; symmetrically,
-     * once {@code |upperBound| == minCardinality}, no candidate can be dropped without falling
-     * short of it, so {@code lowerBound} expands to exactly {@code upperBound}. Both conditions are
-     * evaluated against the bounds as originally passed in (not against each other's result), so
-     * this is safe to apply unconditionally — if both happen to hold simultaneously, {@code
-     * lowerBound ⊆ upperBound} (guaranteed by every caller: {@link #of} asserts it, {@link
-     * #withLowerBound}/{@link #withUpperBound} only narrow towards it) forces {@code |lowerBound| =
-     * |upperBound|}, which for a subset relationship between finite sets means they were already
-     * equal. This runs on every construction path, including {@link #of}, since an
-     * un-tightened-but-equivalent domain is never wrong, just less informative than it could
-     * immediately be — e.g. it's what lets a set variable resolve to a singleton through
-     * propagation alone, without needing a dedicated branching search stage.
+     * cardinality cap, so {@code upperBound} narrows to its intersection with {@code lowerBound};
+     * symmetrically, once {@code |upperBound| == minCardinality}, no candidate can be dropped
+     * without falling short of it, so {@code lowerBound} widens to its union with {@code
+     * upperBound}. Both the trigger conditions <em>and</em> the new values are computed from the
+     * bounds exactly as passed into this constructor call (never against each other's result, and
+     * never against a caller's pre-narrowing state from further up the call stack) — deliberately
+     * intersection/union, not a blind overwrite of one bound with the other: for an already-valid
+     * pair ({@code lowerBound ⊆ upperBound}) the two coincide, but overwriting instead of
+     * intersecting/unioning would silently discard a genuinely narrower value a caller passed in —
+     * e.g. {@code withUpperBound(Set.of())} called on a domain already at {@code
+     * |lowerBound|==maxCardinality} would, under a blind overwrite, "helpfully" restore {@code
+     * upperBound} back to {@code lowerBound} instead of leaving it empty, masking exactly the
+     * infeasibility {@link #isEmpty()}'s containment check exists to catch (found via {@code
+     * DisjointConstraint} propagating a real exclusion into this exact state). This runs on every
+     * construction path, including {@link #of}, since an un-tightened-but-equivalent domain is
+     * never wrong, just less informative than it could immediately be — e.g. it's what lets a set
+     * variable resolve to a singleton through propagation alone, without needing a dedicated
+     * branching search stage.
      */
     public SetIntervalDomain {
         lowerBound = Set.copyOf(lowerBound);
         upperBound = Set.copyOf(upperBound);
-        boolean forceUpperToLower = lowerBound.size() == maxCardinality;
-        boolean forceLowerToUpper = upperBound.size() == minCardinality;
-        if (forceUpperToLower) upperBound = lowerBound;
-        if (forceLowerToUpper) lowerBound = upperBound;
+
+        Set<E> tightenedUpper = upperBound;
+        if (lowerBound.size() == maxCardinality) {
+            Set<E> intersected = new HashSet<>(upperBound);
+            intersected.retainAll(lowerBound);
+            tightenedUpper = Set.copyOf(intersected);
+        }
+        Set<E> tightenedLower = lowerBound;
+        if (upperBound.size() == minCardinality) {
+            Set<E> unioned = new HashSet<>(lowerBound);
+            unioned.addAll(upperBound);
+            tightenedLower = Set.copyOf(unioned);
+        }
+        upperBound = tightenedUpper;
+        lowerBound = tightenedLower;
     }
 
     /**

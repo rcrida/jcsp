@@ -220,4 +220,18 @@ public class SetIntervalDomainTest {
         var d = SetIntervalDomain.of(Set.of(1), Set.of(1, 2), 0, 2);
         assertThat(d.toString()).isEqualTo("[[1] subsetOf S subsetOf [1, 2], |S| in [0, 2]]");
     }
+
+    @Test
+    void withUpperBound_narrowingBelowForcedLowerBound_correctlyReportsEmpty_notSilentlyRestored() {
+        // Regression test: the domain-intrinsic tightening (upperBound narrows towards lowerBound
+        // once |lowerBound|==maxCardinality) must use intersection, not a blind overwrite --
+        // otherwise a caller narrowing upperBound below what lowerBound already requires would have
+        // that narrower, correctly-infeasible value silently discarded and replaced back with
+        // lowerBound, masking a genuine contradiction instead of reporting it. Found via
+        // DisjointConstraint propagating a real exclusion into exactly this state (SetBranchingSolver
+        // forcing an element into one side that a disjoint partner already requires).
+        var base = SetIntervalDomain.of(Set.of(1), Set.of(1), 1, 1);
+        var narrowed = base.withUpperBound(Set.of());
+        assertThat(narrowed.isEmpty()).isTrue();
+    }
 }
