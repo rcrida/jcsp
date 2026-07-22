@@ -2,6 +2,7 @@ package io.github.rcrida.jcsp.domains;
 
 import org.junit.jupiter.api.Test;
 
+import java.util.Comparator;
 import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -233,5 +234,83 @@ public class SetIntervalDomainTest {
         var base = SetIntervalDomain.of(Set.of(1), Set.of(1), 1, 1);
         var narrowed = base.withUpperBound(Set.of());
         assertThat(narrowed.isEmpty()).isTrue();
+    }
+
+    // --- comparator: construction ---
+
+    @Test
+    void of_universeWithComparator_defaultsToEmptyLowerBoundFullUpperBoundAndFullCardinalityRange() {
+        var d = SetIntervalDomain.of(Set.of(1, 2, 3), Comparator.<Integer>naturalOrder());
+        assertThat(d.getLowerBound()).isEmpty();
+        assertThat(d.getUpperBound()).isEqualTo(Set.of(1, 2, 3));
+        assertThat(d.getMinCardinality()).isZero();
+        assertThat(d.getMaxCardinality()).isEqualTo(3);
+    }
+
+    @Test
+    void getComparator_returnsSuppliedComparator() {
+        Comparator<Integer> reverse = Comparator.reverseOrder();
+        var d = SetIntervalDomain.of(Set.of(), Set.of(1, 2, 3), 0, 3, reverse);
+        assertThat(d.getComparator()).isSameAs(reverse);
+    }
+
+    @Test
+    void of_naturalOrderFactory_defaultsToNaturalOrderComparator() {
+        var d = SetIntervalDomain.of(Set.of(1), Set.of(1, 2), 0, 2);
+        assertThat(d.getComparator()).isEqualTo(Comparator.<Integer>naturalOrder());
+    }
+
+    @Test
+    void of_explicitComparator_ordersBoundsByIt() {
+        var d = SetIntervalDomain.of(Set.of(), Set.of(3, 1, 2), 0, 3, Comparator.<Integer>reverseOrder());
+        assertThat(d.getUpperBound()).containsExactly(3, 2, 1);
+    }
+
+    @Test
+    void withLowerBound_preservesComparatorAcrossNarrowing() {
+        var d = SetIntervalDomain.of(Set.of(), Set.of(3, 1, 2), 0, 3, Comparator.<Integer>reverseOrder())
+                .withLowerBound(Set.of(1));
+        assertThat(d.getLowerBound()).containsExactly(1);
+        assertThat(d.getUpperBound()).containsExactly(3, 2, 1);
+        assertThat(d.getComparator()).isEqualTo(Comparator.<Integer>reverseOrder());
+    }
+
+    record Point(int x, int y) {}
+
+    @Test
+    void of_nonComparableTypeWithExplicitComparator_ordersBoundsByIt() {
+        var p1 = new Point(1, 5);
+        var p2 = new Point(2, 3);
+        var d = SetIntervalDomain.of(Set.of(), Set.of(p2, p1), 0, 2, Comparator.comparingInt(Point::x));
+        assertThat(d.getUpperBound()).containsExactly(p1, p2);
+    }
+
+    // --- equals / hashCode ---
+
+    @Test
+    void equals_sameReference_true() {
+        var d = SetIntervalDomain.of(Set.of(1), Set.of(1, 2), 0, 2);
+        assertThat(d.equals(d)).isTrue();
+    }
+
+    @Test
+    void equals_differentType_false() {
+        var d = SetIntervalDomain.of(Set.of(1), Set.of(1, 2), 0, 2);
+        assertThat(d.equals("not a domain")).isFalse();
+    }
+
+    @Test
+    void equals_sameContentDifferentComparatorInstance_trueWithMatchingHashCode() {
+        var d1 = SetIntervalDomain.of(Set.of(1), Set.of(1, 2), 0, 2);
+        var d2 = SetIntervalDomain.of(Set.of(1), Set.of(1, 2), 0, 2, Comparator.<Integer>naturalOrder());
+        assertThat(d1).isEqualTo(d2);
+        assertThat(d1.hashCode()).isEqualTo(d2.hashCode());
+    }
+
+    @Test
+    void equals_differentContent_false() {
+        var d1 = SetIntervalDomain.of(Set.of(1), Set.of(1, 2), 0, 2);
+        var d2 = SetIntervalDomain.of(Set.of(2), Set.of(1, 2), 0, 2);
+        assertThat(d1).isNotEqualTo(d2);
     }
 }

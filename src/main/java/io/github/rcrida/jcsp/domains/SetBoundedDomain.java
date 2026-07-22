@@ -2,6 +2,7 @@ package io.github.rcrida.jcsp.domains;
 
 import org.jspecify.annotations.NonNull;
 
+import java.util.Comparator;
 import java.util.Set;
 
 /**
@@ -49,6 +50,18 @@ public interface SetBoundedDomain<E> extends Domain<Set<E>> {
     int getMinCardinality();
 
     int getMaxCardinality();
+
+    /**
+     * The ordering this domain's bounds are consistently sorted by. Every implementation must
+     * supply one — either {@link Comparator#naturalOrder()} (when {@code E} is itself {@code
+     * Comparable}) or an explicit one for {@code E} types that aren't — rather than leaving it
+     * optional, so every {@link #withLowerBound}/{@link #withUpperBound}/{@link #withCardinality}
+     * call can re-apply it unconditionally: a caller that needs deterministic enumeration (e.g. a
+     * branching search picking "the next candidate element") always has a ready-made ordering to
+     * use instead of re-deriving one on every call. See {@link SetIntervalDomain}'s two {@code of}
+     * factory groups.
+     */
+    Comparator<E> getComparator();
 
     /**
      * Returns this domain with {@code forcedIn} unioned into the lower bound — elements now known

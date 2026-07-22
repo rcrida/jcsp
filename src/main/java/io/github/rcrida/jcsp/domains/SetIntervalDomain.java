@@ -3,9 +3,13 @@ package io.github.rcrida.jcsp.domains;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 
+import java.util.Collections;
+import java.util.Comparator;
 import java.util.HashSet;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
+import java.util.TreeSet;
 
 /**
  * A "set interval" domain: the set of every possible {@code Set<E>} value {@code S} such that
@@ -14,34 +18,35 @@ import java.util.Set;
  * and {@link #withCardinality} instead, the set-CP analogue of how {@link IntervalDomain} narrows
  * without enumerating every {@code double} in its range.
  * <p>
- * Bounds are wrapped via {@link Set#copyOf}, not {@code LinkedHashSet}: unlike {@link
- * IntRangeDomain}/{@link EnumDomain}, which build their own canonical ascending order internally
- * before construction, this record takes whatever {@code Set<E>} a caller passes in directly —
- * wrapping that in a {@code LinkedHashSet} would only freeze in whatever order the caller's set
- * already had (e.g. {@code Set.of(...)}'s randomized per-JVM-run order), not derive a
- * deterministic one, so it isn't worth the extra structure. {@code E} is unbounded (no {@code
- * Comparable} guarantee), so there's no canonical order to derive here anyway; any future consumer
- * that needs deterministic enumeration (e.g. a branching search picking "the next candidate
- * element") sorts explicitly at its own call site instead, the same way {@link #formatSet} already
- * does for display.
+ * Bounds are always stored sorted by {@link #comparator}, via a {@link TreeSet} — every
+ * construction path (including {@link #withLowerBound}/{@link #withUpperBound}/{@link
+ * #withCardinality}, not just the two {@code of} factory groups below) re-sorts, so a caller that
+ * needs deterministic enumeration (e.g. a branching search picking "the next candidate element")
+ * never has to re-derive an ordering itself, no matter how many narrowing steps a domain has
+ * already been through. {@code comparator} is required, not optional, precisely so this holds
+ * unconditionally: the two {@code of} factory groups are the only two ways to obtain one (either
+ * {@link Comparator#naturalOrder()} for {@code E extends Comparable<E>}, or an explicit {@code
+ * Comparator<E>} for any other {@code E}), so there's never a domain state without one to fall
+ * back on.
  */
-public record SetIntervalDomain<E>(Set<E> lowerBound, Set<E> upperBound, int minCardinality, int maxCardinality)
+public record SetIntervalDomain<E>(Set<E> lowerBound, Set<E> upperBound, int minCardinality, int maxCardinality,
+                                    Comparator<E> comparator)
         implements SetBoundedDomain<E> {
 
     /**
-     * Beyond wrapping the bounds defensively, this also applies a domain-intrinsic tightening
-     * that holds regardless of which constraint (if any) is doing the narrowing: once {@code
-     * |lowerBound| == maxCardinality}, no further element can ever be added without exceeding the
-     * cardinality cap, so {@code upperBound} narrows to its intersection with {@code lowerBound};
-     * symmetrically, once {@code |upperBound| == minCardinality}, no candidate can be dropped
-     * without falling short of it, so {@code lowerBound} widens to its union with {@code
-     * upperBound}. Both the trigger conditions <em>and</em> the new values are computed from the
-     * bounds exactly as passed into this constructor call (never against each other's result, and
-     * never against a caller's pre-narrowing state from further up the call stack) — deliberately
-     * intersection/union, not a blind overwrite of one bound with the other: for an already-valid
-     * pair ({@code lowerBound ⊆ upperBound}) the two coincide, but overwriting instead of
-     * intersecting/unioning would silently discard a genuinely narrower value a caller passed in —
-     * e.g. {@code withUpperBound(Set.of())} called on a domain already at {@code
+     * Beyond wrapping the bounds defensively (sorted via {@link #comparator}), this also applies a
+     * domain-intrinsic tightening that holds regardless of which constraint (if any) is doing the
+     * narrowing: once {@code |lowerBound| == maxCardinality}, no further element can ever be added
+     * without exceeding the cardinality cap, so {@code upperBound} narrows to its intersection with
+     * {@code lowerBound}; symmetrically, once {@code |upperBound| == minCardinality}, no candidate
+     * can be dropped without falling short of it, so {@code lowerBound} widens to its union with
+     * {@code upperBound}. Both the trigger conditions <em>and</em> the new values are computed from
+     * the bounds exactly as passed into this constructor call (never against each other's result,
+     * and never against a caller's pre-narrowing state from further up the call stack) —
+     * deliberately intersection/union, not a blind overwrite of one bound with the other: for an
+     * already-valid pair ({@code lowerBound ⊆ upperBound}) the two coincide, but overwriting
+     * instead of intersecting/unioning would silently discard a genuinely narrower value a caller
+     * passed in — e.g. {@code withUpperBound(Set.of())} called on a domain already at {@code
      * |lowerBound|==maxCardinality} would, under a blind overwrite, "helpfully" restore {@code
      * upperBound} back to {@code lowerBound} instead of leaving it empty, masking exactly the
      * infeasibility {@link #isEmpty()}'s containment check exists to catch (found via {@code
@@ -52,34 +57,52 @@ public record SetIntervalDomain<E>(Set<E> lowerBound, Set<E> upperBound, int min
      * branching search stage.
      */
     public SetIntervalDomain {
-        lowerBound = Set.copyOf(lowerBound);
-        upperBound = Set.copyOf(upperBound);
+        lowerBound = sorted(lowerBound, comparator);
+        upperBound = sorted(upperBound, comparator);
 
         Set<E> tightenedUpper = upperBound;
         if (lowerBound.size() == maxCardinality) {
             Set<E> intersected = new HashSet<>(upperBound);
             intersected.retainAll(lowerBound);
-            tightenedUpper = Set.copyOf(intersected);
+            tightenedUpper = sorted(intersected, comparator);
         }
         Set<E> tightenedLower = lowerBound;
         if (upperBound.size() == minCardinality) {
             Set<E> unioned = new HashSet<>(lowerBound);
             unioned.addAll(upperBound);
-            tightenedLower = Set.copyOf(unioned);
+            tightenedLower = sorted(unioned, comparator);
         }
         upperBound = tightenedUpper;
         lowerBound = tightenedLower;
     }
 
+    private static <E> Set<E> sorted(Set<E> elements, Comparator<E> comparator) {
+        var tree = new TreeSet<>(comparator);
+        tree.addAll(elements);
+        return Collections.unmodifiableSet(tree);
+    }
+
     /**
-     * Constructs and validates an initial domain. Unlike {@link #withLowerBound}/{@link
-     * #withUpperBound}/{@link #withCardinality} (used during propagation, where narrowing to an
-     * empty domain is an expected, silently-representable outcome), this is the user-facing
-     * construction path, so an already-infeasible domain is a programmer error caught eagerly —
-     * the same relationship {@link IntervalDomain#of} has with {@link IntervalDomain#withBounds}.
+     * Constructs and validates an initial domain, ordered by {@link Comparator#naturalOrder()}.
+     * Unlike {@link #withLowerBound}/{@link #withUpperBound}/{@link #withCardinality} (used during
+     * propagation, where narrowing to an empty domain is an expected, silently-representable
+     * outcome), this is the user-facing construction path, so an already-infeasible domain is a
+     * programmer error caught eagerly — the same relationship {@link IntervalDomain#of} has with
+     * {@link IntervalDomain#withBounds}.
      */
+    public static <E extends Comparable<E>> SetIntervalDomain<E> of(@NonNull Set<E> lowerBound, @NonNull Set<E> upperBound,
+                                                                      int minCardinality, int maxCardinality) {
+        return of(lowerBound, upperBound, minCardinality, maxCardinality, Comparator.naturalOrder());
+    }
+
+    /** {@code lowerBound = ∅}, {@code upperBound = universe}, cardinality unrestricted within {@code [0, |universe|]}. */
+    public static <E extends Comparable<E>> SetIntervalDomain<E> of(@NonNull Set<E> universe) {
+        return of(Set.of(), universe, 0, universe.size());
+    }
+
+    /** As {@link #of(Set, Set, int, int)}, ordered by the given {@code comparator} instead of requiring {@code E extends Comparable<E>}. */
     public static <E> SetIntervalDomain<E> of(@NonNull Set<E> lowerBound, @NonNull Set<E> upperBound,
-                                               int minCardinality, int maxCardinality) {
+                                               int minCardinality, int maxCardinality, @NonNull Comparator<E> comparator) {
         assert upperBound.containsAll(lowerBound) :
                 String.format("lowerBound %s must be a subset of upperBound %s", lowerBound, upperBound);
         assert minCardinality >= 0 : String.format("minCardinality (%d) must not be negative", minCardinality);
@@ -89,12 +112,12 @@ public record SetIntervalDomain<E>(Set<E> lowerBound, Set<E> upperBound, int min
                 String.format("lowerBound size (%d) must not exceed maxCardinality (%d)", lowerBound.size(), maxCardinality);
         assert upperBound.size() >= minCardinality :
                 String.format("upperBound size (%d) must be at least minCardinality (%d)", upperBound.size(), minCardinality);
-        return new SetIntervalDomain<>(lowerBound, upperBound, minCardinality, maxCardinality);
+        return new SetIntervalDomain<>(lowerBound, upperBound, minCardinality, maxCardinality, comparator);
     }
 
-    /** {@code lowerBound = ∅}, {@code upperBound = universe}, cardinality unrestricted within {@code [0, |universe|]}. */
-    public static <E> SetIntervalDomain<E> of(@NonNull Set<E> universe) {
-        return of(Set.of(), universe, 0, universe.size());
+    /** As {@link #of(Set)}, ordered by the given {@code comparator} instead of requiring {@code E extends Comparable<E>}. */
+    public static <E> SetIntervalDomain<E> of(@NonNull Set<E> universe, @NonNull Comparator<E> comparator) {
+        return of(Set.of(), universe, 0, universe.size(), comparator);
     }
 
     @Override
@@ -110,22 +133,25 @@ public record SetIntervalDomain<E>(Set<E> lowerBound, Set<E> upperBound, int min
     public int getMaxCardinality() { return maxCardinality; }
 
     @Override
+    public Comparator<E> getComparator() { return comparator; }
+
+    @Override
     public SetIntervalDomain<E> withLowerBound(@NonNull Set<E> forcedIn) {
         var newLower = new HashSet<>(lowerBound);
         newLower.addAll(forcedIn);
-        return new SetIntervalDomain<>(newLower, upperBound, minCardinality, maxCardinality);
+        return new SetIntervalDomain<>(newLower, upperBound, minCardinality, maxCardinality, comparator);
     }
 
     @Override
     public SetIntervalDomain<E> withUpperBound(@NonNull Set<E> restrictedTo) {
         var newUpper = new HashSet<>(upperBound);
         newUpper.retainAll(restrictedTo);
-        return new SetIntervalDomain<>(lowerBound, newUpper, minCardinality, maxCardinality);
+        return new SetIntervalDomain<>(lowerBound, newUpper, minCardinality, maxCardinality, comparator);
     }
 
     @Override
     public SetIntervalDomain<E> withCardinality(int newMin, int newMax) {
-        return new SetIntervalDomain<>(lowerBound, upperBound, Math.max(minCardinality, newMin), Math.min(maxCardinality, newMax));
+        return new SetIntervalDomain<>(lowerBound, upperBound, Math.max(minCardinality, newMin), Math.min(maxCardinality, newMax), comparator);
     }
 
     @Override
@@ -166,20 +192,29 @@ public record SetIntervalDomain<E>(Set<E> lowerBound, Set<E> upperBound, int min
         return isSingleton() ? Optional.of(lowerBound) : Optional.empty();
     }
 
+    /**
+     * Ignores {@link #comparator}: two domains with the same bounds and cardinality range are the
+     * same domain regardless of which ordering (or which of two logically-equivalent {@code
+     * Comparator} instances, e.g. two separate {@code naturalOrder()} calls) produced their
+     * internal iteration order. {@code lowerBound}/{@code upperBound} equality is already
+     * order-independent ({@link Set#equals} never considers iteration order), so this override
+     * exists solely to keep {@code comparator} out of the comparison and hash entirely.
+     */
     @Override
-    public String toString() {
-        return "[" + formatSet(lowerBound) + " subsetOf S subsetOf " + formatSet(upperBound) + ", |S| in [" + minCardinality + ", " + maxCardinality + "]]";
+    public boolean equals(Object o) {
+        if (this == o) return true;
+        if (!(o instanceof SetIntervalDomain<?> other)) return false;
+        return minCardinality == other.minCardinality && maxCardinality == other.maxCardinality
+                && lowerBound.equals(other.lowerBound) && upperBound.equals(other.upperBound);
     }
 
-    /**
-     * Renders {@code set} in a deterministic order for display. {@code E} is unbounded (no {@code
-     * Comparable} guarantee), and the {@code Set} a caller constructs this domain from may itself
-     * have a randomized iteration order (e.g. {@code Set.of(...)}) — sorting by each element's own
-     * {@code toString()} keeps this method's output a pure function of the domain's content rather
-     * than of incidental construction history, which matters for reproducible debug logging and
-     * deterministic test assertions alike.
-     */
-    private static <E> String formatSet(Set<E> set) {
-        return set.stream().map(String::valueOf).sorted().toList().toString();
+    @Override
+    public int hashCode() {
+        return Objects.hash(lowerBound, upperBound, minCardinality, maxCardinality);
+    }
+
+    @Override
+    public String toString() {
+        return "[" + lowerBound + " subsetOf S subsetOf " + upperBound + ", |S| in [" + minCardinality + ", " + maxCardinality + "]]";
     }
 }

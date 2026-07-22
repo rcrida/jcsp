@@ -115,18 +115,16 @@ public class SetBranchingSolver extends SolverDecorator {
     }
 
     /**
-     * Picks the undetermined element whose {@code String} representation sorts first, the same
-     * deterministic-enumeration approach {@link io.github.rcrida.jcsp.domains.SetIntervalDomain}'s
-     * own {@code toString} uses — {@code E} is unbounded (no {@code Comparable} guarantee), and the
-     * caller-supplied {@code Set} backing the domain may itself have a randomized iteration order,
-     * so this is the only way to keep branch order (and therefore which solution is found first)
-     * reproducible across runs.
+     * Picks the least undetermined element by {@link SetBoundedDomain#getComparator()} — every
+     * domain carries one unconditionally (see that method's Javadoc), so branch order (and
+     * therefore which solution is found first) is reproducible across runs without this method
+     * needing to derive its own ordering.
      */
     @SuppressWarnings({"unchecked", "rawtypes"})
     private static Object pickElement(SetBoundedDomain domain) {
         Set undetermined = new HashSet<>(domain.getUpperBound());
         undetermined.removeAll(domain.getLowerBound());
-        return (Object) undetermined.stream().min(Comparator.comparing(String::valueOf)).orElseThrow();
+        return undetermined.stream().min(domain.getComparator()).orElseThrow();
     }
 
     /**

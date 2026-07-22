@@ -7,6 +7,7 @@ import io.github.rcrida.jcsp.domains.SetIntervalDomain;
 import io.github.rcrida.jcsp.variables.Variable;
 import org.junit.jupiter.api.Test;
 
+import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -158,5 +159,22 @@ public class SetBranchingSolverTest {
         var solution = Solver.Factory.INSTANCE.createSolver(csp, objective).getSolution();
         assertThat(solution).isPresent();
         assertThat(solution.get().getValue(a)).contains(Set.of(3));
+    }
+
+    @Test
+    void pickElement_respectsDomainsOwnComparator() {
+        // With the default natural-order comparator, pickElement would try 1 first (see the other
+        // tests above). Constructing the domain with an explicit reverse comparator instead should
+        // make it try 2 first -- since there's no constraint to make that fail, the very first
+        // solution found (getSolution() = findFirst()) should be {2}, not {1}, proving
+        // pickElement genuinely reads the domain's own comparator rather than defaulting to natural
+        // order regardless.
+        Variable<Set<Integer>> a = F.create("a_reverse");
+        var csp = ConstraintSatisfactionProblem.builder()
+                .variableDomain(a, SetIntervalDomain.of(Set.of(), Set.of(1, 2), 1, 1, Comparator.<Integer>reverseOrder()))
+                .build();
+        var solution = solver().getSolution(csp);
+        assertThat(solution).isPresent();
+        assertThat(solution.get().getValue(a)).contains(Set.of(2));
     }
 }
