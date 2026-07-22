@@ -11,7 +11,6 @@ import lombok.val;
 import io.github.rcrida.jcsp.ConstraintSatisfactionProblem;
 import io.github.rcrida.jcsp.assignments.Assignment;
 import io.github.rcrida.jcsp.constraints.Constraint;
-import io.github.rcrida.jcsp.domains.DiscreteDomain;
 import io.github.rcrida.jcsp.solver.assignmentfactory.InitialAssignmentFactory;
 import io.github.rcrida.jcsp.solver.backtrackingsearch.selector.ConflictedVariableSelector;
 import io.github.rcrida.jcsp.solver.backtrackingsearch.selector.UnassignedVariableSelector;
@@ -172,7 +171,7 @@ public class TabuSearchSolver implements LocalSolver, CancellableLocalSolver {
                 .toList();
         T oldValue = current.getValue(variable).orElseThrow();
         double oldLocalWeight = LocalSearchSupport.weighConflicts(variable, oldValue, current, variableConstraints, constraintWeights);
-        val costs = ((DiscreteDomain<T>) csp.getDomain(variable)).stream()
+        val costs = SetDomainMoves.candidateValues(csp.getDomain(variable), oldValue)
                 .map(v -> {
                     double localWeight = LocalSearchSupport.weighConflicts(variable, v, current, variableConstraints, constraintWeights);
                     return new ValueWeight<>(v, localWeight, currentTotalWeight - oldLocalWeight + localWeight);
@@ -219,7 +218,7 @@ public class TabuSearchSolver implements LocalSolver, CancellableLocalSolver {
                 .toList();
         T oldValue = current.getValue(variable).orElseThrow();
         double oldLocalWeight = LocalSearchSupport.weighConflicts(variable, oldValue, current, variableConstraints, constraintWeights);
-        val costs = ((DiscreteDomain<T>) csp.getDomain(variable)).stream()
+        val costs = SetDomainMoves.candidateValues(csp.getDomain(variable), oldValue)
                 .map(v -> {
                     val candidateAssignment = current.withValue(variable, v);
                     double localWeight = LocalSearchSupport.weighConflicts(variable, v, current, variableConstraints, constraintWeights);

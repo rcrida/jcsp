@@ -11,7 +11,6 @@ import lombok.val;
 import io.github.rcrida.jcsp.ConstraintSatisfactionProblem;
 import io.github.rcrida.jcsp.assignments.Assignment;
 import io.github.rcrida.jcsp.constraints.Constraint;
-import io.github.rcrida.jcsp.domains.DiscreteDomain;
 import io.github.rcrida.jcsp.solver.assignmentfactory.InitialAssignmentFactory;
 import io.github.rcrida.jcsp.solver.backtrackingsearch.selector.ConflictedVariableSelector;
 import io.github.rcrida.jcsp.solver.backtrackingsearch.selector.UnassignedVariableSelector;
@@ -152,7 +151,8 @@ public class MinConflictsSolver implements LocalSolver, CancellableLocalSolver {
         val variableConstraints = LocalSearchSupport.conflictConstraints(csp)
                 .filter(c -> c.getVariables().contains(variable))
                 .toList();
-        val costs = ((DiscreteDomain<T>) csp.getDomain(variable)).stream()
+        T currentValue = current.getValue(variable).orElseThrow();
+        val costs = SetDomainMoves.candidateValues(csp.getDomain(variable), currentValue)
                 .map(v -> new ValueCost<>(v,
                         LocalSearchSupport.weighConflicts(variable, v, current, variableConstraints, constraintWeights),
                         objective.applyAsDouble(current.withValue(variable, v))))
@@ -198,7 +198,8 @@ public class MinConflictsSolver implements LocalSolver, CancellableLocalSolver {
         val variableConstraints = LocalSearchSupport.conflictConstraints(csp)
                 .filter(constraint -> constraint.getVariables().contains(variable))
                 .toList();
-        Map<T, Double> valueWeights = ((DiscreteDomain<T>) csp.getDomain(variable)).stream()
+        T currentValue = current.getValue(variable).orElseThrow();
+        Map<T, Double> valueWeights = SetDomainMoves.candidateValues(csp.getDomain(variable), currentValue)
                 .collect(Collectors.toMap(v -> v, v -> LocalSearchSupport.weighConflicts(variable, v, current, variableConstraints, constraintWeights)));
         log.debug("Value weights: {}", valueWeights);
         val minWeight = valueWeights.values().stream().min(Comparator.naturalOrder()).orElseThrow();

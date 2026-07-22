@@ -6,6 +6,9 @@ import lombok.val;
 import io.github.rcrida.jcsp.ConstraintSatisfactionProblem;
 import io.github.rcrida.jcsp.assignments.Assignment;
 import io.github.rcrida.jcsp.domains.DiscreteDomain;
+import io.github.rcrida.jcsp.domains.Domain;
+import io.github.rcrida.jcsp.domains.SetBoundedDomain;
+import io.github.rcrida.jcsp.solver.SetDomainMoves;
 import io.github.rcrida.jcsp.variables.Variable;
 import org.jspecify.annotations.NonNull;
 
@@ -15,6 +18,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.stream.Stream;
 
 /**
  * An {@link InitialAssignmentFactory} that builds an initial assignment greedily: variables are
@@ -30,6 +34,9 @@ import java.util.concurrent.atomic.AtomicInteger;
 public class GreedyAssignmentFactory implements InitialAssignmentFactory {
 
     public static final GreedyAssignmentFactory INSTANCE = new GreedyAssignmentFactory();
+
+    /** Random draws {@link SetDomainMoves#representativeSeeds} adds for a {@link SetBoundedDomain} variable. */
+    private static final int SET_DOMAIN_SAMPLE_SIZE = 3;
 
     @Override
     public Assignment getAssignment(@NonNull ConstraintSatisfactionProblem csp) {
@@ -48,7 +55,7 @@ public class GreedyAssignmentFactory implements InitialAssignmentFactory {
 
         AtomicInteger bestViolations = new AtomicInteger(Integer.MAX_VALUE);
         List<Object> bestValues = new ArrayList<>();
-        ((DiscreteDomain<?>) csp.getDomain(variable)).stream().forEach(value -> {
+        candidateSeedValues(csp.getDomain(variable)).forEach(value -> {
             val candidate = Assignment.of(addEntry(current, variable, value));
             int violations = (int) constraintsOnVariable.stream()
                     .filter(c -> c.getVariables().stream().allMatch(v -> candidate.getValue(v).isPresent()))
@@ -63,6 +70,19 @@ public class GreedyAssignmentFactory implements InitialAssignmentFactory {
             }
         });
         return bestValues.get(ThreadLocalRandom.current().nextInt(bestValues.size()));
+    }
+
+    /**
+     * The candidates to score for {@code variable}: every value for a {@link DiscreteDomain}
+     * (unchanged behaviour), or a small representative sample for a {@link SetBoundedDomain} —
+     * see {@link SetDomainMoves#representativeSeeds} for why a short list, not full enumeration or
+     * a bare random draw, is the right amount of effort for an initial-assignment seed.
+     */
+    private static Stream<?> candidateSeedValues(Domain<?> domain) {
+        if (domain instanceof SetBoundedDomain<?> setDomain) {
+            return SetDomainMoves.representativeSeeds(setDomain, SET_DOMAIN_SAMPLE_SIZE).stream();
+        }
+        return ((DiscreteDomain<?>) domain).stream();
     }
 
     private static Map<Variable<?>, Object> addEntry(Assignment current, Variable<?> variable, Object value) {

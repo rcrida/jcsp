@@ -3,6 +3,7 @@ package io.github.rcrida.jcsp.solver;
 import io.github.rcrida.jcsp.ConstraintSatisfactionProblem;
 import io.github.rcrida.jcsp.assignments.Assignment;
 import io.github.rcrida.jcsp.domains.IntRangeDomain;
+import io.github.rcrida.jcsp.domains.SetIntervalDomain;
 import io.github.rcrida.jcsp.variables.Variable;
 import lombok.val;
 import org.junit.jupiter.api.Test;
@@ -19,6 +20,30 @@ public class TabuSearchSolverTest {
     static final Variable<Integer> Z = F.create("z");
     static final Variable<Integer> W = F.create("w");
     static final Variable<Integer> V = F.create("v");
+
+    static final Set<String> SET_UNIVERSE = Set.of("p", "q", "r", "s", "t", "u");
+    static final Variable<Set<String>> A = F.create("a");
+    static final Variable<Set<String>> B = F.create("b");
+
+    // A, B ⊆ {p..u}, |A|,|B| ∈ [2,3], disjoint — plenty of room to repair via add/remove/swap.
+    static final ConstraintSatisfactionProblem DISJOINT_SET_CSP = ConstraintSatisfactionProblem.builder()
+            .variableDomain(A, SetIntervalDomain.of(Set.of(), SET_UNIVERSE, 2, 3))
+            .variableDomain(B, SetIntervalDomain.of(Set.of(), SET_UNIVERSE, 2, 3))
+            .disjointConstraint(A, B)
+            .build();
+
+    // A is pinned to a singleton by its own domain (no legal move for it); only B can repair the
+    // overlap, but ConflictedVariableSelector may still pick A at some step since it's touched by
+    // the violated constraint — SetDomainMoves.neighbours must handle that ("no legal moves") case.
+    static final ConstraintSatisfactionProblem DISJOINT_SET_CSP_WITH_SINGLETON_A = ConstraintSatisfactionProblem.builder()
+            .variableDomain(A, SetIntervalDomain.of(Set.of("p", "q"), Set.of("p", "q"), 2, 2))
+            .variableDomain(B, SetIntervalDomain.of(Set.of(), SET_UNIVERSE, 2, 3))
+            .disjointConstraint(A, B)
+            .build();
+
+    static Assignment overlappingSets() {
+        return Assignment.builder().value(A, Set.of("p", "q")).value(B, Set.of("p", "r")).build();
+    }
 
     // X ∈ {1,2,3}, Y ∈ {1,2,3}, allDiff — six solutions exist
     static final ConstraintSatisfactionProblem CSP = ConstraintSatisfactionProblem.builder()
@@ -217,5 +242,33 @@ public class TabuSearchSolverTest {
         cancellation.cancel();
         val solver = TabuSearchSolver.of(1, 500, csp -> infeasible()).withCancellation(cancellation);
         assertThat(solver.getLocalSolution(CSP, a -> 0.0)).isEmpty();
+    }
+
+    @Test
+    void getLocalSolution_setBoundedDomain_repairsOverlapToDisjointSets() {
+        val solver = TabuSearchSolver.of(5, 200, csp -> overlappingSets());
+        val solution = solver.getLocalSolution(DISJOINT_SET_CSP);
+        assertThat(solution).isPresent();
+        assertThat(solution.get().isSolution(DISJOINT_SET_CSP)).isTrue();
+    }
+
+    @Test
+    void getLocalSolution_setBoundedDomain_withObjective_repairsOverlapToDisjointSets() {
+        val solver = TabuSearchSolver.of(5, 200, csp -> overlappingSets());
+        val solution = solver.getLocalSolution(DISJOINT_SET_CSP, a -> 0.0);
+        assertThat(solution).isPresent();
+        assertThat(solution.get().isSolution(DISJOINT_SET_CSP)).isTrue();
+    }
+
+    @Test
+    void getLocalSolution_setBoundedDomain_singletonParticipantDoesNotCrash() {
+        // Over 200 steps with only two variables touching the violated constraint, A (the
+        // singleton) is selected by ConflictedVariableSelector roughly half the time -- exercising
+        // SetDomainMoves.neighbours' "no legal move" path for real, not just hypothetically.
+        val solver = TabuSearchSolver.of(5, 200, csp -> overlappingSets());
+        val solution = solver.getLocalSolution(DISJOINT_SET_CSP_WITH_SINGLETON_A);
+        assertThat(solution).isPresent();
+        assertThat(solution.get().isSolution(DISJOINT_SET_CSP_WITH_SINGLETON_A)).isTrue();
+        assertThat(solution.get().getValue(A)).hasValue(Set.of("p", "q"));
     }
 }

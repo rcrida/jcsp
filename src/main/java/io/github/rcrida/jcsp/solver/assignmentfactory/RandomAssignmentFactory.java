@@ -6,6 +6,9 @@ import lombok.val;
 import io.github.rcrida.jcsp.ConstraintSatisfactionProblem;
 import io.github.rcrida.jcsp.assignments.Assignment;
 import io.github.rcrida.jcsp.domains.DiscreteDomain;
+import io.github.rcrida.jcsp.domains.Domain;
+import io.github.rcrida.jcsp.domains.SetBoundedDomain;
+import io.github.rcrida.jcsp.solver.SetDomainMoves;
 import org.jspecify.annotations.NonNull;
 
 import java.util.concurrent.ThreadLocalRandom;
@@ -27,12 +30,16 @@ public class RandomAssignmentFactory implements InitialAssignmentFactory {
     @Override
     public Assignment getAssignment(@NonNull ConstraintSatisfactionProblem csp) {
         val builder = Assignment.builder();
-        csp.getVariableDomains().forEach((key, value) -> builder.value(key, getRandomValue((DiscreteDomain<?>) value)));
+        csp.getVariableDomains().forEach((key, value) -> builder.value(key, getRandomValue(value)));
         return builder.build();
     }
 
-    private Object getRandomValue(DiscreteDomain domain) {
-        int index = ThreadLocalRandom.current().nextInt(domain.size());
-        return domain.stream().skip(index).findAny().get();
+    private Object getRandomValue(Domain<?> domain) {
+        if (domain instanceof SetBoundedDomain<?> setDomain) {
+            return SetDomainMoves.randomValue(setDomain);
+        }
+        val discrete = (DiscreteDomain<?>) domain;
+        int index = ThreadLocalRandom.current().nextInt(discrete.size());
+        return discrete.stream().skip(index).findAny().get();
     }
 }
