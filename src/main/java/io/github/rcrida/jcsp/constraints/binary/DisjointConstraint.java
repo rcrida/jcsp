@@ -1,8 +1,8 @@
 package io.github.rcrida.jcsp.constraints.binary;
 
 import io.github.rcrida.jcsp.consistency.Propagatable;
-import io.github.rcrida.jcsp.constraints.nary.GroundNogoodConstraint;
 import io.github.rcrida.jcsp.constraints.nary.NogoodConstraint;
+import io.github.rcrida.jcsp.constraints.nary.SetBoundsNogoodConstraint;
 import io.github.rcrida.jcsp.domains.Domain;
 import io.github.rcrida.jcsp.domains.SetBoundedDomain;
 import io.github.rcrida.jcsp.variables.Variable;
@@ -68,12 +68,11 @@ public class DisjointConstraint<E> extends BinaryConstraint<Set<E>, Set<E>> impl
     }
 
     /**
-     * Sound only when both sides are already fully resolved (singleton) — see {@link
-     * SubsetConstraint#explainInfeasible}'s Javadoc for the identical reasoning.
+     * Two-tier explanation via {@link SetBoundsNogoodConstraint#explainViaGroundOrBounds} — see
+     * {@link SubsetConstraint#explainInfeasible}'s Javadoc for the identical reasoning.
      */
     @Override
     public Optional<NogoodConstraint> explainInfeasible(@NonNull Map<Variable<?>, Domain<?>> domains) {
-        Map<Variable<?>, Object> reason = Propagatable.allSingletonReason(getVariables(), domains);
-        return GroundNogoodConstraint.fromReason(reason);
+        return SetBoundsNogoodConstraint.explainViaGroundOrBounds(getVariables(), domains);
     }
 }

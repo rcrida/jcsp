@@ -99,11 +99,14 @@ public class RangeNogoodConstraint extends NaryConstraint implements NogoodConst
      * {@link BoundedDomain} (continuous, so min/max already is the whole domain); for a
      * {@link DiscreteDomain}, only when every value is an {@link Integer} and the domain is
      * gapless — its size equals {@code max - min + 1} — so the interval and the domain denote
-     * exactly the same set of values.
+     * exactly the same set of values. {@code false} for any other {@link Domain} kind (e.g.
+     * {@link io.github.rcrida.jcsp.domains.SetBoundedDomain}, which is neither {@link BoundedDomain}
+     * nor {@link DiscreteDomain} — it isn't {@code Number}-based, so no {@link IntervalDomain} could
+     * stand in for it at all).
      */
     private static boolean isSafeToCiteAsRange(Domain<?> domain) {
         if (domain instanceof BoundedDomain<?>) return true;
-        DiscreteDomain<?> discrete = (DiscreteDomain<?>) domain;
+        if (!(domain instanceof DiscreteDomain<?> discrete)) return false;
         var values = discrete.toList();
         if (values.isEmpty() || !(values.get(0) instanceof Integer)) return false;
         int min = Integer.MAX_VALUE;

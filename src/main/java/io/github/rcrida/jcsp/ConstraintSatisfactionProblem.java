@@ -52,6 +52,7 @@ import io.github.rcrida.jcsp.constraints.nary.NaryElementConstraint;
 import io.github.rcrida.jcsp.constraints.nary.NValueConstraint;
 import io.github.rcrida.jcsp.constraints.nary.NogoodConstraint;
 import io.github.rcrida.jcsp.constraints.nary.RangeNogoodConstraint;
+import io.github.rcrida.jcsp.constraints.nary.SetBoundsNogoodConstraint;
 import io.github.rcrida.jcsp.constraints.nary.ProductConstraint;
 import io.github.rcrida.jcsp.constraints.nary.NaryTuplesConstraint;
 import io.github.rcrida.jcsp.constraints.nary.SumBoundConstraint;
@@ -160,7 +161,8 @@ public class ConstraintSatisfactionProblem {
      * #validateDomainKindCompatibility} this class uses for both.
      */
     private static final Set<Class<? extends Constraint>> SET_COMPATIBLE_CONSTRAINTS =
-            Set.of(SubsetConstraint.class, DisjointConstraint.class, IntersectionCardinalityConstraint.class);
+            Set.of(SubsetConstraint.class, DisjointConstraint.class, IntersectionCardinalityConstraint.class,
+                    GroundNogoodConstraint.class, SetBoundsNogoodConstraint.class);
 
     Map<Variable<?>, Domain<?>> variableDomains;
     // Included in equals/hashCode (via ConstraintGraph's own, which compares constraints/isCyclic/

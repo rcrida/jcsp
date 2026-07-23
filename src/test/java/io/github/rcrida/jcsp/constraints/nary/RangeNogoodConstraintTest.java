@@ -5,6 +5,7 @@ import io.github.rcrida.jcsp.domains.Domain;
 import io.github.rcrida.jcsp.domains.DomainObjectSet;
 import io.github.rcrida.jcsp.domains.IntRangeDomain;
 import io.github.rcrida.jcsp.domains.IntervalDomain;
+import io.github.rcrida.jcsp.domains.SetIntervalDomain;
 import io.github.rcrida.jcsp.variables.Variable;
 import org.junit.jupiter.api.Test;
 
@@ -218,6 +219,15 @@ public class RangeNogoodConstraintTest {
     void fromCurrentBounds_emptyDomain_returnsEmpty() {
         Variable<Integer> x = F.create("ex");
         var domains = Map.<Variable<?>, Domain<?>>of(x, DomainObjectSet.<Integer>builder().build());
+        assertThat(RangeNogoodConstraint.fromCurrentBounds(Set.of(x), domains)).isEmpty();
+    }
+
+    @Test
+    void fromCurrentBounds_setBoundedVariable_returnsEmpty() {
+        // Neither BoundedDomain nor DiscreteDomain -- a SetBoundedDomain isn't Number-based, so no
+        // IntervalDomain could stand in for it at all; must degrade to empty rather than crash.
+        Variable<Set<Integer>> x = F.create("hx");
+        var domains = Map.<Variable<?>, Domain<?>>of(x, SetIntervalDomain.of(Set.of(1), Set.of(1, 2), 1, 2));
         assertThat(RangeNogoodConstraint.fromCurrentBounds(Set.of(x), domains)).isEmpty();
     }
 

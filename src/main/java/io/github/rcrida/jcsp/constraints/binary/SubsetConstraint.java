@@ -1,8 +1,8 @@
 package io.github.rcrida.jcsp.constraints.binary;
 
 import io.github.rcrida.jcsp.consistency.Propagatable;
-import io.github.rcrida.jcsp.constraints.nary.GroundNogoodConstraint;
 import io.github.rcrida.jcsp.constraints.nary.NogoodConstraint;
+import io.github.rcrida.jcsp.constraints.nary.SetBoundsNogoodConstraint;
 import io.github.rcrida.jcsp.domains.Domain;
 import io.github.rcrida.jcsp.domains.SetBoundedDomain;
 import io.github.rcrida.jcsp.variables.Variable;
@@ -80,15 +80,12 @@ public class SubsetConstraint<E> extends BinaryConstraint<Set<E>, Set<E>> implem
     }
 
     /**
-     * Sound only when both sides are already fully resolved (singleton) — {@code left ⊆ right}'s
-     * violation, once detected via bounds/cardinality reasoning rather than a ground pair, isn't
-     * generally attributable to a smaller subset of either side's possible values, so no tighter
-     * reason is attempted; the framework falls back to citing the full current assignment when
-     * this returns empty (see {@link Propagatable#explainInfeasible}'s own Javadoc).
+     * Two-tier explanation via {@link SetBoundsNogoodConstraint#explainViaGroundOrBounds}: a ground
+     * reason when both sides are already fully resolved (singleton), else their current
+     * bound/cardinality state cited verbatim.
      */
     @Override
     public Optional<NogoodConstraint> explainInfeasible(@NonNull Map<Variable<?>, Domain<?>> domains) {
-        Map<Variable<?>, Object> reason = Propagatable.allSingletonReason(getVariables(), domains);
-        return GroundNogoodConstraint.fromReason(reason);
+        return SetBoundsNogoodConstraint.explainViaGroundOrBounds(getVariables(), domains);
     }
 }

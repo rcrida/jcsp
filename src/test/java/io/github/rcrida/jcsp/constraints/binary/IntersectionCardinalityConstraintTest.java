@@ -2,6 +2,7 @@ package io.github.rcrida.jcsp.constraints.binary;
 
 import io.github.rcrida.jcsp.ConstraintSatisfactionProblem;
 import io.github.rcrida.jcsp.constraints.Operator;
+import io.github.rcrida.jcsp.constraints.nary.SetBoundsNogoodConstraint;
 import io.github.rcrida.jcsp.domains.Domain;
 import io.github.rcrida.jcsp.domains.DomainObjectSet;
 import io.github.rcrida.jcsp.domains.SetIntervalDomain;
@@ -144,10 +145,11 @@ public class IntersectionCardinalityConstraintTest {
         assertThat(reason).isPresent();
     }
 
-    @Test void explainInfeasible_notBothSingleton_returnsEmpty() {
+    @Test void explainInfeasible_notBothSingleton_returnsSetBoundsNogood() {
         var domains = sets(Set.of(1), Set.of(1, 2), 0, 2, Set.of(), Set.of(1, 2, 3), 0, 3);
         var reason = IntersectionCardinalityConstraint.of(L, R, Operator.LEQ, 0).explainInfeasible(domains);
-        assertThat(reason).isEmpty();
+        assertThat(reason).isPresent();
+        assertThat(reason.get()).isInstanceOf(SetBoundsNogoodConstraint.class);
     }
 
     // --- end-to-end: via the CSP.Builder helper and the full solver chain ---
