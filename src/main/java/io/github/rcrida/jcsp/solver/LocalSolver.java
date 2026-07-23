@@ -28,6 +28,7 @@ import io.github.rcrida.jcsp.constraints.nary.MaxConstraint;
 import io.github.rcrida.jcsp.constraints.nary.MinConstraint;
 import io.github.rcrida.jcsp.constraints.nary.NaryElementConstraint;
 import io.github.rcrida.jcsp.constraints.nary.NValueConstraint;
+import io.github.rcrida.jcsp.constraints.nary.PartitionConstraint;
 import io.github.rcrida.jcsp.constraints.nary.ProductConstraint;
 import io.github.rcrida.jcsp.constraints.nary.NaryTuplesConstraint;
 import io.github.rcrida.jcsp.constraints.nary.RegularConstraint;
@@ -110,7 +111,8 @@ public interface LocalSolver {
                 FixpointConsistency.of(ImplicationConstraint.class),
                 FixpointConsistency.of(SubsetConstraint.class),
                 FixpointConsistency.of(DisjointConstraint.class),
-                FixpointConsistency.of(IntersectionCardinalityConstraint.class)
+                FixpointConsistency.of(IntersectionCardinalityConstraint.class),
+                FixpointConsistency.of(PartitionConstraint.class)
         );
 
         Factory INSTANCE = (maxAttempts, maxSteps, initialAssignmentFactory) -> {

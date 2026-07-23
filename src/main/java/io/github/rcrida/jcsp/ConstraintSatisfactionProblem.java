@@ -51,6 +51,7 @@ import io.github.rcrida.jcsp.constraints.nary.GroundNogoodConstraint;
 import io.github.rcrida.jcsp.constraints.nary.NaryElementConstraint;
 import io.github.rcrida.jcsp.constraints.nary.NValueConstraint;
 import io.github.rcrida.jcsp.constraints.nary.NogoodConstraint;
+import io.github.rcrida.jcsp.constraints.nary.PartitionConstraint;
 import io.github.rcrida.jcsp.constraints.nary.RangeNogoodConstraint;
 import io.github.rcrida.jcsp.constraints.nary.SetBoundsNogoodConstraint;
 import io.github.rcrida.jcsp.constraints.nary.ProductConstraint;
@@ -162,7 +163,7 @@ public class ConstraintSatisfactionProblem {
      */
     private static final Set<Class<? extends Constraint>> SET_COMPATIBLE_CONSTRAINTS =
             Set.of(SubsetConstraint.class, DisjointConstraint.class, IntersectionCardinalityConstraint.class,
-                    GroundNogoodConstraint.class, SetBoundsNogoodConstraint.class);
+                    PartitionConstraint.class, GroundNogoodConstraint.class, SetBoundsNogoodConstraint.class);
 
     Map<Variable<?>, Domain<?>> variableDomains;
     // Included in equals/hashCode (via ConstraintGraph's own, which compares constraints/isCyclic/
@@ -906,6 +907,21 @@ public class ConstraintSatisfactionProblem {
         public <E> ConstraintSatisfactionProblemBuilder intersectionCardinalityConstraint(
                 @NonNull Variable<Set<E>> left, @NonNull Variable<Set<E>> right, @NonNull Operator operator, int bound) {
             return this.constraint(IntersectionCardinalityConstraint.of(left, right, operator, bound));
+        }
+
+        /**
+         * Create an n-ary constraint over set variables requiring {@code parts} to partition
+         * {@code universe}: every element of {@code universe} belongs to exactly one of
+         * {@code parts}. {@code universe} is fixed data, not a variable. Equivalent to MiniZinc's
+         * {@code partition_set(parts, universe)} constraint.
+         *
+         * @param parts the set variables that must jointly partition {@code universe}
+         * @param universe the fixed set every part's elements are drawn from and must cover
+         * @return the builder
+         */
+        public <E> ConstraintSatisfactionProblemBuilder partitionConstraint(
+                @NonNull Set<Variable<Set<E>>> parts, @NonNull Set<E> universe) {
+            return this.constraint(PartitionConstraint.of(parts, universe));
         }
 
         /**

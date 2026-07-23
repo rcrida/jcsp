@@ -35,9 +35,14 @@ import static org.assertj.core.api.Assertions.assertThat;
  * <ul>
  *   <li>fixed group size ({@code card(...) = n_per_group}) — expressed here as the domain's own
  *       cardinality range {@code [N_PER_GROUP, N_PER_GROUP]} rather than a separate constraint;</li>
- *   <li>pairwise-disjoint groups within a round ({@code all_disjoint}) — one {@code
- *       disjointConstraint} per group pair within a round (trivially one per round here, since
- *       this instance has exactly {@code N_GROUPS = 2});</li>
+ *   <li>each round's groups partition the golfer set ({@code all_disjoint} plus implicit full
+ *       coverage in the reference model) — one {@code partitionConstraint(round's groups, GOLFERS)}
+ *       per round, rather than one {@code disjointConstraint} per group pair: with only pairwise
+ *       disjointness and no explicit coverage constraint, this instance's solution count would
+ *       still happen to come out the same (fixed group sizes summing exactly to {@code
+ *       |GOLFERS|} force full coverage as an arithmetic side effect regardless), but {@code
+ *       partitionConstraint} states the actual CSPLib requirement directly rather than relying on
+ *       that coincidence;</li>
  *   <li>"each pair may play together at most once" — the reference model sums, over every
  *       (round, group), an indicator for whether a specific golfer pair is both in that group, and
  *       bounds the total by 1. Provably equivalent here to bounding {@code |Group[r1][g1] ∩
@@ -83,13 +88,9 @@ public class Prob010SocialGolfersTest {
             }
         }
 
-        // Each group in each round has to be disjoint.
+        // Each round's groups partition the golfer set.
         for (int r = 0; r < N_ROUNDS; r++) {
-            for (int g1 = 0; g1 < N_GROUPS; g1++) {
-                for (int g2 = g1 + 1; g2 < N_GROUPS; g2++) {
-                    builder.disjointConstraint(GROUP.get(r).get(g1), GROUP.get(r).get(g2));
-                }
-            }
+            builder.partitionConstraint(Set.copyOf(GROUP.get(r)), GOLFERS);
         }
 
         // Each pair may play together at most once.

@@ -7,6 +7,7 @@ import io.github.rcrida.jcsp.consistency.fixpoint.FixpointConsistency;
 import io.github.rcrida.jcsp.constraints.binary.DisjointConstraint;
 import io.github.rcrida.jcsp.constraints.binary.IntersectionCardinalityConstraint;
 import io.github.rcrida.jcsp.constraints.binary.SubsetConstraint;
+import io.github.rcrida.jcsp.constraints.nary.PartitionConstraint;
 import io.github.rcrida.jcsp.domains.SetBoundedDomain;
 import io.github.rcrida.jcsp.variables.Variable;
 import lombok.EqualsAndHashCode;
@@ -59,7 +60,8 @@ public class SetBranchingSolver extends SolverDecorator {
     private static final List<ConstraintConsistency> REPROPAGATORS = List.of(
             FixpointConsistency.of(SubsetConstraint.class),
             FixpointConsistency.of(DisjointConstraint.class),
-            FixpointConsistency.of(IntersectionCardinalityConstraint.class)
+            FixpointConsistency.of(IntersectionCardinalityConstraint.class),
+            FixpointConsistency.of(PartitionConstraint.class)
     );
 
     @Nullable ToDoubleFunction<Assignment> objective;

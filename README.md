@@ -158,7 +158,7 @@ ConstraintSatisfactionProblem csp = ConstraintSatisfactionProblem.builder()
 Solver.Factory.INSTANCE.createSolver(csp).getSolutions().forEach(System.out::println);
 ```
 
-`SubsetConstraint` (`left ⊆ right`), `DisjointConstraint` (`left ∩ right = ∅`), and `IntersectionCardinalityConstraint` (`|left ∩ right| op bound` — e.g. "these two groups share at most one member across the whole schedule", `IntersectionCardinalityConstraint`'s only propagating operators are `LEQ`/`LT`) are the supported constraint types; any other constraint referencing a `SetIntervalDomain` variable is rejected with `IllegalArgumentException` at build time. `createSolver` auto-detects set variables and runs real backtracking search (`SetBranchingSolver`) — unlike `IntervalDomain`, an arbitrary choice among a set variable's undetermined elements isn't safe to snap to a single value, since set constraints are inherently combinatorial rather than smooth — in both the satisfaction and optimization chains for whatever propagation alone can't fully resolve. See `Prob010SocialGolfersTest` for a complete worked example (CSPLib's Social Golfers problem).
+`SubsetConstraint` (`left ⊆ right`), `DisjointConstraint` (`left ∩ right = ∅`), `IntersectionCardinalityConstraint` (`|left ∩ right| op bound` — e.g. "these two groups share at most one member across the whole schedule", `IntersectionCardinalityConstraint`'s only propagating operators are `LEQ`/`LT`), and `PartitionConstraint` (`parts` jointly partition a fixed `universe` — every element in exactly one part) are the supported constraint types; any other constraint referencing a `SetIntervalDomain` variable is rejected with `IllegalArgumentException` at build time. `createSolver` auto-detects set variables and runs real backtracking search (`SetBranchingSolver`) — unlike `IntervalDomain`, an arbitrary choice among a set variable's undetermined elements isn't safe to snap to a single value, since set constraints are inherently combinatorial rather than smooth — in both the satisfaction and optimization chains for whatever propagation alone can't fully resolve. See `Prob010SocialGolfersTest` for a complete worked example (CSPLib's Social Golfers problem, using `partitionConstraint` for each round's groups).
 
 ### Solver configuration
 
@@ -229,6 +229,7 @@ builder.biPredicateConstraint(v1, v2, biPredicate)          // biPredicate.test(
 builder.subsetConstraint(left, right)                       // left ⊆ right  (set variables — Variable<Set<E>>)
 builder.disjointConstraint(left, right)                     // left ∩ right = ∅  (set variables)
 builder.intersectionCardinalityConstraint(left, right, Operator.LEQ, 1)  // |left ∩ right| <= 1  (set variables; only LEQ/LT propagate)
+builder.partitionConstraint(parts, universe)                 // parts jointly partition universe  (set variables; universe is fixed data)
 ```
 
 **N-ary**
