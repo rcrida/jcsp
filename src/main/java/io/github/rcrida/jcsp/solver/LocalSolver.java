@@ -74,6 +74,20 @@ public interface LocalSolver {
     }
 
     interface Factory {
+        /**
+         * Runs once, before the repair search starts, in the same order as {@link
+         * io.github.rcrida.jcsp.solver.PropagationFixpointSolver#PROPAGATORS} except without the
+         * outer fixpoint loop and without {@code AllDiffConstraint}'s GAC (Régin's algorithm):
+         * that propagator is comparatively expensive (a bipartite-matching computation), and
+         * repair-based search doesn't recoup that cost the way a single one-shot pass through
+         * {@code PropagationFixpointSolver} does — {@code MinConflictsSolver}/{@code
+         * TabuSearchSolver} never re-run propagation mid-search, they just need a decent starting
+         * assignment and cheap per-step conflict scoring, and will happily walk through and repair
+         * an all-different violation on their own rather than needing it ruled out up front.
+         * {@code AtLeastNConstraint}/{@code AtMostNConstraint} are included here specifically
+         * because those boolean constraints have no binary decomposition for AC3 to lean on
+         * otherwise, so this is their only source of propagation in the local-search chain.
+         */
         List<ConstraintConsistency> PREPROCESSORS = List.of(
                 NodeConsistency.INSTANCE,
                 FixpointConsistency.of(UnaryComparatorConstraint.class),
