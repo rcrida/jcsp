@@ -82,7 +82,7 @@ public class LexConstraint<T extends Comparable<T>> extends NaryConstraint imple
      * for {@link Operator#GEQ}/{@link Operator#GT} the pair's roles are swapped so it's always
      * {@code lesser <op> greater}. Empty when every position is forced equal.
      */
-    private record UndecidedPosition<T>(Variable<T> lesser, Variable<T> greater, boolean strictHere) {}
+    private record UndecidedPosition<T>(int index, Variable<T> lesser, Variable<T> greater, boolean strictHere) {}
 
     @SuppressWarnings("unchecked")
     private Optional<UndecidedPosition<T>> firstUndecidedPosition(Map<Variable<?>, Domain<?>> domains,
@@ -100,7 +100,7 @@ public class LexConstraint<T extends Comparable<T>> extends NaryConstraint imple
             }
 
             boolean strictHere = strict && i == variablePairs.size() - 1;
-            return Optional.of(new UndecidedPosition<>(lesser, greater, strictHere));
+            return Optional.of(new UndecidedPosition<>(i, lesser, greater, strictHere));
         }
         return Optional.empty();
     }
@@ -154,7 +154,13 @@ public class LexConstraint<T extends Comparable<T>> extends NaryConstraint imple
      *       jointly — neither alone proves the position fails, since a wider domain on the omitted
      *       side could still satisfy the ordering. Both must be singleton before citing either,
      *       via {@link Propagatable#allSingletonReason} — the same lesson as
-     *       {@link DiffnConstraint}'s joint mandatory-overlap condition.</li>
+     *       {@link DiffnConstraint}'s joint mandatory-overlap condition. This alone is not a sound
+     *       standalone nogood once the undecided position found is beyond index 0, though: reaching
+     *       position {@code i} at all depends on every earlier pair {@code 0..i-1} already being
+     *       forced equal (that's the scan's own {@code continue} condition) — an earlier pair
+     *       differing instead would settle the whole comparison there, regardless of position
+     *       {@code i}'s values, so that precondition must be part of the citation too. Every pair
+     *       from {@code 0} through {@code i} inclusive is cited, not just pair {@code i}.</li>
      *   <li><b>Every position forced equal</b>: reaching the final {@code 0 <op> 0} check requires
      *       every position's pair to already be singleton-and-equal (that is the loop's own
      *       {@code continue} condition), so citing every variable across every position is always
@@ -190,7 +196,10 @@ public class LexConstraint<T extends Comparable<T>> extends NaryConstraint imple
                 ? lesserMin.compareTo(greaterMax) >= 0
                 : lesserMin.compareTo(greaterMax) > 0;
         if (!infeasible) return Optional.empty(); // propagate() would narrow, not fail, at this position
-        return GroundNogoodConstraint.fromReason(Propagatable.allSingletonReason(List.of(p.lesser(), p.greater()), domains));
+        List<Variable<T>> reasonVars = variablePairs.subList(0, p.index() + 1).stream()
+                .flatMap(pair -> Stream.of(pair.left(), pair.right()))
+                .toList();
+        return GroundNogoodConstraint.fromReason(Propagatable.allSingletonReason(reasonVars, domains));
     }
 
     @SuppressWarnings("unchecked")

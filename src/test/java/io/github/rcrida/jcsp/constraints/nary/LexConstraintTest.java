@@ -356,15 +356,20 @@ public class LexConstraintTest {
     }
 
     @Test
-    void explainInfeasible_forcedEqualThenInfeasible_skipsToNextPosition() {
+    void explainInfeasible_forcedEqualThenInfeasible_citesForcedEqualPositionToo() {
         // [x1,x2] <= [y1,y2]: position 0 forced equal (x1=y1=2, both singleton) → skipped via
         // continue; position 1 (last, non-strict) has x2={5}, y2={3}, both singleton, wrong order.
+        // The reason must cite position 0's pair too, not just position 1's: reaching position 1
+        // at all depends on position 0 already being forced equal -- a branch where x1 != y1
+        // instead would settle the whole comparison there regardless of x2/y2, so citing only
+        // (x2, y2) would be an unsound, reusable-in-the-wrong-context nogood.
         var c = LexConstraint.of(List.of(x1, x2), Operator.LEQ, List.of(y1, y2));
         var domains = Map.<Variable<?>, Domain<?>>of(
                 x1, IntRangeDomain.of(2, 2), y1, IntRangeDomain.of(2, 2),
                 x2, IntRangeDomain.of(5, 5), y2, IntRangeDomain.of(3, 3));
         assertThat(c.propagate(domains)).isEmpty();
-        assertThat(c.explainInfeasible(domains)).contains(GroundNogoodConstraint.of(Map.of(x2, 5, y2, 3)));
+        assertThat(c.explainInfeasible(domains)).contains(
+                GroundNogoodConstraint.of(Map.of(x1, 2, y1, 2, x2, 5, y2, 3)));
     }
 
     @Test
