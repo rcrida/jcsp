@@ -23,6 +23,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.function.ToDoubleFunction;
+import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 /**
@@ -33,6 +34,18 @@ import java.util.stream.Stream;
  *
  * <p>{@link #getSolutions(ConstraintSatisfactionProblem)} explores all feasible points via
  * bisection and returns them in improving objective order (each strictly better than the previous).
+ *
+ * <p>{@link #allFeasible} threads a shared {@code incumbent} through its recursion and prunes a
+ * subtree immediately once {@code objective} evaluated against a <em>partial</em> {@link Assignment}
+ * of whichever variables are currently singleton (see {@link #partialAssignmentLowerBound}) already
+ * meets or exceeds it -- mirroring {@link BranchAndBoundSolver#search}'s own
+ * {@code objective.applyAsDouble(assignment) >= incumbent[0]} check, and relying on the same
+ * pre-existing contract ({@link Solver.Factory#createSolver(ConstraintSatisfactionProblem,
+ * ToDoubleFunction)}'s objective "must return a lower bound on the cost of any completion of a
+ * partial assignment"). Without this, several {@code BoundedDomain} variables whose tight bounds
+ * depend on other, still-unresolved discrete variables force every bisection split to explore both
+ * halves regardless of cost, with every leaf re-running the entire inner discrete search from
+ * scratch.
  */
 @Slf4j
 @SuperBuilder
@@ -55,15 +68,7 @@ public class BisectionConditioningSolver extends SolverDecorator {
         if (target == null) {
             return getInner().getSolutions(csp);
         }
-        double[] incumbent = {Double.MAX_VALUE};
-        return allFeasible(csp).filter(candidate -> {
-            double cost = objective.applyAsDouble(candidate);
-            if (cost < incumbent[0]) {
-                incumbent[0] = cost;
-                return true;
-            }
-            return false;
-        });
+        return allFeasible(csp, new double[]{Double.MAX_VALUE});
     }
 
     /**
@@ -77,12 +82,23 @@ public class BisectionConditioningSolver extends SolverDecorator {
         return getSolutions(csp).findFirst();
     }
 
-    private Stream<Assignment> allFeasible(@NonNull ConstraintSatisfactionProblem csp) {
+    private Stream<Assignment> allFeasible(@NonNull ConstraintSatisfactionProblem csp, double[] incumbent) {
+        if (partialAssignmentLowerBound(csp) >= incumbent[0]) {
+            return Stream.empty();
+        }
         val target = findWidestBounded(csp);
         if (target == null) {
             // All bounded domains are singletons. If fully determined, validate and return the
             // forced assignment; otherwise delegate remaining discrete variables to inner.
-            return csp.isFullyDetermined() ? forcedSolution(csp).stream() : getInner().getSolutions(csp);
+            return (csp.isFullyDetermined() ? forcedSolution(csp).stream() : getInner().getSolutions(csp))
+                    .filter(candidate -> {
+                        double cost = objective.applyAsDouble(candidate);
+                        if (cost < incumbent[0]) {
+                            incumbent[0] = cost;
+                            return true;
+                        }
+                        return false;
+                    });
         }
         val bd = (BoundedDomain<?>) csp.getDomain(target);
         double lo = bd.getMin().doubleValue();
@@ -90,13 +106,26 @@ public class BisectionConditioningSolver extends SolverDecorator {
         double mid = (lo + hi) / 2.0;
         if (hi - lo <= epsilon) {
             log.debug("Snapping {} to {}", target, mid);
-            return allFeasible(withSnapped(csp, target, mid));
+            return allFeasible(withSnapped(csp, target, mid), incumbent);
         }
         log.debug("Bisecting {} at {} in [{}, {}]", target, mid, lo, hi);
         return Stream.concat(
-                narrow(csp, target, lo, mid).stream().flatMap(this::allFeasible),
-                narrow(csp, target, mid, hi).stream().flatMap(this::allFeasible)
+                narrow(csp, target, lo, mid).stream().flatMap(c -> allFeasible(c, incumbent)),
+                narrow(csp, target, mid, hi).stream().flatMap(c -> allFeasible(c, incumbent))
         );
+    }
+
+    /**
+     * A valid lower bound on any completion of {@code csp}: {@link #objective} evaluated against a
+     * partial {@link Assignment} of only the variables that are currently singleton, relying on the
+     * same "unassigned contributes nothing yet" convention {@link BranchAndBoundSolver} already
+     * requires of every optimization objective in this codebase.
+     */
+    private double partialAssignmentLowerBound(ConstraintSatisfactionProblem csp) {
+        val values = csp.getVariableDomains().entrySet().stream()
+                .filter(e -> e.getValue().isSingleton())
+                .collect(Collectors.toMap(Map.Entry::getKey, e -> e.getValue().singleValue().orElseThrow()));
+        return objective.applyAsDouble(Assignment.of(values));
     }
 
     @Nullable

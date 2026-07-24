@@ -4,6 +4,7 @@ import io.github.rcrida.jcsp.ConstraintSatisfactionProblem;
 import io.github.rcrida.jcsp.assignments.Assignment;
 import io.github.rcrida.jcsp.domains.Domain;
 import io.github.rcrida.jcsp.domains.DomainObjectSet;
+import io.github.rcrida.jcsp.domains.IntervalDomain;
 import io.github.rcrida.jcsp.variables.Variable;
 import org.junit.jupiter.api.Test;
 
@@ -107,5 +108,20 @@ class LeastConstrainingValueOrdererTest {
 
         // Verify (Values remain ordered based solely on constraints for unassigned neighbors)
         assertThat(orderer.order(csp, A, assignment).toList()).isEqualTo(List.of(1, 2, 3));
+    }
+
+    @Test
+    void singletonBoundedDomain_returnsItsSoleValueWithoutEnumeratingAsDiscrete() {
+        // A BoundedDomain reaches value ordering when BranchAndBoundSolver's variable selector picks
+        // a variable that BisectionConditioningSolver has already snapped to a point -- it's never a
+        // DiscreteDomain, so it can't be enumerated the normal way.
+        Variable<Double> x = FACTORY.create("x");
+        ConstraintSatisfactionProblem csp = ConstraintSatisfactionProblem.builder()
+                .variableDomain(x, IntervalDomain.of(5.0, 5.0))
+                .build();
+
+        LeastConstrainingValueOrderer orderer = LeastConstrainingValueOrderer.INSTANCE;
+
+        assertThat(orderer.order(csp, x, Assignment.of(Map.of())).toList()).isEqualTo(List.of(5.0));
     }
 }

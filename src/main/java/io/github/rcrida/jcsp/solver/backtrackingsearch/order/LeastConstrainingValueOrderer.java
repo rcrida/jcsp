@@ -5,6 +5,7 @@ import io.github.rcrida.jcsp.ConstraintSatisfactionProblem;
 import io.github.rcrida.jcsp.assignments.Assignment;
 import io.github.rcrida.jcsp.constraints.binary.BinaryConstraint;
 import io.github.rcrida.jcsp.domains.DiscreteDomain;
+import io.github.rcrida.jcsp.domains.Domain;
 import io.github.rcrida.jcsp.variables.Variable;
 import org.jspecify.annotations.NonNull;
 
@@ -34,6 +35,15 @@ public class LeastConstrainingValueOrderer implements DomainValuesOrderer {
 
     @Override
     public Stream<?> order(@NonNull ConstraintSatisfactionProblem csp, @NonNull Variable<?> variable, @NonNull Assignment assignment) {
+        Domain<?> domain = csp.getVariableDomains().get(variable);
+        if (!(domain instanceof DiscreteDomain<?> discrete)) {
+            // A BoundedDomain reaching value ordering (e.g. BranchAndBoundSolver's
+            // MinimumRemainingValuesSelector picking an already-snapped IntervalDomain left behind by
+            // BisectionConditioningSolver) must already be singleton -- same invariant, same fallback,
+            // as AssignmentDomain#singleVariableAssignments.
+            return Stream.of(domain.singleValue().orElseThrow());
+        }
+
         @SuppressWarnings("unchecked")
         val binaryConstraints = (java.util.List<BinaryConstraint<?, ?>>) (java.util.List<?>) csp.getConstraints().stream()
                 .filter(BinaryConstraint.class::isInstance)
@@ -41,7 +51,7 @@ public class LeastConstrainingValueOrderer implements DomainValuesOrderer {
                 .filter(constraint -> constraint.getLeft().equals(variable) || constraint.getRight().equals(variable))
                 .toList();
 
-        return ((DiscreteDomain<?>) csp.getVariableDomains().get(variable)).stream()
+        return discrete.stream()
                 .sorted(Comparator.comparingLong(value ->
                         countEliminatedValues(csp, assignment, variable, value, binaryConstraints)));
     }

@@ -33,7 +33,11 @@ public class ContinuousOptimizationTest {
                 .variableDomain(y, IntervalDomain.of(0.0, 10.0))
                 .sumConstraint(Set.of(x, y), Operator.EQ, 7.0)
                 .build();
-        var solution = Solver.Factory.INSTANCE.createSolver(csp, a -> Math.pow((Double) a.getValue(x).orElseThrow() - 2.0, 2))
+        // (x-2)^2 is always >= 0, so 0.0 is a valid lower bound for a not-yet-resolved x -- the same
+        // "unassigned contributes nothing yet" convention every optimization objective in this
+        // codebase must follow (see BranchAndBoundSolver's Javadoc).
+        var solution = Solver.Factory.INSTANCE.createSolver(csp,
+                        a -> a.getValue(x).map(v -> Math.pow((Double) v - 2.0, 2)).orElse(0.0))
                 .getSolution();
         assertThat(solution).isPresent();
         assertThat((Double) solution.get().getValue(x).orElseThrow()).isCloseTo(2.0, within(0.01));
