@@ -207,7 +207,7 @@ public class AC3 implements ConstraintConsistency {
         if (!(domains.get(arc.getFrom()) instanceof DiscreteDomain<?> D_i)) return Optional.empty();
         if (!(domains.get(arc.getTo()) instanceof DiscreteDomain<?> D_j)) return Optional.empty();
         val valuesToDelete = D_i.stream()
-                .filter(x -> D_j.stream().noneMatch(y -> constraint.isSatisfiedBy(arc.toAssignment(x, y))))
+                .filter(x -> D_j.stream().noneMatch(y -> constraint.isSatisfiedByArcValues(arc, x, y)))
                 .toList();
         if (valuesToDelete.isEmpty()) return Optional.empty();
         val revisedBuilder = D_i.toBuilder();

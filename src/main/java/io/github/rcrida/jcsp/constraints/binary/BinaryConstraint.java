@@ -40,6 +40,24 @@ public abstract class BinaryConstraint<L, R> implements Constraint {
 
     public abstract boolean isSatisfiedBy(@NonNull L leftValue, @NonNull R rightValue);
 
+    /**
+     * Checks satisfaction directly from two raw values keyed by {@code arc}'s own endpoints,
+     * without constructing an {@link Assignment} — {@code arc} is assumed to be one of this
+     * constraint's own two arcs (see {@link #getArcs}), i.e. {@code {arc.getFrom(), arc.getTo()}
+     * == {left, right}} in some order, so which of {@code fromValue}/{@code toValue} is the left
+     * vs. right value can be determined directly rather than needing an {@code Assignment} to look
+     * them up by variable. Exists for {@link io.github.rcrida.jcsp.consistency.arc.AC3#revise},
+     * which checks every value pair in a domain product during arc revision — profiling found
+     * building a fresh {@code Assignment} (with its own {@code @Singular} map and a new {@code
+     * Statistics} instance) per pair to be the dominant cost there.
+     */
+    @SuppressWarnings("unchecked")
+    public boolean isSatisfiedByArcValues(@NonNull Arc arc, @NonNull Object fromValue, @NonNull Object toValue) {
+        return arc.getFrom().equals(left)
+                ? isSatisfiedBy((L) fromValue, (R) toValue)
+                : isSatisfiedBy((L) toValue, (R) fromValue);
+    }
+
     @Override
     public Set<Variable<?>> getVariables() {
         return Set.of(left, right);

@@ -29,4 +29,11 @@ public class ArcTest {
     void testToString() {
         assertThat(arc).asString().isEqualTo("(from -> to)");
     }
+
+    @Test
+    void toAssignment_mapsFromAndToValues() {
+        var assignment = arc.toAssignment("fromValue", "toValue");
+        assertThat(assignment.getValue(from)).contains("fromValue");
+        assertThat(assignment.getValue(to)).contains("toValue");
+    }
 }
