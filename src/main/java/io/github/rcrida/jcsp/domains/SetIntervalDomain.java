@@ -3,12 +3,15 @@ package io.github.rcrida.jcsp.domains;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 
+import java.util.AbstractSet;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashSet;
+import java.util.Iterator;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
+import java.util.SortedSet;
 import java.util.TreeSet;
 
 /**
@@ -78,10 +81,69 @@ public record SetIntervalDomain<E>(Set<E> lowerBound, Set<E> upperBound, int min
         upperBound = sorted(tightenedUpper, comparator);
     }
 
+    /**
+     * Skips the re-sort when {@code elements} is already a {@link TrustedSortedSet} ordered by an
+     * equal {@code comparator} — the common case for whichever bound a narrowing call <em>didn't</em>
+     * touch (e.g. {@link #withLowerBound} passes {@code upperBound} straight through unchanged).
+     * Deliberately checks for {@code TrustedSortedSet} specifically, not the generic {@link
+     * SortedSet} interface: a caller-supplied {@code Set} that merely happens to already be sorted
+     * (e.g. an external raw {@code TreeSet}) would pass a generic {@code instanceof SortedSet}
+     * check too, but returning it by reference — instead of the defensive copy every other path
+     * here takes — would alias that caller's own, still-mutable object into this otherwise-immutable
+     * domain; a later external mutation would then silently corrupt it. {@code TrustedSortedSet}'s
+     * constructor is private to this class, so no such alias can ever occur: an instance can only
+     * exist if this method itself already produced it — see that class's own Javadoc for the
+     * incident this reasoning comes from (and for why {@code TrustedSortedSet} deliberately does
+     * <em>not</em> implement {@link SortedSet}, a second, independent incident from the same
+     * optimization attempt).
+     */
     private static <E> Set<E> sorted(Set<E> elements, Comparator<E> comparator) {
+        if (elements instanceof TrustedSortedSet<E> trusted && Objects.equals(trusted.sortedBy, comparator)) {
+            return trusted;
+        }
         var tree = new TreeSet<>(comparator);
         tree.addAll(elements);
-        return Collections.unmodifiableSet(tree);
+        return new TrustedSortedSet<>(tree, comparator);
+    }
+
+    /**
+     * Marks a {@code Set} as already produced by {@link #sorted}, so a later {@link #sorted} call
+     * can safely return it by reference instead of re-sorting. Only {@link #sorted} can ever
+     * construct one (private constructor, private class), so {@code instanceof TrustedSortedSet}
+     * is a sound way to distinguish "genuinely our own prior output" from an external caller's own
+     * {@link Set} that merely happens to already be sorted the same way — the distinction an
+     * earlier, reverted version of this optimization got wrong: it checked the generic {@link
+     * SortedSet} interface instead, which let an externally-supplied, still-mutable {@code TreeSet}
+     * get aliased into this otherwise-immutable domain instead of defensively copied, so a later
+     * external mutation silently corrupted it (caught by {@code mvn clean verify} via a "passes in
+     * isolation, fails as part of the full test class" signature — the tell for shared mutable
+     * state).
+     * <p>
+     * Deliberately implements {@link Set} only, <em>not</em> {@link SortedSet}, even though it's
+     * backed by a real, sorted {@link TreeSet} internally: AssertJ's {@code isEqualTo} switches to
+     * an order-sensitive, element-by-element comparison the moment the actual value implements
+     * {@code SortedSet} (rather than the order-independent {@link Set#equals} used for a plain
+     * {@code Set}), and {@code Set.of(...)}'s own iteration order is randomised per JVM launch — so
+     * an early version of this class that did implement {@code SortedSet} passed or failed
+     * genuinely at random depending on whether that random order happened to match ascending order
+     * that particular run (reproduced directly against AssertJ, no Maven/JaCoCo involved, ruling
+     * those out first). Iteration order is still deterministically sorted (via the internal
+     * {@link TreeSet}), preserving this class's own determinism guarantee for callers like {@link
+     * io.github.rcrida.jcsp.solver.SetBranchingSolver} — only the {@code SortedSet} <em>interface</em>
+     * (and the special handling library code gives it) is withheld.
+     */
+    private static final class TrustedSortedSet<E> extends AbstractSet<E> {
+        private final Set<E> delegate;
+        private final Comparator<E> sortedBy;
+
+        private TrustedSortedSet(TreeSet<E> backing, Comparator<E> sortedBy) {
+            this.delegate = Collections.unmodifiableSet(backing);
+            this.sortedBy = sortedBy;
+        }
+
+        @Override public int size() { return delegate.size(); }
+        @Override public boolean contains(Object o) { return delegate.contains(o); }
+        @Override public Iterator<E> iterator() { return delegate.iterator(); }
     }
 
     /**

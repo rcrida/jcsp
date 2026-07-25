@@ -275,6 +275,16 @@ public class SetIntervalDomainTest {
         assertThat(d.getComparator()).isEqualTo(Comparator.<Integer>reverseOrder());
     }
 
+    @Test
+    void sorted_reSortsWhenReusedBoundHasMismatchedComparator() {
+        // natural.getUpperBound() is already sorted internally (by SetIntervalDomain's own
+        // fast-path-eligible representation), but by natural order -- reusing it directly under a
+        // *different* comparator must still trigger a real re-sort rather than being returned as-is.
+        var natural = SetIntervalDomain.of(Set.of(), Set.of(3, 1, 2), 0, 3);
+        var reOrdered = SetIntervalDomain.of(Set.of(), natural.getUpperBound(), 0, 3, Comparator.<Integer>reverseOrder());
+        assertThat(reOrdered.getUpperBound()).containsExactly(3, 2, 1);
+    }
+
     record Point(int x, int y) {}
 
     @Test
