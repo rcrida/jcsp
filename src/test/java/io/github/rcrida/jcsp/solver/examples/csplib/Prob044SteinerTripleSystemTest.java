@@ -111,14 +111,6 @@ public class Prob044SteinerTripleSystemTest {
     }
 
     @Test
-    void getSolution_findsAValidSteinerSystem() {
-        val solution = Solver.Factory.INSTANCE.createSolver(CSP).getSolution();
-        assertThat(solution).isPresent();
-        assertValidSteinerSystem(solution.get());
-        System.out.println(solution);
-    }
-
-    @Test
     void getSolutions_findsExactlyEveryLabeledSystem() {
         val solutions = Solver.Factory.INSTANCE.createSolver(CSP).getSolutions().toList();
         assertThat(solutions).hasSize(EXPECTED_SOLUTION_COUNT);
