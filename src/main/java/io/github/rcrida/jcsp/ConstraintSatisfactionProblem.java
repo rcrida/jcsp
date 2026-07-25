@@ -92,6 +92,7 @@ import java.util.Queue;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.BiPredicate;
+import java.util.function.Function;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
@@ -442,6 +443,22 @@ public class ConstraintSatisfactionProblem {
      */
     public Set<BinaryConstraint<?, ?>> getAllBinaryConstraints() {
         return constraintGraph.getAllBinaryConstraints();
+    }
+
+    /**
+     * Computes (or returns the previously computed) value cached against this problem's
+     * underlying {@link ConstraintGraph}, keyed by {@code key} — for any propagation algorithm
+     * (e.g. {@code AC3}'s own arc/constraint index) that wants to memoize a derived value keyed
+     * only by this problem's structure. See {@link ConstraintGraph#auxiliaryCache}'s own Javadoc
+     * for why this is keyed per-graph rather than on the calling algorithm's own shared instance.
+     *
+     * @param key a token identifying the cached value's shape (e.g. a {@code Class} literal) —
+     *            not the constraint set itself, so this never pays a {@code hashCode}/{@code
+     *            equals} cost proportional to constraint count
+     * @param compute produces the value on a cache miss, given this problem
+     */
+    public <T> T computeAuxiliaryCacheIfAbsent(@NonNull Object key, @NonNull Function<ConstraintSatisfactionProblem, T> compute) {
+        return constraintGraph.computeAuxiliaryCacheIfAbsent(key, graph -> compute.apply(this));
     }
 
     public Set<Constraint> getConstraints() {

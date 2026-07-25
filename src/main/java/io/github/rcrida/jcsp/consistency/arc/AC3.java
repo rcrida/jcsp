@@ -30,25 +30,43 @@ import java.util.stream.Collectors;
 public class AC3 implements ConstraintConsistency {
     public static final AC3 INSTANCE = new AC3();
 
+    private record ArcIndex(Set<Arc> allArcs, Map<Arc, List<BinaryConstraint<?, ?>>> arcConstraints,
+                             Map<Variable<?>, List<Arc>> arcsByTarget) {}
+
     private AC3() {}
+
+    /**
+     * Memoized via {@link ConstraintSatisfactionProblem#computeAuxiliaryCacheIfAbsent}, keyed per
+     * problem structure rather than on this class's own shared {@link #INSTANCE} — a single cache
+     * slot on the singleton itself would let two different problems solved concurrently (e.g.
+     * independent subproblems) keep evicting each other's entry; see that method's own Javadoc.
+     */
+    private ArcIndex arcIndex(ConstraintSatisfactionProblem problem) {
+        return problem.computeAuxiliaryCacheIfAbsent(ArcIndex.class, this::buildArcIndex);
+    }
+
+    private ArcIndex buildArcIndex(ConstraintSatisfactionProblem problem) {
+        Set<BinaryConstraint<?, ?>> source = problem.getAllBinaryConstraints();
+        Set<Arc> allArcs = source.stream().flatMap(BinaryConstraint::getArcs).collect(Collectors.toUnmodifiableSet());
+        Map<Arc, List<BinaryConstraint<?, ?>>> arcConstraints = source.stream()
+                .flatMap(binaryConstraint -> binaryConstraint.getArcs()
+                        .map(arc -> new AbstractMap.SimpleEntry<>(arc, binaryConstraint)))
+                .collect(Collectors.groupingBy(Map.Entry::getKey, Collectors.mapping(Map.Entry::getValue, Collectors.toUnmodifiableList())));
+        Map<Variable<?>, List<Arc>> arcsByTarget = arcConstraints.keySet().stream()
+                .collect(Collectors.groupingBy(Arc::getTo, Collectors.toUnmodifiableList()));
+        return new ArcIndex(allArcs, arcConstraints, arcsByTarget);
+    }
 
     @Override
     public Optional<ConstraintSatisfactionProblem> apply(ConstraintSatisfactionProblem problem) {
-        val allArcs = problem.getAllBinaryConstraints().stream()
-                .flatMap(BinaryConstraint::getArcs)
-                .collect(Collectors.toSet());
-        val queue = new ArrayDeque<>(allArcs);
+        val queue = new ArrayDeque<>(arcIndex(problem).allArcs());
         return applyQueue(problem, queue);
     }
 
     public Optional<ConstraintSatisfactionProblem> applyQueue(ConstraintSatisfactionProblem problem, Queue<Arc> queue) {
-        val allBinaryConstraints = problem.getAllBinaryConstraints();
-        val arcConstraints = allBinaryConstraints.stream()
-                .flatMap(binaryConstraint -> binaryConstraint.getArcs()
-                        .map(arc -> new AbstractMap.SimpleEntry<>(arc, binaryConstraint)))
-                .collect(Collectors.groupingBy(Map.Entry::getKey, Collectors.mapping(Map.Entry::getValue, Collectors.toList())));
-        val arcsByTarget = arcConstraints.keySet().stream()
-                .collect(Collectors.groupingBy(Arc::getTo));
+        val index = arcIndex(problem);
+        val arcConstraints = index.arcConstraints();
+        val arcsByTarget = index.arcsByTarget();
         val variableDomains = new HashMap<Variable<?>, Domain<?>>(problem.getVariableDomains());
         while (!queue.isEmpty()) {
             val arc = queue.poll();
@@ -80,20 +98,14 @@ public class AC3 implements ConstraintConsistency {
      */
     @Override
     public Optional<NogoodConstraint> explainConflict(ConstraintSatisfactionProblem problem) {
-        val allArcs = problem.getAllBinaryConstraints().stream()
-                .flatMap(BinaryConstraint::getArcs)
-                .collect(Collectors.toSet());
-        ConsistencyResult result = applyQueueWithReason(problem, new ArrayDeque<>(allArcs));
+        ConsistencyResult result = applyQueueWithReason(problem, new ArrayDeque<>(arcIndex(problem).allArcs()));
         return result.isInfeasible() ? Optional.ofNullable(result.reason()) : Optional.empty();
     }
 
     @Override
     public ConsistencyResult applyWithReason(ConstraintSatisfactionProblem problem,
                                              @Nullable Set<Variable<?>> changedSinceLastRun) {
-        val allArcs = problem.getAllBinaryConstraints().stream()
-                .flatMap(BinaryConstraint::getArcs)
-                .collect(Collectors.toSet());
-        return applyQueueWithReason(problem, new ArrayDeque<>(allArcs));
+        return applyQueueWithReason(problem, new ArrayDeque<>(arcIndex(problem).allArcs()));
     }
 
     /**
@@ -123,13 +135,9 @@ public class AC3 implements ConstraintConsistency {
      * need separate justification not attempted in this pass.
      */
     public ConsistencyResult applyQueueWithReason(ConstraintSatisfactionProblem problem, Queue<Arc> queue) {
-        val allBinaryConstraints = problem.getAllBinaryConstraints();
-        val arcConstraints = allBinaryConstraints.stream()
-                .flatMap(binaryConstraint -> binaryConstraint.getArcs()
-                        .map(arc -> new AbstractMap.SimpleEntry<>(arc, binaryConstraint)))
-                .collect(Collectors.groupingBy(Map.Entry::getKey, Collectors.mapping(Map.Entry::getValue, Collectors.toList())));
-        val arcsByTarget = arcConstraints.keySet().stream()
-                .collect(Collectors.groupingBy(Arc::getTo));
+        val index = arcIndex(problem);
+        val arcConstraints = index.arcConstraints();
+        val arcsByTarget = index.arcsByTarget();
         val variableDomains = new HashMap<Variable<?>, Domain<?>>(problem.getVariableDomains());
         while (!queue.isEmpty()) {
             val arc = queue.poll();
@@ -155,9 +163,7 @@ public class AC3 implements ConstraintConsistency {
     }
 
     public Optional<ConstraintSatisfactionProblem> revise(ConstraintSatisfactionProblem problem, Arc arc) {
-        val arcConstraints = problem.getAllBinaryConstraints().stream()
-                .filter(bc -> bc.getArcs().anyMatch(arc::equals))
-                .toList();
+        val arcConstraints = arcIndex(problem).arcConstraints().getOrDefault(arc, List.of());
         val variableDomains = new HashMap<Variable<?>, Domain<?>>(problem.getVariableDomains());
         for (BinaryConstraint<?, ?> binaryConstraint : arcConstraints) {
             val optionalRevisedD = revise(variableDomains, arc, binaryConstraint);

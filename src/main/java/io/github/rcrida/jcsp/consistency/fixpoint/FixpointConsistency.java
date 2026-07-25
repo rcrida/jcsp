@@ -32,13 +32,6 @@ public final class FixpointConsistency implements ConstraintConsistency {
     private static final Logger log = LoggerFactory.getLogger(FixpointConsistency.class);
 
     private final Class<? extends Propagatable> constraintType;
-    // Mutable-state-inside-otherwise-immutable-instance cache, same pattern as NogoodStore's
-    // snapshot cache and ConstraintSatisfactionProblem's nogood-merge cache: remembers the most
-    // recent (source constraint Set reference, filtered-by-type result) pair so that repeated
-    // calls against the same csp.getConstraints() reference -- the common case across a whole
-    // branch-and-propagate recursion, since only domains change between calls, not the structural
-    // constraint set -- skip re-filtering the entire constraint set on every round of every node.
-    private final AtomicReference<FilterCache> filterCache = new AtomicReference<>();
 
     private record FilterCache(Set<Constraint> source, List<Propagatable> filtered) {}
 
@@ -54,17 +47,29 @@ public final class FixpointConsistency implements ConstraintConsistency {
      * Filters {@code csp.getConstraints()} to this instance's {@link #constraintType}, reusing the
      * last computed result when the incoming constraint {@link Set} is the exact same reference as
      * last time (a cheap identity check — always correct on a miss, since it just falls back to a
-     * fresh filter).
+     * fresh filter). Note {@code csp.getConstraints()}, unlike {@code getAllBinaryConstraints()},
+     * changes reference whenever a nogood is learned, not just when the structural constraint set
+     * changes — this instance's own cache holder is keyed per {@link ConstraintSatisfactionProblem}
+     * structure (via {@link ConstraintSatisfactionProblem#computeAuxiliaryCacheIfAbsent}, on {@link
+     * #constraintType} — every {@code FixpointConsistency} in the solver chains targets an ordinary
+     * structural constraint type, never a {@code NogoodConstraint} subtype, since those are handled
+     * separately by {@code NogoodFixpointConsistency}, so this filtered result never actually
+     * changes as nogoods accumulate in practice — but the reference-equality check below is what
+     * makes that a correctness guarantee rather than an assumption), not on this instance itself:
+     * a single cache slot shared across every {@link ConstraintSatisfactionProblem} solved by the
+     * same shared {@code PROPAGATORS}-list instance would let two different problems solved
+     * concurrently (e.g. independent subproblems) keep evicting each other's entry.
      */
     @SuppressWarnings({"unchecked", "rawtypes"})
     private List<Propagatable> filteredConstraints(ConstraintSatisfactionProblem csp) {
+        AtomicReference<FilterCache> holder = csp.computeAuxiliaryCacheIfAbsent(constraintType, ignored -> new AtomicReference<>());
         Set<Constraint> source = csp.getConstraints();
-        FilterCache cached = filterCache.get();
+        FilterCache cached = holder.get();
         if (cached != null && cached.source() == source) {
             return cached.filtered();
         }
         List<Propagatable> filtered = (List) source.stream().filter(constraintType::isInstance).toList();
-        filterCache.set(new FilterCache(source, filtered));
+        holder.set(new FilterCache(source, filtered));
         return filtered;
     }
 
