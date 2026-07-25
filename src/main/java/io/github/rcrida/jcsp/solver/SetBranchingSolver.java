@@ -2,12 +2,6 @@ package io.github.rcrida.jcsp.solver;
 
 import io.github.rcrida.jcsp.ConstraintSatisfactionProblem;
 import io.github.rcrida.jcsp.assignments.Assignment;
-import io.github.rcrida.jcsp.consistency.ConstraintConsistency;
-import io.github.rcrida.jcsp.consistency.fixpoint.FixpointConsistency;
-import io.github.rcrida.jcsp.constraints.binary.DisjointConstraint;
-import io.github.rcrida.jcsp.constraints.binary.IntersectionCardinalityConstraint;
-import io.github.rcrida.jcsp.constraints.binary.SubsetConstraint;
-import io.github.rcrida.jcsp.constraints.nary.PartitionConstraint;
 import io.github.rcrida.jcsp.domains.SetBoundedDomain;
 import io.github.rcrida.jcsp.variables.Variable;
 import lombok.EqualsAndHashCode;
@@ -19,7 +13,6 @@ import org.jspecify.annotations.Nullable;
 
 import java.util.Comparator;
 import java.util.HashSet;
-import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
@@ -56,13 +49,6 @@ import java.util.stream.Stream;
 @SuperBuilder
 @EqualsAndHashCode(callSuper = true)
 public class SetBranchingSolver extends SolverDecorator {
-
-    private static final List<ConstraintConsistency> REPROPAGATORS = List.of(
-            FixpointConsistency.of(SubsetConstraint.class),
-            FixpointConsistency.of(DisjointConstraint.class),
-            FixpointConsistency.of(IntersectionCardinalityConstraint.class),
-            FixpointConsistency.of(PartitionConstraint.class)
-    );
 
     @Nullable ToDoubleFunction<Assignment> objective;
 
@@ -147,7 +133,7 @@ public class SetBranchingSolver extends SolverDecorator {
     private static Optional<ConstraintSatisfactionProblem> forceIn(ConstraintSatisfactionProblem csp, Variable target,
                                                                      SetBoundedDomain domain, Object element) {
         SetBoundedDomain narrowed = domain.withLowerBound(Set.of(element));
-        return repropagate(csp.toBuilder().variableDomainEntry(target, narrowed).build());
+        return repropagate(csp.withDomain(target, narrowed));
     }
 
     /** Never produces an empty domain either, for the symmetric reason {@link #forceIn} doesn't. */
@@ -157,29 +143,22 @@ public class SetBranchingSolver extends SolverDecorator {
         Set restricted = new HashSet<>(domain.getUpperBound());
         restricted.remove(element);
         SetBoundedDomain narrowed = domain.withUpperBound(restricted);
-        return repropagate(csp.toBuilder().variableDomainEntry(target, narrowed).build());
+        return repropagate(csp.withDomain(target, narrowed));
     }
 
+    /**
+     * Delegates to {@link PropagationFixpointSolver#applyFixpoint(ConstraintSatisfactionProblem)}
+     * so that every constraint referencing a set variable — not just {@link
+     * io.github.rcrida.jcsp.constraints.binary.SubsetConstraint}/{@link
+     * io.github.rcrida.jcsp.constraints.binary.DisjointConstraint}/{@link
+     * io.github.rcrida.jcsp.constraints.binary.IntersectionCardinalityConstraint}/{@link
+     * io.github.rcrida.jcsp.constraints.nary.PartitionConstraint} — gets to prune a branch as soon
+     * as it's narrowed, including one only reached via {@link
+     * io.github.rcrida.jcsp.constraints.nary.ReifiedConstraint} or a {@link
+     * io.github.rcrida.jcsp.constraints.nary.LexConstraint} symmetry-breaking constraint.
+     */
     private static Optional<ConstraintSatisfactionProblem> repropagate(ConstraintSatisfactionProblem csp) {
-        var current = csp;
-        boolean changed = true;
-        while (changed) {
-            int undeterminedBefore = totalUndetermined(current);
-            for (var propagator : REPROPAGATORS) {
-                var next = propagator.apply(current);
-                if (next.isEmpty()) return Optional.empty();
-                current = next.get();
-            }
-            changed = totalUndetermined(current) < undeterminedBefore;
-        }
-        return Optional.of(current);
-    }
-
-    private static int totalUndetermined(ConstraintSatisfactionProblem csp) {
-        return csp.getVariableDomains().values().stream()
-                .filter(SetBoundedDomain.class::isInstance)
-                .mapToInt(d -> undeterminedCount((SetBoundedDomain<?>) d))
-                .sum();
+        return PropagationFixpointSolver.applyFixpoint(csp);
     }
 
     private static int undeterminedCount(SetBoundedDomain<?> domain) {

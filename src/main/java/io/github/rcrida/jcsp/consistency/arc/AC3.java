@@ -70,7 +70,7 @@ public class AC3 implements ConstraintConsistency {
                 }
             }
         }
-        return Optional.of(problem.toBuilder().variableDomains(variableDomains).build());
+        return Optional.of(problem.withDomains(variableDomains));
     }
 
     /**
@@ -151,7 +151,7 @@ public class AC3 implements ConstraintConsistency {
                 }
             }
         }
-        return ConsistencyResult.feasible(problem.toBuilder().variableDomains(variableDomains).build());
+        return ConsistencyResult.feasible(problem.withDomains(variableDomains));
     }
 
     public Optional<ConstraintSatisfactionProblem> revise(ConstraintSatisfactionProblem problem, Arc arc) {
@@ -170,7 +170,7 @@ public class AC3 implements ConstraintConsistency {
                 variableDomains.put(arc.getFrom(), revisedD);
             }
         }
-        return Optional.of(problem.toBuilder().variableDomains(variableDomains).build());
+        return Optional.of(problem.withDomains(variableDomains));
     }
 
     /**

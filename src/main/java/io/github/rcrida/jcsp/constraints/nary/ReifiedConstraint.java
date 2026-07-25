@@ -94,14 +94,15 @@ public class ReifiedConstraint extends NaryConstraint implements BinaryDecomposa
      *       fully-determined body found satisfied — a direct contradiction.</li>
      *   <li><b>indicator still open</b>: forced to {@code body}'s value once every body variable
      *       is singleton (the reverse link the unary-only {@link BinaryDecomposable} decomposition
-     *       can't express for n-ary bodies), or forced {@code false} if a {@link Propagatable} body
-     *       already reports itself infeasible under the current (possibly partial) domains — sound
-     *       because that means no completion of the current domains satisfies {@code body}, so
-     *       {@code indicator} can't be {@code true}.</li>
+     *       can't express for n-ary bodies); forced {@code true} if a {@link Propagatable} body
+     *       reports {@link Propagatable#isNecessarilySatisfied} under the current (possibly
+     *       partial) domains — sound because no further narrowing can undo it; otherwise forced
+     *       {@code false} if that same body's own {@code propagate} already reports itself
+     *       infeasible — sound because that means no completion of the current domains satisfies
+     *       {@code body}, so {@code indicator} can't be {@code true}.</li>
      * </ul>
-     * The "body proven necessary" case (indicator open, body not yet singleton but provably always
-     * satisfied) has no generic detection and is left untouched, same principle as the "indicator
-     * forced false" case above.
+     * A body not overriding {@link Propagatable#isNecessarilySatisfied} (the default: never) falls
+     * straight through to the infeasibility check, same behaviour as before that method existed.
      */
     @Override
     @SuppressWarnings("unchecked")
@@ -125,8 +126,13 @@ public class ReifiedConstraint extends NaryConstraint implements BinaryDecomposa
         if (bodyFullyDetermined) {
             return Optional.of(Map.of(indicator, forceIndicator(indicatorDomain, bodySatisfied(domains))));
         }
-        if (body instanceof Propagatable propagatableBody && propagatableBody.propagate(domains).isEmpty()) {
-            return Optional.of(Map.of(indicator, forceIndicator(indicatorDomain, false)));
+        if (body instanceof Propagatable propagatableBody) {
+            if (propagatableBody.isNecessarilySatisfied(domains)) {
+                return Optional.of(Map.of(indicator, forceIndicator(indicatorDomain, true)));
+            }
+            if (propagatableBody.propagate(domains).isEmpty()) {
+                return Optional.of(Map.of(indicator, forceIndicator(indicatorDomain, false)));
+            }
         }
         return Optional.of(Map.of());
     }

@@ -55,25 +55,27 @@ public record SetIntervalDomain<E>(Set<E> lowerBound, Set<E> upperBound, int min
      * never wrong, just less informative than it could immediately be — e.g. it's what lets a set
      * variable resolve to a singleton through propagation alone, without needing a dedicated
      * branching search stage.
+     * <p>
+     * The trigger checks and intersection/union above run against the raw, as-passed-in bounds
+     * <em>before</em> either is sorted, so each bound is only ever sorted once — whichever value
+     * (raw or tightened) turns out to be the final one — rather than sorting the raw bound first
+     * and then sorting the tightened replacement again on top when tightening fires. {@code size()}
+     * and set intersection/union are unaffected by a {@code Set}'s internal ordering, so computing
+     * them from the raw bounds gives exactly the same result either way.
      */
     public SetIntervalDomain {
-        lowerBound = sorted(lowerBound, comparator);
-        upperBound = sorted(upperBound, comparator);
-
         Set<E> tightenedUpper = upperBound;
         if (lowerBound.size() == maxCardinality) {
-            Set<E> intersected = new HashSet<>(upperBound);
-            intersected.retainAll(lowerBound);
-            tightenedUpper = sorted(intersected, comparator);
+            tightenedUpper = new HashSet<>(upperBound);
+            tightenedUpper.retainAll(lowerBound);
         }
         Set<E> tightenedLower = lowerBound;
         if (upperBound.size() == minCardinality) {
-            Set<E> unioned = new HashSet<>(lowerBound);
-            unioned.addAll(upperBound);
-            tightenedLower = sorted(unioned, comparator);
+            tightenedLower = new HashSet<>(lowerBound);
+            tightenedLower.addAll(upperBound);
         }
-        upperBound = tightenedUpper;
-        lowerBound = tightenedLower;
+        lowerBound = sorted(tightenedLower, comparator);
+        upperBound = sorted(tightenedUpper, comparator);
     }
 
     private static <E> Set<E> sorted(Set<E> elements, Comparator<E> comparator) {

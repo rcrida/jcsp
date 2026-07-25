@@ -46,9 +46,11 @@ import io.github.rcrida.jcsp.constraints.nary.RegularConstraint;
 import io.github.rcrida.jcsp.constraints.nary.ReifiedConstraint;
 import io.github.rcrida.jcsp.constraints.nary.SumBoundConstraint;
 import io.github.rcrida.jcsp.constraints.nary.SumVariableConstraint;
+import io.github.rcrida.jcsp.constraints.unary.SetMembershipConstraint;
 import io.github.rcrida.jcsp.constraints.unary.UnaryComparatorConstraint;
 import io.github.rcrida.jcsp.domains.BoundedDomain;
 import io.github.rcrida.jcsp.domains.Domain;
+import io.github.rcrida.jcsp.domains.SetBoundedDomain;
 import io.github.rcrida.jcsp.variables.Variable;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
@@ -125,7 +127,8 @@ public class PropagationFixpointSolver extends SolverDecorator {
             FixpointConsistency.of(SubsetConstraint.class),
             FixpointConsistency.of(DisjointConstraint.class),
             FixpointConsistency.of(IntersectionCardinalityConstraint.class),
-            FixpointConsistency.of(PartitionConstraint.class)
+            FixpointConsistency.of(PartitionConstraint.class),
+            FixpointConsistency.of(SetMembershipConstraint.class)
     );
 
     /** When true, snaps non-singleton bounded domains to midpoints after propagation converges. */
@@ -262,14 +265,27 @@ public class PropagationFixpointSolver extends SolverDecorator {
 
     /**
      * Sums each domain's "size" as a progress metric for fixpoint convergence: discrete domains
-     * contribute their element count, while {@link BoundedDomain} (e.g. {@link IntervalDomain})
-     * contribute their width, so interval narrowing is recognised as progress.
+     * contribute their element count, {@link BoundedDomain} (e.g. {@link IntervalDomain})
+     * contributes its width, and {@link SetBoundedDomain} contributes {@code |upperBound| -
+     * |lowerBound|} (its own remaining-slack metric, mirroring {@link SetBranchingSolver}'s
+     * {@code undeterminedCount}) — not {@link Domain#size()}, which for a {@link SetBoundedDomain}
+     * is only ever {@code 1} (singleton) or {@code Integer.MAX_VALUE} (anything else), and so can't
+     * distinguish a domain one bound-narrowing step away from resolved from one untouched by
+     * propagation. That insensitivity went unnoticed while only this class's own {@code
+     * runFixpoint} called {@link #applyFixpoint} (whose few propagation rounds before handing off
+     * to {@link SetBranchingSolver} rarely narrow a set domain part-way without resolving it
+     * outright), but became a real bottleneck once {@link SetBranchingSolver} started calling
+     * {@link #applyFixpoint} directly at every branch step: a round that only narrowed set bounds
+     * without reaching singleton looked identical to one that changed nothing, so the loop exited
+     * a full fixpoint early, leaving weaker propagation per branch and a larger search tree.
      */
     private static double domainSum(@NonNull ConstraintSatisfactionProblem csp) {
         return csp.getVariableDomains().values().stream()
-                .mapToDouble(d -> (d instanceof BoundedDomain<?> bd)
-                        ? bd.getMax().doubleValue() - bd.getMin().doubleValue()
-                        : d.size())
+                .mapToDouble(d -> {
+                    if (d instanceof BoundedDomain<?> bd) return bd.getMax().doubleValue() - bd.getMin().doubleValue();
+                    if (d instanceof SetBoundedDomain<?> sd) return sd.getUpperBound().size() - sd.getLowerBound().size();
+                    return d.size();
+                })
                 .sum();
     }
 }

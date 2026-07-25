@@ -51,6 +51,22 @@ public interface Propagatable {
     }
 
     /**
+     * Reports whether this constraint is already guaranteed satisfied by {@code domains}, even
+     * though they may not yet be fully assigned — the mirror of the infeasibility {@link
+     * #propagate} already signals via {@link Optional#empty()}, but for "definitely true" rather
+     * than "definitely false". The default returns {@code false}: soundly detecting this generally
+     * requires reasoning specific to the constraint (e.g. an element already forced into a set
+     * variable's lower bound, so its membership can't be undone by any further narrowing), which
+     * isn't derivable from {@link #propagate}'s own contract the way infeasibility is. Constraints
+     * for which this is cheap and sound override it; {@code io.github.rcrida.jcsp.constraints.nary
+     * .ReifiedConstraint} uses it to force its indicator {@code true} as soon as the body is
+     * guaranteed to hold, rather than only once every body variable is singleton.
+     */
+    default boolean isNecessarilySatisfied(Map<Variable<?>, Domain<?>> domains) {
+        return false;
+    }
+
+    /**
      * If {@code domain} is a singleton, records its sole value against {@code variable} in
      * {@code reason}. Shared by {@code propagateWithReasons} overrides that attribute an
      * infeasible narrowing to whichever side of a binary constraint already holds a pinned

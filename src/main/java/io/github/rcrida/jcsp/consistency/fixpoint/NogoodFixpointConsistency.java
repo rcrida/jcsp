@@ -4,7 +4,6 @@ import io.github.rcrida.jcsp.ConstraintSatisfactionProblem;
 import io.github.rcrida.jcsp.consistency.ConsistencyResult;
 import io.github.rcrida.jcsp.consistency.ConstraintConsistency;
 import io.github.rcrida.jcsp.constraints.nary.NogoodConstraint;
-import io.github.rcrida.jcsp.domains.Domain;
 import io.github.rcrida.jcsp.variables.Variable;
 import lombok.extern.slf4j.Slf4j;
 import org.jspecify.annotations.Nullable;
@@ -70,23 +69,13 @@ public final class NogoodFixpointConsistency implements ConstraintConsistency {
                 }
                 var updates = result.get();
                 if (!updates.isEmpty()) {
-                    var builder = current.toBuilder();
-                    for (var entry : updates.entrySet()) {
-                        variableDomainEntry(builder, entry.getKey(), entry.getValue());
-                    }
-                    current = builder.build();
+                    current = current.withDomains(updates);
                     changed = true;
                 }
             }
         }
         log.debug("NogoodConstraint: fixpoint reached");
         return Optional.of(current);
-    }
-
-    @SuppressWarnings({"unchecked", "rawtypes"})
-    private static void variableDomainEntry(ConstraintSatisfactionProblem.ConstraintSatisfactionProblemBuilder builder,
-                                            Variable<?> variable, Domain<?> domain) {
-        builder.variableDomainEntry((Variable) variable, (Domain) domain);
     }
 
     /**
@@ -145,11 +134,7 @@ public final class NogoodFixpointConsistency implements ConstraintConsistency {
                 }
                 var updates = result.get();
                 if (!updates.isEmpty()) {
-                    var builder = current.toBuilder();
-                    for (var entry : updates.entrySet()) {
-                        variableDomainEntry(builder, entry.getKey(), entry.getValue());
-                    }
-                    current = builder.build();
+                    current = current.withDomains(updates);
                     changed = true;
                 }
             }

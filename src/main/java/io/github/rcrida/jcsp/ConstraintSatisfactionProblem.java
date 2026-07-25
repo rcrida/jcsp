@@ -70,6 +70,7 @@ import io.github.rcrida.jcsp.constraints.unary.UnaryComparatorConstraint;
 import io.github.rcrida.jcsp.constraints.unary.UnaryNotEqualsConstraint;
 import io.github.rcrida.jcsp.constraints.unary.UnaryPredicateConstraint;
 import io.github.rcrida.jcsp.constraints.unary.UnaryValueConstraint;
+import io.github.rcrida.jcsp.constraints.unary.SetMembershipConstraint;
 import io.github.rcrida.jcsp.domains.BooleanDomain;
 import io.github.rcrida.jcsp.domains.BoundedDomain;
 import io.github.rcrida.jcsp.domains.Domain;
@@ -81,7 +82,9 @@ import org.jspecify.annotations.Nullable;
 
 import java.math.BigInteger;
 import java.util.ArrayDeque;
+import java.util.Collections;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -163,7 +166,8 @@ public class ConstraintSatisfactionProblem {
      */
     private static final Set<Class<? extends Constraint>> SET_COMPATIBLE_CONSTRAINTS =
             Set.of(SubsetConstraint.class, DisjointConstraint.class, IntersectionCardinalityConstraint.class,
-                    PartitionConstraint.class, GroundNogoodConstraint.class, SetBoundsNogoodConstraint.class);
+                    PartitionConstraint.class, GroundNogoodConstraint.class, SetBoundsNogoodConstraint.class,
+                    SetMembershipConstraint.class);
 
     Map<Variable<?>, Domain<?>> variableDomains;
     // Included in equals/hashCode (via ConstraintGraph's own, which compares constraints/isCyclic/
@@ -190,7 +194,18 @@ public class ConstraintSatisfactionProblem {
      * Constructor ensures constraints reference known variables and determines whether graph is cyclic and/or
      * fully connected. When a {@code constraintGraph} is supplied whose constraint set matches {@code constraints}
      * (e.g. via {@link #toBuilder()} during domain-only updates) it is reused directly, avoiding redundant
-     * recomputation of neighbours and binary constraints.
+     * recomputation of neighbours and binary constraints. The match check tries reference equality
+     * ({@code ==}) before falling back to {@code Set#equals} — a cheap, always-safe fast path (a
+     * miss just falls through to the same check as before) that matters because the {@code
+     * @Singular} builder rebuilds {@code constraints} into a fresh {@code Set} on every {@code
+     * build()} regardless of whether its contents actually changed, making the fallback {@code
+     * equals} (a full {@code hashCode}/element comparison — expensive for large constraint sets
+     * with non-trivial {@code hashCode} implementations, e.g. {@code ReifiedConstraint}) run on
+     * every domain-only update unless something avoids it. {@link #withDomain}/{@link #withDomains}
+     * are the intended way to get the reference-equality hit: they call this constructor directly
+     * with {@code constraintGraph.getConstraints()} itself as {@code constraints}, bypassing the
+     * builder's rebuild entirely — found to be the dominant per-node cost in a set-CP branch search
+     * with several reified constraints ({@code Prob044SteinerTripleSystemTest}) via JFR profiling.
      * <p>
      * {@code nogoods} is layered on top of {@code constraints} without ever influencing
      * {@code constraintGraph}: a {@link NogoodConstraint} is neither a {@link BinaryConstraint} nor
@@ -207,7 +222,8 @@ public class ConstraintSatisfactionProblem {
     @Builder
     ConstraintSatisfactionProblem(@Singular("variableDomainEntry") Map<Variable<?>, Domain<?>> variableDomains, @Singular Set<Constraint> constraints, @Nullable ConstraintGraph constraintGraph, @Nullable Set<NogoodConstraint> nogoods, @Nullable AtomicReference<NogoodMergeCache> nogoodMergeCache) {
         this.variableDomains = variableDomains;
-        if (constraintGraph != null && constraintGraph.getConstraints().equals(constraints)) {
+        if (constraintGraph != null
+                && (constraintGraph.getConstraints() == constraints || constraintGraph.getConstraints().equals(constraints))) {
             this.constraintGraph = constraintGraph;
         } else {
             validateConstraints(variableDomains, constraints);
@@ -271,6 +287,37 @@ public class ConstraintSatisfactionProblem {
     public ConstraintSatisfactionProblem withNogoods(@NonNull Set<NogoodConstraint> newNogoods) {
         if (newNogoods == this.nogoods) return this;
         return toBuilder().nogoods(newNogoods).build();
+    }
+
+    /**
+     * Returns this problem with {@code variable}'s domain replaced by {@code domain}, leaving
+     * constraints/{@code constraintGraph}/nogoods untouched. Calls the constructor directly with
+     * {@code constraintGraph.getConstraints()} passed straight through as {@code constraints} —
+     * unlike {@code toBuilder().variableDomainEntry(...).build()}, which forces the {@code
+     * @Singular} builder to rebuild {@code constraints} into a fresh {@code Set} — so the
+     * constructor's reference-equality fast path (see its own Javadoc) always hits here. Domain
+     * narrowing is by far the most frequent operation during search (every propagator's own domain
+     * update goes through this or {@link #withDomains}), so this exists specifically to make that
+     * path cheap.
+     * <p>
+     * Uses {@link LinkedHashMap} throughout, not {@link Map#copyOf}: the latter's iteration order
+     * is deliberately unspecified, which silently broke {@code SetBranchingSolver#findMostUndeterminedSet}'s
+     * (and any other iteration-order-sensitive tie-breaking's) reproducibility the first time this
+     * method was written — variable iteration order needs to stay exactly what {@code
+     * variableDomains}' own order already was, insertion order preserved.
+     */
+    public ConstraintSatisfactionProblem withDomain(@NonNull Variable<?> variable, @NonNull Domain<?> domain) {
+        Map<Variable<?>, Domain<?>> newDomains = new LinkedHashMap<>(variableDomains);
+        newDomains.put(variable, domain);
+        return new ConstraintSatisfactionProblem(Collections.unmodifiableMap(newDomains), constraintGraph.getConstraints(), constraintGraph, nogoods, nogoodMergeCache);
+    }
+
+    /** As {@link #withDomain}, applying every entry of {@code updates} in one pass; returns {@code this} unchanged if {@code updates} is empty. */
+    public ConstraintSatisfactionProblem withDomains(@NonNull Map<Variable<?>, Domain<?>> updates) {
+        if (updates.isEmpty()) return this;
+        Map<Variable<?>, Domain<?>> newDomains = new LinkedHashMap<>(variableDomains);
+        newDomains.putAll(updates);
+        return new ConstraintSatisfactionProblem(Collections.unmodifiableMap(newDomains), constraintGraph.getConstraints(), constraintGraph, nogoods, nogoodMergeCache);
     }
 
     private static void validateConstraints(Map<Variable<?>, Domain<?>> variableDomains, Set<Constraint> constraints) {
@@ -922,6 +969,22 @@ public class ConstraintSatisfactionProblem {
         public <E> ConstraintSatisfactionProblemBuilder partitionConstraint(
                 @NonNull Set<Variable<Set<E>>> parts, @NonNull Set<E> universe) {
             return this.constraint(PartitionConstraint.of(parts, universe));
+        }
+
+        /**
+         * Create a unary constraint over a set variable: {@code element ∈ variable}. Primarily
+         * useful reified ({@code reifyConstraint(indicator, setMembershipConstraint(...))}) to
+         * obtain a genuine boolean membership indicator for a set variable — something {@link
+         * #subsetConstraint}/{@link #disjointConstraint} alone can't provide, since they only ever
+         * force hard, unconditional membership/exclusion.
+         *
+         * @param variable the set variable to test
+         * @param element the element whose membership is being constrained
+         * @return the builder
+         */
+        public <E> ConstraintSatisfactionProblemBuilder setMembershipConstraint(
+                @NonNull Variable<Set<E>> variable, @NonNull E element) {
+            return this.constraint(SetMembershipConstraint.of(variable, element));
         }
 
         /**

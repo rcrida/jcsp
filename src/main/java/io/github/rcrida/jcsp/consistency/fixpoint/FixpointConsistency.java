@@ -17,6 +17,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicReference;
 
 /**
  * A {@link ConstraintConsistency} that runs all {@link Propagatable} constraints of a given
@@ -31,6 +32,15 @@ public final class FixpointConsistency implements ConstraintConsistency {
     private static final Logger log = LoggerFactory.getLogger(FixpointConsistency.class);
 
     private final Class<? extends Propagatable> constraintType;
+    // Mutable-state-inside-otherwise-immutable-instance cache, same pattern as NogoodStore's
+    // snapshot cache and ConstraintSatisfactionProblem's nogood-merge cache: remembers the most
+    // recent (source constraint Set reference, filtered-by-type result) pair so that repeated
+    // calls against the same csp.getConstraints() reference -- the common case across a whole
+    // branch-and-propagate recursion, since only domains change between calls, not the structural
+    // constraint set -- skip re-filtering the entire constraint set on every round of every node.
+    private final AtomicReference<FilterCache> filterCache = new AtomicReference<>();
+
+    private record FilterCache(Set<Constraint> source, List<Propagatable> filtered) {}
 
     private FixpointConsistency(Class<? extends Propagatable> constraintType) {
         this.constraintType = constraintType;
@@ -40,12 +50,27 @@ public final class FixpointConsistency implements ConstraintConsistency {
         return new FixpointConsistency(constraintType);
     }
 
-    @Override
+    /**
+     * Filters {@code csp.getConstraints()} to this instance's {@link #constraintType}, reusing the
+     * last computed result when the incoming constraint {@link Set} is the exact same reference as
+     * last time (a cheap identity check — always correct on a miss, since it just falls back to a
+     * fresh filter).
+     */
     @SuppressWarnings({"unchecked", "rawtypes"})
+    private List<Propagatable> filteredConstraints(ConstraintSatisfactionProblem csp) {
+        Set<Constraint> source = csp.getConstraints();
+        FilterCache cached = filterCache.get();
+        if (cached != null && cached.source() == source) {
+            return cached.filtered();
+        }
+        List<Propagatable> filtered = (List) source.stream().filter(constraintType::isInstance).toList();
+        filterCache.set(new FilterCache(source, filtered));
+        return filtered;
+    }
+
+    @Override
     public Optional<ConstraintSatisfactionProblem> apply(ConstraintSatisfactionProblem csp) {
-        List<Propagatable> constraints = (List) csp.getConstraints().stream()
-                .filter(constraintType::isInstance)
-                .toList();
+        List<Propagatable> constraints = filteredConstraints(csp);
         var name = constraintType.getSimpleName();
         if (constraints.isEmpty()) {
             log.debug("{}: fixpoint reached", name);
@@ -63,11 +88,7 @@ public final class FixpointConsistency implements ConstraintConsistency {
                 }
                 var updates = result.get();
                 if (!updates.isEmpty()) {
-                    var builder = current.toBuilder();
-                    for (var entry : updates.entrySet()) {
-                        builder.variableDomainEntry((Variable) entry.getKey(), (Domain) entry.getValue());
-                    }
-                    current = builder.build();
+                    current = current.withDomains(updates);
                     changed = true;
                 }
             }
@@ -108,12 +129,9 @@ public final class FixpointConsistency implements ConstraintConsistency {
      * fixed, small constraint count, so the dirty-variable hint has nothing to save here.
      */
     @Override
-    @SuppressWarnings({"unchecked", "rawtypes"})
     public ConsistencyResult applyWithReason(ConstraintSatisfactionProblem csp,
                                              @Nullable Set<Variable<?>> changedSinceLastRun) {
-        List<Propagatable> constraints = (List) csp.getConstraints().stream()
-                .filter(constraintType::isInstance)
-                .toList();
+        List<Propagatable> constraints = filteredConstraints(csp);
         if (constraints.isEmpty()) return ConsistencyResult.feasible(csp);
         var current = csp;
         boolean changed = true;
@@ -131,11 +149,7 @@ public final class FixpointConsistency implements ConstraintConsistency {
                 }
                 var updates = result.get();
                 if (!updates.isEmpty()) {
-                    var builder = current.toBuilder();
-                    for (var entry : updates.entrySet()) {
-                        builder.variableDomainEntry((Variable) entry.getKey(), (Domain) entry.getValue());
-                    }
-                    current = builder.build();
+                    current = current.withDomains(updates);
                     changed = true;
                 }
             }
