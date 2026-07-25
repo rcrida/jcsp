@@ -206,12 +206,23 @@ public class AC3 implements ConstraintConsistency {
     private static Optional<DiscreteDomain<?>> revise(Map<Variable<?>, Domain<?>> domains, Arc arc, BinaryConstraint<?, ?> constraint) {
         if (!(domains.get(arc.getFrom()) instanceof DiscreteDomain<?> D_i)) return Optional.empty();
         if (!(domains.get(arc.getTo()) instanceof DiscreteDomain<?> D_j)) return Optional.empty();
+        // D_j is materialised once and iterated with a plain loop, not D_j.stream(), for every
+        // x in D_i: profiling found repeatedly creating a fresh Stream pipeline for the same,
+        // unchanging D_j -- once per x -- to be a real cost in this O(|D_i| * |D_j|) hot loop.
+        val jValues = D_j.toList();
         val valuesToDelete = D_i.stream()
-                .filter(x -> D_j.stream().noneMatch(y -> constraint.isSatisfiedByArcValues(arc, x, y)))
+                .filter(x -> !hasSupport(constraint, arc, x, jValues))
                 .toList();
         if (valuesToDelete.isEmpty()) return Optional.empty();
         val revisedBuilder = D_i.toBuilder();
         valuesToDelete.forEach(revisedBuilder::delete);
         return Optional.of(revisedBuilder.build());
+    }
+
+    private static boolean hasSupport(BinaryConstraint<?, ?> constraint, Arc arc, Object x, List<?> jValues) {
+        for (Object y : jValues) {
+            if (constraint.isSatisfiedByArcValues(arc, x, y)) return true;
+        }
+        return false;
     }
 }
