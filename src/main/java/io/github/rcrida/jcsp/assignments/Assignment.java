@@ -8,11 +8,11 @@ import io.github.rcrida.jcsp.ConstraintSatisfactionProblem;
 import io.github.rcrida.jcsp.variables.Variable;
 import org.jspecify.annotations.NonNull;
 
+import java.util.HashMap;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
-import java.util.stream.Collectors;
 
 @Slf4j
 @Builder(toBuilder = true)
@@ -43,12 +43,24 @@ public record Assignment(@Singular Map<Variable<?>, Object> values, Statistics s
         return Optional.ofNullable((T) values.get(variable));
     }
 
+    /**
+     * Iterates {@code variables} and looks each one up in {@link #values} directly, rather than
+     * scanning every entry in {@link #values} and filtering by membership in {@code variables} —
+     * {@code variables} is typically a single constraint's own handful of variables, far smaller
+     * than the full assignment (profiling {@code UniformNaryConstraint#isSatisfiedBy}, this
+     * method's dominant caller, found the original O(|values|)-per-call scan to be the runaway
+     * cost in {@code LargeNeighborhoodSolver}'s per-combo, per-constraint violation checking).
+     * {@code values} never intentionally maps a variable to {@code null} (same assumption {@link
+     * #getValue} already relies on via {@code Optional.ofNullable}), so a {@code null} lookup
+     * result is only ever "not yet assigned", matching the original's membership-filter semantics.
+     */
     public Assignment extractPartialAssignment(@NonNull Set<? extends Variable<?>> variables) {
-        return Assignment.builder()
-                .values(values.entrySet().stream()
-                        .filter(a -> variables.contains(a.getKey()))
-                        .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue)))
-                .build();
+        Map<Variable<?>, Object> partial = new HashMap<>();
+        for (Variable<?> variable : variables) {
+            Object value = values.get(variable);
+            if (value != null) partial.put(variable, value);
+        }
+        return Assignment.builder().values(partial).build();
     }
 
     public Assignment withValue(@NonNull Variable<?> variable, @NonNull Object value) {
