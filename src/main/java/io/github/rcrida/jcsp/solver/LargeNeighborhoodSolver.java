@@ -143,9 +143,9 @@ public class LargeNeighborhoodSolver implements LocalSolver {
                 .filter(c -> !Collections.disjoint(c.getVariables(), relaxedVars))
                 .toList();
 
-        var baseBuilder = current.toBuilder();
-        for (var v : relaxedVars) baseBuilder.value(v, false);
-        var base = baseBuilder.build();
+        Map<Variable<?>, Object> baseValues = new HashMap<>(current.getValues());
+        for (var v : relaxedVars) baseValues.put(v, false);
+        Assignment base = Assignment.ofTrusted(baseValues, current.getStatistics());
 
         return enumerate(relaxedSlots).stream()
                 .map(combo -> applyCombo(base, combo))
@@ -173,11 +173,18 @@ public class LargeNeighborhoodSolver implements LocalSolver {
         return result;
     }
 
+    // Bypasses Assignment's Lombok builder (a two-pass ArrayList-then-map construction) in favour
+    // of a single HashMap copy-constructor pass plus Assignment.ofTrusted's direct record
+    // construction -- profiling ParkrunSchedulingTest found AssignmentBuilder.values/build the
+    // dominant cost here, since this runs once per enumerated combo (up to slotsPerStep-many
+    // candidates' worth of Cartesian product) rather than once per step. Deliberately HashMap, not
+    // LinkedHashMap: an earlier attempt at the latter (for deterministic iteration order) measurably
+    // regressed this same hot path, for an ordering guarantee no current caller observes.
     private Assignment applyCombo(@NonNull Assignment base,
                                    @NonNull Map<Variable<Boolean>, Boolean> combo) {
-        var builder = base.toBuilder();
-        combo.forEach((v, val) -> builder.value(v, val));
-        return builder.build();
+        Map<Variable<?>, Object> merged = new HashMap<>(base.getValues());
+        merged.putAll(combo);
+        return Assignment.ofTrusted(merged, base.getStatistics());
     }
 
     private long violationCount(@NonNull Assignment a, @NonNull List<Constraint> constraints) {

@@ -8,6 +8,7 @@ import io.github.rcrida.jcsp.ConstraintSatisfactionProblem;
 import io.github.rcrida.jcsp.variables.Variable;
 import org.jspecify.annotations.NonNull;
 
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Objects;
@@ -38,6 +39,19 @@ public record Assignment(@Singular Map<Variable<?>, Object> values, Statistics s
         return Assignment.builder().values(values).build();
     }
 
+    /**
+     * Constructs an {@code Assignment} directly from an already-built values map and statistics,
+     * skipping the Lombok builder's ArrayList-based accumulation entirely — for hot per-candidate
+     * construction paths (e.g. {@code LargeNeighborhoodSolver}'s per-combo enumeration) where the
+     * caller already owns a freshly-built map it will never mutate again. {@code values} is wrapped
+     * in an unmodifiable view (an O(1) wrap, not a copy) so the returned {@code Assignment} still
+     * gets the same immutability guarantee {@link #getValues} callers rely on elsewhere, even
+     * though this path never goes through the builder's own defensive copy.
+     */
+    public static Assignment ofTrusted(@NonNull Map<Variable<?>, Object> values, @NonNull Statistics statistics) {
+        return new Assignment(Collections.unmodifiableMap(values), statistics);
+    }
+
     @SuppressWarnings("unchecked")
     public <T> Optional<T> getValue(@NonNull Variable<T> variable) {
         return Optional.ofNullable((T) values.get(variable));
@@ -53,14 +67,31 @@ public record Assignment(@Singular Map<Variable<?>, Object> values, Statistics s
      * {@code values} never intentionally maps a variable to {@code null} (same assumption {@link
      * #getValue} already relies on via {@code Optional.ofNullable}), so a {@code null} lookup
      * result is only ever "not yet assigned", matching the original's membership-filter semantics.
+     * Deliberately backed by a plain {@code HashMap}, not a {@code LinkedHashMap}: this result is
+     * read-only and discarded immediately by its dominant caller (only {@code .values()} is ever
+     * read, never the entries themselves), so there's no order to preserve, and re-profiling after
+     * an earlier attempt to use {@code LinkedHashMap} here (for consistency with {@link #values}'s
+     * own iteration order) found it measurably regressed this exact hot path (~20% fewer LNS steps
+     * per second on {@code ParkrunSchedulingTest}) for a guarantee nothing actually observes.
      */
-    public Assignment extractPartialAssignment(@NonNull Set<? extends Variable<?>> variables) {
+    public Map<Variable<?>, Object> partialValues(@NonNull Set<? extends Variable<?>> variables) {
         Map<Variable<?>, Object> partial = new HashMap<>();
         for (Variable<?> variable : variables) {
             Object value = values.get(variable);
             if (value != null) partial.put(variable, value);
         }
-        return Assignment.builder().values(partial).build();
+        return Collections.unmodifiableMap(partial);
+    }
+
+    /**
+     * Same lookup as {@link #partialValues} but wrapped in a full {@code Assignment} — needed by
+     * callers that rely on {@code Assignment} identity/equality (e.g. {@code NaryTuplesConstraint}
+     * comparing against a table of tuples), unlike {@code UniformNaryConstraint#isSatisfiedBy},
+     * which only ever needs the raw value collection and calls {@link #partialValues} directly to
+     * skip this wrapping.
+     */
+    public Assignment extractPartialAssignment(@NonNull Set<? extends Variable<?>> variables) {
+        return Assignment.of(partialValues(variables));
     }
 
     public Assignment withValue(@NonNull Variable<?> variable, @NonNull Object value) {
