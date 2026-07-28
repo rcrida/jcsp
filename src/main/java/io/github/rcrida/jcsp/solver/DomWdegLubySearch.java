@@ -169,7 +169,7 @@ public class DomWdegLubySearch implements Solver {
                                                                     DomWdegVariableSelector selector) {
         ConsistencyResult inferred = inference.applyWithReason(cspWithNogoods, variable, next);
         if (inferred.isInfeasible()) {
-            selector.incrementWeights(cspWithNogoods, variable, next);
+            selector.incrementWeights(variable, next);
             if (inferred.reason() != null) {
                 nogoodStore.record(inferred.reason());
                 next.getStatistics().incrementNogoodsLearned();
