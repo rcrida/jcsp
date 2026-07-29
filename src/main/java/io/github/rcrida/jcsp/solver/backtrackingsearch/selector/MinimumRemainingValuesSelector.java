@@ -22,7 +22,7 @@ import java.util.stream.Collectors;
  * 3. Computes the number of potential legal values remaining in the domain for each unassigned variable.
  * 4. Selects the variable with the smallest number of remaining legal values.
  * <p>
- * If no unassigned variables are found, the method will throw an {@code IllegalStateException}.
+ * If no unassigned variables are found, the method will throw an {@link IllegalStateException}.
  */
 public class MinimumRemainingValuesSelector implements UnassignedVariableSelector {
     public static final MinimumRemainingValuesSelector INSTANCE = new MinimumRemainingValuesSelector();

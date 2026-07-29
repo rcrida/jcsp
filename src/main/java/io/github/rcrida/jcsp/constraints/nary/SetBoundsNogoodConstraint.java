@@ -18,7 +18,7 @@ import java.util.stream.Collectors;
 
 /**
  * A {@link NogoodConstraint} forbidding a whole set-interval region per variable: the clause
- * {@code OR(x1 ∉ R1, x2 ∉ R2, ..., xk ∉ Rk)} over {@code forbidden} — violated only when every one
+ * {@code OR(x1 ∉ R1, x2 ∉ R2, ..., xk ∉ Rk)} over {@link #forbidden} — violated only when every one
  * of its variables' current {@link SetBoundedDomain} lies entirely within its own forbidden
  * region. The set-CP analogue of {@link RangeNogoodConstraint}: generalises {@link
  * GroundNogoodConstraint} (one forbidden ground {@code Set<E>} value per variable) to a whole

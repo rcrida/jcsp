@@ -14,7 +14,7 @@ import java.util.stream.Collectors;
 
 /**
  * A {@link NogoodConstraint} forbidding one specific ground value per variable: the clause
- * {@code OR(x1 != v1, x2 != v2, ..., xk != vk)} over {@code forbidden} — violated only when every
+ * {@code OR(x1 != v1, x2 != v2, ..., xk != vk)} over {@link #forbidden} — violated only when every
  * one of its variables is assigned exactly its forbidden value.
  * <p>
  * Recording a nogood as an actual constraint (rather than a separate variable-value map matched

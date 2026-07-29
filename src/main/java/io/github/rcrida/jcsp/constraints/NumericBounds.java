@@ -61,8 +61,8 @@ public final class NumericBounds {
      * used by {@link io.github.rcrida.jcsp.constraints.nary.SumVariableConstraint} (all
      * coefficients {@code 1.0}) and {@link io.github.rcrida.jcsp.constraints.nary.LinearVariableConstraint}
      * (real per-variable coefficients). Generalises the same per-term contribution/feasibility/
-     * narrowing shape those constraints' bound-comparing siblings ({@code SumBoundConstraint},
-     * {@code LinearBoundConstraint}) already implement, treating {@code target} as one additional
+     * narrowing shape those constraints' bound-comparing siblings ({@link io.github.rcrida.jcsp.constraints.nary.SumBoundConstraint},
+     * {@link io.github.rcrida.jcsp.constraints.nary.LinearBoundConstraint}) already implement, treating {@code target} as one additional
      * term with coefficient {@code -1.0} and comparing the combined total against the constant
      * {@code 0} — {@code sum(vars) <op> target} rearranges to {@code sum(vars) - target <op> 0}
      * for every operator (subtraction never flips inequality direction, unlike multiplying by a

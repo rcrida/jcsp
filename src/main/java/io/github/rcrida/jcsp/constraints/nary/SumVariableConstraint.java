@@ -24,13 +24,13 @@ import java.util.stream.Collectors;
  * rather than a fixed bound: {@code v1 + v2 + ... + vn <op> target}. The sibling of {@link
  * SumBoundConstraint} for when the right-hand side is itself a decision variable — see {@link
  * NumericBounds#propagateWeightedSumVsTarget} for why this needed its own class rather than
- * folding {@code target} into {@code SumBoundConstraint} with a nullable field (it can't simply
- * extend {@link UniformNaryConstraint} the way {@code SumBoundConstraint} does, since that
- * class's {@code isSatisfiedBy} is {@code final} and can't distinguish {@code target}'s role from
+ * folding {@link #target} into {@link SumBoundConstraint} with a nullable field (it can't simply
+ * extend {@link UniformNaryConstraint} the way {@link SumBoundConstraint} does, since that
+ * class's {@code isSatisfiedBy} is {@code final} and can't distinguish {@link #target}'s role from
  * an ordinary summed variable via its generic value-collection bridge).
  * <p>
  * For partial assignments the constraint is optimistically satisfied — only evaluated once every
- * summed variable and {@code target} are all assigned.
+ * summed variable and {@link #target} are all assigned.
  */
 @SuperBuilder
 @EqualsAndHashCode(callSuper = true)
@@ -53,10 +53,10 @@ public class SumVariableConstraint<N extends Number> extends NaryConstraint impl
     }
 
     /**
-     * Dispatches the sum's numeric type off {@code target}'s <em>actual assigned value</em>
+     * Dispatches the sum's numeric type off {@link #target}'s <em>actual assigned value</em>
      * (always available once the containment check passes) rather than a compile-time constant —
      * unlike {@link SumBoundConstraint}, there is no fixed {@code N}-typed {@code bound} to switch
-     * on here, and {@code target}'s runtime value is the only {@code N} instance ever available.
+     * on here, and {@link #target}'s runtime value is the only {@code N} instance ever available.
      */
     @Override
     public boolean isSatisfiedBy(@NonNull Assignment assignment) {
@@ -113,7 +113,7 @@ public class SumVariableConstraint<N extends Number> extends NaryConstraint impl
 
     /**
      * Same shape as {@link SumBoundConstraint#explainInfeasible}: the sum's violation depends on
-     * the combined contribution of every variable (including {@code target}, now folded into
+     * the combined contribution of every variable (including {@link #target}, now folded into
      * {@link #getVariables()}), not any single one in isolation, so the fully collective
      * explanation via {@link Propagatable#allSingletonReason} is the only sound, self-contained
      * one.

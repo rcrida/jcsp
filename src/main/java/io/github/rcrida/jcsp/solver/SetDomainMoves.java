@@ -24,8 +24,8 @@ import java.util.stream.Stream;
  * Public and placed in {@code io.github.rcrida.jcsp.solver} — rather than added to the
  * package-private {@link LocalSearchSupport} — because its consumers span both this package
  * ({@link MinConflictsSolver}, {@link TabuSearchSolver}) and the {@code solver.assignmentfactory}
- * subpackage ({@code RandomAssignmentFactory}, {@code GreedyAssignmentFactory}); package-private
- * visibility doesn't reach a subpackage. Same precedent as {@code NumericBounds}, which lives one
+ * subpackage ({@link io.github.rcrida.jcsp.solver.assignmentfactory.RandomAssignmentFactory}, {@link io.github.rcrida.jcsp.solver.assignmentfactory.GreedyAssignmentFactory}); package-private
+ * visibility doesn't reach a subpackage. Same precedent as {@link io.github.rcrida.jcsp.constraints.NumericBounds}, which lives one
  * package above its own consumers for the identical reason.
  */
 public final class SetDomainMoves {
@@ -44,8 +44,8 @@ public final class SetDomainMoves {
      * <p>
      * Assumes {@code !domain.isEmpty()} — guaranteed at every real call site, since infeasible
      * domains are screened out by propagation before local search starts — the same precondition
-     * style {@code SetIntervalDomain.of}'s own {@code assert}s use. Given that, {@code
-     * SetIntervalDomain#isEmpty()}'s own contract guarantees {@code upperBound.size() >=
+     * style {@code SetIntervalDomain.of}'s own {@code assert}s use. Given that, {@link
+     * io.github.rcrida.jcsp.domains.SetIntervalDomain#isEmpty()}'s own contract guarantees {@code upperBound.size() >=
      * minCardinality}, which is exactly what keeps the arithmetic below from asking for more
      * elements than the gap actually has.
      */
@@ -69,7 +69,7 @@ public final class SetDomainMoves {
      * assignment: {@code lowerBound} padded up to {@code minCardinality} and {@code upperBound}
      * trimmed down to {@code maxCardinality} (both using {@code domain.getComparator()} so the
      * choice is reproducible), plus {@code randomSampleSize} random draws via {@link #randomValue}.
-     * Deliberately not exhaustive — see {@code GreedyAssignmentFactory}'s Javadoc for why a short
+     * Deliberately not exhaustive — see {@link io.github.rcrida.jcsp.solver.assignmentfactory.GreedyAssignmentFactory}'s Javadoc for why a short
      * representative list is preferred over both full enumeration (infeasible) and a bare {@link
      * #randomValue} fallback (would make greedy seeding no better than random for exactly the
      * variable kind — tight cardinality/disjointness — that benefits most from it).
@@ -182,7 +182,7 @@ public final class SetDomainMoves {
      * a uniform-ish sample rather than always favouring the same corner of the cross product; when
      * the full cross product is at or under the cap, shuffling changes only iteration order, not
      * which pairs are returned. No two pairs from the nested-loop iteration can coincide, since
-     * {@code removable}/{@code addable} are themselves duplicate-free (built from {@code Set}s).
+     * {@code removable}/{@code addable} are themselves duplicate-free (built from {@link Set}s).
      */
     private static <E> List<Set<E>> swapCandidates(Set<E> current, List<E> removable, List<E> addable) {
         List<Set<E>> result = new ArrayList<>();

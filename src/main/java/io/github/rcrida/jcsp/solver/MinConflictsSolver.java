@@ -27,7 +27,7 @@ import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
 /**
- * The {@code MinConflictsSolver} class implements the local search technique for solving
+ * The {@link MinConflictsSolver} class implements the local search technique for solving
  * constraint satisfaction problems (CSPs) using the Min-Conflicts heuristic. This approach is designed
  * to navigate the solution space by iteratively minimizing the number of conflicts in the current assignment.
  * <p>
@@ -46,7 +46,7 @@ import java.util.stream.IntStream;
  * Otherwise, it will return an empty {@link Optional}.
  * <p>
  * Parameters:
- * - {@code maxSteps}: The maximum number of steps the solver will take to attempt finding a solution.
+ * - {@link #maxSteps}: The maximum number of steps the solver will take to attempt finding a solution.
  */
 @Slf4j
 @Value

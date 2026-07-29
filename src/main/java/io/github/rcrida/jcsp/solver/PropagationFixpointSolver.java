@@ -77,9 +77,9 @@ import java.util.Set;
  * <p>To add a new propagator for a {@link io.github.rcrida.jcsp.consistency.Propagatable} constraint
  * type, append {@code FixpointConsistency.of(MyConstraint.class)} to {@link #PROPAGATORS}.
  *
- * <p>When {@code snap} is true (satisfaction mode with {@link BoundedDomain} variables), any
+ * <p>When {@link #snap} is true (satisfaction mode with {@link BoundedDomain} variables), any
  * non-singleton bounded domain remaining after propagation is snapped to its interval midpoint,
- * giving one concrete solution for underdetermined continuous systems. When {@code snap} is false
+ * giving one concrete solution for underdetermined continuous systems. When {@link #snap} is false
  * (optimization mode), intervals are left open so that a downstream {@link BisectionConditioningSolver}
  * can explore the feasible region.
  */
@@ -152,8 +152,8 @@ public class PropagationFixpointSolver extends SolverDecorator {
      * Tracks which variables' domains changed during the previous round and passes that set to
      * each propagator via {@link ConstraintConsistency#apply(ConstraintSatisfactionProblem, Set)},
      * so {@link NogoodFixpointConsistency} can skip re-checking nogoods that reference none of
-     * them (see its javadoc). {@code initialSeed} is round 1's dirty-variable hint: {@code
-     * FULL_PROPAGATION_INFERENCE} passes the diff between the pre- and post-MAC domains (plus any
+     * them (see its javadoc). {@code initialSeed} is round 1's dirty-variable hint: {@link
+     * io.github.rcrida.jcsp.solver.Solver.Factory#FULL_PROPAGATION_INFERENCE} passes the diff between the pre- and post-MAC domains (plus any
      * variable of a newly-learned nogood, which must always be checked once) rather than {@code
      * null}, since at a search node this call's input is exactly the parent's already-converged
      * CSP -- nothing else could have changed. {@code null} (this class's own preprocessing call,

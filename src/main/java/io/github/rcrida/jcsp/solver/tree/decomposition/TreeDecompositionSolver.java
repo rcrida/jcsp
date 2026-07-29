@@ -82,7 +82,7 @@ public class TreeDecompositionSolver extends SolverDecorator {
     }
 
     /**
-     * Returns true when every constrained variable has at least {@code targetTreewidth} neighbours,
+     * Returns true when every constrained variable has at least {@link #targetTreewidth} neighbours,
      * guaranteeing that minimum-degree elimination will immediately produce a clique whose joint
      * domain exceeds {@code maxDomainSize} — so the decomposer is certain to return empty.
      * Skipping the decomposer in this case is exact, not just a heuristic.

@@ -21,7 +21,7 @@ import java.util.Set;
  * <p>
  * Propagation is symmetric: any element already forced into one side's lower bound can never
  * appear in the other side, so it's removed from the other side's upper bound. Only {@link
- * SetBoundedDomain}-typed variable pairs are narrowed; a non-{@code SetBoundedDomain} side is left
+ * SetBoundedDomain}-typed variable pairs are narrowed; a non-{@link SetBoundedDomain} side is left
  * to {@link #isSatisfiedBy} and AC3's generic binary-arc handling, same as {@link SubsetConstraint}.
  */
 @SuperBuilder

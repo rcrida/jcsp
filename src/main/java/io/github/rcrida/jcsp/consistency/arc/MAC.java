@@ -29,8 +29,8 @@ public class MAC implements Inference {
      * @param problem The constraint satisfaction problem to which inference will be applied.
      * @param variable The variable that has been assigned a new value in the CSP.
      * @param assignment The current assignment of values to variables in the CSP.
-     * @return An {@code Optional} containing the updated constraint satisfaction problem if inference
-     *         is successful and maintains consistency; otherwise, an empty {@code Optional}.
+     * @return An {@link Optional} containing the updated constraint satisfaction problem if inference
+     *         is successful and maintains consistency; otherwise, an empty {@link Optional}.
      */
     @Override
     @SuppressWarnings("unchecked")

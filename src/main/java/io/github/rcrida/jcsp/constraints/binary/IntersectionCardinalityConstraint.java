@@ -29,11 +29,12 @@ import java.util.Set;
  * the limit, any further candidate that's already forced into <em>one</em> side must be excluded
  * from the other, since letting it join both would push the count over. A candidate not yet forced
  * into either side can't be soundly resolved this way — which side (if either) it ends up on is a
- * genuine disjunctive choice, not a narrowing — the same bounds-consistency-not-GAC ceiling {@code
- * NValueConstraint} documents for the analogous reason. {@link Operator#EQ}/{@link Operator#GEQ}/
+ * genuine disjunctive choice, not a narrowing — the same bounds-consistency-not-GAC ceiling {@link
+ * io.github.rcrida.jcsp.constraints.nary.NValueConstraint} documents for the analogous reason.
+ * {@link Operator#EQ}/{@link Operator#GEQ}/
  * {@link Operator#GT}/{@link Operator#NEQ} are left to {@link #isSatisfiedBy} and AC3's generic
  * handling, same as {@link io.github.rcrida.jcsp.constraints.binary.AbsoluteDifferenceConstraint}
- * skips {@code NEQ} — extending this to those operators (e.g. BIBD's {@code EQ} requirement) is
+ * skips {@link Operator#NEQ} — extending this to those operators (e.g. BIBD's {@link Operator#EQ} requirement) is
  * deferred until a real instance needs it, rather than built speculatively now.
  */
 @SuperBuilder

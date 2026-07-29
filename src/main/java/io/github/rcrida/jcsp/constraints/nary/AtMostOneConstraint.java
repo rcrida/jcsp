@@ -86,7 +86,7 @@ public class AtMostOneConstraint extends UniformNaryConstraint<Boolean> implemen
     /**
      * At most one of these variables may be {@code true}: infeasible once two are already
      * definitely {@code true}; once exactly one is, every remaining possibly-true variable is
-     * forced {@code false} (mirrors {@code AtMostNConstraint} with {@code n} hardcoded to 1, but
+     * forced {@code false} (mirrors {@link AtMostNConstraint} with {@code n} hardcoded to 1, but
      * kept as its own implementation since {@link ExactlyOneConstraint} needs to layer additional
      * "at least one" reasoning on top via the shared {@link #classify} helper).
      */
@@ -107,7 +107,7 @@ public class AtMostOneConstraint extends UniformNaryConstraint<Boolean> implemen
      * On infeasibility (two or more definitely {@code true}), attributes the conflict to every
      * variable already forced {@code true} — collectively sufficient, and by pigeonhole always
      * reduces to a simple pairwise collision (at least two share the value), same reasoning as
-     * {@code AtMostNConstraint}'s equivalent.
+     * {@link AtMostNConstraint}'s equivalent.
      */
     @Override
     @SuppressWarnings("unchecked")

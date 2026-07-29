@@ -8,9 +8,9 @@ import java.util.Optional;
  * Represents the set of values a variable may take. The base contract covers only operations that
  * are meaningful for both enumerable and non-enumerable (e.g. continuous interval) domains.
  *
- * <p>Enumerable domains implement {@link DiscreteDomain}, which adds {@code stream()},
- * {@code toList()}, and {@code toBuilder()}. Continuous domains implement {@link BoundedDomain},
- * which adds {@code getMin()}, {@code getMax()}, and {@code withBounds()}.
+ * <p>Enumerable domains implement {@link DiscreteDomain}, which adds {@link DiscreteDomain#stream},
+ * {@link DiscreteDomain#toList}, and {@link DiscreteDomain#toBuilder}. Continuous domains implement {@link BoundedDomain},
+ * which adds {@link BoundedDomain#getMin}, {@link BoundedDomain#getMax}, and {@link BoundedDomain#withBounds}.
  */
 public interface Domain<T> {
     boolean contains(@Nullable Object value);

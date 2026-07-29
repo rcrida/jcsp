@@ -28,7 +28,7 @@ import java.util.stream.IntStream;
  * that minimises the total number of violated constraints (greedy). The noise walk prevents
  * getting stuck in local optima that pure greedy repair cannot escape.
  * <p>
- * Runs all {@code maxAttempts} restarts in parallel. For satisfaction, returns the first
+ * Runs all {@link #maxAttempts} restarts in parallel. For satisfaction, returns the first
  * solution found. For optimization, each attempt stops at its first feasible solution and
  * all attempts run to completion; the one with the minimum objective value is returned.
  */

@@ -194,7 +194,7 @@ public class AC3 implements ConstraintConsistency {
 
     /**
      * Reads from whichever {@code domains} map it is handed, rather than re-reading a frozen
-     * {@code ConstraintSatisfactionProblem} snapshot. Until 2026-07-16, {@link #applyQueue}/{@link
+     * {@link ConstraintSatisfactionProblem} snapshot. Until 2026-07-16, {@link #applyQueue}/{@link
      * #applyQueueWithReason} called the 3-arg {@code revise} overload with the original, unchanging
      * {@code problem} parameter instead of their own progressively-narrowed map; since {@code revise}
      * is a pure function of the domains it's given, a given {@code (arc, constraint)} pair then

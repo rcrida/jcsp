@@ -59,10 +59,10 @@ public class RegularConstraint extends NaryConstraint implements Propagatable {
 
     /**
      * Outcome of the forward pass, shared by {@link #propagate} and {@link #explainInfeasible} so
-     * the reachable-state computation lives in exactly one place. On success, {@code reachable}
+     * the reachable-state computation lives in exactly one place. On success, {@link #reachable}
      * holds the full per-position array ({@code reachable[i]} = states reachable after processing
-     * positions {@code 0..i-1}); on failure, {@code reachable} is {@code null} and
-     * {@code failedAt} is the position {@code i} whose domain left no live transition out of
+     * positions {@code 0..i-1}); on failure, {@link #reachable} is {@code null} and
+     * {@link #failedAt} is the position {@code i} whose domain left no live transition out of
      * {@code reachable[i]} ({@code -1} when the failure is instead detected after the loop, i.e.
      * no accepting state is reachable at the end).
      */

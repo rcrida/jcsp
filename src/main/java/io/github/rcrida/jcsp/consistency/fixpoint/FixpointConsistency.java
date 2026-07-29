@@ -51,9 +51,9 @@ public final class FixpointConsistency implements ConstraintConsistency {
      * changes reference whenever a nogood is learned, not just when the structural constraint set
      * changes — this instance's own cache holder is keyed per {@link ConstraintSatisfactionProblem}
      * structure (via {@link ConstraintSatisfactionProblem#computeAuxiliaryCacheIfAbsent}, on {@link
-     * #constraintType} — every {@code FixpointConsistency} in the solver chains targets an ordinary
-     * structural constraint type, never a {@code NogoodConstraint} subtype, since those are handled
-     * separately by {@code NogoodFixpointConsistency}, so this filtered result never actually
+     * #constraintType} — every {@link FixpointConsistency} in the solver chains targets an ordinary
+     * structural constraint type, never a {@link NogoodConstraint} subtype, since those are handled
+     * separately by {@link NogoodFixpointConsistency}, so this filtered result never actually
      * changes as nogoods accumulate in practice — but the reference-equality check below is what
      * makes that a correctness guarantee rather than an assumption), not on this instance itself:
      * a single cache slot shared across every {@link ConstraintSatisfactionProblem} solved by the
@@ -108,7 +108,7 @@ public final class FixpointConsistency implements ConstraintConsistency {
      * that don't override it): returns the nogood that explains a domain wipeout, tried in order —
      * (1) the failing constraint's own {@link Propagatable#explainInfeasible} — tightest when it
      * applies, and free to be a ground or a range nogood depending on what the propagator itself
-     * can prove (e.g. {@code AllDiffConstraint} tries ground on its Hall-violating subset, then
+     * can prove (e.g. {@link io.github.rcrida.jcsp.constraints.nary.AllDiffConstraint} tries ground on its Hall-violating subset, then
      * range over that same subset); (2) {@link RangeNogoodConstraint#fromCurrentBounds} over the
      * failing constraint's <em>entire</em> variable set — the generic fallback for propagators that
      * don't provide anything tighter, sound whenever (1) is empty, since {@link Propagatable#propagate}

@@ -23,15 +23,15 @@ import java.util.stream.Stream;
  * requested. This is efficient for both finding the first solution (only the first element of each
  * sub-problem is computed) and finding all solutions (inner sub-problem solutions are replayed from cache).
  * <p>
- * Takes an {@code innerFactory} rather than a single fixed inner {@link Solver} — unlike every other
+ * Takes an {@link #innerFactory} rather than a single fixed inner {@link Solver} — unlike every other
  * decorator, so this does not extend {@link SolverDecorator} — because each decomposed sub-problem
  * needs its <em>own</em>, freshly-built solver: specifically its own
  * {@link io.github.rcrida.jcsp.assignments.NogoodStore}, sized for and scoped to just that
- * sub-problem's variables. A single fixed inner solver bakes one {@code NogoodStore} into
+ * sub-problem's variables. A single fixed inner solver bakes one {@link io.github.rcrida.jcsp.assignments.NogoodStore} into
  * {@link DomWdegLubySearch} at build time, independent of whatever CSP is later passed to
  * {@code getSolutions(csp)} — so sharing it across independent sub-problems is unsound (a nogood
  * learned solving one sub-problem can reference variables a different sub-problem has never heard
- * of) and previously crashed ({@code IllegalArgumentException}: unknown variables) as soon as any
+ * of) and previously crashed ({@link IllegalArgumentException}: unknown variables) as soon as any
  * sub-problem was hard enough to actually learn one.
  */
 @Slf4j

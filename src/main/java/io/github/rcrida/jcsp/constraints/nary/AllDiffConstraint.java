@@ -233,8 +233,8 @@ public class AllDiffConstraint<T> extends UniformNaryConstraint<T> implements Pr
      * values. When that's not available (e.g. three variables each with domain {@code {1,2}}, the
      * actual reason Régin's algorithm exists instead of plain pairwise decomposition), falls back
      * to a {@link RangeNogoodConstraint} over the same subset's current bounds — sound because
-     * {@code propagate()} already reported infeasible given exactly these domains, and tighter than
-     * the generic {@code FixpointConsistency} tier-2 fallback would be, since it's scoped to just
+     * {@link #propagate} already reported infeasible given exactly these domains, and tighter than
+     * the generic {@link io.github.rcrida.jcsp.consistency.fixpoint.FixpointConsistency} tier-2 fallback would be, since it's scoped to just
      * the Hall-violating subset rather than every variable this constraint covers.
      */
     @Override

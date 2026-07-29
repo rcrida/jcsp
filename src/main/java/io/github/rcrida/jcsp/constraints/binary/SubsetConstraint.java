@@ -33,7 +33,7 @@ import java.util.Set;
  *   <li>{@code left} can't be larger than {@code right} could possibly be — {@code left}'s
  *       maximum cardinality falls to at most {@code right}'s.</li>
  * </ul>
- * Only {@link SetBoundedDomain}-typed variable pairs are narrowed; a non-{@code SetBoundedDomain}
+ * Only {@link SetBoundedDomain}-typed variable pairs are narrowed; a non-{@link SetBoundedDomain}
  * side (unexpected in practice, since this is the only domain kind meaningful for a set variable)
  * is left to {@link #isSatisfiedBy} and AC3's generic binary-arc handling, which safely no-ops for
  * non-{@link io.github.rcrida.jcsp.domains.DiscreteDomain} domains rather than crashing.

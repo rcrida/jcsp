@@ -30,7 +30,7 @@ import java.util.stream.IntStream;
 /**
  * Tabu search local search for CSPs: the same min-conflicts move selection as
  * {@link MinConflictsSolver}, plus a short-term memory that forbids reverting a variable to the
- * value it just held for {@code tabuTenure} steps — unless doing so would strictly improve on the
+ * value it just held for {@link #tabuTenure} steps — unless doing so would strictly improve on the
  * best total conflict weight (summed over every constraint in the CSP, not just the moved
  * variable's own) seen so far this attempt (the aspiration criterion). The memory tracks a single
  * forbidden value per variable (the value it was moved away from), which is enough to break the
@@ -42,9 +42,9 @@ import java.util.stream.IntStream;
  * own (already-computed) conflict weight. This keeps the per-step cost the same order as
  * {@link MinConflictsSolver}'s instead of scaling with the CSP's total constraint count.
  * <p>
- * Runs all {@code maxAttempts} restarts in parallel, each with its own tabu memory. For
+ * Runs all {@link #maxAttempts} restarts in parallel, each with its own tabu memory. For
  * satisfaction, returns the first solution found. For optimization, every attempt runs to
- * completion (or exhausts {@code maxSteps}) and the lowest-cost feasible assignment is returned.
+ * completion (or exhausts {@link #maxSteps}) and the lowest-cost feasible assignment is returned.
  */
 @Slf4j
 @Value

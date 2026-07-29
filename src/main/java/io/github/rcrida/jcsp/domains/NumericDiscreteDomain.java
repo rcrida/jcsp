@@ -15,7 +15,7 @@ import java.util.Set;
  * SetDomain.DefaultBuilder}'s own fallback to {@link DomainObjectSet} for the same reason. Uses the
  * same {@code @Builder}/{@code @Singular} pattern as {@link DomainObjectSet} rather than a
  * hand-written compact constructor, for the same defensive-copy-plus-insertion-order guarantee
- * Lombok's generated builder already gives that class (backed by a {@code LinkedHashSet}
+ * Lombok's generated builder already gives that class (backed by a {@link java.util.LinkedHashSet}
  * internally — confirmed by disassembling the generated builder, not merely assumed).
  */
 @Builder(toBuilder = true)
@@ -44,8 +44,8 @@ public record NumericDiscreteDomain<N extends Number>(@Singular Set<N> values) i
 
     /**
      * Makes Lombok's generated builder satisfy {@link SetDomain}'s abstract {@code toBuilder():
-     * DiscreteDomain.Builder<N>} covariantly — otherwise the generated {@code toBuilder()}
-     * (returning this class) and {@code SetDomain}'s own default clash on return type. Same trick
+     * DiscreteDomain.Builder<N>} covariantly — otherwise the generated {@link #toBuilder}
+     * (returning this class) and {@link SetDomain}'s own default clash on return type. Same trick
      * {@link DomainObjectSet}'s own nested builder subclass already relies on.
      */
     public static class NumericDiscreteDomainBuilder<N extends Number> implements DiscreteDomain.Builder<N> {

@@ -57,7 +57,7 @@ public interface Solver {
          * <p>
          * Doesn't need to separately account for newly-learned nogoods (e.g. one recorded while
          * backtracking an earlier sibling value at this same node): {@code problem} here is always
-         * {@code cspWithNogoods} from {@code DomWdegLubySearch}, i.e. already {@code
+         * {@code cspWithNogoods} from {@link DomWdegLubySearch}, i.e. already {@code
          * nogoodStore.apply(csp)} -- freshly re-merged with the current nogood set immediately
          * before this call, for every candidate value, not just the first. Neither {@link
          * MAC#apply} nor {@link PropagationFixpointSolver#applyFixpoint} ever changes a CSP's
@@ -71,7 +71,7 @@ public interface Solver {
          * from-scratch re-derivation. Falls back to the current assignment (matching {@link
          * Inference#applyWithReason}'s own default) whenever neither MAC nor the fixpoint could
          * derive anything tighter -- e.g. a wipeout on a non-singleton neighbour, or a Hall-set
-         * violation over ungapped-but-non-singleton domains that even {@code RangeNogoodConstraint}'s
+         * violation over ungapped-but-non-singleton domains that even {@link io.github.rcrida.jcsp.constraints.nary.RangeNogoodConstraint}'s
          * gaplessness gate declines to cite.
          */
         Inference FULL_PROPAGATION_INFERENCE = new Inference() {
@@ -108,7 +108,7 @@ public interface Solver {
          * Picks between the real reason-deriving {@link #FULL_PROPAGATION_INFERENCE} and a wrapper
          * that never derives one, per {@code SolverConfig.isNogoodLearningEnabled()}. Shared by both
          * chains' wiring below so the choice lives in exactly one place: the terminal solvers
-         * ({@code DomWdegLubySearch}, {@code BranchAndBoundSolver}) stay free of any "should I
+         * ({@link DomWdegLubySearch}, {@link BranchAndBoundSolver}) stay free of any "should I
          * explain" branch of their own -- they just call {@link Inference#applyWithReason} and react
          * to whatever reason comes back.
          */

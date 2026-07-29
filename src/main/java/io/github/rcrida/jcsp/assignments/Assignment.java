@@ -40,11 +40,12 @@ public record Assignment(@Singular Map<Variable<?>, Object> values, Statistics s
     }
 
     /**
-     * Constructs an {@code Assignment} directly from an already-built values map and statistics,
+     * Constructs an {@link Assignment} directly from an already-built values map and statistics,
      * skipping the Lombok builder's ArrayList-based accumulation entirely — for hot per-candidate
-     * construction paths (e.g. {@code LargeNeighborhoodSolver}'s per-combo enumeration) where the
-     * caller already owns a freshly-built map it will never mutate again. {@code values} is wrapped
-     * in an unmodifiable view (an O(1) wrap, not a copy) so the returned {@code Assignment} still
+     * construction paths (e.g. {@link io.github.rcrida.jcsp.solver.LargeNeighborhoodSolver}'s
+     * per-combo enumeration) where the caller already owns a freshly-built map it will never
+     * mutate again. {@link #values} is wrapped
+     * in an unmodifiable view (an O(1) wrap, not a copy) so the returned {@link Assignment} still
      * gets the same immutability guarantee {@link #getValues} callers rely on elsewhere, even
      * though this path never goes through the builder's own defensive copy.
      */
@@ -61,18 +62,22 @@ public record Assignment(@Singular Map<Variable<?>, Object> values, Statistics s
      * Iterates {@code variables} and looks each one up in {@link #values} directly, rather than
      * scanning every entry in {@link #values} and filtering by membership in {@code variables} —
      * {@code variables} is typically a single constraint's own handful of variables, far smaller
-     * than the full assignment (profiling {@code UniformNaryConstraint#isSatisfiedBy}, this
+     * than the full assignment (profiling
+     * {@link io.github.rcrida.jcsp.constraints.nary.UniformNaryConstraint#isSatisfiedBy}, this
      * method's dominant caller, found the original O(|values|)-per-call scan to be the runaway
-     * cost in {@code LargeNeighborhoodSolver}'s per-combo, per-constraint violation checking).
-     * {@code values} never intentionally maps a variable to {@code null} (same assumption {@link
-     * #getValue} already relies on via {@code Optional.ofNullable}), so a {@code null} lookup
+     * cost in {@link io.github.rcrida.jcsp.solver.LargeNeighborhoodSolver}'s per-combo,
+     * per-constraint violation checking).
+     * {@link #values} never intentionally maps a variable to {@code null} (same assumption {@link
+     * #getValue} already relies on via {@link Optional#ofNullable}), so a {@code null} lookup
      * result is only ever "not yet assigned", matching the original's membership-filter semantics.
-     * Deliberately backed by a plain {@code HashMap}, not a {@code LinkedHashMap}: this result is
-     * read-only and discarded immediately by its dominant caller (only {@code .values()} is ever
-     * read, never the entries themselves), so there's no order to preserve, and re-profiling after
-     * an earlier attempt to use {@code LinkedHashMap} here (for consistency with {@link #values}'s
-     * own iteration order) found it measurably regressed this exact hot path (~20% fewer LNS steps
-     * per second on {@code ParkrunSchedulingTest}) for a guarantee nothing actually observes.
+     * Deliberately backed by a plain {@link java.util.HashMap}, not a {@link
+     * java.util.LinkedHashMap}: this result is read-only and discarded immediately by its dominant
+     * caller (only {@link Map#values()} is ever read, never the entries themselves), so there's no
+     * order to preserve, and re-profiling after an earlier attempt to use {@link
+     * java.util.LinkedHashMap} here (for consistency with {@link #values}'s own iteration order)
+     * found it measurably regressed this exact hot path (~20% fewer LNS steps per second on
+     * {@code ParkrunSchedulingTest}, a test-scope class this main-sources Javadoc can't link to)
+     * for a guarantee nothing actually observes.
      */
     public Map<Variable<?>, Object> partialValues(@NonNull Set<? extends Variable<?>> variables) {
         Map<Variable<?>, Object> partial = new HashMap<>();
@@ -84,11 +89,13 @@ public record Assignment(@Singular Map<Variable<?>, Object> values, Statistics s
     }
 
     /**
-     * Same lookup as {@link #partialValues} but wrapped in a full {@code Assignment} — needed by
-     * callers that rely on {@code Assignment} identity/equality (e.g. {@code NaryTuplesConstraint}
-     * comparing against a table of tuples), unlike {@code UniformNaryConstraint#isSatisfiedBy},
-     * which only ever needs the raw value collection and calls {@link #partialValues} directly to
-     * skip this wrapping.
+     * Same lookup as {@link #partialValues} but wrapped in a full {@link Assignment} — needed by
+     * callers that rely on {@link Assignment} identity/equality (e.g.
+     * {@link io.github.rcrida.jcsp.constraints.nary.NaryTuplesConstraint} comparing against a
+     * table of tuples), unlike
+     * {@link io.github.rcrida.jcsp.constraints.nary.UniformNaryConstraint#isSatisfiedBy}, which
+     * only ever needs the raw value collection and calls {@link #partialValues} directly to skip
+     * this wrapping.
      */
     public Assignment extractPartialAssignment(@NonNull Set<? extends Variable<?>> variables) {
         return Assignment.of(partialValues(variables));

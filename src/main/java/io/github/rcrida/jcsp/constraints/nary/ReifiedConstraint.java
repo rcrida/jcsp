@@ -84,7 +84,7 @@ public class ReifiedConstraint extends NaryConstraint implements BinaryDecomposa
     /**
      * Propagates both directions of {@code indicator <-> body}:
      * <ul>
-     *   <li><b>indicator forced true</b>: body must hold, so if {@code body} is itself
+     *   <li><b>indicator forced true</b>: body must hold, so if {@link #body} is itself
      *       {@link Propagatable} its own {@code propagate} is delegated to directly (infeasible
      *       there means infeasible here too); otherwise, if every body variable is already
      *       singleton, the fully-determined assignment is checked directly via
@@ -92,14 +92,14 @@ public class ReifiedConstraint extends NaryConstraint implements BinaryDecomposa
      *   <li><b>indicator forced false</b>: body must not hold. There is no generic way to
      *       propagate the negation of an arbitrary constraint, so the only case handled is a
      *       fully-determined body found satisfied — a direct contradiction.</li>
-     *   <li><b>indicator still open</b>: forced to {@code body}'s value once every body variable
+     *   <li><b>indicator still open</b>: forced to {@link #body}'s value once every body variable
      *       is singleton (the reverse link the unary-only {@link BinaryDecomposable} decomposition
      *       can't express for n-ary bodies); forced {@code true} if a {@link Propagatable} body
      *       reports {@link Propagatable#isNecessarilySatisfied} under the current (possibly
      *       partial) domains — sound because no further narrowing can undo it; otherwise forced
      *       {@code false} if that same body's own {@code propagate} already reports itself
      *       infeasible — sound because that means no completion of the current domains satisfies
-     *       {@code body}, so {@code indicator} can't be {@code true}.</li>
+     *       {@link #body}, so {@link #indicator} can't be {@code true}.</li>
      * </ul>
      * A body not overriding {@link Propagatable#isNecessarilySatisfied} (the default: never) falls
      * straight through to the infeasibility check, same behaviour as before that method existed.
@@ -142,7 +142,7 @@ public class ReifiedConstraint extends NaryConstraint implements BinaryDecomposa
      * plus every body variable's singleton value — collectively sufficient, mirroring
      * {@link Propagatable#allSingletonReason}'s reasoning). The case where a {@link Propagatable}
      * body reports infeasible while still partially open is left unexplained ({@link Optional#empty()}):
-     * combining that reason with {@code indicator}'s own forced value would require reaching into
+     * combining that reason with {@link #indicator}'s own forced value would require reaching into
      * an arbitrary {@link NogoodConstraint} shape the body might return, which isn't sound to do
      * generically; the caller falls back to the full assignment as the nogood in that case.
      */

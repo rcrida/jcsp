@@ -19,7 +19,7 @@ import java.util.stream.Collectors;
 
 /**
  * A {@link NogoodConstraint} forbidding a whole numeric range per variable: the clause
- * {@code OR(x1 ∉ R1, x2 ∉ R2, ..., xk ∉ Rk)} over {@code forbidden} — violated only when every
+ * {@code OR(x1 ∉ R1, x2 ∉ R2, ..., xk ∉ Rk)} over {@link #forbidden} — violated only when every
  * one of its variables currently holds a value inside its own forbidden {@link IntervalDomain}.
  * Generalises {@link GroundNogoodConstraint} (which forbids exactly one value per variable) to a
  * whole sub-domain per variable, letting a single learned nogood prune an entire forbidden
@@ -101,7 +101,7 @@ public class RangeNogoodConstraint extends NaryConstraint implements NogoodConst
      * gapless — its size equals {@code max - min + 1} — so the interval and the domain denote
      * exactly the same set of values. {@code false} for any other {@link Domain} kind (e.g.
      * {@link io.github.rcrida.jcsp.domains.SetBoundedDomain}, which is neither {@link BoundedDomain}
-     * nor {@link DiscreteDomain} — it isn't {@code Number}-based, so no {@link IntervalDomain} could
+     * nor {@link DiscreteDomain} — it isn't {@link Number}-based, so no {@link IntervalDomain} could
      * stand in for it at all).
      */
     private static boolean isSafeToCiteAsRange(Domain<?> domain) {

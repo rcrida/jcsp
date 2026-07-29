@@ -23,7 +23,7 @@ import java.util.concurrent.atomic.AtomicReference;
  * constraint's propagation — never explicitly assigned by search — is still caught, which a plain
  * assignment-map comparison could never see.
  * <p>
- * Backed by a {@code Set} (matching {@link ConstraintSatisfactionProblem}'s own constraint
+ * Backed by a {@link Set} (matching {@link ConstraintSatisfactionProblem}'s own constraint
  * storage) rather than a list: {@link NogoodConstraint} has value-based equality on its forbidden
  * map, so re-deriving the same nogood twice (e.g. independently in two branches before either
  * benefits from the other's recorded nogood) collapses into one entry instead of growing
@@ -31,7 +31,7 @@ import java.util.concurrent.atomic.AtomicReference;
  * <p>
  * Follows the same mutable-runtime-state-inside-@Value pattern as {@link SolverLimits}: the store
  * is immutable as a configuration object but accumulates nogoods during search. The internal set is
- * excluded from {@code equals}/{@code hashCode}/{@code toString}. A single {@code NogoodStore}
+ * excluded from {@code equals}/{@code hashCode}/{@code toString}. A single {@link NogoodStore}
  * instance is shared across Luby restarts so learned nogoods survive and benefit every subsequent
  * restart.
  * <p>
@@ -44,7 +44,7 @@ import java.util.concurrent.atomic.AtomicReference;
  * used to be rebuilt from scratch on every {@code withNogoods} call regardless of whether anything
  * had actually changed since the last one — confirmed via {@code NogoodPropagationBenchmark} to be
  * the dominant per-node cost in long searches, since it scales with total nogood count (up to
- * {@code 20 * variableCount}) and ran unconditionally. {@link #snapshot} plus {@code
+ * {@code 20 * variableCount}) and ran unconditionally. {@link #snapshot} plus {@link
  * ConstraintSatisfactionProblem}'s own merge cache (keyed on that same stable reference) together
  * mean the whole pipeline collapses to a couple of reference checks between nogood-learning events.
  * <p>
@@ -107,8 +107,8 @@ public class NogoodStore {
 
     /**
      * Records a nogood constraint, deduplicated via {@link Set#add} (see the class javadoc for
-     * why a {@code Set} rather than a {@code List}). Callers typically get {@code nogood} from
-     * {@link io.github.rcrida.jcsp.consistency.Inference#applyWithReason}'s {@code ConsistencyResult}
+     * why a {@link Set} rather than a {@link java.util.List}). Callers typically get {@code nogood} from
+     * {@link io.github.rcrida.jcsp.consistency.Inference#applyWithReason}'s {@link io.github.rcrida.jcsp.consistency.ConsistencyResult}
      * — there is no "empty nogood" case to guard against here, since a {@link NogoodConstraint} is
      * non-empty by construction (see e.g. {@link io.github.rcrida.jcsp.constraints.nary.GroundNogoodConstraint#of}).
      */
@@ -121,7 +121,7 @@ public class NogoodStore {
 
     /**
      * Evicts the largest-arity nogoods first once {@link #maxNogoods} is exceeded (see the class
-     * javadoc for why arity rather than a fixed size threshold). {@code nogoods} is weakly
+     * javadoc for why arity rather than a fixed size threshold). {@link #nogoods} is weakly
      * consistent under concurrent {@link #record} calls from parallel independent-subproblem
      * solves, so the excess computed here may be slightly stale by the time eviction finishes —
      * harmless, since a later call re-checks and corrects it.

@@ -22,7 +22,7 @@ import java.util.function.ToDoubleFunction;
  * produces a result first, rather than committing to a single strategy up front — this sidesteps
  * needing a heuristic to predict which strategy suits a given problem shape (a router built on
  * such a heuristic was tried and falsified before for a different pair of solvers; see
- * {@code BacktrackingSearch} vs {@code DomWdegLubySearch} in project history).
+ * {@link io.github.rcrida.jcsp.solver.backtrackingsearch.BacktrackingSearch} vs {@link DomWdegLubySearch} in project history).
  * <p>
  * Delegates implementing the package-private {@link CancellableLocalSolver} contract (currently
  * {@link MinConflictsSolver} and {@link TabuSearchSolver}) are handed a shared {@link Cancellation}

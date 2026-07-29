@@ -18,7 +18,7 @@ public interface Inference {
     /**
      * Variant of {@link #apply} that also explains a failure as part of the same pass, rather than
      * requiring a caller to separately re-derive one afterward (there is deliberately no separate
-     * "conflict explainer" interface for this — an {@code Inference} is the only thing that knows
+     * "conflict explainer" interface for this — an {@link Inference} is the only thing that knows
      * how its own propagation failed, so explaining it is this interface's job, not a second one's).
      * The default delegates to {@link #apply} and, on failure, falls back to the current assignment
      * itself as a {@link GroundNogoodConstraint} — always sound, if not always minimal, since the

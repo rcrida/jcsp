@@ -12,7 +12,7 @@ package io.github.rcrida.jcsp.domains;
  * double max} fields), and every real caller of bounds-narrowing code only ever had a {@code
  * double} in hand anyway (see {@link BoundedDomain#withBounds}'s own Javadoc). The default {@link
  * #withBounds} here instead assumes {@code this} is also a {@link DiscreteDomain} (true for every
- * non-{@code BoundedDomain} implementor) and filters its values, building the result as a {@link
+ * non-{@link BoundedDomain} implementor) and filters its values, building the result as a {@link
  * NumericDiscreteDomain} — the numeric analogue of {@link SetDomain.DefaultBuilder}'s own fallback
  * to {@link DomainObjectSet} when the caller's specific concrete type isn't known.
  */

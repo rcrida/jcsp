@@ -12,8 +12,8 @@ public interface BoundedDomain<T extends Number> extends NumericDomain<T> {
      * Takes {@code double} rather than a {@code T}-typed pair: every real caller of bounds-
      * narrowing code (propagators working generically over an erased {@code T}) only ever had a
      * plain {@code double} in hand — a freshly computed bound, or a {@code T} value already widened
-     * via {@code Number#doubleValue()} — and previously had to reach for a raw {@link BoundedDomain}
-     * reference just to pass it through the old {@code T}-typed signature, autoboxing to {@code
+     * via {@link Number#doubleValue()} — and previously had to reach for a raw {@link BoundedDomain}
+     * reference just to pass it through the old {@code T}-typed signature, autoboxing to {@link
      * Double} in the process. Taking {@code double} natively removes that raw-type cast (and the
      * boxing) from every one of those call sites, and gives this method the exact signature {@link
      * NumericDomain}'s own shared contract already needs, so no separate delegating override is

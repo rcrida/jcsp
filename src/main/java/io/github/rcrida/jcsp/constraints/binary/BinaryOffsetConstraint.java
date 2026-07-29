@@ -24,8 +24,8 @@ import java.util.Optional;
  * holds true after the offset is applied to the left operand and compared to the right operand.
  * If either operand is null, the constraint is treated as implicitly satisfied.
  * <p>
- * This class supports various numerical types for the offset, including {@code Byte}, {@code Short},
- * {@code Integer}, {@code Long}, {@code Float}, and {@code Double}.
+ * This class supports various numerical types for the offset, including {@link Byte}, {@link Short},
+ * {@link Integer}, {@link Long}, {@link Float}, and {@link Double}.
  */
 @SuperBuilder
 @EqualsAndHashCode(callSuper = true)
@@ -129,7 +129,7 @@ public class BinaryOffsetConstraint<N extends Number> extends BinaryConstraint<N
      * side already holds a singleton domain — the other side is omitted since no single value
      * can be blamed for it. Empty when neither side is singleton. Structurally mirrors
      * {@link BinaryComparatorConstraint#explainInfeasible}, but unlike that constraint,
-     * {@code propagate()} here narrows discrete/discrete pairs too (via
+     * {@link #propagate} here narrows discrete/discrete pairs too (via
      * {@link io.github.rcrida.jcsp.constraints.NumericBounds#narrow}, not just
      * {@link io.github.rcrida.jcsp.domains.BoundedDomain#withBounds}), so this method's
      * infeasible branch is reachable for plain discrete pairs as well, not only mixed

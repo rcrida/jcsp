@@ -28,10 +28,10 @@ import java.util.stream.Collectors;
  * <p>
  * Propagation applies interval-arithmetic bounds narrowing for EQ, LEQ, LT, GEQ, and GT:
  * <ul>
- *   <li>{@link Operator#LEQ}/{@link Operator#LT}: clips every variable's upper bound to {@code bound};
- *       infeasible when any variable's lower bound exceeds {@code bound}.</li>
- *   <li>{@link Operator#GEQ}/{@link Operator#GT}: infeasible when no variable can reach {@code bound};
- *       when exactly one variable can still reach {@code bound} its lower bound is raised to {@code bound}.</li>
+ *   <li>{@link Operator#LEQ}/{@link Operator#LT}: clips every variable's upper bound to {@link #bound};
+ *       infeasible when any variable's lower bound exceeds {@link #bound}.</li>
+ *   <li>{@link Operator#GEQ}/{@link Operator#GT}: infeasible when no variable can reach {@link #bound};
+ *       when exactly one variable can still reach {@link #bound} its lower bound is raised to {@link #bound}.</li>
  *   <li>{@link Operator#EQ}: combines both upper-clip and lower-force passes.</li>
  *   <li>{@link Operator#NEQ}: skipped (no narrowing applicable).</li>
  * </ul>
@@ -78,9 +78,9 @@ public class MaxConstraint<N extends Number> extends UniformNaryConstraint<N> im
     /**
      * Bounds propagation for {@code max(vars) op bound}.
      * <p>
-     * Upper-bound pass (EQ/LEQ/LT): clips every variable's maximum to {@code bound}.
-     * Lower-bound pass (EQ/GEQ/GT): when only one variable can still reach {@code bound},
-     * raises its minimum to {@code bound}. Returns {@link Optional#empty()} on infeasibility.
+     * Upper-bound pass (EQ/LEQ/LT): clips every variable's maximum to {@link #bound}.
+     * Lower-bound pass (EQ/GEQ/GT): when only one variable can still reach {@link #bound},
+     * raises its minimum to {@link #bound}. Returns {@link Optional#empty()} on infeasibility.
      */
     @Override
     @SuppressWarnings("unchecked")
@@ -164,16 +164,16 @@ public class MaxConstraint<N extends Number> extends UniformNaryConstraint<N> im
      * the conflict (including the discrete-gap corner case, which falls back to an empty reason):
      * <ul>
      *   <li><b>Single culprit</b> (violates the upper bound, EQ/LEQ/LT): any one singleton
-     *       variable whose value already exceeds {@code bound} makes {@code max(vars) op bound}
+     *       variable whose value already exceeds {@link #bound} makes {@code max(vars) op bound}
      *       infeasible by itself, regardless of every other variable — attributed alone as soon
      *       as found.</li>
      *   <li><b>Collective</b> (violates the lower bound, EQ/GEQ/GT): {@code max(vars) >= bound}
-     *       needs at least one variable to reach {@code bound}; only attributable when every
+     *       needs at least one variable to reach {@link #bound}; only attributable when every
      *       variable is singleton, since a partial subset can't rule out an unlisted open-domain
-     *       variable also being unable to reach {@code bound}. Whenever every variable is
+     *       variable also being unable to reach {@link #bound}. Whenever every variable is
      *       singleton and the single-culprit check above found nothing, every one of them is
-     *       guaranteed to individually fall short of {@code bound} (otherwise the single-culprit
-     *       check — or {@code propagate()} itself — would already have resolved the conflict), so
+     *       guaranteed to individually fall short of {@link #bound} (otherwise the single-culprit
+     *       check — or {@link #propagate} itself — would already have resolved the conflict), so
      *       the full set of singleton values is always a sound, self-contained explanation as
      *       soon as it's reached.</li>
      * </ul>

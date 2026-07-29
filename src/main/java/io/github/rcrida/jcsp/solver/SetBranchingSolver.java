@@ -35,14 +35,14 @@ import java.util.stream.Stream;
  * optimization — {@link Solver.Factory} wires it in unconditionally whenever any variable's domain
  * is a {@link SetBoundedDomain}, in both {@code createSolver} overloads.
  * <p>
- * {@code objective} is {@code null} in the satisfaction chain (no incumbent to track — {@link
+ * {@link #objective} is {@code null} in the satisfaction chain (no incumbent to track — {@link
  * #getSolutions} returns every branch's solutions unfiltered) and non-null in the optimization
  * chain. It exists for the same reason {@link BisectionConditioningSolver} carries one: each branch
  * below independently calls {@code inner.getSolutions(...)}, and {@link BranchAndBoundSolver}'s own
  * "each solution strictly better than the previous" guarantee only holds <em>within</em> one such
  * call — concatenating multiple branches' streams without a shared incumbent would let a later
  * branch yield a worse solution than an earlier one already found, silently breaking that contract
- * for whatever reads the combined stream (in particular, {@code BoundSolver#getSolution}'s {@code
+ * for whatever reads the combined stream (in particular, {@link BoundSolver#getSolution}'s {@code
  * reduce((a, b) -> b)}, which assumes the last element is the global optimum).
  */
 @Slf4j
@@ -126,7 +126,7 @@ public class SetBranchingSolver extends SolverDecorator {
      * {@code lowerBound.size() <= maxCardinality} and leaves containment/{@code upperBound}'s own
      * cardinality untouched, so none of {@link SetBoundedDomain#isEmpty()}'s four conditions can
      * become true here. This is specific to how <em>this class</em> calls {@code withLowerBound} —
-     * unlike {@code DisjointConstraint}/{@code SubsetConstraint}, which narrow arbitrary domain
+     * unlike {@link io.github.rcrida.jcsp.constraints.binary.DisjointConstraint}/{@link io.github.rcrida.jcsp.constraints.binary.SubsetConstraint}, which narrow arbitrary domain
      * states and do need their own checks.
      */
     @SuppressWarnings({"unchecked", "rawtypes"})

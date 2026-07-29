@@ -36,13 +36,13 @@ import java.util.stream.Stream;
  * bisection and returns them in improving objective order (each strictly better than the previous).
  *
  * <p>{@link #allFeasible} threads a shared {@code incumbent} through its recursion and prunes a
- * subtree immediately once {@code objective} evaluated against a <em>partial</em> {@link Assignment}
+ * subtree immediately once {@link #objective} evaluated against a <em>partial</em> {@link Assignment}
  * of whichever variables are currently singleton (see {@link #partialAssignmentLowerBound}) already
  * meets or exceeds it -- mirroring {@link BranchAndBoundSolver#search}'s own
  * {@code objective.applyAsDouble(assignment) >= incumbent[0]} check, and relying on the same
  * pre-existing contract ({@link Solver.Factory#createSolver(ConstraintSatisfactionProblem,
  * ToDoubleFunction)}'s objective "must return a lower bound on the cost of any completion of a
- * partial assignment"). Without this, several {@code BoundedDomain} variables whose tight bounds
+ * partial assignment"). Without this, several {@link BoundedDomain} variables whose tight bounds
  * depend on other, still-unresolved discrete variables force every bisection split to explore both
  * halves regardless of cost, with every leaf re-running the entire inner discrete search from
  * scratch.

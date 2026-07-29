@@ -21,16 +21,16 @@ import java.util.Optional;
 import java.util.Set;
 
 /**
- * An n-ary constraint requiring {@code parts} to partition a fixed {@code universe}: every element
- * of {@code universe} belongs to exactly one of {@code parts}, and no element of any part lies
- * outside {@code universe}. Equivalent to MiniZinc's {@code partition_set(parts, universe)}.
- * {@code universe} is fixed data, not a variable — only the parts' membership is a decision,
+ * An n-ary constraint requiring {@code parts} to partition a fixed {@link #universe}: every element
+ * of {@link #universe} belongs to exactly one of {@code parts}, and no element of any part lies
+ * outside {@link #universe}. Equivalent to MiniZinc's {@code partition_set(parts, universe)}.
+ * {@link #universe} is fixed data, not a variable — only the parts' membership is a decision,
  * matching {@link BinPackingConstraint}'s precedent for fixed capacities alongside variable
- * assignments. {@code parts} is a {@code Set}, not a {@code List} — unlike {@code
+ * assignments. {@code parts} is a {@link Set}, not a {@link List} — unlike {@link
  * BinPackingConstraint}'s {@code bin} (positionally paired with a parallel {@code weights} list),
  * there's no ordering dependency between parts, matching {@link AllDiffConstraint}/{@link
- * AtMostOneConstraint}'s precedent; a {@code Set} also rules out the same variable being passed
- * twice as two different "parts" by construction, which a {@code List} wouldn't.
+ * AtMostOneConstraint}'s precedent; a {@link Set} also rules out the same variable being passed
+ * twice as two different "parts" by construction, which a {@link List} wouldn't.
  * <p>
  * Unlike {@link NValueConstraint} (which keeps its own {@code trackedVariables} field distinct
  * from the inherited {@code variables}, since it has one further variable — {@code count} — beyond
@@ -38,27 +38,27 @@ import java.util.Set;
  * is kept at all. {@link #propagate}/{@link #classify} — called repeatedly over the course of a
  * solve, unlike {@link #getAsBinaryConstraints}, which runs once at graph-construction time — look
  * up each part's domain directly from the supplied domains map by variable, keeping {@code
- * Variable<?>} untyped rather than casting {@code getVariables()} to an ordered, typed copy first;
+ * Variable<?>} untyped rather than casting {@link #getVariables} to an ordered, typed copy first;
  * {@link #getAsBinaryConstraints} still needs the typed view (to pass to {@link
  * DisjointConstraint#of}), obtained via the same cast-back pattern {@link AllDiffConstraint}
  * already uses.
  * <p>
- * Implements {@link BinaryDecomposable} via pairwise {@link DisjointConstraint}s (for AC3/{@code
- * ConstraintGraph} purposes) but {@link #isDecompositionComplete()} is {@code false}: pairwise
+ * Implements {@link BinaryDecomposable} via pairwise {@link DisjointConstraint}s (for AC3/{@link
+ * io.github.rcrida.jcsp.ConstraintGraph} purposes) but {@link #isDecompositionComplete()} is {@code false}: pairwise
  * disjointness alone only rules out an element landing in two parts at once, it says nothing
- * about an element landing in <em>no</em> part — the same shape of gap {@code ExactlyOneConstraint}
+ * about an element landing in <em>no</em> part — the same shape of gap {@link ExactlyOneConstraint}
  * documents for its own "at least one true" half, which its inherited pairwise-NAND decomposition
  * can't express either. {@link #propagate} layers that "coverage" reasoning on top, the way {@link
  * ExactlyOneConstraint#propagate} layers "at least one" on top of {@link
  * io.github.rcrida.jcsp.constraints.nary.AtMostOneConstraint}'s inherited decomposition.
  * <p>
- * Deliberately doesn't proactively narrow a part's upper bound down to {@code universe} even
- * though a part's own domain including a candidate element outside {@code universe} is meaningless
+ * Deliberately doesn't proactively narrow a part's upper bound down to {@link #universe} even
+ * though a part's own domain including a candidate element outside {@link #universe} is meaningless
  * — every realistic construction already bounds each part's domain to (a subset of) {@code
  * universe} directly, the same "unexpected in practice" reasoning {@link DisjointConstraint} and
  * {@link io.github.rcrida.jcsp.constraints.binary.SubsetConstraint} already give for a
  * non-{@link SetBoundedDomain} side. {@link #isSatisfiedByValues} still checks it independently,
- * though, since {@code universe} is passed as a separate constructor argument with nothing
+ * though, since {@link #universe} is passed as a separate constructor argument with nothing
  * enforcing it matches each part's own domain — a real (if unlikely) modelling mismatch, unlike
  * the domain-kind case above.
  */
@@ -82,8 +82,8 @@ public class PartitionConstraint<E> extends UniformNaryConstraint<Set<E>> implem
 
     /**
      * Every element seen across the currently-assigned parts must be unique (no element claimed
-     * by two parts) and must belong to {@code universe}; once every part is assigned, their
-     * combined elements must equal {@code universe} exactly (coverage) — checked only once
+     * by two parts) and must belong to {@link #universe}; once every part is assigned, their
+     * combined elements must equal {@link #universe} exactly (coverage) — checked only once
      * complete, since a partial assignment obviously hasn't covered everything yet and that's not
      * itself a violation.
      */
@@ -105,7 +105,7 @@ public class PartitionConstraint<E> extends UniformNaryConstraint<Set<E>> implem
     }
 
     /**
-     * Only {@link SetBoundedDomain}-typed parts are narrowed; a non-{@code SetBoundedDomain} part
+     * Only {@link SetBoundedDomain}-typed parts are narrowed; a non-{@link SetBoundedDomain} part
      * (unexpected in practice, same reasoning {@link DisjointConstraint} gives) leaves this
      * constraint's propagation as a no-op for the whole call, matching {@link
      * io.github.rcrida.jcsp.constraints.binary.SubsetConstraint}'s all-or-nothing type check.
@@ -139,7 +139,7 @@ public class PartitionConstraint<E> extends UniformNaryConstraint<Set<E>> implem
     }
 
     /**
-     * Classifies every element of {@code universe} against each part's current bounds, looked up
+     * Classifies every element of {@link #universe} against each part's current bounds, looked up
      * directly from {@code domains} by variable (no ordered copy of the parts kept around, since
      * {@code propagate} is called repeatedly over the course of a solve), following the same
      * "definite/undetermined" shape {@link
@@ -158,7 +158,7 @@ public class PartitionConstraint<E> extends UniformNaryConstraint<Set<E>> implem
      *       Disjoint}, which never needs to widen a lower bound.</li>
      *   <li>no part has {@code e} forced in, and 2+ parts still candidate it: a genuine
      *       disjunctive choice, left unresolved — the same bounds-consistency-not-GAC ceiling
-     *       {@code IntersectionCardinalityConstraint}/{@code NValueConstraint} document.</li>
+     *       {@link io.github.rcrida.jcsp.constraints.binary.IntersectionCardinalityConstraint}/{@link NValueConstraint} document.</li>
      * </ul>
      */
     private Classification<E> classify(Map<Variable<?>, Domain<?>> domains) {
@@ -194,7 +194,7 @@ public class PartitionConstraint<E> extends UniformNaryConstraint<Set<E>> implem
     private record Classification<T>(boolean infeasible, Map<Variable<?>, Set<T>> excluded, Map<Variable<?>, Set<T>> forcedIn) {}
 
     /**
-     * Two infeasibility points, mirroring {@code ExactlyOneConstraint}'s own two-branch reasoning
+     * Two infeasibility points, mirroring {@link ExactlyOneConstraint}'s own two-branch reasoning
      * (a targeted subset for "too many", the full collective for "none left"):
      * <ul>
      *   <li><b>2+ parts force the same element {@code e}</b>: those parts alone are already a

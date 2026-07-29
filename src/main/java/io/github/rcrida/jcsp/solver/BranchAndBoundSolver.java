@@ -120,7 +120,7 @@ public class BranchAndBoundSolver implements Solver {
      * pass. A {@code null} {@link ConsistencyResult#reason()} means the configured {@link
      * Inference} doesn't want a nogood recorded for this failure (see
      * {@link Inference#withoutReasonTracking}) -- this method has no fallback of its own for that
-     * case, since choosing whether/how to explain is entirely {@code inference}'s job.
+     * case, since choosing whether/how to explain is entirely {@link #inference}'s job.
      */
     private Optional<ConstraintSatisfactionProblem> inferOrExplain(ConstraintSatisfactionProblem cspWithNogoods,
                                                                      Variable<?> variable,

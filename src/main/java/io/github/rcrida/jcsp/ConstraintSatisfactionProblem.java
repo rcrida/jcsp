@@ -118,33 +118,33 @@ public class ConstraintSatisfactionProblem {
      * runs before returning a solution (e.g. {@link io.github.rcrida.jcsp.solver.SolverDecorator#forcedSolution})
      * — the same fallback guarantee every other listed constraint relies on beyond its one upfront
      * propagation pass in {@link io.github.rcrida.jcsp.solver.BisectionConditioningSolver} (whose own
-     * re-propagation is itself limited to {@code SumBoundConstraint}/{@code LinearBoundConstraint} — see its
+     * re-propagation is itself limited to {@link SumBoundConstraint}/{@link LinearBoundConstraint} — see its
      * {@code REPROPAGATORS}):
      * <ul>
-     *   <li>{@link io.github.rcrida.jcsp.constraints.unary.UnaryPredicateConstraint} — {@code NodeConsistency}
+     *   <li>{@link io.github.rcrida.jcsp.constraints.unary.UnaryPredicateConstraint} — {@link io.github.rcrida.jcsp.consistency.node.NodeConsistency}
      *       already gates on {@code instanceof DiscreteDomain} and no-ops otherwise.</li>
      *   <li>{@link io.github.rcrida.jcsp.constraints.binary.BinaryPredicateConstraint},
      *       {@link PredicateConstraint}, {@link ImplicationConstraint} — none of these implement
      *       {@link io.github.rcrida.jcsp.consistency.Propagatable} or {@link BinaryDecomposable}, so
      *       no propagator ever sees them.</li>
-     *   <li>{@link ReifiedConstraint} — likewise not {@code Propagatable}; its {@code BinaryDecomposable}
-     *       output only exists when the body is a {@code UnaryConstraint}, and AC3 gates that arc on
-     *       {@code DiscreteDomain} the same way as above.</li>
+     *   <li>{@link ReifiedConstraint} — likewise not {@link io.github.rcrida.jcsp.consistency.Propagatable}; its {@link BinaryDecomposable}
+     *       output only exists when the body is a {@link io.github.rcrida.jcsp.constraints.unary.UnaryConstraint}, and AC3 gates that arc on
+     *       {@link io.github.rcrida.jcsp.domains.DiscreteDomain} the same way as above.</li>
      *   <li>{@link NaryElementConstraint} — the one exception that's already explicitly defensive:
      *       every propagation pass checks {@code instanceof DiscreteDomain} up front and returns
      *       {@code Optional.of(Map.of())} (a no-op) the moment {@code result} or any {@code vars[i]}
-     *       is a {@code BoundedDomain}, so mixing a discrete {@code index} with continuous
+     *       is a {@link BoundedDomain}, so mixing a discrete {@code index} with continuous
      *       {@code result}/{@code vars} was always safe at the propagator level, just previously
      *       blocked by this list. Enabling it also surfaced (and required fixing) two latent bugs
-     *       one layer down, in {@code TreeDecompositionSolver}'s machinery — reachable by any
-     *       {@code BoundedDomain} CSP with 3+ mutually connected variables not fully resolved by
+     *       one layer down, in {@link io.github.rcrida.jcsp.solver.tree.decomposition.TreeDecompositionSolver}'s machinery — reachable by any
+     *       {@link BoundedDomain} CSP with 3+ mutually connected variables not fully resolved by
      *       propagation, not just this constraint: {@code TreeDecomposerImpl.getMaximalCliqueBags}'s
      *       min-degree elimination used to represent purely-structural "fill-in" edges as a real
-     *       {@code BinaryTuplesConstraint} pushed through the fully validated CSP builder (fixed by
+     *       {@link io.github.rcrida.jcsp.constraints.binary.BinaryTuplesConstraint} pushed through the fully validated CSP builder (fixed by
      *       maintaining the working adjacency graph as a plain map instead); and
      *       {@code AssignmentDomain.populateCombinations} unconditionally cast every clique
-     *       variable's domain to {@code DiscreteDomain} to enumerate it (fixed by special-casing an
-     *       already-singleton {@code BoundedDomain} via {@code Domain#singleValue()} — the only
+     *       variable's domain to {@link io.github.rcrida.jcsp.domains.DiscreteDomain} to enumerate it (fixed by special-casing an
+     *       already-singleton {@link BoundedDomain} via {@link Domain#singleValue()} — the only
      *       shape one can be by the time it reaches a clique, since the satisfaction chain's
      *       {@code PropagationFixpointSolver(snap=true)} always resolves bounded domains to
      *       singletons before tree decomposition ever runs).</li>
@@ -153,7 +153,7 @@ public class ConstraintSatisfactionProblem {
      * Lists {@link GroundNogoodConstraint} and {@link RangeNogoodConstraint} specifically, not the
      * {@link NogoodConstraint} interface they implement — this check matches on
      * {@link Object#getClass()}, the concrete runtime type, so any future additional
-     * {@code NogoodConstraint} implementation needs its own entry here too.
+     * {@link NogoodConstraint} implementation needs its own entry here too.
      */
     private static final Set<Class<? extends Constraint>> CONTINUOUS_COMPATIBLE_CONSTRAINTS =
             Set.of(SumBoundConstraint.class, SumVariableConstraint.class, LinearBoundConstraint.class, LinearVariableConstraint.class, UnaryComparatorConstraint.class, BinaryComparatorConstraint.class, BinaryOffsetConstraint.class, AbsoluteDifferenceConstraint.class, DivisionConstraint.class, LexConstraint.class, CumulativeConstraint.class, MaxConstraint.class, MinConstraint.class, ProductConstraint.class, DiffnConstraint.class, GroundNogoodConstraint.class, RangeNogoodConstraint.class, IncreasingConstraint.class, DecreasingConstraint.class, UnaryPredicateConstraint.class, BinaryPredicateConstraint.class, PredicateConstraint.class, ReifiedConstraint.class, ImplicationConstraint.class, NaryElementConstraint.class);
@@ -193,23 +193,23 @@ public class ConstraintSatisfactionProblem {
 
     /**
      * Constructor ensures constraints reference known variables and determines whether graph is cyclic and/or
-     * fully connected. When a {@code constraintGraph} is supplied whose constraint set matches {@code constraints}
+     * fully connected. When a {@link #constraintGraph} is supplied whose constraint set matches {@code constraints}
      * (e.g. via {@link #toBuilder()} during domain-only updates) it is reused directly, avoiding redundant
      * recomputation of neighbours and binary constraints. The match check tries reference equality
-     * ({@code ==}) before falling back to {@code Set#equals} — a cheap, always-safe fast path (a
+     * ({@code ==}) before falling back to {@link Set#equals} — a cheap, always-safe fast path (a
      * miss just falls through to the same check as before) that matters because the {@code
-     * @Singular} builder rebuilds {@code constraints} into a fresh {@code Set} on every {@code
+     * @Singular} builder rebuilds {@code constraints} into a fresh {@link Set} on every {@code
      * build()} regardless of whether its contents actually changed, making the fallback {@code
      * equals} (a full {@code hashCode}/element comparison — expensive for large constraint sets
-     * with non-trivial {@code hashCode} implementations, e.g. {@code ReifiedConstraint}) run on
+     * with non-trivial {@code hashCode} implementations, e.g. {@link ReifiedConstraint}) run on
      * every domain-only update unless something avoids it. {@link #withDomain}/{@link #withDomains}
      * are the intended way to get the reference-equality hit: they call this constructor directly
      * with {@code constraintGraph.getConstraints()} itself as {@code constraints}, bypassing the
      * builder's rebuild entirely — found to be the dominant per-node cost in a set-CP branch search
      * with several reified constraints ({@code Prob044SteinerTripleSystemTest}) via JFR profiling.
      * <p>
-     * {@code nogoods} is layered on top of {@code constraints} without ever influencing
-     * {@code constraintGraph}: a {@link NogoodConstraint} is neither a {@link BinaryConstraint} nor
+     * {@link #nogoods} is layered on top of {@code constraints} without ever influencing
+     * {@link #constraintGraph}: a {@link NogoodConstraint} is neither a {@link BinaryConstraint} nor
      * {@link BinaryDecomposable}, so it never contributes to neighbours, binary decomposition, or
      * cycle/connectivity analysis. This is what lets {@link #withNogoods} add learned nogoods without
      * ever triggering graph recomputation.
@@ -238,10 +238,10 @@ public class ConstraintSatisfactionProblem {
     }
 
     /**
-     * Returns {@code constraintGraph.getConstraints()} unioned with {@code nogoods}, reusing the
-     * last computed merge from {@link #nogoodMergeCache} when {@code nogoods} is the exact same
+     * Returns {@code constraintGraph.getConstraints()} unioned with {@link #nogoods}, reusing the
+     * last computed merge from {@link #nogoodMergeCache} when {@link #nogoods} is the exact same
      * {@link Set} reference as last time (a cheap identity check) instead of rebuilding a fresh
-     * {@code HashSet} of every structural constraint plus every nogood on every call. Correct
+     * {@link HashSet} of every structural constraint plus every nogood on every call. Correct
      * regardless of hit rate: a reference match can only ever return a result actually computed for
      * that exact object, so a miss (different nogoods reference) always falls back to a fresh,
      * correct merge. Relies on {@link NogoodStore#apply} handing back the same cached snapshot
@@ -292,17 +292,17 @@ public class ConstraintSatisfactionProblem {
 
     /**
      * Returns this problem with {@code variable}'s domain replaced by {@code domain}, leaving
-     * constraints/{@code constraintGraph}/nogoods untouched. Calls the constructor directly with
+     * constraints/{@link #constraintGraph}/nogoods untouched. Calls the constructor directly with
      * {@code constraintGraph.getConstraints()} passed straight through as {@code constraints} —
      * unlike {@code toBuilder().variableDomainEntry(...).build()}, which forces the {@code
-     * @Singular} builder to rebuild {@code constraints} into a fresh {@code Set} — so the
+     * @Singular} builder to rebuild {@code constraints} into a fresh {@link Set} — so the
      * constructor's reference-equality fast path (see its own Javadoc) always hits here. Domain
      * narrowing is by far the most frequent operation during search (every propagator's own domain
      * update goes through this or {@link #withDomains}), so this exists specifically to make that
      * path cheap.
      * <p>
      * Uses {@link LinkedHashMap} throughout, not {@link Map#copyOf}: the latter's iteration order
-     * is deliberately unspecified, which silently broke {@code SetBranchingSolver#findMostUndeterminedSet}'s
+     * is deliberately unspecified, which silently broke {@link io.github.rcrida.jcsp.solver.SetBranchingSolver#findMostUndeterminedSet}'s
      * (and any other iteration-order-sensitive tie-breaking's) reproducibility the first time this
      * method was written — variable iteration order needs to stay exactly what {@code
      * variableDomains}' own order already was, insertion order preserved.
@@ -364,7 +364,7 @@ public class ConstraintSatisfactionProblem {
      * themselves whitelisted in {@link #CONTINUOUS_COMPATIBLE_CONSTRAINTS} unconditionally (they
      * do no propagation of their own over the body), so without this recursion an incompatible
      * body constraint (e.g. {@code allDiffConstraint}/{@code circuitConstraint} over a
-     * {@code BoundedDomain} variable, both explicitly rejected when used directly) would silently
+     * {@link BoundedDomain} variable, both explicitly rejected when used directly) would silently
      * bypass the whitelist check entirely by being wrapped in a reification.
      */
     private static void validateCompatibility(Constraint constraint, Set<Variable<?>> restrictedVariables,
@@ -448,11 +448,11 @@ public class ConstraintSatisfactionProblem {
     /**
      * Computes (or returns the previously computed) value cached against this problem's
      * underlying {@link ConstraintGraph}, keyed by {@code key} — for any propagation algorithm
-     * (e.g. {@code AC3}'s own arc/constraint index) that wants to memoize a derived value keyed
+     * (e.g. {@link io.github.rcrida.jcsp.consistency.arc.AC3}'s own arc/constraint index) that wants to memoize a derived value keyed
      * only by this problem's structure. See {@link ConstraintGraph#auxiliaryCache}'s own Javadoc
      * for why this is keyed per-graph rather than on the calling algorithm's own shared instance.
      *
-     * @param key a token identifying the cached value's shape (e.g. a {@code Class} literal) —
+     * @param key a token identifying the cached value's shape (e.g. a {@link Class} literal) —
      *            not the constraint set itself, so this never pays a {@code hashCode}/{@code
      *            equals} cost proportional to constraint count
      * @param compute produces the value on a cache miss, given this problem

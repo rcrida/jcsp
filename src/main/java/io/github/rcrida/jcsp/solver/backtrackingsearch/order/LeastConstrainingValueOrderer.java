@@ -24,7 +24,7 @@ import java.util.stream.Stream;
  * established in ascending order of the number of eliminated values, with values that affect fewer
  * neighbours or eliminate fewer possibilities being prioritized.
  * <p>
- * This implementation specifically accounts for constraints that are instances of {@code BinaryConstraint},
+ * This implementation specifically accounts for constraints that are instances of {@link BinaryConstraint},
  * which operate on pairs of variables. The elimination of domain values is computed by iterating
  * over the binary constraints involving the variable of interest and evaluating their satisfaction.
  */

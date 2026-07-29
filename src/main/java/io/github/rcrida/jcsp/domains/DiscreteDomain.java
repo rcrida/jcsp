@@ -7,7 +7,7 @@ import java.util.Optional;
 import java.util.stream.Stream;
 
 /**
- * A {@link Domain} whose values are enumerable. Extends the base {@code Domain} contract with
+ * A {@link Domain} whose values are enumerable. Extends the base {@link Domain} contract with
  * {@link #stream()}, {@link #toList()}, and {@link #toBuilder()} — methods that
  * require individual values to be addressable. All concrete domain implementations except
  * {@link IntervalDomain} implement this interface.

@@ -119,16 +119,16 @@ public class TreeDecomposerImpl implements TreeDecomposer {
      * are structurally connected) — it never inspects constraint semantics or domain values — so
      * building a fully validated CSP on every elimination step was both wasted work and, worse,
      * unsound: each step's "fill-in" edges (recording that a pivot's remaining neighbours must now
-     * be treated as mutually adjacent) used to be represented as a real {@code BinaryTuplesConstraint}
+     * be treated as mutually adjacent) used to be represented as a real {@link io.github.rcrida.jcsp.constraints.binary.BinaryTuplesConstraint}
      * pushed through {@link ConstraintSatisfactionProblem.ConstraintSatisfactionProblemBuilder#build()},
-     * which re-runs the {@code BoundedDomain} compatibility check ({@code validateConstraints}) on
+     * which re-runs the {@link io.github.rcrida.jcsp.domains.BoundedDomain} compatibility check ({@code validateConstraints}) on
      * every new constraint added. That check is meant for constraints that are actually evaluated
      * during solving; a fill-in edge never is; it exists purely to make the next iteration's
-     * {@code getNeighbours} report the right adjacency. Since {@code BinaryTuplesConstraint} was
-     * never (and shouldn't be) whitelisted for {@code BoundedDomain} — extensional tables over
+     * {@code getNeighbours} report the right adjacency. Since {@link io.github.rcrida.jcsp.constraints.binary.BinaryTuplesConstraint} was
+     * never (and shouldn't be) whitelisted for {@link io.github.rcrida.jcsp.domains.BoundedDomain} — extensional tables over
      * continuous values don't make sense — any tree decomposition attempt over 3+ mutually
-     * connected {@code BoundedDomain} variables not already resolved by propagation would throw
-     * {@code IllegalArgumentException}, regardless of which real constraint originally connected
+     * connected {@link io.github.rcrida.jcsp.domains.BoundedDomain} variables not already resolved by propagation would throw
+     * {@link IllegalArgumentException}, regardless of which real constraint originally connected
      * them (2026-07-15).
      */
     private @NonNull List<Set<Variable<?>>> getMaximalCliqueBags(@NonNull ConstraintSatisfactionProblem csp) {

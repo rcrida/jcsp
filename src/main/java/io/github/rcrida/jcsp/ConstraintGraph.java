@@ -41,18 +41,18 @@ class ConstraintGraph {
      */
     @EqualsAndHashCode.Exclude Set<BinaryConstraint<?, ?>> allBinaryConstraints;
     /**
-     * Generic per-structure memoization slot for any propagation algorithm (e.g. {@code AC3}'s own
+     * Generic per-structure memoization slot for any propagation algorithm (e.g. {@link io.github.rcrida.jcsp.consistency.arc.AC3}'s own
      * arc/constraint index) that wants to cache a derived value keyed only by this graph's
      * structure, without the risk a single shared cache on the algorithm's own singleton instance
      * carries: two different {@link ConstraintSatisfactionProblem}s solved concurrently (e.g.
      * independent subproblems) would otherwise keep evicting each other's entry. Keying by this
      * graph instance directly — reused across every domain-only narrowing step of a search, since
-     * {@code ConstraintSatisfactionProblem}'s constructor only rebuilds it when the structural
+     * {@link ConstraintSatisfactionProblem}'s constructor only rebuilds it when the structural
      * constraint set actually changes — gives each distinct constraint structure its own isolated
      * cache with no cross-contamination, discarded automatically once the graph itself becomes
      * unreachable, and no {@code hashCode}/{@code equals} cost on the (potentially large,
      * expensive-to-hash) constraint set itself: the key is whatever opaque token the caller
-     * supplies (e.g. a {@code Class} literal identifying the cached value's shape), not the
+     * supplies (e.g. a {@link Class} literal identifying the cached value's shape), not the
      * constraint set.
      */
     @EqualsAndHashCode.Exclude

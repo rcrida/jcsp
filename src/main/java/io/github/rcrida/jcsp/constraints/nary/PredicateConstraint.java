@@ -12,10 +12,10 @@ import java.util.function.Predicate;
  * <p>
  * This constraint is defined by:
  * - {@code variables}: The set of variables to which the constraint applies.
- * - {@code predicate}: A predicate that evaluates whether the
+ * - {@link #predicate}: A predicate that evaluates whether the
  *   provided {@link Assignment} satisfies the constraint.
  * <p>
- * The constraint is satisfied if the provided assignment passes the {@code predicate}.
+ * The constraint is satisfied if the provided assignment passes the {@link #predicate}.
  * This allows for defining complex relationships and dependencies between multiple variables.
  */
 @SuperBuilder

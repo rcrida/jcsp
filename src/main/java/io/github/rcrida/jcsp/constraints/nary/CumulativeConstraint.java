@@ -23,7 +23,7 @@ import java.util.Set;
 
 /**
  * An n-ary constraint that bounds resource usage over time: at every instant, the sum of
- * resources consumed by concurrently executing tasks must not exceed {@code limit}.
+ * resources consumed by concurrently executing tasks must not exceed {@link #limit}.
  * Task {@code i} executes during {@code [start[i], start[i] + duration[i])}.
  * <p>
  * Start-time variables may be backed by either {@link io.github.rcrida.jcsp.domains.IntRangeDomain}

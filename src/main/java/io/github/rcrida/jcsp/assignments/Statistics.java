@@ -10,19 +10,19 @@ import java.util.concurrent.atomic.AtomicInteger;
  * {@link Assignment#withValue}, so a single instance reflects the full cost of a search.
  *
  * <ul>
- *   <li>{@code nodesExplored} — variable assignments attempted (incremented by {@link Assignment#withValue})</li>
- *   <li>{@code constraintChecks} — constraint evaluations performed (incremented by {@link Assignment#isConsistent})</li>
- *   <li>{@code backtracks} — times tree search reversed a value assignment due to inconsistency or domain wipeout</li>
- *   <li>{@code restarts} — completed Luby restarts before a solution was found (backtracking search only)</li>
- *   <li>{@code steps} — local search moves taken to reach the solution (local search solvers only)</li>
- *   <li>{@code nogoodsLearned} — nogoods recorded after a domain-wipeout during search (backtracking search only)</li>
+ *   <li>{@link #nodesExplored} — variable assignments attempted (incremented by {@link Assignment#withValue})</li>
+ *   <li>{@link #constraintChecks} — constraint evaluations performed (incremented by {@link Assignment#isConsistent})</li>
+ *   <li>{@link #backtracks} — times tree search reversed a value assignment due to inconsistency or domain wipeout</li>
+ *   <li>{@link #restarts} — completed Luby restarts before a solution was found (backtracking search only)</li>
+ *   <li>{@link #steps} — local search moves taken to reach the solution (local search solvers only)</li>
+ *   <li>{@link #nogoodsLearned} — nogoods recorded after a domain-wipeout during search (backtracking search only)</li>
  * </ul>
  *
  * <p>There is deliberately no separate "nogood prunes" counter: nogoods are modelled as ordinary
  * {@link io.github.rcrida.jcsp.constraints.nary.NogoodConstraint}s that join the same propagation
  * fixpoint as every other constraint (see {@link io.github.rcrida.jcsp.assignments.NogoodStore}),
  * so a candidate rejected because of a learned nogood is architecturally indistinguishable from
- * one rejected by any other constraint — it's simply counted under {@code backtracks}.
+ * one rejected by any other constraint — it's simply counted under {@link #backtracks}.
  */
 @Value
 public class Statistics {

@@ -21,24 +21,24 @@ import java.util.Set;
 import java.util.stream.Collectors;
 
 /**
- * An n-ary constraint linking {@code count} to the number of distinct values taken by
- * {@code trackedVariables}: {@code count == |{ v.value : v in trackedVariables }|}.
+ * An n-ary constraint linking {@link #count} to the number of distinct values taken by
+ * {@link #trackedVariables}: {@code count == |{ v.value : v in trackedVariables }|}.
  * Equivalent to MiniZinc's {@code nvalue(count, trackedVariables)} constraint. Generalises
- * {@link AllDiffConstraint} (which is equivalent to fixing {@code count} to
+ * {@link AllDiffConstraint} (which is equivalent to fixing {@link #count} to
  * {@code trackedVariables.size()}).
  * <p>
- * {@code count} is a genuine decision variable rather than a fixed constant + {@link
- * io.github.rcrida.jcsp.constraints.Operator}, unlike e.g. {@code SumBoundConstraint}. This lets a
- * caller hand {@code count} directly to an optimization objective ({@code a ->
+ * {@link #count} is a genuine decision variable rather than a fixed constant + {@link
+ * io.github.rcrida.jcsp.constraints.Operator}, unlike e.g. {@link SumBoundConstraint}. This lets a
+ * caller hand {@link #count} directly to an optimization objective ({@code a ->
  * (Integer) a.getValue(count).orElseThrow()}) to minimise the number of distinct values used —
  * the motivating use case (course/template/slab "minimise resources used" problems) for this
- * constraint. Fixing {@code count} to a singleton domain recovers the fixed-bound use case too.
+ * constraint. Fixing {@link #count} to a singleton domain recovers the fixed-bound use case too.
  * <p>
  * Propagation is bounds-consistency, not full generalised arc consistency: GAC-nvalue is
  * NP-hard (Bessiere et al. 2006), so — like every constraint in this codebase except {@link
  * AllDiffConstraint}'s Régin algorithm — no attempt is made at a full GAC filtering algorithm
  * here. See {@link #propagate} for exactly what is and isn't filtered. Discrete-only: not
- * whitelisted for {@code BoundedDomain} variables, same precedent as {@link AllDiffConstraint},
+ * whitelisted for {@link io.github.rcrida.jcsp.domains.BoundedDomain} variables, same precedent as {@link AllDiffConstraint},
  * {@link CountConstraint}, {@link AmongConstraint}, and {@link GlobalCardinalityConstraint}
  * (distinct-value counting doesn't have a meaningful analogue over a dense/continuous range).
  */
@@ -61,9 +61,9 @@ public class NValueConstraint<T> extends NaryConstraint implements Propagatable 
 
     /**
      * Optimistic until every tracked variable is assigned, with one early-failure check: once
-     * {@code count} is assigned, the number of distinct values already committed can only grow
+     * {@link #count} is assigned, the number of distinct values already committed can only grow
      * as more variables are assigned, so exceeding it is a permanent violation (mirrors {@link
-     * GlobalCardinalityConstraint}'s early-exceeded check). {@code count} itself unassigned is
+     * GlobalCardinalityConstraint}'s early-exceeded check). {@link #count} itself unassigned is
      * treated as optimistically satisfied, mirroring {@link NaryElementConstraint}'s "wait for
      * the linking variable" style.
      */
@@ -89,7 +89,7 @@ public class NValueConstraint<T> extends NaryConstraint implements Propagatable 
 
     /**
      * Classifies each tracked variable as <em>definite</em> (singleton domain) or <em>open</em>
-     * (not), then narrows {@code count} to {@code [lowerBound, upperBound]}:
+     * (not), then narrows {@link #count} to {@code [lowerBound, upperBound]}:
      * <ul>
      *   <li>{@code lowerBound = |definiteValues|} — already-guaranteed distinct values.</li>
      *   <li>{@code upperBound = |definiteValues| + min(|openVars|, |openValues|)}, where
@@ -98,7 +98,7 @@ public class NValueConstraint<T> extends NaryConstraint implements Propagatable 
      *       value, and there can never be more new values than exist in the open variables'
      *       combined domains.</li>
      * </ul>
-     * If narrowing {@code count} forces it to a singleton {@code k}, two further (mutually
+     * If narrowing {@link #count} forces it to a singleton {@code k}, two further (mutually
      * exclusive, since {@code lowerBound <= upperBound} always) forcing steps apply:
      * <ul>
      *   <li>{@code k == lowerBound}: no open variable may introduce a new value, so every open
@@ -112,7 +112,7 @@ public class NValueConstraint<T> extends NaryConstraint implements Propagatable 
      *       |openValues|}), only <em>some</em> open variables need a new value and the rest may
      *       still repeat a definite one — which ones is a matching/Hall-set question ({@link
      *       AllDiffConstraint}-shaped), deliberately out of scope here, same kind of scope line as
-     *       {@code DiffnConstraint}'s compulsory-part-only propagation.</li>
+     *       {@link DiffnConstraint}'s compulsory-part-only propagation.</li>
      * </ul>
      */
     @Override
@@ -163,12 +163,12 @@ public class NValueConstraint<T> extends NaryConstraint implements Propagatable 
      * arithmetic is cheap and side-effect-free, so it's simply repeated rather than shared).
      * Only one of {@code propagate}'s two infeasibility points is ever explainable here:
      * <ul>
-     *   <li><b>{@code count}'s domain wiped</b> by the {@code [lowerBound, upperBound]} filter:
+     *   <li><b>{@link #count}'s domain wiped</b> by the {@code [lowerBound, upperBound]} filter:
      *       sound only when every surviving candidate was excluded from the same side (all below
      *       {@code lowerBound}, or all above {@code upperBound}) — a domain with candidates
      *       excluded from <em>both</em> sides (a gap spanning the whole valid range) has no
      *       single-sided reason and returns {@link Optional#empty()}. The below-side reason cites
-     *       the definite variables (already singleton by construction) plus {@code count} itself;
+     *       the definite variables (already singleton by construction) plus {@link #count} itself;
      *       the above-side reason additionally cites the open variables, since the upper bound
      *       depends on their domains too. Both go through {@link
      *       Propagatable#allSingletonReason}, so — like {@link

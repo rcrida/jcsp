@@ -29,7 +29,7 @@ import java.util.Optional;
  * sides via {@code withBounds}, discrete sides via value deletion — including a plain
  * discrete/discrete pair, as long as its values are actually {@link Number}s (both sides share
  * the same type parameter, so checking one side settles it for both). For a non-numeric
- * {@code Comparable} pair (e.g. ordering {@link String} or enum variables), propagation stays
+ * {@link Comparable} pair (e.g. ordering {@link String} or enum variables), propagation stays
  * a no-op and the ordering is enforced purely by {@code isSatisfiedBy} plus AC3 during search,
  * since {@link NumericBounds} has no notion of bounds for a type it can't convert to
  * {@code double}.
@@ -116,24 +116,24 @@ public class BinaryComparatorConstraint<T extends Comparable<T>> extends BinaryC
      * singleton, e.g. two open ranges with no overlap; callers fall back to the full assignment.
      * <p>
      * This is the reference implementation of {@link Propagatable#explainInfeasible}. Its benefit
-     * varies by domain-type pairing, since {@code propagate()} only narrows when the pair is
+     * varies by domain-type pairing, since {@link #propagate} only narrows when the pair is
      * numeric (bounded, or discrete with {@link Number} values) — see the class javadoc.
      * <ul>
      *     <li>Discrete/discrete numeric pairs: real benefit, reachable whenever narrowing empties
      *     one side — the same mechanism as {@link BinaryOffsetConstraint}.</li>
      *     <li>Discrete/discrete non-numeric pairs (e.g. ordering {@link String} or enum
-     *     variables): no benefit. {@code propagate()} is a no-op for these (delegates entirely
+     *     variables): no benefit. {@link #propagate} is a no-op for these (delegates entirely
      *     to AC3), so this method's infeasible branch is unreachable.</li>
      *     <li>Bounded/bounded pairs: usually no benefit either. A conflict between two intervals
-     *     is typically caught during preprocessing — {@code PropagationFixpointSolver}'s
+     *     is typically caught during preprocessing — {@link io.github.rcrida.jcsp.solver.PropagationFixpointSolver}'s
      *     snap-then-reconverge loop, run once before search — which reports the CSP UNSAT
      *     directly from the solver-decorator chain without ever invoking
-     *     {@code Inference#applyWithReason} (that only runs inside {@code DomWdegLubySearch}'s
+     *     {@link io.github.rcrida.jcsp.consistency.Inference#applyWithReason} (that only runs inside {@link io.github.rcrida.jcsp.solver.DomWdegLubySearch}'s
      *     search loop).</li>
      *     <li>Mixed discrete/bounded pairs: the one case with real payoff. By the time search
      *     runs, the bounded side is already snapped to a singleton; if a live discrete variable's
      *     search-time assignment then conflicts with it, MAC wraps that assignment in a singleton
-     *     {@code AssignedDomain} before this method runs, so it attributes the conflict to
+     *     {@link io.github.rcrida.jcsp.domains.AssignedDomain} before this method runs, so it attributes the conflict to
      *     {@code {discreteVar: assignedValue}} (plus the bounded side) instead of the caller
      *     falling back to the entire accumulated partial assignment — a nogood that prunes that
      *     discrete choice across branches and Luby restarts, not just the one search path.</li>

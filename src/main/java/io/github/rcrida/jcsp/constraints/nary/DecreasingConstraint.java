@@ -27,8 +27,8 @@ import java.util.Set;
  * are optimistically satisfied. Equivalent to MiniZinc's {@code decreasing(vars)}.
  * <p>
  * Implements {@link Propagatable} directly, same rationale as {@link IncreasingConstraint}. {@code
- * v[0] >= v[1] >= ... >= v[n-1]} holds iff the reversed list is non-decreasing, so {@code
- * propagate()}/{@code explainInfeasible()} simply delegate to {@link OrderingPropagation} over
+ * v[0] >= v[1] >= ... >= v[n-1]} holds iff the reversed list is non-decreasing, so
+ * {@link #propagate}/{@link #explainInfeasible} simply delegate to {@link OrderingPropagation} over
  * {@code orderedVariables.reversed()} rather than duplicating the bounds computation mirrored.
  */
 @SuperBuilder

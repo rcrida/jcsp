@@ -59,8 +59,8 @@ public class CountConstraint<T> extends UniformNaryConstraint<T> implements Prop
      * {@link #explainInfeasible} so the classification logic lives in exactly one place:
      * <ul>
      *   <li><em>definite</em>: domain is exactly {@code {value}}</li>
-     *   <li><em>possible</em>: {@code value} is in the domain alongside other values</li>
-     *   <li><em>impossible</em>: {@code value} is absent from the domain</li>
+     *   <li><em>possible</em>: {@link #value} is in the domain alongside other values</li>
+     *   <li><em>impossible</em>: {@link #value} is absent from the domain</li>
      * </ul>
      */
     private record Classification<T>(List<Variable<T>> definite, List<Variable<T>> possible,
@@ -84,7 +84,7 @@ public class CountConstraint<T> extends UniformNaryConstraint<T> implements Prop
     }
 
     /**
-     * When the definite count reaches {@code n} (for EQ/LEQ), {@code value} is removed from
+     * When the definite count reaches {@code n} (for EQ/LEQ), {@link #value} is removed from
      * all possible domains. When the max reachable count equals {@code n} (for EQ/GEQ), all
      * possible domains are forced to {@code {value}}.
      */
@@ -134,11 +134,11 @@ public class CountConstraint<T> extends UniformNaryConstraint<T> implements Prop
      * <ul>
      *   <li><b>Definite-count violation</b> (EQ/LEQ): {@code definiteCount > n}. Every
      *       <em>definite</em> variable is, by construction, already a singleton {@code {value}}
-     *       domain, so citing all of them with {@code value} is directly sound — no further
+     *       domain, so citing all of them with {@link #value} is directly sound — no further
      *       singleton gating needed, unlike the collective case below.</li>
      *   <li><b>Max-reachable-count violation</b> (EQ/GEQ): {@code maxCount < n}. This depends on
-     *       every <em>impossible</em> variable (domain excludes {@code value}) categorically
-     *       excluding {@code value}, regardless of what value each one actually takes — but a
+     *       every <em>impossible</em> variable (domain excludes {@link #value}) categorically
+     *       excluding {@link #value}, regardless of what value each one actually takes — but a
      *       nogood can only cite concrete variable-value pairs, so it's only attributable when
      *       every impossible variable is singleton (via {@link Propagatable#allSingletonReason}):
      *       a non-singleton impossible variable's domain could still shrink differently along

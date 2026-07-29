@@ -36,7 +36,7 @@ import java.util.Optional;
  * still gets real interval narrowing through the reification/implication).
  * <p>
  * Also accepted, but without dedicated bounds propagation of their own — correctness for these
- * rests on the final {@code isSatisfiedBy} check once every {@code BoundedDomain} variable has
+ * rests on the final {@code isSatisfiedBy} check once every {@link BoundedDomain} variable has
  * been resolved to a concrete point (see {@link io.github.rcrida.jcsp.solver.PropagationFixpointSolver}'s
  * midpoint snapping and {@link io.github.rcrida.jcsp.solver.BisectionConditioningSolver}'s bisection):
  * {@link io.github.rcrida.jcsp.constraints.unary.UnaryPredicateConstraint},
@@ -44,7 +44,7 @@ import java.util.Optional;
  * {@link io.github.rcrida.jcsp.constraints.nary.PredicateConstraint},
  * {@link io.github.rcrida.jcsp.constraints.nary.NaryElementConstraint}.
  * <p>
- * Any other constraint type referencing an {@code IntervalDomain} variable is rejected at
+ * Any other constraint type referencing an {@link IntervalDomain} variable is rejected at
  * build time with {@link IllegalArgumentException}.
  */
 public record IntervalDomain(double min, double max) implements BoundedDomain<Double> {

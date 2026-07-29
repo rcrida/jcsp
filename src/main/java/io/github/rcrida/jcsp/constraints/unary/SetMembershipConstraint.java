@@ -26,7 +26,7 @@ import java.util.Set;
  * usable elsewhere (e.g. in an arithmetic ordering constraint that breaks symmetry between
  * otherwise-interchangeable set variables, which is what motivated adding this class).
  * <p>
- * Propagation only narrows the "must be a member" direction — forcing {@code element} into the
+ * Propagation only narrows the "must be a member" direction — forcing {@link #element} into the
  * domain's lower bound — mirroring {@link ReifiedConstraint}'s own documented, generic limit for
  * an arbitrary body ("no generic way to propagate the negation of an arbitrary constraint"): a
  * reified indicator forced {@code false} isn't proactively excluded from the domain's upper bound.
@@ -54,10 +54,10 @@ public class SetMembershipConstraint<E> extends UnaryConstraint<Set<E>> implemen
     }
 
     /**
-     * Forces {@code element} into the domain's lower bound — sound whenever {@code propagate} runs
+     * Forces {@link #element} into the domain's lower bound — sound whenever {@code propagate} runs
      * at all, since that only happens once the constraint is known to hold (either registered
      * directly, or via {@link ReifiedConstraint} once its indicator has resolved true). Reports
-     * infeasible when {@code element} isn't even in the upper bound (can never be a member) —
+     * infeasible when {@link #element} isn't even in the upper bound (can never be a member) —
      * exactly the signal {@link ReifiedConstraint} needs, with no set-specific logic of its own, to
      * force a still-open indicator false.
      */
@@ -80,7 +80,7 @@ public class SetMembershipConstraint<E> extends UnaryConstraint<Set<E>> implemen
     }
 
     /**
-     * {@code element} already forced into the domain's lower bound makes this constraint true
+     * {@link #element} already forced into the domain's lower bound makes this constraint true
      * regardless of how the domain narrows further — propagation only ever adds to a lower bound,
      * never removes from it, so this can't be undone by any later step in the same search branch.
      */

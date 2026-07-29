@@ -44,7 +44,7 @@ public interface Propagatable {
      * domain wipeout. The default returns {@link Optional#empty()}, meaning no explanation is
      * provided and the caller substitutes the full assignment as the nogood. Constraints override
      * this to return a tighter, sound explanation — a {@link NogoodConstraint}, not necessarily a
-     * ground one; see {@code GroundNogoodConstraint}/{@code RangeNogoodConstraint}.
+     * ground one; see {@link io.github.rcrida.jcsp.constraints.nary.GroundNogoodConstraint}/{@link io.github.rcrida.jcsp.constraints.nary.RangeNogoodConstraint}.
      */
     default Optional<NogoodConstraint> explainInfeasible(Map<Variable<?>, Domain<?>> domains) {
         return Optional.empty();

@@ -27,12 +27,12 @@ import java.util.Set;
  *
  * <p>Implements {@link Propagatable} for the same reason as {@link ReifiedConstraint} (see that
  * class's Javadoc): without it, an n-ary body got zero propagation at all — not even AC3, since
- * unlike {@code ReifiedConstraint} this constraint has no {@code BinaryDecomposable} fallback for
+ * unlike {@link ReifiedConstraint} this constraint has no {@link io.github.rcrida.jcsp.constraints.BinaryDecomposable} fallback for
  * any body shape, not even a unary one — and was only ever caught by
  * {@link io.github.rcrida.jcsp.assignments.Assignment#isConsistent}'s direct {@code isSatisfiedBy}
  * check. Only one direction is propagated, unlike full reification: {@code indicator -> body}
- * never lets a satisfied/violated body force {@code indicator} true, since {@code indicator}
- * false leaves {@code body} entirely unconstrained.
+ * never lets a satisfied/violated body force {@link #indicator} true, since {@link #indicator}
+ * false leaves {@link #body} entirely unconstrained.
  */
 @SuperBuilder
 @EqualsAndHashCode(callSuper = true)
@@ -61,18 +61,18 @@ public class ImplicationConstraint extends NaryConstraint implements Propagatabl
     /**
      * Propagates {@code indicator -> body}:
      * <ul>
-     *   <li><b>indicator forced true</b>: body must hold, so if {@code body} is itself
+     *   <li><b>indicator forced true</b>: body must hold, so if {@link #body} is itself
      *       {@link Propagatable} its own {@code propagate} is delegated to directly; otherwise, if
      *       every body variable is already singleton, the fully-determined assignment is checked
      *       directly via {@link Constraint#isSatisfiedBy}.</li>
      *   <li><b>indicator forced false</b>: body is entirely unconstrained, so no propagation
      *       happens.</li>
-     *   <li><b>indicator still open</b>: forced {@code false} once {@code body} is proven
+     *   <li><b>indicator still open</b>: forced {@code false} once {@link #body} is proven
      *       unsatisfiable under the current (possibly partial) domains — either a fully-determined
      *       body found unsatisfied, or a {@link Propagatable} body reporting itself infeasible —
-     *       sound because {@code indicator} being {@code true} would then require an impossible
+     *       sound because {@link #indicator} being {@code true} would then require an impossible
      *       body. There is no symmetric "force true" case: unlike {@link ReifiedConstraint}, a
-     *       satisfied or necessary body never forces {@code indicator}, since {@code indicator}
+     *       satisfied or necessary body never forces {@link #indicator}, since {@link #indicator}
      *       false is always a valid escape.</li>
      * </ul>
      */

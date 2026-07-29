@@ -26,13 +26,13 @@ import java.util.stream.Collectors;
  * SumVariableConstraint} (the unweighted analogue) and {@link
  * NumericBounds#propagateWeightedSumVsTarget} for the shared rationale and propagation algorithm.
  * <p>
- * {@code coefficients} is a caller-supplied, already-typed {@code Map<Variable<N>, N>} exactly
+ * {@link #coefficients} is a caller-supplied, already-typed {@code Map<Variable<N>, N>} exactly
  * like {@link LinearBoundConstraint}'s — no synthesized constant is ever needed here (unlike
- * {@code target} itself, whose coefficient of {@code -1} is applied as a raw {@code double} inside
+ * {@link #target} itself, whose coefficient of {@code -1} is applied as a raw {@code double} inside
  * {@link NumericBounds#propagateWeightedSumVsTarget}, never boxed into {@code N}).
  * <p>
  * For partial assignments the constraint is optimistically satisfied — only evaluated once every
- * coefficient variable and {@code target} are all assigned.
+ * coefficient variable and {@link #target} are all assigned.
  */
 @SuperBuilder
 @EqualsAndHashCode(callSuper = true)
@@ -55,7 +55,7 @@ public class LinearVariableConstraint<N extends Number> extends NaryConstraint i
     }
 
     /**
-     * Dispatches the weighted sum's numeric type off {@code target}'s <em>actual assigned
+     * Dispatches the weighted sum's numeric type off {@link #target}'s <em>actual assigned
      * value</em> — same reasoning as {@link SumVariableConstraint#isSatisfiedBy}.
      */
     @Override
@@ -122,7 +122,7 @@ public class LinearVariableConstraint<N extends Number> extends NaryConstraint i
 
     /**
      * Same shape as {@link LinearBoundConstraint#explainInfeasible}: the weighted sum's violation
-     * depends on the combined contribution of every variable (including {@code target}, now
+     * depends on the combined contribution of every variable (including {@link #target}, now
      * folded into {@link #getVariables()}), not any single one in isolation, so the fully
      * collective explanation via {@link Propagatable#allSingletonReason} is the only sound,
      * self-contained one.

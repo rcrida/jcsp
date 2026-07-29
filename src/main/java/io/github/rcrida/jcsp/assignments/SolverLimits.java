@@ -14,8 +14,8 @@ import java.util.concurrent.atomic.AtomicBoolean;
  * Caps the amount of search work performed by a solver.
  *
  * <ul>
- *   <li>{@code nodeLimit} — maximum variable-assignment nodes to explore ({@code 0} = unlimited)</li>
- *   <li>{@code timeLimit} — maximum wall-clock duration ({@code null} = unlimited)</li>
+ *   <li>{@link #nodeLimit} — maximum variable-assignment nodes to explore ({@code 0} = unlimited)</li>
+ *   <li>{@link #timeLimit} — maximum wall-clock duration ({@code null} = unlimited)</li>
  * </ul>
  *
  * When either limit is exceeded {@link io.github.rcrida.jcsp.solver.BoundSolver#getSolutions()} truncates the stream silently;

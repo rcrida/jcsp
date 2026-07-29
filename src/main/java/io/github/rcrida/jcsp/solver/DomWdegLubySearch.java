@@ -38,7 +38,7 @@ import java.util.stream.Stream;
  * attempt. Returns {@link Optional#empty()} either when the problem is genuinely unsatisfiable
  * (a restart exhausted its budget on the full tree) or when {@link #maxRestarts} restarts were
  * used without completing a full traversal; the two cases are not distinguished. Either way, the
- * {@code statistics} field (a shared token seeded into every restart's root {@link Assignment},
+ * {@link #statistics} field (a shared token seeded into every restart's root {@link Assignment},
  * not a fresh one per restart) still holds the true cumulative counts across the whole call —
  * see {@code SolverConfig.getStatistics()} for how a caller retrieves it regardless of outcome.
  * A lightweight {@link BudgetExceeded} sentinel (pre-allocated, no stack trace) unwinds the
@@ -68,7 +68,7 @@ public class DomWdegLubySearch implements Solver {
      */
     @NonNull Statistics statistics;
 
-    /** Partial builder: sets defaults and validates preconditions in {@code build()}. */
+    /** Partial builder: sets defaults and validates preconditions in {@link #build}. */
     public static class DomWdegLubySearchBuilder {
         private int lubyUnit = DEFAULT_LUBY_UNIT;
         private int maxRestarts = DEFAULT_MAX_RESTARTS;
@@ -156,12 +156,12 @@ public class DomWdegLubySearch implements Solver {
 
     /**
      * Calls {@link #inference}'s {@link Inference#applyWithReason} unconditionally -- whatever
-     * {@code Inference} is configured is polymorphically responsible for both propagating and, on
+     * {@link Inference} is configured is polymorphically responsible for both propagating and, on
      * failure, explaining itself in one pass. A {@code null} {@link ConsistencyResult#reason()}
-     * means the configured {@code Inference} doesn't want a nogood recorded for this failure at
+     * means the configured {@link Inference} doesn't want a nogood recorded for this failure at
      * all (see {@link Inference#withoutReasonTracking}, used to disable CDCL for a true
      * zero-explanation-cost path); this method has no fallback of its own to reach for in that
-     * case, since choosing whether/how to explain is entirely {@code inference}'s job now.
+     * case, since choosing whether/how to explain is entirely {@link #inference}'s job now.
      */
     private Optional<ConstraintSatisfactionProblem> inferOrExplain(ConstraintSatisfactionProblem cspWithNogoods,
                                                                     Variable<?> variable,

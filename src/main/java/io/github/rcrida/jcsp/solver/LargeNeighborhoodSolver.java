@@ -28,13 +28,13 @@ import java.util.stream.IntStream;
 /**
  * Large Neighborhood Search (LNS) solver for boolean CSPs containing {@link ExactlyOneConstraint}s.
  *
- * <p>Each step selects {@code slotsPerStep} random ExactlyOne slots to relax (their variables are
+ * <p>Each step selects {@link #slotsPerStep} random ExactlyOne slots to relax (their variables are
  * temporarily freed). All valid refilling combinations — exactly one variable true per slot — are
  * enumerated exhaustively, and the combination with the fewest violations (ties broken by objective
  * value) is accepted. For {@code k} slots with {@code n} candidates each, at most {@code n^k}
  * combinations are evaluated per step, making this tractable for typical scheduling problems.
  *
- * <p>Runs all {@code maxAttempts} restarts in parallel. For satisfaction, returns the first feasible
+ * <p>Runs all {@link #maxAttempts} restarts in parallel. For satisfaction, returns the first feasible
  * solution found. For optimization, each attempt tracks the best feasible solution and the global
  * minimum across all attempts is returned.
  */

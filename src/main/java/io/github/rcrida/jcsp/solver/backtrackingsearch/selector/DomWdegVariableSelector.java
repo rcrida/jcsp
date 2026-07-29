@@ -29,7 +29,7 @@ import java.util.Set;
  * once into {@link #constraintsByVariable}, rather than re-derived from the live CSP on every
  * {@link #select}/{@link #incrementWeights} call: {@link NogoodConstraint}s are never active
  * (see below) and {@code csp.getConstraints()} in production always includes every nogood
- * learned so far (up to {@code 20 * variableCount}, see {@code NogoodStore}), so re-scanning it
+ * learned so far (up to {@code 20 * variableCount}, see {@link io.github.rcrida.jcsp.assignments.NogoodStore}), so re-scanning it
  * per unassigned variable per node would mean re-discovering and discarding every one of those
  * nogoods again and again for no benefit.
  * <p>

@@ -45,11 +45,11 @@ public abstract class BinaryConstraint<L, R> implements Constraint {
      * without constructing an {@link Assignment} — {@code arc} is assumed to be one of this
      * constraint's own two arcs (see {@link #getArcs}), i.e. {@code {arc.getFrom(), arc.getTo()}
      * == {left, right}} in some order, so which of {@code fromValue}/{@code toValue} is the left
-     * vs. right value can be determined directly rather than needing an {@code Assignment} to look
+     * vs. right value can be determined directly rather than needing an {@link Assignment} to look
      * them up by variable. Exists for {@link io.github.rcrida.jcsp.consistency.arc.AC3#revise},
      * which checks every value pair in a domain product during arc revision — profiling found
-     * building a fresh {@code Assignment} (with its own {@code @Singular} map and a new {@code
-     * Statistics} instance) per pair to be the dominant cost there.
+     * building a fresh {@link Assignment} (with its own {@code @Singular} map and a new {@link
+     * io.github.rcrida.jcsp.assignments.Statistics} instance) per pair to be the dominant cost there.
      */
     @SuppressWarnings("unchecked")
     public boolean isSatisfiedByArcValues(@NonNull Arc arc, @NonNull Object fromValue, @NonNull Object toValue) {

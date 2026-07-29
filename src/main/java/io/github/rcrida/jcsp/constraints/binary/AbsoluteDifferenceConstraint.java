@@ -110,7 +110,7 @@ public class AbsoluteDifferenceConstraint<N extends Number> extends BinaryConstr
      * side already holds a singleton domain — the other side is omitted since no single value
      * can be blamed for it. Empty when neither side is singleton. Structurally mirrors
      * {@link BinaryComparatorConstraint#explainInfeasible}, but unlike that constraint,
-     * {@code propagate()} here narrows discrete/discrete pairs too (via
+     * {@link #propagate} here narrows discrete/discrete pairs too (via
      * {@link NumericBounds#narrow}, not just
      * {@link io.github.rcrida.jcsp.domains.BoundedDomain#withBounds}), so this method's
      * infeasible branch is reachable for plain discrete pairs as well, not only mixed

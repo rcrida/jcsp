@@ -14,7 +14,7 @@ import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 /**
- * Abstract base for solver decorators. Holds the {@code inner} solver that receives the preprocessed
+ * Abstract base for solver decorators. Holds the {@link #inner} solver that receives the preprocessed
  * problem, and exposes a {@link #preprocess} hook that subclasses override to transform the CSP
  * before delegating.
  *
@@ -23,12 +23,12 @@ import java.util.stream.Stream;
  * (cutset conditioning, tree decomposition) override {@link #getSolutions(ConstraintSatisfactionProblem)}
  * <em>and</em> {@link #getSolution(ConstraintSatisfactionProblem)} for their decomposition logic
  * — the two are not simply "first element of the stream" for decomposers with genuinely different
- * single-solution strategies (e.g. {@code CutsetConditioningSolver} short-circuiting on the first
+ * single-solution strategies (e.g. {@link io.github.rcrida.jcsp.solver.tree.cutsetconditioning.CutsetConditioningSolver} short-circuiting on the first
  * cutset assignment that yields a tree solution), so this base class's default cannot be relied on
- * for them. {@code IndependentSubproblemSolver} goes further still and doesn't extend this class at
+ * for them. {@link IndependentSubproblemSolver} goes further still and doesn't extend this class at
  * all — each decomposed sub-problem needs its own, freshly-built inner solver (so its own
  * {@link io.github.rcrida.jcsp.assignments.NogoodStore}, correctly scoped to just that sub-problem's
- * variables), which a single fixed {@code inner} field can't provide.
+ * variables), which a single fixed {@link #inner} field can't provide.
  */
 @Value
 @NonFinal

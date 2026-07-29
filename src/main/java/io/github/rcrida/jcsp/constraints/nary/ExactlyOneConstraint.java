@@ -52,7 +52,7 @@ public class ExactlyOneConstraint extends AtMostOneConstraint {
      * Same "at most one" reasoning as {@link AtMostOneConstraint#propagate} (infeasible above one
      * definite true, force the rest false once exactly one is true) plus the dual "at least one"
      * case once zero are yet definitely true: infeasible once no variable can still become true,
-     * and once exactly one candidate remains open, it is forced {@code true} (mirrors {@code
+     * and once exactly one candidate remains open, it is forced {@code true} (mirrors {@link
      * AtLeastNConstraint} with {@code n} hardcoded to 1) — propagation the inherited pairwise-NAND
      * decomposition alone can never provide, since "at least one true" is an inherently
      * whole-constraint counting condition, not a pairwise relation.
@@ -81,7 +81,7 @@ public class ExactlyOneConstraint extends AtMostOneConstraint {
      * {@link AtMostOneConstraint#explainInfeasible}'s reasoning directly (citing every forced-true
      * variable); zero definite true with no remaining candidate attributes the conflict to every
      * variable instead, all of which are forced {@code false} by construction of that branch
-     * (mirrors {@code AtLeastNConstraint}'s equivalent "all forced false" case).
+     * (mirrors {@link AtLeastNConstraint}'s equivalent "all forced false" case).
      */
     @Override
     public Optional<NogoodConstraint> explainInfeasible(@NonNull Map<Variable<?>, Domain<?>> domains) {

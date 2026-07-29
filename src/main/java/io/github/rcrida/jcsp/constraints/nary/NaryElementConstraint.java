@@ -21,18 +21,18 @@ import java.util.stream.Collectors;
 
 /**
  * An n-ary constraint implementing array element access over a list of variables:
- * {@code result = vars[index]}, where both {@code index} and {@code result} are variables
- * and {@code vars} is a list of CSP variables (not fixed values).
+ * {@code result = vars[index]}, where both {@link #index} and {@link #result} are variables
+ * and {@link #vars} is a list of CSP variables (not fixed values).
  * <p>
- * The {@code index} variable is 1-based. Out-of-bounds indices are treated as a constraint
+ * The {@link #index} variable is 1-based. Out-of-bounds indices are treated as a constraint
  * violation. For partial assignments the constraint is optimistically satisfied — only evaluated
- * once {@code index}, {@code result}, and {@code vars[index-1]} are all assigned.
+ * once {@link #index}, {@link #result}, and {@code vars[index-1]} are all assigned.
  * <p>
  * Propagation performs three passes over discrete domains:
  * <ol>
- *   <li>Prune {@code index}: remove value {@code i} if {@code vars[i-1].domain ∩ result.domain = ∅},
+ *   <li>Prune {@link #index}: remove value {@code i} if {@code vars[i-1].domain ∩ result.domain = ∅},
  *       or if {@code i} is out of bounds.</li>
- *   <li>Prune {@code result}: intersect with the union of {@code vars[i-1].domain} for all live
+ *   <li>Prune {@link #result}: intersect with the union of {@code vars[i-1].domain} for all live
  *       index values {@code i}.</li>
  *   <li>Prune {@code vars[i-1]}: when {@code index.domain} is a singleton {@code {i}}, intersect
  *       {@code vars[i-1].domain} with {@code result.domain}.</li>
@@ -167,20 +167,20 @@ public class NaryElementConstraint<T> extends NaryConstraint implements Propagat
     }
 
     /**
-     * The sole infeasibility point is pass 1 emptying {@code index}'s domain: every candidate
+     * The sole infeasibility point is pass 1 emptying {@link #index}'s domain: every candidate
      * {@code i} was excluded either because it's out of bounds (unconditional — no variable
-     * involved) or because {@code vars[i-1]}'s domain doesn't overlap {@code result}'s (depends on
-     * both). Since {@code propagate} guarantees {@code index}, {@code result}, and every
+     * involved) or because {@code vars[i-1]}'s domain doesn't overlap {@link #result}'s (depends on
+     * both). Since {@code propagate} guarantees {@link #index}, {@link #result}, and every
      * {@code vars[i-1]} were {@link DiscreteDomain} before ever reaching pass 1 (the type guards
      * upstream return {@code Optional.of(Map.of())} otherwise, never {@code Optional.empty()}, and
      * {@code explainInfeasible} is only ever invoked with the same {@code domains} that made
      * {@code propagate} return infeasible), no redundant type check is needed here.
      * <p>
-     * Attributes the wipeout to {@code result} plus every {@code vars[i-1]} for in-bounds
+     * Attributes the wipeout to {@link #result} plus every {@code vars[i-1]} for in-bounds
      * candidates only — out-of-bounds candidates contribute to the wipeout "for free" and cite
      * nothing. Sound only when every cited variable is singleton, via
      * {@link Propagatable#allSingletonReason}: a non-singleton {@code vars[i-1]} could still narrow
-     * to a value overlapping {@code result} along a different search path. If every candidate was
+     * to a value overlapping {@link #result} along a different search path. If every candidate was
      * out of bounds (nothing to cite), returns {@link Map#of()} directly rather than degrading
      * through an empty {@code allSingletonReason} call on an empty set.
      */

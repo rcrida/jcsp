@@ -23,15 +23,15 @@ import java.util.Set;
  * {@code sum(weights[i] : bin[i] == b) <= capacities[b]} for every bin {@code b}. Equivalent to
  * MiniZinc's {@code bin_packing_capa(capacities, bin, weights)} constraint.
  * <p>
- * {@code bin} holds the decision variables (0-indexed bin number per item); {@code weights} and
- * {@code capacities} are fixed data, not variables — only the assignment is a decision, matching
- * the standard formulation. Discrete-only: not whitelisted for {@code BoundedDomain} variables,
+ * {@link #bin} holds the decision variables (0-indexed bin number per item); {@link #weights} and
+ * {@link #capacities} are fixed data, not variables — only the assignment is a decision, matching
+ * the standard formulation. Discrete-only: not whitelisted for {@link io.github.rcrida.jcsp.domains.BoundedDomain} variables,
  * same precedent as {@link AllDiffConstraint} and {@link NValueConstraint} (a bin index has no
  * continuous analogue).
  * <p>
  * This constraint only enforces capacity. "Minimise the number of bins used" — the actual
  * optimization goal in most problems that need bin-packing — composes for free by pairing this
- * with {@link NValueConstraint} over the same {@code bin} variables
+ * with {@link NValueConstraint} over the same {@link #bin} variables
  * ({@code nValueConstraint(Set.copyOf(bin), count)}, then minimise {@code count}): no separate
  * machinery is needed for that half.
  */
@@ -81,7 +81,7 @@ public class BinPackingConstraint extends NaryConstraint implements Propagatable
      * bin-packing has no dual-direction bound narrowing, only ever "would this overload the
      * bin"):
      * <ol>
-     *   <li>Classify each item as <em>definite</em> (singleton {@code bin} domain) or
+     *   <li>Classify each item as <em>definite</em> (singleton {@link #bin} domain) or
      *       <em>open</em>; accumulate {@code definiteLoad[b]} from definite items only.</li>
      *   <li>If any {@code definiteLoad[b] > capacities[b]}: infeasible.</li>
      *   <li>For each open item, remove any candidate bin {@code b} where

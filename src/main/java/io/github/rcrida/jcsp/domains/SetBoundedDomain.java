@@ -21,13 +21,13 @@ import java.util.Set;
  * cardinality alone (via {@link #withCardinality}) doesn't touch the bounds, and narrowing a bound
  * doesn't touch cardinality.
  * <p>
- * Deliberately <em>not</em> a subtype of {@link BoundedDomain}: every existing {@code
- * BoundedDomain} consumer (e.g. {@code NumericBounds}, {@code BisectionConditioningSolver}, {@code
- * ConstraintSatisfactionProblem}'s {@code CONTINUOUS_COMPATIBLE_CONSTRAINTS} whitelist check) does
- * an {@code instanceof BoundedDomain} check and then immediately treats the result as {@code
- * Number} — interval-arithmetic narrowing, midpoint bisection, {@code doubleValue()} bounds
+ * Deliberately <em>not</em> a subtype of {@link BoundedDomain}: every existing {@link
+ * BoundedDomain} consumer (e.g. {@link io.github.rcrida.jcsp.constraints.NumericBounds}, {@link io.github.rcrida.jcsp.solver.BisectionConditioningSolver}, {@link
+ * io.github.rcrida.jcsp.ConstraintSatisfactionProblem}'s {@code CONTINUOUS_COMPATIBLE_CONSTRAINTS} whitelist check) does
+ * an {@code instanceof BoundedDomain} check and then immediately treats the result as {@link
+ * Number} — interval-arithmetic narrowing, midpoint bisection, {@link Number#doubleValue} bounds
  * extraction. Unifying the two interfaces would sweep this domain kind into all of that
- * numeric-specific handling incorrectly (a {@code Set} is not a {@code Number}), and every one of
+ * numeric-specific handling incorrectly (a {@link Set} is not a {@link Number}), and every one of
  * those call sites would need an extra type check to exclude it again. The two only share a
  * superficial shape (two bound accessors plus narrowing operations); the actual narrowing math
  * differs completely — lattice union/intersection under subset ordering here, versus interval
@@ -36,11 +36,11 @@ import java.util.Set;
  * The narrowing methods below return {@code SetBoundedDomain<E>} rather than the weaker {@code
  * Domain<Set<E>>}, matching {@link BoundedDomain#withBounds}'s own return type ({@code
  * BoundedDomain<T>}, not {@code Domain<T>}) for the same reason: a caller that narrows more than
- * once within a single {@code propagate()} pass (e.g. force an element into the lower bound, then
+ * once within a single {@link io.github.rcrida.jcsp.consistency.Propagatable#propagate} pass (e.g. force an element into the lower bound, then
  * check whether {@code |lowerBound| == getMaxCardinality()}, and if so trim the upper bound to
  * match) never needs an intermediate cast back to this interface. That chaining is set
  * propagation's main source of strength, so the return type matters more here than it might first
- * appear — but the principle is identical to {@code BoundedDomain}'s, not a divergence from it.
+ * appear — but the principle is identical to {@link BoundedDomain}'s, not a divergence from it.
  */
 public interface SetBoundedDomain<E> extends Domain<Set<E>> {
     Set<E> getLowerBound();
@@ -53,7 +53,7 @@ public interface SetBoundedDomain<E> extends Domain<Set<E>> {
 
     /**
      * The ordering this domain's bounds are consistently sorted by. Every implementation must
-     * supply one — either {@link Comparator#naturalOrder()} (when {@code E} is itself {@code
+     * supply one — either {@link Comparator#naturalOrder()} (when {@code E} is itself {@link
      * Comparable}) or an explicit one for {@code E} types that aren't — rather than leaving it
      * optional, so every {@link #withLowerBound}/{@link #withUpperBound}/{@link #withCardinality}
      * call can re-apply it unconditionally: a caller that needs deterministic enumeration (e.g. a

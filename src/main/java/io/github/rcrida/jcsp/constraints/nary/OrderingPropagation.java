@@ -16,7 +16,7 @@ import java.util.Optional;
 /**
  * Shared bounds-consistency computation for {@link IncreasingConstraint}/{@link DecreasingConstraint},
  * generic over any {@code T extends Comparable<T>} — matching those constraints' own type bound
- * rather than narrowing to {@link Number} the way {@code BinaryComparatorConstraint} does. A
+ * rather than narrowing to {@link Number} the way {@link io.github.rcrida.jcsp.constraints.binary.BinaryComparatorConstraint} does. A
  * non-decreasing chain {@code v[0] <= v[1] <= ... <= v[n-1]} is fully bounds-consistent by
  * computing, independently, a running maximum of minimums left-to-right (transitivity means each
  * {@code v[i].min} must be at least every earlier variable's min) and a running minimum of maximums
@@ -26,10 +26,10 @@ import java.util.Optional;
  * non-decreasing.
  * <p>
  * Works uniformly over {@link NumericDomain} (both {@link BoundedDomain} and discrete numeric
- * domains like {@code IntRangeDomain} — {@code getMin}/{@code getMax} are {@code T}-typed here;
+ * domains like {@link io.github.rcrida.jcsp.domains.IntRangeDomain} — {@code getMin}/{@code getMax} are {@code T}-typed here;
  * {@code withBounds} itself takes {@code double} — see {@link #narrow}) and any other {@link
  * DiscreteDomain} (via natural ordering and value deletion), so an ordering over non-numeric
- * {@code Comparable} types (e.g. {@link String} or enum variables) gets real propagation too, not
+ * {@link Comparable} types (e.g. {@link String} or enum variables) gets real propagation too, not
  * just numeric chains.
  */
 final class OrderingPropagation {

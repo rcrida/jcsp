@@ -28,8 +28,8 @@ import java.util.Set;
  * <p>
  * Implements {@link Propagatable} directly rather than relying solely on its {@link
  * BinaryDecomposable} pairs, which only ever reach {@link io.github.rcrida.jcsp.consistency.arc.AC3}
- * (skipping non-{@code DiscreteDomain} arcs entirely, so a {@link io.github.rcrida.jcsp.domains.BoundedDomain}
- * chain previously got no propagation at all). {@code propagate()} computes bounds consistency for
+ * (skipping non-{@link io.github.rcrida.jcsp.domains.DiscreteDomain} arcs entirely, so a {@link io.github.rcrida.jcsp.domains.BoundedDomain}
+ * chain previously got no propagation at all). {@link #propagate} computes bounds consistency for
  * the whole chain in one pass each direction via {@link OrderingPropagation}, generic over {@code T}
  * itself (not narrowed to {@link Number} the way {@link BinaryComparatorConstraint} is) — since
  * {@link io.github.rcrida.jcsp.domains.BoundedDomain#getMin}/{@code getMax}/{@code withBounds} are

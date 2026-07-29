@@ -26,7 +26,7 @@ import java.util.TreeSet;
  * #withCardinality}, not just the two {@code of} factory groups below) re-sorts, so a caller that
  * needs deterministic enumeration (e.g. a branching search picking "the next candidate element")
  * never has to re-derive an ordering itself, no matter how many narrowing steps a domain has
- * already been through. {@code comparator} is required, not optional, precisely so this holds
+ * already been through. {@link #comparator} is required, not optional, precisely so this holds
  * unconditionally: the two {@code of} factory groups are the only two ways to obtain one (either
  * {@link Comparator#naturalOrder()} for {@code E extends Comparable<E>}, or an explicit {@code
  * Comparator<E>} for any other {@code E}), so there's never a domain state without one to fall
@@ -40,10 +40,10 @@ public record SetIntervalDomain<E>(Set<E> lowerBound, Set<E> upperBound, int min
      * Beyond wrapping the bounds defensively (sorted via {@link #comparator}), this also applies a
      * domain-intrinsic tightening that holds regardless of which constraint (if any) is doing the
      * narrowing: once {@code |lowerBound| == maxCardinality}, no further element can ever be added
-     * without exceeding the cardinality cap, so {@code upperBound} narrows to its intersection with
-     * {@code lowerBound}; symmetrically, once {@code |upperBound| == minCardinality}, no candidate
-     * can be dropped without falling short of it, so {@code lowerBound} widens to its union with
-     * {@code upperBound}. Both the trigger conditions <em>and</em> the new values are computed from
+     * without exceeding the cardinality cap, so {@link #upperBound} narrows to its intersection with
+     * {@link #lowerBound}; symmetrically, once {@code |upperBound| == minCardinality}, no candidate
+     * can be dropped without falling short of it, so {@link #lowerBound} widens to its union with
+     * {@link #upperBound}. Both the trigger conditions <em>and</em> the new values are computed from
      * the bounds exactly as passed into this constructor call (never against each other's result,
      * and never against a caller's pre-narrowing state from further up the call stack) —
      * deliberately intersection/union, not a blind overwrite of one bound with the other: for an
@@ -51,9 +51,9 @@ public record SetIntervalDomain<E>(Set<E> lowerBound, Set<E> upperBound, int min
      * instead of intersecting/unioning would silently discard a genuinely narrower value a caller
      * passed in — e.g. {@code withUpperBound(Set.of())} called on a domain already at {@code
      * |lowerBound|==maxCardinality} would, under a blind overwrite, "helpfully" restore {@code
-     * upperBound} back to {@code lowerBound} instead of leaving it empty, masking exactly the
-     * infeasibility {@link #isEmpty()}'s containment check exists to catch (found via {@code
-     * DisjointConstraint} propagating a real exclusion into this exact state). This runs on every
+     * upperBound} back to {@link #lowerBound} instead of leaving it empty, masking exactly the
+     * infeasibility {@link #isEmpty()}'s containment check exists to catch (found via {@link
+     * io.github.rcrida.jcsp.constraints.binary.DisjointConstraint} propagating a real exclusion into this exact state). This runs on every
      * construction path, including {@link #of}, since an un-tightened-but-equivalent domain is
      * never wrong, just less informative than it could immediately be — e.g. it's what lets a set
      * variable resolve to a singleton through propagation alone, without needing a dedicated
@@ -62,8 +62,8 @@ public record SetIntervalDomain<E>(Set<E> lowerBound, Set<E> upperBound, int min
      * The trigger checks and intersection/union above run against the raw, as-passed-in bounds
      * <em>before</em> either is sorted, so each bound is only ever sorted once — whichever value
      * (raw or tightened) turns out to be the final one — rather than sorting the raw bound first
-     * and then sorting the tightened replacement again on top when tightening fires. {@code size()}
-     * and set intersection/union are unaffected by a {@code Set}'s internal ordering, so computing
+     * and then sorting the tightened replacement again on top when tightening fires. {@link Set#size}
+     * and set intersection/union are unaffected by a {@link Set}'s internal ordering, so computing
      * them from the raw bounds gives exactly the same result either way.
      */
     public SetIntervalDomain {
@@ -83,17 +83,17 @@ public record SetIntervalDomain<E>(Set<E> lowerBound, Set<E> upperBound, int min
 
     /**
      * Skips the re-sort when {@code elements} is already a {@link TrustedSortedSet} ordered by an
-     * equal {@code comparator} — the common case for whichever bound a narrowing call <em>didn't</em>
-     * touch (e.g. {@link #withLowerBound} passes {@code upperBound} straight through unchanged).
-     * Deliberately checks for {@code TrustedSortedSet} specifically, not the generic {@link
-     * SortedSet} interface: a caller-supplied {@code Set} that merely happens to already be sorted
-     * (e.g. an external raw {@code TreeSet}) would pass a generic {@code instanceof SortedSet}
+     * equal {@link #comparator} — the common case for whichever bound a narrowing call <em>didn't</em>
+     * touch (e.g. {@link #withLowerBound} passes {@link #upperBound} straight through unchanged).
+     * Deliberately checks for {@link TrustedSortedSet} specifically, not the generic {@link
+     * SortedSet} interface: a caller-supplied {@link Set} that merely happens to already be sorted
+     * (e.g. an external raw {@link TreeSet}) would pass a generic {@code instanceof SortedSet}
      * check too, but returning it by reference — instead of the defensive copy every other path
      * here takes — would alias that caller's own, still-mutable object into this otherwise-immutable
-     * domain; a later external mutation would then silently corrupt it. {@code TrustedSortedSet}'s
+     * domain; a later external mutation would then silently corrupt it. {@link TrustedSortedSet}'s
      * constructor is private to this class, so no such alias can ever occur: an instance can only
      * exist if this method itself already produced it — see that class's own Javadoc for the
-     * incident this reasoning comes from (and for why {@code TrustedSortedSet} deliberately does
+     * incident this reasoning comes from (and for why {@link TrustedSortedSet} deliberately does
      * <em>not</em> implement {@link SortedSet}, a second, independent incident from the same
      * optimization attempt).
      */
@@ -107,13 +107,13 @@ public record SetIntervalDomain<E>(Set<E> lowerBound, Set<E> upperBound, int min
     }
 
     /**
-     * Marks a {@code Set} as already produced by {@link #sorted}, so a later {@link #sorted} call
+     * Marks a {@link Set} as already produced by {@link #sorted}, so a later {@link #sorted} call
      * can safely return it by reference instead of re-sorting. Only {@link #sorted} can ever
      * construct one (private constructor, private class), so {@code instanceof TrustedSortedSet}
      * is a sound way to distinguish "genuinely our own prior output" from an external caller's own
      * {@link Set} that merely happens to already be sorted the same way — the distinction an
      * earlier, reverted version of this optimization got wrong: it checked the generic {@link
-     * SortedSet} interface instead, which let an externally-supplied, still-mutable {@code TreeSet}
+     * SortedSet} interface instead, which let an externally-supplied, still-mutable {@link TreeSet}
      * get aliased into this otherwise-immutable domain instead of defensively copied, so a later
      * external mutation silently corrupted it (caught by {@code mvn clean verify} via a "passes in
      * isolation, fails as part of the full test class" signature — the tell for shared mutable
@@ -122,14 +122,14 @@ public record SetIntervalDomain<E>(Set<E> lowerBound, Set<E> upperBound, int min
      * Deliberately implements {@link Set} only, <em>not</em> {@link SortedSet}, even though it's
      * backed by a real, sorted {@link TreeSet} internally: AssertJ's {@code isEqualTo} switches to
      * an order-sensitive, element-by-element comparison the moment the actual value implements
-     * {@code SortedSet} (rather than the order-independent {@link Set#equals} used for a plain
-     * {@code Set}), and {@code Set.of(...)}'s own iteration order is randomised per JVM launch — so
-     * an early version of this class that did implement {@code SortedSet} passed or failed
+     * {@link SortedSet} (rather than the order-independent {@link Set#equals} used for a plain
+     * {@link Set}), and {@code Set.of(...)}'s own iteration order is randomised per JVM launch — so
+     * an early version of this class that did implement {@link SortedSet} passed or failed
      * genuinely at random depending on whether that random order happened to match ascending order
      * that particular run (reproduced directly against AssertJ, no Maven/JaCoCo involved, ruling
      * those out first). Iteration order is still deterministically sorted (via the internal
      * {@link TreeSet}), preserving this class's own determinism guarantee for callers like {@link
-     * io.github.rcrida.jcsp.solver.SetBranchingSolver} — only the {@code SortedSet} <em>interface</em>
+     * io.github.rcrida.jcsp.solver.SetBranchingSolver} — only the {@link SortedSet} <em>interface</em>
      * (and the special handling library code gives it) is withheld.
      */
     private static final class TrustedSortedSet<E> extends AbstractSet<E> {
@@ -164,7 +164,7 @@ public record SetIntervalDomain<E>(Set<E> lowerBound, Set<E> upperBound, int min
         return of(Set.of(), universe, 0, universe.size());
     }
 
-    /** As {@link #of(Set, Set, int, int)}, ordered by the given {@code comparator} instead of requiring {@code E extends Comparable<E>}. */
+    /** As {@link #of(Set, Set, int, int)}, ordered by the given {@link #comparator} instead of requiring {@code E extends Comparable<E>}. */
     public static <E> SetIntervalDomain<E> of(@NonNull Set<E> lowerBound, @NonNull Set<E> upperBound,
                                                int minCardinality, int maxCardinality, @NonNull Comparator<E> comparator) {
         assert upperBound.containsAll(lowerBound) :
@@ -179,7 +179,7 @@ public record SetIntervalDomain<E>(Set<E> lowerBound, Set<E> upperBound, int min
         return new SetIntervalDomain<>(lowerBound, upperBound, minCardinality, maxCardinality, comparator);
     }
 
-    /** As {@link #of(Set)}, ordered by the given {@code comparator} instead of requiring {@code E extends Comparable<E>}. */
+    /** As {@link #of(Set)}, ordered by the given {@link #comparator} instead of requiring {@code E extends Comparable<E>}. */
     public static <E> SetIntervalDomain<E> of(@NonNull Set<E> universe, @NonNull Comparator<E> comparator) {
         return of(Set.of(), universe, 0, universe.size(), comparator);
     }
@@ -229,8 +229,8 @@ public record SetIntervalDomain<E>(Set<E> lowerBound, Set<E> upperBound, int min
     /**
      * Empty (infeasible) when the lower bound escapes the upper bound, the cardinality range is
      * contradictory, or the bounds and cardinality range are jointly unsatisfiable ({@code
-     * lowerBound} alone already exceeds {@code maxCardinality}, or even taking every candidate in
-     * {@code upperBound} can't reach {@code minCardinality}).
+     * lowerBound} alone already exceeds {@link #maxCardinality}, or even taking every candidate in
+     * {@link #upperBound} can't reach {@link #minCardinality}).
      */
     @Override
     public boolean isEmpty() {
@@ -258,11 +258,11 @@ public record SetIntervalDomain<E>(Set<E> lowerBound, Set<E> upperBound, int min
 
     /**
      * Ignores {@link #comparator}: two domains with the same bounds and cardinality range are the
-     * same domain regardless of which ordering (or which of two logically-equivalent {@code
-     * Comparator} instances, e.g. two separate {@code naturalOrder()} calls) produced their
-     * internal iteration order. {@code lowerBound}/{@code upperBound} equality is already
+     * same domain regardless of which ordering (or which of two logically-equivalent {@link
+     * Comparator} instances, e.g. two separate {@link Comparator#naturalOrder} calls) produced their
+     * internal iteration order. {@link #lowerBound}/{@link #upperBound} equality is already
      * order-independent ({@link Set#equals} never considers iteration order), so this override
-     * exists solely to keep {@code comparator} out of the comparison and hash entirely.
+     * exists solely to keep {@link #comparator} out of the comparison and hash entirely.
      */
     @Override
     public boolean equals(Object o) {
