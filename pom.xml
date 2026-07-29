@@ -139,6 +139,7 @@
                 </executions>
                 <configuration>
                     <doclint>none</doclint>
+                    <failOnWarnings>true</failOnWarnings>
                 </configuration>
             </plugin>
             <plugin>
