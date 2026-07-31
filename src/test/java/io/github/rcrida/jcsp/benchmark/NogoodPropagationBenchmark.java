@@ -89,7 +89,7 @@ import java.util.Set;
  * conflictExplainer.explain} inside the branch where {@code inference.apply} (propagation) returns
  * empty, and neither {@code ExactlyOneConstraint} nor {@code AtMostOneConstraint} was registered as
  * a {@link io.github.rcrida.jcsp.consistency.Propagatable} in {@code
- * PropagationFixpointSolver.PROPAGATORS} -- only their pairwise-NAND {@code BinaryDecomposable}
+ * FixpointPropagation.PROPAGATORS} -- only their pairwise-NAND {@code BinaryDecomposable}
  * decomposition fed {@code AC3}, which can force individual variables but can never detect "zero
  * holes assigned true" as a domain wipeout (an inherently global/counting condition). So every
  * pigeonhole failure was caught by {@code Assignment#isConsistent}'s direct {@code isSatisfiedBy}

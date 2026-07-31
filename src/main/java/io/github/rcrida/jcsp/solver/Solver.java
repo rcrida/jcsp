@@ -52,7 +52,7 @@ public interface Solver {
          * exactly the parent search node's already-converged CSP, since nothing else touches it
          * between when the parent's own inference call finished and this one starts. So the diff
          * between {@code problem} and the post-MAC result (via {@link
-         * PropagationFixpointSolver#changedVariables}) is exactly what changed by branching on
+         * FixpointPropagation#changedVariables}) is exactly what changed by branching on
          * {@code variable} plus whatever MAC narrowed as a result -- nothing else could have.
          * <p>
          * Doesn't need to separately account for newly-learned nogoods (e.g. one recorded while
@@ -60,7 +60,7 @@ public interface Solver {
          * {@code cspWithNogoods} from {@link DomWdegLubySearch}, i.e. already {@code
          * nogoodStore.apply(csp)} -- freshly re-merged with the current nogood set immediately
          * before this call, for every candidate value, not just the first. Neither {@link
-         * MAC#apply} nor {@link PropagationFixpointSolver#applyFixpoint} ever changes a CSP's
+         * MAC#apply} nor {@link FixpointPropagation#applyFixpoint} ever changes a CSP's
          * nogood set (both only ever replace domain entries via {@code toBuilder()}), so {@code
          * problem.getNogoods()} and the post-MAC result's are always identical -- there is no
          * "newly learned since problem" case to seed for here.
@@ -79,8 +79,8 @@ public interface Solver {
             public Optional<ConstraintSatisfactionProblem> apply(ConstraintSatisfactionProblem problem,
                                                                   Variable<?> variable, Assignment assignment) {
                 return MAC.INSTANCE.apply(problem, variable, assignment)
-                        .flatMap(afterMac -> PropagationFixpointSolver.applyFixpoint(afterMac,
-                                PropagationFixpointSolver.changedVariables(problem.getVariableDomains(), afterMac.getVariableDomains())));
+                        .flatMap(afterMac -> FixpointPropagation.applyFixpoint(afterMac,
+                                FixpointPropagation.changedVariables(problem.getVariableDomains(), afterMac.getVariableDomains())));
             }
 
             @Override
@@ -92,8 +92,8 @@ public interface Solver {
                             : ConsistencyResult.infeasible(GroundNogoodConstraint.of(assignment.getValues()));
                 }
                 ConstraintSatisfactionProblem afterMac = macResult.problem();
-                ConsistencyResult fixpointResult = PropagationFixpointSolver.applyFixpointWithReason(afterMac,
-                        PropagationFixpointSolver.changedVariables(problem.getVariableDomains(), afterMac.getVariableDomains()));
+                ConsistencyResult fixpointResult = FixpointPropagation.applyFixpointWithReason(afterMac,
+                        FixpointPropagation.changedVariables(problem.getVariableDomains(), afterMac.getVariableDomains()));
                 if (fixpointResult.isInfeasible() && fixpointResult.reason() == null) {
                     return ConsistencyResult.infeasible(GroundNogoodConstraint.of(assignment.getValues()));
                 }

@@ -14,15 +14,17 @@ import java.util.Set;
 
 /**
  * A {@link ConstraintConsistency} specialized for {@link NogoodConstraint}: unlike every other
- * entry in {@code PropagationFixpointSolver.PROPAGATORS} (each backed by a fixed, small constraint
- * count set at CSP-build time), the nogood set grows unboundedly over the course of a search (see
+ * entry in {@link io.github.rcrida.jcsp.solver.FixpointPropagation#PROPAGATORS} (each backed by a
+ * fixed, small constraint count set at CSP-build time), the nogood set grows unboundedly over the
+ * course of a search (see
  * {@link io.github.rcrida.jcsp.assignments.NogoodStore}'s eviction cap, up to {@code 20 * variableCount}), so re-checking every one
  * of them on every fixpoint round — as the generic {@link FixpointConsistency} does — becomes the
  * dominant propagation cost in long searches (measured ~2.5-4x wall-clock overhead on Golomb ruler
  * UNSAT proofs, see {@code NogoodPropagationBenchmark}).
  *
  * <p>{@link #apply(ConstraintSatisfactionProblem, Set)} exploits the hint {@link
- * io.github.rcrida.jcsp.solver.PropagationFixpointSolver#applyFixpoint} now threads through its outer loop: a {@link
+ * io.github.rcrida.jcsp.solver.FixpointPropagation#applyFixpoint} now threads through its outer
+ * loop: a {@link
  * NogoodConstraint}'s {@link io.github.rcrida.jcsp.consistency.Propagatable#propagate} result
  * depends only on the current domains of its own {@link io.github.rcrida.jcsp.constraints.Constraint#getVariables()}
  * (never on any other variable), so a nogood whose variables are all untouched since the last time

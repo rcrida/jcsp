@@ -25,7 +25,8 @@ import java.util.concurrent.atomic.AtomicReference;
  * returning {@link Optional#empty()} as soon as any propagator signals infeasibility.
  *
  * <p>Use the {@link #of} factory to create instances. Adding a new propagator to the solver
- * chains ({@code PropagationFixpointSolver.PROPAGATORS}, {@code LocalSolver.Factory.PREPROCESSORS})
+ * chains ({@link io.github.rcrida.jcsp.solver.FixpointPropagation#PROPAGATORS}, {@code
+ * LocalSolver.Factory.PREPROCESSORS})
  * requires only a single {@code FixpointConsistency.of(MyConstraint.class)} entry.
  */
 public final class FixpointConsistency implements ConstraintConsistency {

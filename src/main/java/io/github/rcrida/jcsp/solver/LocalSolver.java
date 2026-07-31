@@ -76,7 +76,7 @@ public interface LocalSolver {
     interface Factory {
         /**
          * Runs once, before the repair search starts, in the same order as {@link
-         * io.github.rcrida.jcsp.solver.PropagationFixpointSolver#PROPAGATORS} except without the
+         * FixpointPropagation#PROPAGATORS} except without the
          * outer fixpoint loop and without {@link io.github.rcrida.jcsp.constraints.nary.AllDiffConstraint}'s GAC (Régin's algorithm):
          * that propagator is comparatively expensive (a bipartite-matching computation), and
          * repair-based search doesn't recoup that cost the way a single one-shot pass through

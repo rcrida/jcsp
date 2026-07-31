@@ -19,7 +19,7 @@ public interface ConstraintConsistency {
     /**
      * Variant of {@link #apply(ConstraintSatisfactionProblem)} that accepts a hint of which
      * variables' domains changed since this consistency pass last ran in the current fixpoint
-     * loop (see {@link io.github.rcrida.jcsp.solver.PropagationFixpointSolver#applyFixpoint}), or {@code null} meaning "unknown
+     * loop (see {@link io.github.rcrida.jcsp.solver.FixpointPropagation#applyFixpoint}), or {@code null} meaning "unknown
      * — assume everything may have changed". Passes whose cost scales with a fixed, small
      * constraint count (every {@link io.github.rcrida.jcsp.consistency.fixpoint.FixpointConsistency}
      * instance, {@link io.github.rcrida.jcsp.consistency.arc.AC3}) have no need for the hint and

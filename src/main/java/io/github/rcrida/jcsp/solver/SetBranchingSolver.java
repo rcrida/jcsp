@@ -147,7 +147,7 @@ public class SetBranchingSolver extends SolverDecorator {
     }
 
     /**
-     * Delegates to {@link PropagationFixpointSolver#applyFixpoint(ConstraintSatisfactionProblem)}
+     * Delegates to {@link FixpointPropagation#applyFixpoint(ConstraintSatisfactionProblem)}
      * so that every constraint referencing a set variable — not just {@link
      * io.github.rcrida.jcsp.constraints.binary.SubsetConstraint}/{@link
      * io.github.rcrida.jcsp.constraints.binary.DisjointConstraint}/{@link
@@ -158,7 +158,7 @@ public class SetBranchingSolver extends SolverDecorator {
      * io.github.rcrida.jcsp.constraints.nary.LexConstraint} symmetry-breaking constraint.
      */
     private static Optional<ConstraintSatisfactionProblem> repropagate(ConstraintSatisfactionProblem csp) {
-        return PropagationFixpointSolver.applyFixpoint(csp);
+        return FixpointPropagation.applyFixpoint(csp);
     }
 
     private static int undeterminedCount(SetBoundedDomain<?> domain) {
