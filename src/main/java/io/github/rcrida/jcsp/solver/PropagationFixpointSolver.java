@@ -37,7 +37,6 @@ import io.github.rcrida.jcsp.constraints.nary.LinearVariableConstraint;
 import io.github.rcrida.jcsp.constraints.nary.MaxConstraint;
 import io.github.rcrida.jcsp.constraints.nary.MinConstraint;
 import io.github.rcrida.jcsp.constraints.nary.NaryElementConstraint;
-import io.github.rcrida.jcsp.constraints.nary.NogoodConstraint;
 import io.github.rcrida.jcsp.constraints.nary.NValueConstraint;
 import io.github.rcrida.jcsp.constraints.nary.PartitionConstraint;
 import io.github.rcrida.jcsp.constraints.nary.ProductConstraint;
@@ -198,17 +197,6 @@ public class PropagationFixpointSolver extends SolverDecorator {
             }
         }
         return result;
-    }
-
-    /**
-     * Thin wrapper over {@link #applyFixpointWithReason}, kept for direct callers/tests: returns
-     * the nogood that explains a conflict, or {@link Optional#empty()} if the fixpoint converges
-     * feasibly instead.
-     */
-    static Optional<NogoodConstraint> explainConflict(@NonNull ConstraintSatisfactionProblem csp) {
-        log.debug("explainConflict");
-        ConsistencyResult result = applyFixpointWithReason(csp, null);
-        return result.isInfeasible() ? Optional.ofNullable(result.reason()) : Optional.empty();
     }
 
     /**
