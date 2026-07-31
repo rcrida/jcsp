@@ -14,6 +14,7 @@ import io.github.rcrida.jcsp.constraints.Constraint;
 import io.github.rcrida.jcsp.solver.assignmentfactory.InitialAssignmentFactory;
 import io.github.rcrida.jcsp.solver.backtrackingsearch.selector.ConflictedVariableSelector;
 import io.github.rcrida.jcsp.solver.backtrackingsearch.selector.UnassignedVariableSelector;
+import io.github.rcrida.jcsp.solver.listener.LocalSolverListener;
 import io.github.rcrida.jcsp.variables.Variable;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
@@ -56,6 +57,7 @@ public class TabuSearchSolver implements LocalSolver, CancellableLocalSolver {
     @Builder.Default UnassignedVariableSelector conflictedVariableSelector = ConflictedVariableSelector.INSTANCE;
     /** Number of steps a reverted value stays forbidden for the variable it was moved away from. */
     @Builder.Default int tabuTenure = 10;
+    @Builder.Default @NonNull LocalSolverListener listener = LocalSolverListener.NONE;
 
     /**
      * Cooperative cancellation, only ever set by {@link RaceLocalSolver} via {@link #withCancellation}.
@@ -101,6 +103,7 @@ public class TabuSearchSolver implements LocalSolver, CancellableLocalSolver {
         for (int step = 0; step < maxSteps && !cancellation.isCancelled(); step++) {
             if (current.isSolution(csp)) {
                 log.info("Tabu search solution at attempt {} step {}", attempt, step);
+                listener.onSolutionFound(current);
                 return Optional.of(current);
             }
             val variable = conflictedVariableSelector.select(csp, current);
@@ -109,6 +112,7 @@ public class TabuSearchSolver implements LocalSolver, CancellableLocalSolver {
             currentTotalWeight = result.totalWeight();
             bestTotalWeight = Math.min(bestTotalWeight, currentTotalWeight);
             current.getStatistics().incrementSteps();
+            listener.onLocalSearchStep(attempt, step, current);
             currentTotalWeight += LocalSearchSupport.incrementViolatedWeights(csp, constraintWeights, current);
         }
         return Optional.empty();
@@ -136,6 +140,7 @@ public class TabuSearchSolver implements LocalSolver, CancellableLocalSolver {
             if (current.isSolution(csp)) {
                 double cost = objective.applyAsDouble(current);
                 log.info("Tabu search found solution at attempt {} step {} with cost {}", attempt, step, cost);
+                listener.onSolutionFound(current);
                 return Optional.of(current);
             }
             val variable = conflictedVariableSelector.select(csp, current);
@@ -144,6 +149,7 @@ public class TabuSearchSolver implements LocalSolver, CancellableLocalSolver {
             currentTotalWeight = result.totalWeight();
             bestTotalWeight = Math.min(bestTotalWeight, currentTotalWeight);
             current.getStatistics().incrementSteps();
+            listener.onLocalSearchStep(attempt, step, current);
             currentTotalWeight += LocalSearchSupport.incrementViolatedWeights(csp, constraintWeights, current);
         }
         return Optional.empty();
@@ -191,7 +197,7 @@ public class TabuSearchSolver implements LocalSolver, CancellableLocalSolver {
 
         recordMove(tabu, variable, oldValue, chosen.value(), step);
         log.debug("{} -> {}", variable, chosen.value());
-        return new MoveResult(current.toBuilder().value(variable, chosen.value()).build(), chosen.totalWeight());
+        return new MoveResult(current.withValue(variable, chosen.value()), chosen.totalWeight());
     }
 
     private @NonNull MoveResult applyTabuMoveWithObjective(@NonNull ConstraintSatisfactionProblem csp,
@@ -220,7 +226,7 @@ public class TabuSearchSolver implements LocalSolver, CancellableLocalSolver {
         double oldLocalWeight = LocalSearchSupport.weighConflicts(variable, oldValue, current, variableConstraints, constraintWeights);
         val costs = SetDomainMoves.candidateValues(csp.getDomain(variable), oldValue)
                 .map(v -> {
-                    val candidateAssignment = current.withValue(variable, v);
+                    val candidateAssignment = current.toBuilder().value(variable, v).build();
                     double localWeight = LocalSearchSupport.weighConflicts(variable, v, current, variableConstraints, constraintWeights);
                     return new ValueCost<>(v, localWeight, currentTotalWeight - oldLocalWeight + localWeight,
                             objective.applyAsDouble(candidateAssignment));
@@ -244,7 +250,7 @@ public class TabuSearchSolver implements LocalSolver, CancellableLocalSolver {
 
         recordMove(tabu, variable, oldValue, chosen.value(), step);
         log.debug("{} -> {}", variable, chosen.value());
-        return new MoveResult(current.toBuilder().value(variable, chosen.value()).build(), chosen.totalWeight());
+        return new MoveResult(current.withValue(variable, chosen.value()), chosen.totalWeight());
     }
 
     /**

@@ -14,6 +14,7 @@ import io.github.rcrida.jcsp.constraints.Constraint;
 import io.github.rcrida.jcsp.solver.assignmentfactory.InitialAssignmentFactory;
 import io.github.rcrida.jcsp.solver.backtrackingsearch.selector.ConflictedVariableSelector;
 import io.github.rcrida.jcsp.solver.backtrackingsearch.selector.UnassignedVariableSelector;
+import io.github.rcrida.jcsp.solver.listener.LocalSolverListener;
 import io.github.rcrida.jcsp.variables.Variable;
 import org.jspecify.annotations.NonNull;
 
@@ -56,6 +57,7 @@ public class MinConflictsSolver implements LocalSolver, CancellableLocalSolver {
     int maxSteps;
     @NonNull InitialAssignmentFactory initialAssignmentFactory;
     @Builder.Default UnassignedVariableSelector conflictedVariableSelector = ConflictedVariableSelector.INSTANCE;
+    @Builder.Default @NonNull LocalSolverListener listener = LocalSolverListener.NONE;
 
     /**
      * Cooperative cancellation, only ever set by {@link RaceLocalSolver} via {@link #withCancellation}.
@@ -94,11 +96,13 @@ public class MinConflictsSolver implements LocalSolver, CancellableLocalSolver {
         for (int step = 0; step < maxSteps && !cancellation.isCancelled(); step++) {
             if (current.isSolution(csp)) {
                 log.info("Solution at attempt {} step {}", attempt, step);
+                listener.onSolutionFound(current);
                 return Optional.of(current);
             }
             val variable = conflictedVariableSelector.select(csp, current);
             current = applyMinConflicts(csp, variable, current, constraintWeights);
             current.getStatistics().incrementSteps();
+            listener.onLocalSearchStep(attempt, step, current);
             updateWeights(csp, constraintWeights, current);
         }
         return Optional.empty();
@@ -123,11 +127,13 @@ public class MinConflictsSolver implements LocalSolver, CancellableLocalSolver {
             if (current.isSolution(csp)) {
                 double cost = objective.applyAsDouble(current);
                 log.info("Found solution at attempt {} step {} with cost {}", attempt, step, cost);
+                listener.onSolutionFound(current);
                 return Optional.of(current);
             }
             val variable = conflictedVariableSelector.select(csp, current);
             current = applyMinConflictsAndObjective(csp, variable, current, constraintWeights, objective);
             current.getStatistics().incrementSteps();
+            listener.onLocalSearchStep(attempt, step, current);
             updateWeights(csp, constraintWeights, current);
         }
         return Optional.empty();
@@ -155,7 +161,7 @@ public class MinConflictsSolver implements LocalSolver, CancellableLocalSolver {
         val costs = SetDomainMoves.candidateValues(csp.getDomain(variable), currentValue)
                 .map(v -> new ValueCost<>(v,
                         LocalSearchSupport.weighConflicts(variable, v, current, variableConstraints, constraintWeights),
-                        objective.applyAsDouble(current.withValue(variable, v))))
+                        objective.applyAsDouble(current.toBuilder().value(variable, v).build())))
                 .toList();
 
         // Lexicographic: minimise violations first (constraint repair always takes priority),
@@ -169,7 +175,7 @@ public class MinConflictsSolver implements LocalSolver, CancellableLocalSolver {
                 .toList();
         T value = candidates.get(ThreadLocalRandom.current().nextInt(candidates.size()));
         log.debug("{} -> {}", variable, value);
-        return current.toBuilder().value(variable, value).build();
+        return current.withValue(variable, value);
     }
 
     /**
@@ -209,7 +215,7 @@ public class MinConflictsSolver implements LocalSolver, CancellableLocalSolver {
                 .toList();
         T value = candidates.get(ThreadLocalRandom.current().nextInt(candidates.size()));
         log.debug("{} -> {}", variable, value);
-        return current.toBuilder().value(variable, value).build();
+        return current.withValue(variable, value);
     }
 
     /**

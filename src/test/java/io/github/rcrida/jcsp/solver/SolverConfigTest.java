@@ -2,6 +2,7 @@ package io.github.rcrida.jcsp.solver;
 
 import io.github.rcrida.jcsp.ConstraintSatisfactionProblem;
 import io.github.rcrida.jcsp.domains.IntRangeDomain;
+import io.github.rcrida.jcsp.solver.listener.SolverListener;
 import io.github.rcrida.jcsp.variables.Variable;
 import org.junit.jupiter.api.Test;
 
@@ -37,5 +38,10 @@ class SolverConfigTest {
     @Test
     void nogoodLearningEnabled_isDefault() {
         assertThat(SolverConfig.builder().build().isNogoodLearningEnabled()).isTrue();
+    }
+
+    @Test
+    void listener_defaultsToNone() {
+        assertThat(SolverConfig.builder().build().getListener()).isSameAs(SolverListener.NONE);
     }
 }

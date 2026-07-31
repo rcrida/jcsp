@@ -3,7 +3,9 @@ package io.github.rcrida.jcsp.solver;
 import io.github.rcrida.jcsp.ConstraintSatisfactionProblem;
 import io.github.rcrida.jcsp.assignments.Assignment;
 import io.github.rcrida.jcsp.domains.SetBoundedDomain;
+import io.github.rcrida.jcsp.solver.listener.SolverListener;
 import io.github.rcrida.jcsp.variables.Variable;
+import lombok.Builder;
 import lombok.EqualsAndHashCode;
 import lombok.experimental.SuperBuilder;
 import lombok.extern.slf4j.Slf4j;
@@ -51,6 +53,7 @@ import java.util.stream.Stream;
 public class SetBranchingSolver extends SolverDecorator {
 
     @Nullable ToDoubleFunction<Assignment> objective;
+    @Builder.Default @NonNull SolverListener listener = SolverListener.NONE;
 
     @Override
     public Stream<Assignment> getSolutions(@NonNull ConstraintSatisfactionProblem csp) {
@@ -130,16 +133,16 @@ public class SetBranchingSolver extends SolverDecorator {
      * states and do need their own checks.
      */
     @SuppressWarnings({"unchecked", "rawtypes"})
-    private static Optional<ConstraintSatisfactionProblem> forceIn(ConstraintSatisfactionProblem csp, Variable target,
-                                                                     SetBoundedDomain domain, Object element) {
+    private Optional<ConstraintSatisfactionProblem> forceIn(ConstraintSatisfactionProblem csp, Variable target,
+                                                              SetBoundedDomain domain, Object element) {
         SetBoundedDomain narrowed = domain.withLowerBound(Set.of(element));
         return repropagate(csp.withDomain(target, narrowed));
     }
 
     /** Never produces an empty domain either, for the symmetric reason {@link #forceIn} doesn't. */
     @SuppressWarnings({"unchecked", "rawtypes"})
-    private static Optional<ConstraintSatisfactionProblem> excludeFrom(ConstraintSatisfactionProblem csp, Variable target,
-                                                                         SetBoundedDomain domain, Object element) {
+    private Optional<ConstraintSatisfactionProblem> excludeFrom(ConstraintSatisfactionProblem csp, Variable target,
+                                                                  SetBoundedDomain domain, Object element) {
         Set restricted = new HashSet<>(domain.getUpperBound());
         restricted.remove(element);
         SetBoundedDomain narrowed = domain.withUpperBound(restricted);
@@ -147,7 +150,7 @@ public class SetBranchingSolver extends SolverDecorator {
     }
 
     /**
-     * Delegates to {@link FixpointPropagation#applyFixpoint(ConstraintSatisfactionProblem)}
+     * Delegates to {@link FixpointPropagation#applyFixpoint(ConstraintSatisfactionProblem, Set, SolverListener)}
      * so that every constraint referencing a set variable — not just {@link
      * io.github.rcrida.jcsp.constraints.binary.SubsetConstraint}/{@link
      * io.github.rcrida.jcsp.constraints.binary.DisjointConstraint}/{@link
@@ -155,10 +158,12 @@ public class SetBranchingSolver extends SolverDecorator {
      * io.github.rcrida.jcsp.constraints.nary.PartitionConstraint} — gets to prune a branch as soon
      * as it's narrowed, including one only reached via {@link
      * io.github.rcrida.jcsp.constraints.nary.ReifiedConstraint} or a {@link
-     * io.github.rcrida.jcsp.constraints.nary.LexConstraint} symmetry-breaking constraint.
+     * io.github.rcrida.jcsp.constraints.nary.LexConstraint} symmetry-breaking constraint. Instance
+     * method (not {@code static}, unlike before {@link #listener} existed) so it can read
+     * {@code this.listener} rather than needing it threaded through every caller as a parameter.
      */
-    private static Optional<ConstraintSatisfactionProblem> repropagate(ConstraintSatisfactionProblem csp) {
-        return FixpointPropagation.applyFixpoint(csp);
+    private Optional<ConstraintSatisfactionProblem> repropagate(ConstraintSatisfactionProblem csp) {
+        return FixpointPropagation.applyFixpoint(csp, null, listener);
     }
 
     private static int undeterminedCount(SetBoundedDomain<?> domain) {

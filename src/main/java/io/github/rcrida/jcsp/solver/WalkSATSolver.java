@@ -7,6 +7,7 @@ import io.github.rcrida.jcsp.domains.BooleanDomain;
 import io.github.rcrida.jcsp.domains.DiscreteDomain;
 import io.github.rcrida.jcsp.domains.Domain;
 import io.github.rcrida.jcsp.solver.assignmentfactory.InitialAssignmentFactory;
+import io.github.rcrida.jcsp.solver.listener.LocalSolverListener;
 import io.github.rcrida.jcsp.variables.Variable;
 import lombok.Builder;
 import lombok.Value;
@@ -41,6 +42,7 @@ public class WalkSATSolver implements LocalSolver {
     @NonNull InitialAssignmentFactory initialAssignmentFactory;
     /** Probability of taking a random-walk flip rather than the greedy flip. Typical: 0.3–0.5. */
     @Builder.Default double noiseParameter = 0.4;
+    @Builder.Default @NonNull LocalSolverListener listener = LocalSolverListener.NONE;
 
     public static WalkSATSolver of(int maxAttempts, int maxSteps, @NonNull InitialAssignmentFactory factory) {
         return builder().maxAttempts(maxAttempts).maxSteps(maxSteps).initialAssignmentFactory(factory).build();
@@ -76,6 +78,7 @@ public class WalkSATSolver implements LocalSolver {
         for (int step = 0; step < maxSteps; step++) {
             if (current.isSolution(csp)) {
                 log.info("WalkSAT solution at attempt {} step {}", attempt, step);
+                listener.onSolutionFound(current);
                 return Optional.of(current);
             }
             var snapshot = current;
@@ -96,6 +99,7 @@ public class WalkSATSolver implements LocalSolver {
                     : greedyFlip(vars, current, constraints);
             current = flip(current, toFlip);
             current.getStatistics().incrementSteps();
+            listener.onLocalSearchStep(attempt, step, current);
         }
         return Optional.empty();
     }

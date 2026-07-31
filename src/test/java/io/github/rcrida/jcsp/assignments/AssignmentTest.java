@@ -3,6 +3,7 @@ package io.github.rcrida.jcsp.assignments;
 import lombok.val;
 import io.github.rcrida.jcsp.ConstraintSatisfactionProblem;
 import io.github.rcrida.jcsp.domains.Domain;
+import io.github.rcrida.jcsp.solver.listener.SolverListener;
 import io.github.rcrida.jcsp.variables.Variable;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -64,6 +65,31 @@ public class AssignmentTest {
         val next = assignment.withValue(variable, value);
         assertThat(assignment.getStatistics().getNodesExplored().get()).isEqualTo(1);
         assertThat(next.getStatistics()).isSameAs(assignment.getStatistics());
+    }
+
+    @Test
+    void withValueNotifiesListenerOnNodeExplored() {
+        Object[] captured = new Object[3];
+        SolverListener recorder = new SolverListener() {
+            @Override
+            public void onNodeExplored(Variable<?> v, Object v2, Assignment a) {
+                captured[0] = v;
+                captured[1] = v2;
+                captured[2] = a;
+            }
+        };
+        val assignment = Assignment.builder().listener(recorder).build();
+
+        val next = assignment.withValue(variable, value);
+
+        assertThat(captured[0]).isSameAs(variable);
+        assertThat(captured[1]).isSameAs(value);
+        assertThat(captured[2]).isSameAs(next);
+    }
+
+    @Test
+    void listenerDefaultsToNone() {
+        assertThat(Assignment.empty().listener()).isSameAs(SolverListener.NONE);
     }
 
     @Test

@@ -7,6 +7,7 @@ import io.github.rcrida.jcsp.assignments.SolverLimits;
 import io.github.rcrida.jcsp.assignments.Statistics;
 import io.github.rcrida.jcsp.consistency.ConsistencyResult;
 import io.github.rcrida.jcsp.consistency.Inference;
+import io.github.rcrida.jcsp.solver.listener.SolverListener;
 import io.github.rcrida.jcsp.solver.backtrackingsearch.order.DomainValuesOrderer;
 import io.github.rcrida.jcsp.solver.backtrackingsearch.selector.DomWdegVariableSelector;
 import io.github.rcrida.jcsp.variables.Variable;
@@ -67,6 +68,7 @@ public class DomWdegLubySearch implements Solver {
      * (typically via {@code SolverConfig.getStatistics()}) to read it back after the call.
      */
     @NonNull Statistics statistics;
+    @NonNull SolverListener listener;
 
     /** Partial builder: sets defaults and validates preconditions in {@link #build}. */
     public static class DomWdegLubySearchBuilder {
@@ -75,11 +77,12 @@ public class DomWdegLubySearch implements Solver {
         private SolverLimits limits = SolverLimits.unlimited();
         private NogoodStore nogoodStore = new NogoodStore();
         private Statistics statistics = new Statistics();
+        private SolverListener listener = SolverListener.NONE;
 
         public DomWdegLubySearch build() {
             if (lubyUnit <= 0) throw new IllegalArgumentException("lubyUnit must be positive, got: " + lubyUnit);
             if (maxRestarts <= 0) throw new IllegalArgumentException("maxRestarts must be positive, got: " + maxRestarts);
-            return new DomWdegLubySearch(lubyUnit, maxRestarts, domainValuesOrderer, inference, limits, nogoodStore, statistics);
+            return new DomWdegLubySearch(lubyUnit, maxRestarts, domainValuesOrderer, inference, limits, nogoodStore, statistics, listener);
         }
     }
 
@@ -97,7 +100,7 @@ public class DomWdegLubySearch implements Solver {
     public Stream<Assignment> getSolutions(@NonNull ConstraintSatisfactionProblem csp) {
         var selector = new DomWdegVariableSelector(csp.getConstraints());
         long deadline = limits.deadlineNanos();
-        return searchStream(csp, Assignment.builder().statistics(statistics).build(), selector, deadline);
+        return searchStream(csp, Assignment.builder().statistics(statistics).listener(listener).build(), selector, deadline);
     }
 
     @Override
@@ -108,7 +111,7 @@ public class DomWdegLubySearch implements Solver {
             long budget = (long) lubyUnit * luby(k);
             int[] failures = {0};
             try {
-                Assignment root = Assignment.builder().statistics(statistics).build();
+                Assignment root = Assignment.builder().statistics(statistics).listener(listener).build();
                 Optional<Assignment> result = searchOne(csp, root, selector, failures, budget, deadline);
                 if (result.isPresent()) {
                     log.info("dom/wdeg+Luby: solution found at restart {}", k);
@@ -119,6 +122,7 @@ public class DomWdegLubySearch implements Solver {
                 return Optional.empty();
             } catch (BudgetExceeded ignored) {
                 log.debug("dom/wdeg+Luby: budget {} exceeded at restart {}, restarting", budget, k);
+                listener.onRestart(k);
             } catch (LimitsExceeded ignored) {
                 log.info("dom/wdeg+Luby: limit exceeded at restart {}", k);
                 throw new LimitExceededException(statistics);
@@ -133,7 +137,10 @@ public class DomWdegLubySearch implements Solver {
                                             @NonNull Assignment assignment,
                                             @NonNull DomWdegVariableSelector selector,
                                             long deadline) {
-        if (assignment.isComplete(csp)) return Stream.of(assignment);
+        if (assignment.isComplete(csp)) {
+            listener.onSolutionFound(assignment);
+            return Stream.of(assignment);
+        }
         Variable<?> variable = selector.select(csp, assignment);
         return domainValuesOrderer.order(csp, variable, assignment)
                 .flatMap(value -> {
@@ -146,6 +153,7 @@ public class DomWdegLubySearch implements Solver {
                     ConstraintSatisfactionProblem cspWithNogoods = nogoodStore.apply(csp);
                     if (!next.isConsistent(cspWithNogoods)) {
                         next.getStatistics().incrementBacktracks();
+                        listener.onBacktrack(variable, next);
                         return Stream.empty();
                     }
                     return inferOrExplain(cspWithNogoods, variable, next, selector)
@@ -173,8 +181,10 @@ public class DomWdegLubySearch implements Solver {
             if (inferred.reason() != null) {
                 nogoodStore.record(inferred.reason());
                 next.getStatistics().incrementNogoodsLearned();
+                listener.onNogoodLearned(inferred.reason());
             }
             next.getStatistics().incrementBacktracks();
+            listener.onBacktrack(variable, next);
             return Optional.empty();
         }
         return Optional.of(inferred.problem());
@@ -187,7 +197,10 @@ public class DomWdegLubySearch implements Solver {
                                            int[] failures,
                                            long budget,
                                            long deadline) {
-        if (assignment.isComplete(csp)) return Optional.of(assignment);
+        if (assignment.isComplete(csp)) {
+            listener.onSolutionFound(assignment);
+            return Optional.of(assignment);
+        }
         Variable<?> variable = selector.select(csp, assignment);
         for (Object value : domainValuesOrderer.order(csp, variable, assignment).toList()) {
             Assignment next = assignment.withValue((Variable<Object>) variable, value);
@@ -199,6 +212,7 @@ public class DomWdegLubySearch implements Solver {
             ConstraintSatisfactionProblem cspWithNogoods = nogoodStore.apply(csp);
             if (!next.isConsistent(cspWithNogoods)) {
                 next.getStatistics().incrementBacktracks();
+                listener.onBacktrack(variable, next);
                 continue;
             }
             Optional<ConstraintSatisfactionProblem> inferred = inferOrExplain(cspWithNogoods, variable, next, selector);

@@ -11,6 +11,7 @@ import io.github.rcrida.jcsp.assignments.SolverLimits;
 import io.github.rcrida.jcsp.assignments.Statistics;
 import io.github.rcrida.jcsp.consistency.ConsistencyResult;
 import io.github.rcrida.jcsp.consistency.Inference;
+import io.github.rcrida.jcsp.solver.listener.SolverListener;
 import io.github.rcrida.jcsp.solver.backtrackingsearch.order.DomainValuesOrderer;
 import io.github.rcrida.jcsp.solver.backtrackingsearch.selector.UnassignedVariableSelector;
 import io.github.rcrida.jcsp.variables.Variable;
@@ -58,13 +59,15 @@ public class BranchAndBoundSolver implements Solver {
      */
     @Builder.Default
     @NonNull Statistics statistics = new Statistics();
+    @Builder.Default
+    @NonNull SolverListener listener = SolverListener.NONE;
 
     @Override
     public Stream<Assignment> getSolutions(@NonNull ConstraintSatisfactionProblem csp) {
         log.info("Search space before branch-and-bound = {}", csp.getSearchSpace());
         double[] incumbent = {Double.MAX_VALUE};
         long deadline = limits.deadlineNanos();
-        return search(csp, Assignment.builder().statistics(statistics).build(), incumbent, deadline);
+        return search(csp, Assignment.builder().statistics(statistics).listener(listener).build(), incumbent, deadline);
     }
 
     private Stream<Assignment> search(ConstraintSatisfactionProblem csp,
@@ -78,6 +81,7 @@ public class BranchAndBoundSolver implements Solver {
             double cost = objective.applyAsDouble(assignment);
             incumbent[0] = cost;
             log.info("Found improving solution with cost {}: {}", cost, assignment);
+            listener.onIncumbentImproved(assignment, cost);
             return Stream.of(assignment);
         }
         val variable = unassignedVariableSelector.select(csp, assignment);
@@ -104,6 +108,7 @@ public class BranchAndBoundSolver implements Solver {
                     }
                     if (!next.isConsistent(cspWithNogoods)) {
                         next.getStatistics().incrementBacktracks();
+                        listener.onBacktrack(variable, next);
                         return false;
                     }
                     return true;
@@ -130,8 +135,10 @@ public class BranchAndBoundSolver implements Solver {
             if (inferred.reason() != null) {
                 nogoodStore.record(inferred.reason());
                 next.getStatistics().incrementNogoodsLearned();
+                listener.onNogoodLearned(inferred.reason());
             }
             next.getStatistics().incrementBacktracks();
+            listener.onBacktrack(variable, next);
             return Optional.empty();
         }
         return Optional.of(inferred.problem());

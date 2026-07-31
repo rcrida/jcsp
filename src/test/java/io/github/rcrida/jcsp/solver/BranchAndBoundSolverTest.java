@@ -9,11 +9,13 @@ import io.github.rcrida.jcsp.consistency.Inference;
 import io.github.rcrida.jcsp.domains.IntRangeDomain;
 import io.github.rcrida.jcsp.solver.backtrackingsearch.order.DefaultValueOrderer;
 import io.github.rcrida.jcsp.solver.backtrackingsearch.selector.MinimumRemainingValuesSelector;
+import io.github.rcrida.jcsp.solver.listener.SolverListener;
 import io.github.rcrida.jcsp.variables.Variable;
 import org.junit.jupiter.api.Test;
 
 import java.time.Duration;
 import java.util.Optional;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.function.ToDoubleFunction;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -187,5 +189,36 @@ public class BranchAndBoundSolverTest {
         assertThat(solution.get().getStatistics().getNogoodsLearned().get()).isZero();
         assertThat(solution.get().getStatistics().getBacktracks().get()).isGreaterThan(0);
         assertThat(store.apply(csp)).isEqualTo(csp);
+    }
+
+    // ── SolverListener ───────────────────────────────────────────────────────
+
+    @Test
+    void listenerReceivesOnIncumbentImprovedForEachImprovingSolution() {
+        var costs = new CopyOnWriteArrayList<Double>();
+        SolverListener recorder = new SolverListener() {
+            @Override
+            public void onIncumbentImproved(Assignment solution, double cost) {
+                costs.add(cost);
+            }
+        };
+
+        BranchAndBoundSolver solver = BranchAndBoundSolver.builder()
+                .objective(BranchAndBoundSolverTest::sum)
+                .unassignedVariableSelector(MinimumRemainingValuesSelector.INSTANCE)
+                .domainValuesOrderer(DefaultValueOrderer.INSTANCE)
+                .inference((problem, variable, assignment) -> Optional.of(problem))
+                .listener(recorder)
+                .build();
+
+        val improving = solver.getSolutions(CSP).toList();
+
+        assertThat(costs).hasSameSizeAs(improving);
+        for (int i = 0; i < improving.size(); i++) {
+            assertThat(costs.get(i)).isEqualTo((double) sum(improving.get(i)));
+        }
+        for (int i = 1; i < costs.size(); i++) {
+            assertThat(costs.get(i)).isLessThan(costs.get(i - 1));
+        }
     }
 }

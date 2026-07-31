@@ -8,9 +8,11 @@ import io.github.rcrida.jcsp.assignments.Statistics;
 import io.github.rcrida.jcsp.consistency.ConsistencyResult;
 import io.github.rcrida.jcsp.consistency.Inference;
 import io.github.rcrida.jcsp.constraints.nary.GroundNogoodConstraint;
+import io.github.rcrida.jcsp.constraints.nary.NogoodConstraint;
 import io.github.rcrida.jcsp.domains.IntRangeDomain;
 import io.github.rcrida.jcsp.domains.NumericDiscreteDomain;
 import io.github.rcrida.jcsp.solver.backtrackingsearch.order.LeastConstrainingValueOrderer;
+import io.github.rcrida.jcsp.solver.listener.SolverListener;
 import io.github.rcrida.jcsp.variables.Variable;
 import org.junit.jupiter.api.Test;
 
@@ -19,6 +21,8 @@ import java.time.Duration;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -645,5 +649,93 @@ class DomWdegLubySearchTest {
                 .isInstanceOf(LimitExceededException.class)
                 .extracting(e -> ((LimitExceededException) e).getStatistics())
                 .isNotNull();
+    }
+
+    // ── SolverListener ───────────────────────────────────────────────────────
+
+    @Test
+    void listenerReceivesNodeExploredBacktrackNogoodLearnedAndSolutionFoundEvents() {
+        // Same x/y/w1/w2 shape as nogoodsLearnedStatisticIncrementsOnFailedBranch: x=1 fails (a
+        // backtrack plus a recorded nogood), x=2 succeeds -- gives at least one of every event to
+        // assert on, and lets onNodeExplored/onBacktrack/onNogoodLearned counts be cross-checked
+        // exactly against the same Statistics counters DomWdegLubySearch already maintains.
+        Variable<Integer> x = VF.create("lx");
+        Variable<Integer> y = VF.create("ly");
+        Variable<Integer> w1 = VF.create("lw1");
+        Variable<Integer> w2 = VF.create("lw2");
+        ConstraintSatisfactionProblem csp = ConstraintSatisfactionProblem.builder()
+                .variableDomain(x, IntRangeDomain.of(1, 2))
+                .variableDomain(y, IntRangeDomain.of(1, 1))
+                .variableDomain(w1, IntRangeDomain.of(5, 5))
+                .variableDomain(w2, IntRangeDomain.of(6, 6))
+                .notEqualsConstraint(x, y)
+                .notEqualsConstraint(x, w1)
+                .notEqualsConstraint(x, w2)
+                .build();
+
+        AtomicInteger nodesExplored = new AtomicInteger();
+        AtomicInteger backtracks = new AtomicInteger();
+        AtomicInteger nogoodsLearned = new AtomicInteger();
+        List<Assignment> solutionsFound = new CopyOnWriteArrayList<>();
+        SolverListener recorder = new SolverListener() {
+            @Override
+            public void onNodeExplored(Variable<?> variable, Object value, Assignment assignment) {
+                nodesExplored.incrementAndGet();
+            }
+
+            @Override
+            public void onBacktrack(Variable<?> variable, Assignment assignment) {
+                backtracks.incrementAndGet();
+            }
+
+            @Override
+            public void onNogoodLearned(NogoodConstraint nogood) {
+                nogoodsLearned.incrementAndGet();
+            }
+
+            @Override
+            public void onSolutionFound(Assignment solution) {
+                solutionsFound.add(solution);
+            }
+        };
+
+        DomWdegLubySearch solver = DomWdegLubySearch.builder()
+                .domainValuesOrderer(io.github.rcrida.jcsp.solver.backtrackingsearch.order.DefaultValueOrderer.INSTANCE)
+                .inference(Solver.Factory.FULL_PROPAGATION_INFERENCE)
+                .listener(recorder)
+                .build();
+
+        List<Assignment> solutions = solver.getSolutions(csp).toList();
+
+        assertThat(solutions).hasSize(1);
+        assertThat(nodesExplored.get()).isEqualTo(solutions.get(0).getStatistics().getNodesExplored().get());
+        assertThat(backtracks.get()).isEqualTo(solutions.get(0).getStatistics().getBacktracks().get());
+        assertThat(nogoodsLearned.get()).isEqualTo(solutions.get(0).getStatistics().getNogoodsLearned().get());
+        assertThat(nogoodsLearned.get()).isGreaterThan(0);
+        assertThat(solutionsFound).containsExactly(solutions.get(0));
+    }
+
+    @Test
+    void listenerReceivesOnRestartWhenBudgetExceeded() {
+        // Same lubyUnit=1/fourQueensCsp shape as nodeLimitAccumulatesAcrossLubyRestarts, whose own
+        // comment establishes that this configuration reliably forces multiple Luby restarts.
+        List<Integer> restarts = new CopyOnWriteArrayList<>();
+        SolverListener recorder = new SolverListener() {
+            @Override
+            public void onRestart(int restartNumber) {
+                restarts.add(restartNumber);
+            }
+        };
+
+        DomWdegLubySearch tightSolver = DomWdegLubySearch.builder()
+                .lubyUnit(1)
+                .maxRestarts(512)
+                .domainValuesOrderer(LeastConstrainingValueOrderer.INSTANCE)
+                .inference(Solver.Factory.FULL_PROPAGATION_INFERENCE)
+                .listener(recorder)
+                .build();
+
+        assertThat(tightSolver.getSolution(fourQueensCsp())).isPresent();
+        assertThat(restarts).isNotEmpty();
     }
 }

@@ -80,7 +80,8 @@ public interface Solver {
                                                                   Variable<?> variable, Assignment assignment) {
                 return MAC.INSTANCE.apply(problem, variable, assignment)
                         .flatMap(afterMac -> FixpointPropagation.applyFixpoint(afterMac,
-                                FixpointPropagation.changedVariables(problem.getVariableDomains(), afterMac.getVariableDomains())));
+                                FixpointPropagation.changedVariables(problem.getVariableDomains(), afterMac.getVariableDomains()),
+                                assignment.listener()));
             }
 
             @Override
@@ -93,7 +94,8 @@ public interface Solver {
                 }
                 ConstraintSatisfactionProblem afterMac = macResult.problem();
                 ConsistencyResult fixpointResult = FixpointPropagation.applyFixpointWithReason(afterMac,
-                        FixpointPropagation.changedVariables(problem.getVariableDomains(), afterMac.getVariableDomains()));
+                        FixpointPropagation.changedVariables(problem.getVariableDomains(), afterMac.getVariableDomains()),
+                        assignment.listener());
                 if (fixpointResult.isInfeasible() && fixpointResult.reason() == null) {
                     return ConsistencyResult.infeasible(GroundNogoodConstraint.of(assignment.getValues()));
                 }
@@ -184,6 +186,7 @@ public interface Solver {
                             .limits(limits)
                             .nogoodStore(nogoodStore)
                             .statistics(config.getStatistics())
+                            .listener(config.getListener())
                             // Effectively unbounded: getSolution() now reaches Luby-restart search directly
                             // (see BoundSolver#getSolution below), so DEFAULT_MAX_RESTARTS's cap would silently
                             // turn SolverLimits.unlimited() into a bounded search. SolverLimits (node/time)
@@ -203,11 +206,12 @@ public interface Solver {
                 };
                 val independentSubproblemSolver = IndependentSubproblemSolver.builder().innerFactory(innerFactory).build();
                 Solver afterPropagation = hasSets
-                        ? SetBranchingSolver.builder().inner(independentSubproblemSolver).build()
+                        ? SetBranchingSolver.builder().inner(independentSubproblemSolver).listener(config.getListener()).build()
                         : independentSubproblemSolver;
                 val propagationFixpointSolver = PropagationFixpointSolver.builder()
                         .inner(afterPropagation)
                         .snap(hasContinuous)
+                        .listener(config.getListener())
                         .build();
                 Solver chain = NodeConsistentSolver.builder().inner(propagationFixpointSolver).build();
                 return new BoundSolver() {
@@ -246,6 +250,7 @@ public interface Solver {
                         .limits(limits)
                         .nogoodStore(NogoodStore.forProblem(csp))
                         .statistics(config.getStatistics())
+                        .listener(config.getListener())
                         .build();
                 Solver terminal = hasContinuous
                         ? BisectionConditioningSolver.builder()
@@ -255,11 +260,12 @@ public interface Solver {
                                 .build()
                         : branchAndBound;
                 Solver afterPropagation = hasSets
-                        ? SetBranchingSolver.builder().inner(terminal).objective(objective).build()
+                        ? SetBranchingSolver.builder().inner(terminal).objective(objective).listener(config.getListener()).build()
                         : terminal;
                 val propagationFixpointSolver = PropagationFixpointSolver.builder()
                         .inner(afterPropagation)
                         .snap(false)
+                        .listener(config.getListener())
                         .build();
                 Solver chain = NodeConsistentSolver.builder().inner(propagationFixpointSolver).build();
                 return new BoundSolver() {

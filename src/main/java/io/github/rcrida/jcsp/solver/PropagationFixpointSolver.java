@@ -1,10 +1,12 @@
 package io.github.rcrida.jcsp.solver;
 
+import lombok.Builder;
 import lombok.EqualsAndHashCode;
 import lombok.experimental.SuperBuilder;
 import lombok.extern.slf4j.Slf4j;
 import io.github.rcrida.jcsp.ConstraintSatisfactionProblem;
 import io.github.rcrida.jcsp.domains.BoundedDomain;
+import io.github.rcrida.jcsp.solver.listener.SolverListener;
 import org.jspecify.annotations.NonNull;
 
 import java.util.Optional;
@@ -36,6 +38,7 @@ public class PropagationFixpointSolver extends SolverDecorator {
 
     /** When true, snaps non-singleton bounded domains to midpoints after propagation converges. */
     boolean snap;
+    @Builder.Default @NonNull SolverListener listener = SolverListener.NONE;
 
     @Override
     protected @NonNull Optional<ConstraintSatisfactionProblem> preprocess(
@@ -49,7 +52,7 @@ public class PropagationFixpointSolver extends SolverDecorator {
         var current = csp;
         boolean changed = true;
         while (changed) {
-            var result = FixpointPropagation.applyFixpoint(current);
+            var result = FixpointPropagation.applyFixpoint(current, null, listener);
             if (result.isEmpty()) return Optional.empty();
             changed = FixpointPropagation.domainSum(result.get()) < FixpointPropagation.domainSum(current);
             current = result.get();

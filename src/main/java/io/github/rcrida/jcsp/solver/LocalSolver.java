@@ -44,6 +44,7 @@ import io.github.rcrida.jcsp.constraints.nary.SumBoundConstraint;
 import io.github.rcrida.jcsp.constraints.nary.SumVariableConstraint;
 import io.github.rcrida.jcsp.constraints.unary.UnaryComparatorConstraint;
 import io.github.rcrida.jcsp.solver.assignmentfactory.InitialAssignmentFactory;
+import io.github.rcrida.jcsp.solver.listener.LocalSolverListener;
 import lombok.val;
 import org.jspecify.annotations.NonNull;
 
@@ -129,52 +130,108 @@ public interface LocalSolver {
                 FixpointConsistency.of(PartitionConstraint.class)
         );
 
-        Factory INSTANCE = (maxAttempts, maxSteps, initialAssignmentFactory) -> {
-            // Race min-conflicts against tabu search rather than committing to one — a routing
-            // heuristic for this exact pair was tried and falsified before for a different pair of
-            // solvers (BacktrackingSearch vs DomWdegLubySearch), so this avoids needing to predict
-            // which strategy suits a given problem shape.
-            val raced = IndependentSubproblemLocalSolver.builder()
-                    .delegate(RaceLocalSolver.builder()
-                            .delegate(MinConflictsSolver.of(maxAttempts, maxSteps, initialAssignmentFactory))
-                            .delegate(TabuSearchSolver.of(maxAttempts, maxSteps, initialAssignmentFactory))
-                            .build())
-                    .build();
-            val walkSat = IndependentSubproblemLocalSolver.builder()
-                    .delegate(WalkSATSolver.of(maxAttempts, maxSteps, initialAssignmentFactory))
-                    .build();
-            val lns = IndependentSubproblemLocalSolver.builder()
-                    .delegate(LargeNeighborhoodSolver.of(maxAttempts, maxSteps, initialAssignmentFactory))
-                    .build();
-            return new LocalSolver() {
-                @Override
-                public Optional<Assignment> getLocalSolution(@NonNull ConstraintSatisfactionProblem csp) {
-                    var reduced = Optional.of(csp);
-                    for (var p : PREPROCESSORS) reduced = reduced.flatMap(p::apply);
-                    return reduced.flatMap(r -> {
-                        boolean allBoolean = r.getVariableDomains().values().stream()
-                                .allMatch(d -> d.isSingleton() || WalkSATSolver.canFlip(d));
-                        boolean noCountingConstraints = r.getConstraints().stream()
-                                .noneMatch(c -> c instanceof ExactlyOneConstraint
-                                        || c instanceof AtLeastNConstraint);
-                        return (allBoolean && noCountingConstraints ? walkSat : raced).getLocalSolution(r);
+        /**
+         * Runs {@link #PREPROCESSORS} once each (no fixpoint loop, unlike {@link FixpointPropagation}),
+         * notifying {@code listener} of any propagator that narrows the domain-sum -- same
+         * before/after-sum-comparison idiom as {@link FixpointPropagation#logIfDomainSumReduced},
+         * gated on {@code listener != LocalSolverListener.NONE} so the extra {@link
+         * FixpointPropagation#domainSum} computation is skipped entirely when no listener is
+         * registered.
+         */
+        private static Optional<ConstraintSatisfactionProblem> applyPreprocessors(
+                @NonNull ConstraintSatisfactionProblem csp, @NonNull LocalSolverListener listener) {
+            var current = Optional.of(csp);
+            for (var p : PREPROCESSORS) {
+                if (current.isEmpty()) return current;
+                var before = current.get();
+                current = p.apply(before);
+                if (listener != LocalSolverListener.NONE) {
+                    current.ifPresent(after -> {
+                        double beforeSum = FixpointPropagation.domainSum(before);
+                        double afterSum = FixpointPropagation.domainSum(after);
+                        if (afterSum < beforeSum) {
+                            listener.onPropagatorProgress(p, before.getVariableDomains(), after.getVariableDomains(), beforeSum, afterSum);
+                        }
                     });
                 }
+            }
+            return current;
+        }
 
-                @Override
-                public Optional<Assignment> getLocalSolution(@NonNull ConstraintSatisfactionProblem csp,
-                                                             @NonNull ToDoubleFunction<Assignment> objective) {
-                    var reduced = Optional.of(csp);
-                    for (var p : PREPROCESSORS) reduced = reduced.flatMap(p::apply);
-                    return reduced.flatMap(r -> {
-                        boolean hasExactlyOne = r.getConstraints().stream()
-                                .anyMatch(c -> c instanceof ExactlyOneConstraint);
-                        return (hasExactlyOne ? lns : raced).getLocalSolution(r, objective);
-                    });
-                }
-            };
+        Factory INSTANCE = new Factory() {
+            @Override
+            public LocalSolver createLocalSolver(int maxAttempts, int maxSteps,
+                                                  @NonNull InitialAssignmentFactory initialAssignmentFactory,
+                                                  @NonNull LocalSolverConfig config) {
+                // Race min-conflicts against tabu search rather than committing to one — a routing
+                // heuristic for this exact pair was tried and falsified before for a different pair of
+                // solvers (BacktrackingSearch vs DomWdegLubySearch), so this avoids needing to predict
+                // which strategy suits a given problem shape.
+                val raced = IndependentSubproblemLocalSolver.builder()
+                        .delegate(RaceLocalSolver.builder()
+                                .delegate(MinConflictsSolver.builder()
+                                        .maxAttempts(maxAttempts).maxSteps(maxSteps)
+                                        .initialAssignmentFactory(initialAssignmentFactory)
+                                        .listener(config.getListener()).build())
+                                .delegate(TabuSearchSolver.builder()
+                                        .maxAttempts(maxAttempts).maxSteps(maxSteps)
+                                        .initialAssignmentFactory(initialAssignmentFactory)
+                                        .listener(config.getListener()).build())
+                                .build())
+                        .build();
+                val walkSat = IndependentSubproblemLocalSolver.builder()
+                        .delegate(WalkSATSolver.builder()
+                                .maxAttempts(maxAttempts).maxSteps(maxSteps)
+                                .initialAssignmentFactory(initialAssignmentFactory)
+                                .listener(config.getListener()).build())
+                        .build();
+                val lns = IndependentSubproblemLocalSolver.builder()
+                        .delegate(LargeNeighborhoodSolver.builder()
+                                .maxAttempts(maxAttempts).maxSteps(maxSteps)
+                                .initialAssignmentFactory(initialAssignmentFactory)
+                                .listener(config.getListener()).build())
+                        .build();
+                return new LocalSolver() {
+                    @Override
+                    public Optional<Assignment> getLocalSolution(@NonNull ConstraintSatisfactionProblem csp) {
+                        return applyPreprocessors(csp, config.getListener()).flatMap(r -> {
+                            boolean allBoolean = r.getVariableDomains().values().stream()
+                                    .allMatch(d -> d.isSingleton() || WalkSATSolver.canFlip(d));
+                            boolean noCountingConstraints = r.getConstraints().stream()
+                                    .noneMatch(c -> c instanceof ExactlyOneConstraint
+                                            || c instanceof AtLeastNConstraint);
+                            return (allBoolean && noCountingConstraints ? walkSat : raced).getLocalSolution(r);
+                        });
+                    }
+
+                    @Override
+                    public Optional<Assignment> getLocalSolution(@NonNull ConstraintSatisfactionProblem csp,
+                                                                 @NonNull ToDoubleFunction<Assignment> objective) {
+                        return applyPreprocessors(csp, config.getListener()).flatMap(r -> {
+                            boolean hasExactlyOne = r.getConstraints().stream()
+                                    .anyMatch(c -> c instanceof ExactlyOneConstraint);
+                            return (hasExactlyOne ? lns : raced).getLocalSolution(r, objective);
+                        });
+                    }
+                };
+            }
         };
 
-        LocalSolver createLocalSolver(int maxAttempts, int maxSteps, @NonNull InitialAssignmentFactory initialAssignmentFactory);
+        /**
+         * Builds a {@link LocalSolver} configured via {@link LocalSolverConfig} (e.g. a
+         * {@link LocalSolverListener} to observe repair-search progress).
+         */
+        LocalSolver createLocalSolver(int maxAttempts, int maxSteps,
+                                       @NonNull InitialAssignmentFactory initialAssignmentFactory,
+                                       @NonNull LocalSolverConfig config);
+
+        /**
+         * @deprecated use {@link #createLocalSolver(int, int, InitialAssignmentFactory, LocalSolverConfig)}.
+         */
+        @Deprecated
+        default LocalSolver createLocalSolver(int maxAttempts, int maxSteps,
+                                              @NonNull InitialAssignmentFactory initialAssignmentFactory) {
+            return createLocalSolver(maxAttempts, maxSteps, initialAssignmentFactory, LocalSolverConfig.builder().build());
+        }
     }
 }

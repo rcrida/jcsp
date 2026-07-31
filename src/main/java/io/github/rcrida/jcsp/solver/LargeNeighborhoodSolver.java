@@ -5,6 +5,7 @@ import io.github.rcrida.jcsp.assignments.Assignment;
 import io.github.rcrida.jcsp.constraints.Constraint;
 import io.github.rcrida.jcsp.constraints.nary.ExactlyOneConstraint;
 import io.github.rcrida.jcsp.solver.assignmentfactory.InitialAssignmentFactory;
+import io.github.rcrida.jcsp.solver.listener.LocalSolverListener;
 import io.github.rcrida.jcsp.variables.Variable;
 import lombok.Builder;
 import lombok.Value;
@@ -46,6 +47,7 @@ public class LargeNeighborhoodSolver implements LocalSolver {
     int maxSteps;
     @NonNull InitialAssignmentFactory initialAssignmentFactory;
     @Builder.Default int slotsPerStep = 2;
+    @Builder.Default @NonNull LocalSolverListener listener = LocalSolverListener.NONE;
 
     public static LargeNeighborhoodSolver of(int maxAttempts, int maxSteps,
                                               @NonNull InitialAssignmentFactory factory) {
@@ -96,8 +98,10 @@ public class LargeNeighborhoodSolver implements LocalSolver {
         for (int step = 0; step < maxSteps; step++) {
             current = bestNeighbor(csp, current, pickSlots(slots, Math.min(slotsPerStep, slots.size())), null);
             current.getStatistics().incrementSteps();
+            listener.onLocalSearchStep(attempt, step, current);
             if (current.isSolution(csp)) {
                 log.info("LNS solution at attempt {} step {}", attempt, step);
+                listener.onSolutionFound(current);
                 return Optional.of(current);
             }
         }
@@ -113,11 +117,13 @@ public class LargeNeighborhoodSolver implements LocalSolver {
         for (int step = 0; step < maxSteps; step++) {
             current = bestNeighbor(csp, current, pickSlots(slots, Math.min(slotsPerStep, slots.size())), objective);
             current.getStatistics().incrementSteps();
+            listener.onLocalSearchStep(attempt, step, current);
             if (current.isSolution(csp)) {
                 if (bestFeasible == null || objective.applyAsDouble(current) < objective.applyAsDouble(bestFeasible)) {
                     bestFeasible = current;
                     log.info("Better solution at attempt {} step {}: cost={}", attempt, step,
                             objective.applyAsDouble(bestFeasible));
+                    listener.onSolutionFound(bestFeasible);
                 }
             }
         }
@@ -145,7 +151,7 @@ public class LargeNeighborhoodSolver implements LocalSolver {
 
         Map<Variable<?>, Object> baseValues = new HashMap<>(current.getValues());
         for (var v : relaxedVars) baseValues.put(v, false);
-        Assignment base = Assignment.ofTrusted(baseValues, current.getStatistics());
+        Assignment base = Assignment.ofTrusted(baseValues, current.getStatistics(), current.listener());
 
         return enumerate(relaxedSlots).stream()
                 .map(combo -> applyCombo(base, combo))
@@ -184,7 +190,7 @@ public class LargeNeighborhoodSolver implements LocalSolver {
                                    @NonNull Map<Variable<Boolean>, Boolean> combo) {
         Map<Variable<?>, Object> merged = new HashMap<>(base.getValues());
         merged.putAll(combo);
-        return Assignment.ofTrusted(merged, base.getStatistics());
+        return Assignment.ofTrusted(merged, base.getStatistics(), base.listener());
     }
 
     private long violationCount(@NonNull Assignment a, @NonNull List<Constraint> constraints) {

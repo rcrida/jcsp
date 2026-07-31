@@ -2,6 +2,7 @@ package io.github.rcrida.jcsp.solver;
 
 import io.github.rcrida.jcsp.assignments.SolverLimits;
 import io.github.rcrida.jcsp.assignments.Statistics;
+import io.github.rcrida.jcsp.solver.listener.SolverListener;
 import lombok.Builder;
 import lombok.Value;
 import org.jspecify.annotations.NonNull;
@@ -35,6 +36,11 @@ import org.jspecify.annotations.NonNull;
  * {@link BoundSolver} at all. Construct a fresh {@link SolverConfig} (and therefore a fresh {@link
  * Statistics}) per logical solve; reusing one {@link SolverConfig} across multiple
  * {@link BoundSolver#getSolution}/{@link BoundSolver#getSolutions} calls accumulates counts across all of them.
+ * <p>
+ * {@code listener} is threaded the same way {@code statistics} is -- read once at construction time
+ * and passed by reference into every builder that needs to fire {@link SolverListener} events (see
+ * {@link Solver.Factory#INSTANCE}) -- but, unlike {@code statistics}, is never mutated by the
+ * library itself; it's purely a caller-supplied callback.
  */
 @Value
 @Builder
@@ -42,4 +48,5 @@ public class SolverConfig {
     @Builder.Default @NonNull SolverLimits limits = SolverLimits.unlimited();
     @Builder.Default boolean nogoodLearningEnabled = true;
     @Builder.Default @NonNull Statistics statistics = new Statistics();
+    @Builder.Default @NonNull SolverListener listener = SolverListener.NONE;
 }

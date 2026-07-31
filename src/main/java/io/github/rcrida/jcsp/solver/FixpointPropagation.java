@@ -7,6 +7,7 @@ import io.github.rcrida.jcsp.consistency.ConstraintConsistency;
 import io.github.rcrida.jcsp.consistency.fixpoint.FixpointConsistency;
 import io.github.rcrida.jcsp.consistency.fixpoint.NogoodFixpointConsistency;
 import io.github.rcrida.jcsp.consistency.arc.AC3;
+import io.github.rcrida.jcsp.solver.listener.SolverListener;
 import io.github.rcrida.jcsp.constraints.binary.AbsoluteDifferenceConstraint;
 import io.github.rcrida.jcsp.constraints.binary.BinaryComparatorConstraint;
 import io.github.rcrida.jcsp.constraints.binary.BinaryOffsetConstraint;
@@ -131,16 +132,6 @@ public final class FixpointPropagation {
     );
 
     /**
-     * Runs the full propagator fixpoint without snapping bounded domains, with no seed hint for
-     * round 1 (used only for preprocessing, before any search node exists to derive one from).
-     * See {@link #applyFixpoint(ConstraintSatisfactionProblem, Set)}.
-     */
-    public static Optional<ConstraintSatisfactionProblem> applyFixpoint(
-            @NonNull ConstraintSatisfactionProblem csp) {
-        return applyFixpoint(csp, null);
-    }
-
-    /**
      * Runs the full propagator fixpoint without snapping bounded domains. Called by
      * {@link io.github.rcrida.jcsp.solver.Solver.Factory#FULL_PROPAGATION_INFERENCE} to apply
      * all propagators during backtracking search, not just as a preprocessing pass.
@@ -152,12 +143,17 @@ public final class FixpointPropagation {
      * io.github.rcrida.jcsp.solver.Solver.Factory#FULL_PROPAGATION_INFERENCE} passes the diff between the pre- and post-MAC domains (plus any
      * variable of a newly-learned nogood, which must always be checked once) rather than {@code
      * null}, since at a search node this call's input is exactly the parent's already-converged
-     * CSP -- nothing else could have changed. {@code null} (this class's own preprocessing call,
-     * and any other caller with no such parent to diff against) falls back to a full first-round
-     * scan exactly as before.
+     * CSP -- nothing else could have changed. {@code null} (a top-level preprocessing call, or any
+     * other caller with no such parent to diff against) falls back to a full first-round scan
+     * exactly as before. {@code listener} receives {@link SolverListener#onPropagatorProgress}
+     * events; every current caller already has a real listener in scope (a field or, at a search
+     * node, {@link io.github.rcrida.jcsp.assignments.Assignment#listener()}), so pass
+     * {@link SolverListener#NONE} explicitly rather than adding a no-listener overload just to
+     * avoid doing so.
      */
     public static Optional<ConstraintSatisfactionProblem> applyFixpoint(
-            @NonNull ConstraintSatisfactionProblem csp, @Nullable Set<Variable<?>> initialSeed) {
+            @NonNull ConstraintSatisfactionProblem csp, @Nullable Set<Variable<?>> initialSeed,
+            @NonNull SolverListener listener) {
         log.debug("applyFixpoint");
         var current = csp;
         Set<Variable<?>> changedVariables = initialSeed;
@@ -170,7 +166,7 @@ public final class FixpointPropagation {
                 var after = propagator.apply(current, changedVariables);
                 if (after.isEmpty()) return Optional.empty();
                 current = after.get();
-                logIfDomainSumReduced(propagator, beforePropagator, current, log.isDebugEnabled());
+                logIfDomainSumReduced(propagator, beforePropagator, current, log.isDebugEnabled(), listener);
             }
             changed = domainSum(current) < domainSumBefore;
             changedVariables = changed ? changedVariables(before, current.getVariableDomains()) : null;
@@ -205,7 +201,8 @@ public final class FixpointPropagation {
      * this same pass rather than a second, from-scratch, unseeded replay.
      */
     public static ConsistencyResult applyFixpointWithReason(
-            @NonNull ConstraintSatisfactionProblem csp, @Nullable Set<Variable<?>> initialSeed) {
+            @NonNull ConstraintSatisfactionProblem csp, @Nullable Set<Variable<?>> initialSeed,
+            @NonNull SolverListener listener) {
         log.debug("applyFixpointWithReason");
         var current = csp;
         Set<Variable<?>> changedVariables = initialSeed;
@@ -218,7 +215,7 @@ public final class FixpointPropagation {
                 ConsistencyResult after = propagator.applyWithReason(current, changedVariables);
                 if (after.isInfeasible()) return after;
                 current = after.problem();
-                logIfDomainSumReduced(propagator, beforePropagator, current, log.isDebugEnabled());
+                logIfDomainSumReduced(propagator, beforePropagator, current, log.isDebugEnabled(), listener);
             }
             changed = domainSum(current) < domainSumBefore;
             changedVariables = changed ? changedVariables(before, current.getVariableDomains()) : null;
@@ -231,24 +228,30 @@ public final class FixpointPropagation {
      * {@link #applyFixpoint}/{@link #applyFixpointWithReason} only check {@link #domainSum} once per
      * whole round (all {@link #PROPAGATORS} applied in sequence), so without this, a round that made
      * progress gives no visibility into which specific propagator (of up to several dozen) was
-     * responsible. {@code debugEnabled} is passed in (as {@link #log}'s own {@code isDebugEnabled()}
-     * at the one real call site) rather than read directly, so the extra {@link #domainSum}
-     * computation (two calls per propagator per round instead of two per round total) is both
-     * skipped entirely at the default log level on this method's hot path, and independently
-     * testable without depending on the test process's actual SLF4J level -- {@code slf4j-simple}
-     * resolves and caches a logger's level once, at first use, so it can't be toggled per-test the
-     * way a mock could. Package-private, not {@code private}, so a same-package test can exercise
-     * both outcomes of the {@code debugEnabled} branch directly.
+     * responsible -- and, since a {@link SolverListener} was added, notifies it via
+     * {@link SolverListener#onPropagatorProgress} too. {@code debugEnabled} is passed in (as
+     * {@link #log}'s own {@code isDebugEnabled()} at the one real call site) rather than read
+     * directly, so the extra {@link #domainSum} computation (two calls per propagator per round
+     * instead of two per round total) is both skipped entirely at the default log level with no
+     * listener registered, and independently testable without depending on the test process's
+     * actual SLF4J level -- {@code slf4j-simple} resolves and caches a logger's level once, at
+     * first use, so it can't be toggled per-test the way a mock could. The gate now also checks
+     * {@code listener != SolverListener.NONE} (reference equality, not {@code instanceof}), so a
+     * registered listener still receives progress events even when debug logging is off, at the
+     * same computation cost. Package-private, not {@code private}, so a same-package test can
+     * exercise every combination of the two gate conditions directly.
      */
     static void logIfDomainSumReduced(@NonNull ConstraintConsistency propagator,
                                        @NonNull ConstraintSatisfactionProblem before,
                                        @NonNull ConstraintSatisfactionProblem after,
-                                       boolean debugEnabled) {
-        if (!debugEnabled) return;
+                                       boolean debugEnabled,
+                                       @NonNull SolverListener listener) {
+        if (!debugEnabled && listener == SolverListener.NONE) return;
         double beforeSum = domainSum(before);
         double afterSum = domainSum(after);
         if (afterSum < beforeSum) {
             log.debug("{} reduced domain-sum from {} to {}", propagator, beforeSum, afterSum);
+            listener.onPropagatorProgress(propagator, before.getVariableDomains(), after.getVariableDomains(), beforeSum, afterSum);
         }
     }
 
