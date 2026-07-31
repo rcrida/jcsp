@@ -162,6 +162,7 @@ public class PropagationFixpointSolver extends SolverDecorator {
      */
     static Optional<ConstraintSatisfactionProblem> applyFixpoint(
             @NonNull ConstraintSatisfactionProblem csp, @Nullable Set<Variable<?>> initialSeed) {
+        log.debug("applyFixpoint");
         var current = csp;
         Set<Variable<?>> changedVariables = initialSeed;
         boolean changed = true;
@@ -169,9 +170,11 @@ public class PropagationFixpointSolver extends SolverDecorator {
             Map<Variable<?>, Domain<?>> before = current.getVariableDomains();
             double domainSumBefore = domainSum(current);
             for (var propagator : PROPAGATORS) {
+                var beforePropagator = current;
                 var after = propagator.apply(current, changedVariables);
                 if (after.isEmpty()) return Optional.empty();
                 current = after.get();
+                logIfDomainSumReduced(propagator, beforePropagator, current, log.isDebugEnabled());
             }
             changed = domainSum(current) < domainSumBefore;
             changedVariables = changed ? changedVariables(before, current.getVariableDomains()) : null;
@@ -203,6 +206,7 @@ public class PropagationFixpointSolver extends SolverDecorator {
      * feasibly instead.
      */
     static Optional<NogoodConstraint> explainConflict(@NonNull ConstraintSatisfactionProblem csp) {
+        log.debug("explainConflict");
         ConsistencyResult result = applyFixpointWithReason(csp, null);
         return result.isInfeasible() ? Optional.ofNullable(result.reason()) : Optional.empty();
     }
@@ -217,6 +221,7 @@ public class PropagationFixpointSolver extends SolverDecorator {
      */
     static ConsistencyResult applyFixpointWithReason(
             @NonNull ConstraintSatisfactionProblem csp, @Nullable Set<Variable<?>> initialSeed) {
+        log.debug("applyFixpointWithReason");
         var current = csp;
         Set<Variable<?>> changedVariables = initialSeed;
         boolean changed = true;
@@ -224,9 +229,11 @@ public class PropagationFixpointSolver extends SolverDecorator {
             Map<Variable<?>, Domain<?>> before = current.getVariableDomains();
             double domainSumBefore = domainSum(current);
             for (var propagator : PROPAGATORS) {
+                var beforePropagator = current;
                 ConsistencyResult after = propagator.applyWithReason(current, changedVariables);
                 if (after.isInfeasible()) return after;
                 current = after.problem();
+                logIfDomainSumReduced(propagator, beforePropagator, current, log.isDebugEnabled());
             }
             changed = domainSum(current) < domainSumBefore;
             changedVariables = changed ? changedVariables(before, current.getVariableDomains()) : null;
@@ -237,6 +244,7 @@ public class PropagationFixpointSolver extends SolverDecorator {
     @Override
     protected @NonNull Optional<ConstraintSatisfactionProblem> preprocess(
             @NonNull ConstraintSatisfactionProblem csp) {
+        log.debug("preprocess");
         return runFixpoint(csp);
     }
 
@@ -264,6 +272,32 @@ public class PropagationFixpointSolver extends SolverDecorator {
     }
 
     /**
+     * Logs, at debug level, which individual propagator narrowed domains within a fixpoint round —
+     * {@link #applyFixpoint}/{@link #applyFixpointWithReason} only check {@link #domainSum} once per
+     * whole round (all {@link #PROPAGATORS} applied in sequence), so without this, a round that made
+     * progress gives no visibility into which specific propagator (of up to several dozen) was
+     * responsible. {@code debugEnabled} is passed in (as {@link #log}'s own {@code isDebugEnabled()}
+     * at the one real call site) rather than read directly, so the extra {@link #domainSum}
+     * computation (two calls per propagator per round instead of two per round total) is both
+     * skipped entirely at the default log level on this method's hot path, and independently
+     * testable without depending on the test process's actual SLF4J level -- {@code slf4j-simple}
+     * resolves and caches a logger's level once, at first use, so it can't be toggled per-test the
+     * way a mock could. Package-private, not {@code private}, so a same-package test can exercise
+     * both outcomes of the {@code debugEnabled} branch directly.
+     */
+    static void logIfDomainSumReduced(@NonNull ConstraintConsistency propagator,
+                                       @NonNull ConstraintSatisfactionProblem before,
+                                       @NonNull ConstraintSatisfactionProblem after,
+                                       boolean debugEnabled) {
+        if (!debugEnabled) return;
+        double beforeSum = domainSum(before);
+        double afterSum = domainSum(after);
+        if (afterSum < beforeSum) {
+            log.debug("{} reduced domain-sum from {} to {}", propagator, beforeSum, afterSum);
+        }
+    }
+
+    /**
      * Sums each domain's "size" as a progress metric for fixpoint convergence: discrete domains
      * contribute their element count, {@link BoundedDomain} (e.g. {@link IntervalDomain})
      * contributes its width, and {@link SetBoundedDomain} contributes {@code |upperBound| -
@@ -278,6 +312,14 @@ public class PropagationFixpointSolver extends SolverDecorator {
      * {@link #applyFixpoint} directly at every branch step: a round that only narrowed set bounds
      * without reaching singleton looked identical to one that changed nothing, so the loop exited
      * a full fixpoint early, leaving weaker propagation per branch and a larger search tree.
+     * <p>
+     * Deliberately a sum, not the product that would actually measure the combined search space's
+     * size ({@code domain1.size() * domain2.size() * ...}): every caller only ever compares two
+     * successive rounds' totals ({@code changed = domainSum(after) < domainSum(before)}), so any
+     * monotonic-in-each-domain progress signal works equally well, and a product over dozens to
+     * hundreds of variables overflows {@code double} far sooner than a sum does — at that point
+     * every comparison degrades to {@code Infinity < Infinity} ({@code false}), permanently hiding
+     * real progress from the very check this method exists to drive.
      */
     private static double domainSum(@NonNull ConstraintSatisfactionProblem csp) {
         return csp.getVariableDomains().values().stream()

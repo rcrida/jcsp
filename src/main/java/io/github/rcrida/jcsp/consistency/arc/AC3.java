@@ -35,6 +35,11 @@ public class AC3 implements ConstraintConsistency {
 
     private AC3() {}
 
+    @Override
+    public String toString() {
+        return "AC3";
+    }
+
     /**
      * Memoized via {@link ConstraintSatisfactionProblem#computeAuxiliaryCacheIfAbsent}, keyed per
      * problem structure rather than on this class's own shared {@link #INSTANCE} — a single cache

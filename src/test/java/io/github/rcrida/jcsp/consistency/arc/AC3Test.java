@@ -30,6 +30,11 @@ import static io.github.rcrida.jcsp.solver.examples.AustraliaMapColouringTest.WA
 
 public class AC3Test {
     @Test
+    void toString_isReadable() {
+        assertThat(AC3.INSTANCE).hasToString("AC3");
+    }
+
+    @Test
     void applyYEqualsX2() {
         val domain = IntRangeDomain.of(0, 10);
         val tuples = List.of(

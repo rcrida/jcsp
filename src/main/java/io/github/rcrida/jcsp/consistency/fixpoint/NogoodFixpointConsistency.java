@@ -40,6 +40,11 @@ public final class NogoodFixpointConsistency implements ConstraintConsistency {
     }
 
     @Override
+    public String toString() {
+        return "NogoodFixpointConsistency";
+    }
+
+    @Override
     public Optional<ConstraintSatisfactionProblem> apply(ConstraintSatisfactionProblem csp) {
         return apply(csp, null);
     }

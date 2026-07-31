@@ -43,6 +43,11 @@ public final class FixpointConsistency implements ConstraintConsistency {
         return new FixpointConsistency(constraintType);
     }
 
+    @Override
+    public String toString() {
+        return "FixpointConsistency(" + constraintType.getSimpleName() + ")";
+    }
+
     /**
      * Filters {@code csp.getConstraints()} to this instance's {@link #constraintType}, reusing the
      * last computed result when the incoming constraint {@link Set} is the exact same reference as
@@ -78,7 +83,6 @@ public final class FixpointConsistency implements ConstraintConsistency {
         List<Propagatable> constraints = filteredConstraints(csp);
         var name = constraintType.getSimpleName();
         if (constraints.isEmpty()) {
-            log.debug("{}: fixpoint reached", name);
             return Optional.of(csp);
         }
         var current = csp;

@@ -1,6 +1,7 @@
 package io.github.rcrida.jcsp.solver;
 
 import io.github.rcrida.jcsp.ConstraintSatisfactionProblem;
+import io.github.rcrida.jcsp.consistency.arc.AC3;
 import io.github.rcrida.jcsp.constraints.Operator;
 import io.github.rcrida.jcsp.constraints.nary.GroundNogoodConstraint;
 import io.github.rcrida.jcsp.domains.IntRangeDomain;
@@ -161,6 +162,29 @@ public class PropagationFixpointSolverTest {
                 .notEqualsConstraint(b, c)
                 .build();
         assertThat(Solver.Factory.INSTANCE.createSolver(csp).getSolutions().toList()).isEmpty();
+    }
+
+    @Test
+    void logIfDomainSumReduced_debugDisabled_isANoOpRegardlessOfChange() {
+        Variable<Integer> x = F.create("logdisabledx");
+        var wide = ConstraintSatisfactionProblem.builder().variableDomain(x, IntRangeDomain.of(1, 5)).build();
+        var narrow = ConstraintSatisfactionProblem.builder().variableDomain(x, IntRangeDomain.of(1, 2)).build();
+        PropagationFixpointSolver.logIfDomainSumReduced(AC3.INSTANCE, wide, narrow, false);
+    }
+
+    @Test
+    void logIfDomainSumReduced_debugEnabledAndReduced_logsTheReduction() {
+        Variable<Integer> x = F.create("logreducedx");
+        var wide = ConstraintSatisfactionProblem.builder().variableDomain(x, IntRangeDomain.of(1, 5)).build();
+        var narrow = ConstraintSatisfactionProblem.builder().variableDomain(x, IntRangeDomain.of(1, 2)).build();
+        PropagationFixpointSolver.logIfDomainSumReduced(AC3.INSTANCE, wide, narrow, true);
+    }
+
+    @Test
+    void logIfDomainSumReduced_debugEnabledButUnchanged_doesNotLog() {
+        Variable<Integer> x = F.create("logunchangedx");
+        var csp = ConstraintSatisfactionProblem.builder().variableDomain(x, IntRangeDomain.of(1, 5)).build();
+        PropagationFixpointSolver.logIfDomainSumReduced(AC3.INSTANCE, csp, csp, true);
     }
 
 }

@@ -14,6 +14,11 @@ import static org.assertj.core.api.Assertions.assertThat;
 public class FixpointConsistencyTest {
 
     @Test
+    void toString_namesTheConstraintType() {
+        assertThat(FixpointConsistency.of(SumBoundConstraint.class)).hasToString("FixpointConsistency(SumBoundConstraint)");
+    }
+
+    @Test
     void apply_noMatchingConstraints_returnsUnchanged() {
         var csp = ConstraintSatisfactionProblem.builder().build();
         assertThat(FixpointConsistency.of(SumBoundConstraint.class).apply(csp)).hasValue(csp);

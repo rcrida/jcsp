@@ -19,6 +19,11 @@ class NogoodFixpointConsistencyTest {
     static final Variable<Integer> Z = F.create("nfc-z");
 
     @Test
+    void toString_isReadable() {
+        assertThat(NogoodFixpointConsistency.INSTANCE).hasToString("NogoodFixpointConsistency");
+    }
+
+    @Test
     void apply_noNogoods_returnsUnchanged() {
         var csp = ConstraintSatisfactionProblem.builder()
                 .variableDomain(X, IntRangeDomain.of(1, 3))
