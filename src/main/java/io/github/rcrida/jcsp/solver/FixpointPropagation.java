@@ -2,6 +2,7 @@ package io.github.rcrida.jcsp.solver;
 
 import lombok.extern.slf4j.Slf4j;
 import io.github.rcrida.jcsp.ConstraintSatisfactionProblem;
+import io.github.rcrida.jcsp.assignments.Statistics;
 import io.github.rcrida.jcsp.consistency.ConsistencyResult;
 import io.github.rcrida.jcsp.consistency.ConstraintConsistency;
 import io.github.rcrida.jcsp.consistency.fixpoint.FixpointConsistency;
@@ -81,6 +82,13 @@ import java.util.Set;
  * static singleton {@link io.github.rcrida.jcsp.consistency.Inference} applied at every search
  * node, with no per-solve state of its own), and {@link SetBranchingSolver}'s branch
  * re-propagation for set-domain variables (a different class entirely).
+ *
+ * <p>Both {@link #applyFixpoint}/{@link #applyFixpointWithReason} check a caller-supplied {@link
+ * Cancellation} token once per propagator within the round -- "between propagators" -- since a
+ * single round runs every entry in {@link #PROPAGATORS} in sequence and this loop is itself the hot
+ * path invoked at every search node, every {@link SetBranchingSolver} branch step, and once for
+ * whole-CSP preprocessing. See each method's own Javadoc for the exact caller obligation this
+ * creates.
  */
 @Slf4j
 public final class FixpointPropagation {
@@ -149,11 +157,16 @@ public final class FixpointPropagation {
      * events; every current caller already has a real listener in scope (a field or, at a search
      * node, {@link io.github.rcrida.jcsp.assignments.Assignment#listener()}), so pass
      * {@link SolverListener#NONE} explicitly rather than adding a no-listener overload just to
-     * avoid doing so.
+     * avoid doing so. {@code cancellation} is checked once per propagator (not just once per
+     * round), throwing {@link SolverCancelledException} (built from {@code statistics}) the moment
+     * it's detected -- every caller except {@link DomWdegLubySearch#searchOne} must catch this and
+     * convert it to their own existing "stopped early" behavior, since only that one call path is
+     * meant to surface {@link SolverCancelledException} to an external caller (see
+     * {@code SolverConfig.getCancellation()}).
      */
     public static Optional<ConstraintSatisfactionProblem> applyFixpoint(
             @NonNull ConstraintSatisfactionProblem csp, @Nullable Set<Variable<?>> initialSeed,
-            @NonNull SolverListener listener) {
+            @NonNull SolverListener listener, @NonNull Statistics statistics, @NonNull Cancellation cancellation) {
         log.debug("applyFixpoint");
         var current = csp;
         Set<Variable<?>> changedVariables = initialSeed;
@@ -162,6 +175,7 @@ public final class FixpointPropagation {
             Map<Variable<?>, Domain<?>> before = current.getVariableDomains();
             double domainSumBefore = domainSum(current);
             for (var propagator : PROPAGATORS) {
+                if (cancellation.isCancelled()) throw new SolverCancelledException(statistics);
                 var beforePropagator = current;
                 var after = propagator.apply(current, changedVariables);
                 if (after.isEmpty()) return Optional.empty();
@@ -198,11 +212,12 @@ public final class FixpointPropagation {
      * ConstraintConsistency#applyWithReason} costs the same as {@link ConstraintConsistency#apply}
      * on the feasible path (see each propagator's own {@code applyWithReason} override) — and only
      * the propagator that actually signals infeasibility contributes a reason, computed as part of
-     * this same pass rather than a second, from-scratch, unseeded replay.
+     * this same pass rather than a second, from-scratch, unseeded replay. {@code cancellation} is
+     * checked the same way -- and with the same caller obligations -- as in {@link #applyFixpoint}.
      */
     public static ConsistencyResult applyFixpointWithReason(
             @NonNull ConstraintSatisfactionProblem csp, @Nullable Set<Variable<?>> initialSeed,
-            @NonNull SolverListener listener) {
+            @NonNull SolverListener listener, @NonNull Statistics statistics, @NonNull Cancellation cancellation) {
         log.debug("applyFixpointWithReason");
         var current = csp;
         Set<Variable<?>> changedVariables = initialSeed;
@@ -211,6 +226,7 @@ public final class FixpointPropagation {
             Map<Variable<?>, Domain<?>> before = current.getVariableDomains();
             double domainSumBefore = domainSum(current);
             for (var propagator : PROPAGATORS) {
+                if (cancellation.isCancelled()) throw new SolverCancelledException(statistics);
                 var beforePropagator = current;
                 ConsistencyResult after = propagator.applyWithReason(current, changedVariables);
                 if (after.isInfeasible()) return after;

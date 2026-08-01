@@ -582,6 +582,23 @@ class DomWdegLubySearchTest {
     }
 
     @Test
+    void cancellationStopsGetSolutions() {
+        // Constructed directly (bypassing Solver.Factory/PropagationFixpointSolver) so a
+        // pre-cancelled token reaches searchStream's own direct check on the very first candidate,
+        // rather than being intercepted earlier during preprocessing (see BoundSolverCancellationTest
+        // for that distinction at the full-chain level).
+        var cancellation = new Cancellation();
+        cancellation.cancel();
+        DomWdegLubySearch cancelled = DomWdegLubySearch.builder()
+                .domainValuesOrderer(LeastConstrainingValueOrderer.INSTANCE)
+                .inference(Solver.Factory.FULL_PROPAGATION_INFERENCE)
+                .cancellation(cancellation)
+                .build();
+
+        assertThat(cancelled.getSolutions(fourQueensCsp()).findFirst()).isEmpty();
+    }
+
+    @Test
     void timeLimitStopsGetSolutions() {
         DomWdegLubySearch limited = DomWdegLubySearch.builder()
                 .domainValuesOrderer(LeastConstrainingValueOrderer.INSTANCE)
@@ -737,5 +754,35 @@ class DomWdegLubySearchTest {
 
         assertThat(tightSolver.getSolution(fourQueensCsp())).isPresent();
         assertThat(restarts).isNotEmpty();
+    }
+
+    @Test
+    void searchStream_cancellationDuringInference_convertsToEmptyStream_notThrown() {
+        // Simulates a SolverCancelledException surfacing from deep inside FixpointPropagation's
+        // "between propagators" check (reached via inference.applyWithReason) while getSolutions()
+        // (the stream path) is running -- unlike getSolution()'s Luby-restart path, searchStream
+        // must catch this and convert it to Stream.empty(), never letting it propagate.
+        Variable<Integer> x = VF.create("cancelinferx");
+        var csp = ConstraintSatisfactionProblem.builder().variableDomain(x, IntRangeDomain.of(1, 2)).build();
+
+        Statistics statistics = new Statistics();
+        Inference alwaysCancels = new Inference() {
+            @Override
+            public Optional<ConstraintSatisfactionProblem> apply(ConstraintSatisfactionProblem c, Variable<?> variable, Assignment assignment) {
+                throw new SolverCancelledException(statistics);
+            }
+
+            @Override
+            public ConsistencyResult applyWithReason(ConstraintSatisfactionProblem c, Variable<?> variable, Assignment assignment) {
+                throw new SolverCancelledException(statistics);
+            }
+        };
+
+        DomWdegLubySearch solver = DomWdegLubySearch.builder()
+                .domainValuesOrderer(LeastConstrainingValueOrderer.INSTANCE)
+                .inference(alwaysCancels)
+                .build();
+
+        assertThat(solver.getSolutions(csp).toList()).isEmpty();
     }
 }

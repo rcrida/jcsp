@@ -64,3 +64,4 @@ section instead.
 | [0008](0008-decomposition-completeness-flag.md) | Decomposition-completeness flag for binary decompositions | Accepted |
 | [0009](0009-joint-continuous-discrete-optimization.md) | Joint continuous/discrete optimization (LP relaxation) | Proposed |
 | [0010](0010-push-listener-for-solve-progress.md) | Push-listener mechanism for solve progress | Accepted |
+| [0011](0011-cancellation-token-for-main-chain-search.md) | Cancellation token for main-chain search | Accepted |

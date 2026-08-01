@@ -3,25 +3,33 @@ package io.github.rcrida.jcsp.solver;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
- * Cooperative cancellation signal threaded through a local search loop so an external caller
- * (currently only {@link RaceLocalSolver}) can ask it to stop early. Checked once per search step,
- * the same way {@link io.github.rcrida.jcsp.assignments.SolverLimits} is checked in the
- * backtracking solvers — cheap enough to leave in place unconditionally.
+ * Cooperative cancellation signal an external caller can use to ask a search to stop early.
+ * Checked frequently — once per local-search step ({@link RaceLocalSolver}'s original use), once
+ * per main-chain search node, once per {@link SetBranchingSolver} branch step, and once per
+ * propagator within {@link FixpointPropagation}'s fixpoint loop — the same way {@link
+ * io.github.rcrida.jcsp.assignments.SolverLimits} is checked throughout the backtracking solvers;
+ * cheap enough to leave in place unconditionally.
  * <p>
- * {@link #NEVER} is a shared sentinel for callers that have no external cancellation source (i.e.
- * every {@link LocalSolver} entry point invoked directly rather than through a race); {@link #cancel()}
- * must never be called on it.
+ * Registered on the main chain via {@code SolverConfig.getCancellation()}. See {@link
+ * SolverCancelledException} for how a cancelled satisfaction-chain search surfaces to the caller.
+ * <p>
+ * {@link #NEVER} is the shared sentinel every unconfigured solve defaults to. Since it's shared
+ * process-wide, {@link #cancel()} throws {@link UnsupportedOperationException} when called on it,
+ * rather than silently cancelling every other unconfigured solve in progress.
  */
-final class Cancellation {
-    static final Cancellation NEVER = new Cancellation();
+public final class Cancellation {
+    public static final Cancellation NEVER = new Cancellation();
 
     private final AtomicBoolean cancelled = new AtomicBoolean(false);
 
-    void cancel() {
+    public void cancel() {
+        if (this == NEVER) {
+            throw new UnsupportedOperationException("Cancellation.NEVER is a shared sentinel and must never be cancelled");
+        }
         cancelled.set(true);
     }
 
-    boolean isCancelled() {
+    public boolean isCancelled() {
         return cancelled.get();
     }
 }

@@ -2,6 +2,8 @@ package io.github.rcrida.jcsp.solver;
 
 import io.github.rcrida.jcsp.ConstraintSatisfactionProblem;
 import io.github.rcrida.jcsp.assignments.Assignment;
+import io.github.rcrida.jcsp.assignments.SolverLimits;
+import io.github.rcrida.jcsp.assignments.Statistics;
 import io.github.rcrida.jcsp.domains.SetBoundedDomain;
 import io.github.rcrida.jcsp.solver.listener.SolverListener;
 import io.github.rcrida.jcsp.variables.Variable;
@@ -54,14 +56,18 @@ public class SetBranchingSolver extends SolverDecorator {
 
     @Nullable ToDoubleFunction<Assignment> objective;
     @Builder.Default @NonNull SolverListener listener = SolverListener.NONE;
+    @Builder.Default @NonNull SolverLimits limits = SolverLimits.unlimited();
+    @Builder.Default @NonNull Cancellation cancellation = Cancellation.NEVER;
+    @Builder.Default @NonNull Statistics statistics = new Statistics();
 
     @Override
     public Stream<Assignment> getSolutions(@NonNull ConstraintSatisfactionProblem csp) {
+        long deadline = limits.deadlineNanos();
         if (objective == null) {
-            return allFeasible(csp);
+            return allFeasible(csp, deadline);
         }
         double[] incumbent = {Double.MAX_VALUE};
-        return allFeasible(csp).filter(candidate -> {
+        return allFeasible(csp, deadline).filter(candidate -> {
             double cost = objective.applyAsDouble(candidate);
             if (cost < incumbent[0]) {
                 incumbent[0] = cost;
@@ -82,7 +88,7 @@ public class SetBranchingSolver extends SolverDecorator {
         return getSolutions(csp).findFirst();
     }
 
-    private Stream<Assignment> allFeasible(@NonNull ConstraintSatisfactionProblem csp) {
+    private Stream<Assignment> allFeasible(@NonNull ConstraintSatisfactionProblem csp, long deadline) {
         val target = findMostUndeterminedSet(csp);
         if (target == null) {
             return csp.isFullyDetermined() ? forcedSolution(csp).stream() : getInner().getSolutions(csp);
@@ -91,9 +97,38 @@ public class SetBranchingSolver extends SolverDecorator {
         val element = pickElement(domain);
         log.debug("Branching on {}: force {} in, or exclude it", target, element);
         return Stream.concat(
-                forceIn(csp, target, domain, element).stream().flatMap(this::allFeasible),
-                excludeFrom(csp, target, domain, element).stream().flatMap(this::allFeasible)
+                branch(csp, target, domain, element, true, deadline),
+                branch(csp, target, domain, element, false, deadline)
         );
+    }
+
+    /**
+     * One "force {@code element} in" or "exclude {@code element}" branch step -- the set-CP
+     * analogue of a node in {@link DomWdegLubySearch}/{@link BranchAndBoundSolver}'s tree.
+     * Increments the same shared {@link #statistics} those terminal solvers already increment via
+     * {@link Assignment#withValue} (this class never builds an {@link Assignment} itself, so it
+     * can't reuse that side effect), so {@link Statistics#getNodesExplored} reflects the whole
+     * solve's search effort, not just the terminal solver's part. Checked against {@link #limits}/
+     * {@link #cancellation} the same way {@link DomWdegLubySearch}/{@link BranchAndBoundSolver}
+     * check every candidate value: on either, this branch silently contributes nothing (matching
+     * how neither ever throws from here, since {@link #getSolution} has no algorithm of its own
+     * distinct from consuming {@link #getSolutions}'s stream).
+     */
+    @SuppressWarnings({"unchecked", "rawtypes"})
+    private Stream<Assignment> branch(ConstraintSatisfactionProblem csp, Variable target, SetBoundedDomain domain,
+                                       Object element, boolean forceIn, long deadline) {
+        statistics.incrementNodesExplored();
+        if (cancellation.isCancelled()) {
+            return Stream.empty();
+        }
+        if (limits.isNodeLimitExceeded(statistics.getNodesExplored().get()) || limits.isTimeLimitExceeded(deadline)) {
+            limits.markLimitReached();
+            return Stream.empty();
+        }
+        Optional<ConstraintSatisfactionProblem> next = forceIn
+                ? forceIn(csp, target, domain, element)
+                : excludeFrom(csp, target, domain, element);
+        return next.stream().flatMap(c -> allFeasible(c, deadline));
     }
 
     @Nullable
@@ -150,8 +185,9 @@ public class SetBranchingSolver extends SolverDecorator {
     }
 
     /**
-     * Delegates to {@link FixpointPropagation#applyFixpoint(ConstraintSatisfactionProblem, Set, SolverListener)}
-     * so that every constraint referencing a set variable — not just {@link
+     * Delegates to {@link FixpointPropagation#applyFixpoint(ConstraintSatisfactionProblem, Set,
+     * SolverListener, Statistics, Cancellation)} so that every constraint referencing a set
+     * variable — not just {@link
      * io.github.rcrida.jcsp.constraints.binary.SubsetConstraint}/{@link
      * io.github.rcrida.jcsp.constraints.binary.DisjointConstraint}/{@link
      * io.github.rcrida.jcsp.constraints.binary.IntersectionCardinalityConstraint}/{@link
@@ -161,9 +197,16 @@ public class SetBranchingSolver extends SolverDecorator {
      * io.github.rcrida.jcsp.constraints.nary.LexConstraint} symmetry-breaking constraint. Instance
      * method (not {@code static}, unlike before {@link #listener} existed) so it can read
      * {@code this.listener} rather than needing it threaded through every caller as a parameter.
+     * Catches {@link SolverCancelledException} (thrown when {@link #cancellation} is cancelled
+     * mid-fixpoint) and converts it to {@link Optional#empty()}, the same "stops silently, same as
+     * infeasible" treatment {@link #branch}'s own direct check already gives it.
      */
     private Optional<ConstraintSatisfactionProblem> repropagate(ConstraintSatisfactionProblem csp) {
-        return FixpointPropagation.applyFixpoint(csp, null, listener);
+        try {
+            return FixpointPropagation.applyFixpoint(csp, null, listener, statistics, cancellation);
+        } catch (SolverCancelledException e) {
+            return Optional.empty();
+        }
     }
 
     private static int undeterminedCount(SetBoundedDomain<?> domain) {

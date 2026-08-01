@@ -10,7 +10,11 @@ import java.util.concurrent.atomic.AtomicInteger;
  * {@link Assignment#withValue}, so a single instance reflects the full cost of a search.
  *
  * <ul>
- *   <li>{@link #nodesExplored} — variable assignments attempted (incremented by {@link Assignment#withValue})</li>
+ *   <li>{@link #nodesExplored} — variable assignments attempted (incremented by {@link Assignment#withValue}),
+ *       plus, since {@link #incrementNodesExplored} is public, {@link
+ *       io.github.rcrida.jcsp.solver.SetBranchingSolver}'s own branch steps (which never build an
+ *       {@link Assignment}), so this reflects the whole solve's search effort, not just the
+ *       terminal solver's part</li>
  *   <li>{@link #constraintChecks} — constraint evaluations performed (incremented by {@link Assignment#isConsistent})</li>
  *   <li>{@link #backtracks} — times tree search reversed a value assignment due to inconsistency or domain wipeout</li>
  *   <li>{@link #restarts} — completed Luby restarts before a solution was found (backtracking search only)</li>
@@ -33,7 +37,7 @@ public class Statistics {
     AtomicInteger steps = new AtomicInteger();
     AtomicInteger nogoodsLearned = new AtomicInteger();
 
-    void incrementNodesExplored() {
+    public void incrementNodesExplored() {
         nodesExplored.incrementAndGet();
     }
 

@@ -81,7 +81,7 @@ public interface Solver {
                 return MAC.INSTANCE.apply(problem, variable, assignment)
                         .flatMap(afterMac -> FixpointPropagation.applyFixpoint(afterMac,
                                 FixpointPropagation.changedVariables(problem.getVariableDomains(), afterMac.getVariableDomains()),
-                                assignment.listener()));
+                                assignment.listener(), assignment.getStatistics(), assignment.cancellation()));
             }
 
             @Override
@@ -95,7 +95,7 @@ public interface Solver {
                 ConstraintSatisfactionProblem afterMac = macResult.problem();
                 ConsistencyResult fixpointResult = FixpointPropagation.applyFixpointWithReason(afterMac,
                         FixpointPropagation.changedVariables(problem.getVariableDomains(), afterMac.getVariableDomains()),
-                        assignment.listener());
+                        assignment.listener(), assignment.getStatistics(), assignment.cancellation());
                 if (fixpointResult.isInfeasible() && fixpointResult.reason() == null) {
                     return ConsistencyResult.infeasible(GroundNogoodConstraint.of(assignment.getValues()));
                 }
@@ -168,6 +168,7 @@ public interface Solver {
             public BoundSolver createSolver(@NonNull ConstraintSatisfactionProblem csp,
                                             @NonNull SolverConfig config) {
                 val limits = config.getLimits();
+                val cancellation = config.getCancellation();
                 boolean hasContinuous = csp.getVariableDomains().values().stream()
                         .anyMatch(BoundedDomain.class::isInstance);
                 boolean hasSets = csp.getVariableDomains().values().stream()
@@ -187,6 +188,7 @@ public interface Solver {
                             .nogoodStore(nogoodStore)
                             .statistics(config.getStatistics())
                             .listener(config.getListener())
+                            .cancellation(cancellation)
                             // Effectively unbounded: getSolution() now reaches Luby-restart search directly
                             // (see BoundSolver#getSolution below), so DEFAULT_MAX_RESTARTS's cap would silently
                             // turn SolverLimits.unlimited() into a bounded search. SolverLimits (node/time)
@@ -206,12 +208,15 @@ public interface Solver {
                 };
                 val independentSubproblemSolver = IndependentSubproblemSolver.builder().innerFactory(innerFactory).build();
                 Solver afterPropagation = hasSets
-                        ? SetBranchingSolver.builder().inner(independentSubproblemSolver).listener(config.getListener()).build()
+                        ? SetBranchingSolver.builder().inner(independentSubproblemSolver).listener(config.getListener())
+                                .limits(limits).cancellation(cancellation).statistics(config.getStatistics()).build()
                         : independentSubproblemSolver;
                 val propagationFixpointSolver = PropagationFixpointSolver.builder()
                         .inner(afterPropagation)
                         .snap(hasContinuous)
                         .listener(config.getListener())
+                        .statistics(config.getStatistics())
+                        .cancellation(cancellation)
                         .build();
                 Solver chain = NodeConsistentSolver.builder().inner(propagationFixpointSolver).build();
                 return new BoundSolver() {
@@ -238,6 +243,7 @@ public interface Solver {
                                             @NonNull ToDoubleFunction<Assignment> objective,
                                             @NonNull SolverConfig config) {
                 val limits = config.getLimits();
+                val cancellation = config.getCancellation();
                 boolean hasContinuous = csp.getVariableDomains().values().stream()
                         .anyMatch(BoundedDomain.class::isInstance);
                 boolean hasSets = csp.getVariableDomains().values().stream()
@@ -251,6 +257,7 @@ public interface Solver {
                         .nogoodStore(NogoodStore.forProblem(csp))
                         .statistics(config.getStatistics())
                         .listener(config.getListener())
+                        .cancellation(cancellation)
                         .build();
                 Solver terminal = hasContinuous
                         ? BisectionConditioningSolver.builder()
@@ -260,12 +267,15 @@ public interface Solver {
                                 .build()
                         : branchAndBound;
                 Solver afterPropagation = hasSets
-                        ? SetBranchingSolver.builder().inner(terminal).objective(objective).listener(config.getListener()).build()
+                        ? SetBranchingSolver.builder().inner(terminal).objective(objective).listener(config.getListener())
+                                .limits(limits).cancellation(cancellation).statistics(config.getStatistics()).build()
                         : terminal;
                 val propagationFixpointSolver = PropagationFixpointSolver.builder()
                         .inner(afterPropagation)
                         .snap(false)
                         .listener(config.getListener())
+                        .statistics(config.getStatistics())
+                        .cancellation(cancellation)
                         .build();
                 Solver chain = NodeConsistentSolver.builder().inner(propagationFixpointSolver).build();
                 return new BoundSolver() {

@@ -151,7 +151,7 @@ public class LargeNeighborhoodSolver implements LocalSolver {
 
         Map<Variable<?>, Object> baseValues = new HashMap<>(current.getValues());
         for (var v : relaxedVars) baseValues.put(v, false);
-        Assignment base = Assignment.ofTrusted(baseValues, current.getStatistics(), current.listener());
+        Assignment base = Assignment.ofTrusted(baseValues, current.getStatistics(), current.listener(), current.cancellation());
 
         return enumerate(relaxedSlots).stream()
                 .map(combo -> applyCombo(base, combo))
@@ -190,7 +190,7 @@ public class LargeNeighborhoodSolver implements LocalSolver {
                                    @NonNull Map<Variable<Boolean>, Boolean> combo) {
         Map<Variable<?>, Object> merged = new HashMap<>(base.getValues());
         merged.putAll(combo);
-        return Assignment.ofTrusted(merged, base.getStatistics(), base.listener());
+        return Assignment.ofTrusted(merged, base.getStatistics(), base.listener(), base.cancellation());
     }
 
     private long violationCount(@NonNull Assignment a, @NonNull List<Constraint> constraints) {

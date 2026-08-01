@@ -1,6 +1,7 @@
 package io.github.rcrida.jcsp.solver;
 
 import io.github.rcrida.jcsp.ConstraintSatisfactionProblem;
+import io.github.rcrida.jcsp.assignments.Statistics;
 import io.github.rcrida.jcsp.consistency.ConstraintConsistency;
 import io.github.rcrida.jcsp.consistency.arc.AC3;
 import io.github.rcrida.jcsp.constraints.nary.GroundNogoodConstraint;
@@ -14,6 +15,7 @@ import java.util.Map;
 import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 public class FixpointPropagationTest {
     static final Variable.Factory F = Variable.Factory.INSTANCE;
@@ -33,8 +35,25 @@ public class FixpointPropagationTest {
                 .variableDomain(z, IntRangeDomain.of(1, 3))
                 .nogood(nogood)
                 .build();
-        assertThat(FixpointPropagation.applyFixpoint(csp, Set.of(z), SolverListener.NONE)).hasValue(csp);
-        assertThat(FixpointPropagation.applyFixpoint(csp, null, SolverListener.NONE)).isEmpty();
+        assertThat(FixpointPropagation.applyFixpoint(csp, Set.of(z), SolverListener.NONE, new Statistics(), Cancellation.NEVER)).hasValue(csp);
+        assertThat(FixpointPropagation.applyFixpoint(csp, null, SolverListener.NONE, new Statistics(), Cancellation.NEVER)).isEmpty();
+    }
+
+    @Test
+    void applyFixpoint_cancelledBeforeFirstPropagator_throwsSolverCancelledException() {
+        Variable<Integer> x = F.create("cancelledx");
+        var csp = ConstraintSatisfactionProblem.builder().variableDomain(x, IntRangeDomain.of(1, 5)).build();
+        var cancellation = new Cancellation();
+        cancellation.cancel();
+        var statistics = new Statistics();
+
+        assertThatThrownBy(() -> FixpointPropagation.applyFixpoint(csp, null, SolverListener.NONE, statistics, cancellation))
+                .isInstanceOf(SolverCancelledException.class)
+                .extracting(e -> ((SolverCancelledException) e).getStatistics())
+                .isSameAs(statistics);
+
+        assertThatThrownBy(() -> FixpointPropagation.applyFixpointWithReason(csp, null, SolverListener.NONE, statistics, cancellation))
+                .isInstanceOf(SolverCancelledException.class);
     }
 
     @Test

@@ -5,6 +5,7 @@ import io.github.rcrida.jcsp.ConstraintSatisfactionProblem;
 import io.github.rcrida.jcsp.assignments.Assignment;
 import io.github.rcrida.jcsp.assignments.NogoodStore;
 import io.github.rcrida.jcsp.assignments.SolverLimits;
+import io.github.rcrida.jcsp.consistency.ConsistencyResult;
 import io.github.rcrida.jcsp.consistency.Inference;
 import io.github.rcrida.jcsp.domains.IntRangeDomain;
 import io.github.rcrida.jcsp.solver.backtrackingsearch.order.DefaultValueOrderer;
@@ -90,6 +91,51 @@ public class BranchAndBoundSolverTest {
     void timeLimitStopsOptimizationStream() {
         val result = solver(a -> sum(a), SolverLimits.ofTime(Duration.ofNanos(1))).getSolutions(CSP).findFirst();
         assertThat(result).isEmpty();
+    }
+
+    // ── Cancellation ─────────────────────────────────────────────────────────
+
+    @Test
+    void cancellationDuringInference_convertsToEmptyStream_notThrown() {
+        // Simulates SolverCancelledException surfacing from deep inside FixpointPropagation's
+        // "between propagators" check (reached via inference.applyWithReason) -- searchValues must
+        // catch this and convert it to Stream.empty(), never letting it propagate (this class has no
+        // distinct getSolution() algorithm of its own to legitimately let it through).
+        Inference alwaysCancels = new Inference() {
+            @Override
+            public Optional<ConstraintSatisfactionProblem> apply(ConstraintSatisfactionProblem c, Variable<?> variable, Assignment assignment) {
+                throw new SolverCancelledException(assignment.getStatistics());
+            }
+
+            @Override
+            public ConsistencyResult applyWithReason(ConstraintSatisfactionProblem c, Variable<?> variable, Assignment assignment) {
+                throw new SolverCancelledException(assignment.getStatistics());
+            }
+        };
+        BranchAndBoundSolver cancelling = BranchAndBoundSolver.builder()
+                .objective(BranchAndBoundSolverTest::sum)
+                .unassignedVariableSelector(MinimumRemainingValuesSelector.INSTANCE)
+                .domainValuesOrderer(DefaultValueOrderer.INSTANCE)
+                .inference(alwaysCancels)
+                .build();
+
+        assertThat(cancelling.getSolutions(CSP).toList()).isEmpty();
+    }
+
+    @Test
+    void cancellationStopsOptimizationStream_withoutThrowing() {
+        var cancellation = new Cancellation();
+        cancellation.cancel();
+        BranchAndBoundSolver cancelled = BranchAndBoundSolver.builder()
+                .objective(BranchAndBoundSolverTest::sum)
+                .unassignedVariableSelector(MinimumRemainingValuesSelector.INSTANCE)
+                .domainValuesOrderer(DefaultValueOrderer.INSTANCE)
+                .inference((problem, variable, assignment) -> Optional.of(problem))
+                .cancellation(cancellation)
+                .build();
+
+        assertThat(cancelled.getSolutions(CSP).findFirst()).isEmpty();
+        assertThat(cancelled.getSolution(CSP)).isEmpty();
     }
 
     @Test

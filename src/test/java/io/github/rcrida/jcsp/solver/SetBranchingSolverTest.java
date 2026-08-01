@@ -2,11 +2,17 @@ package io.github.rcrida.jcsp.solver;
 
 import io.github.rcrida.jcsp.ConstraintSatisfactionProblem;
 import io.github.rcrida.jcsp.assignments.Assignment;
+import io.github.rcrida.jcsp.assignments.SolverLimits;
+import io.github.rcrida.jcsp.assignments.Statistics;
+import io.github.rcrida.jcsp.consistency.ConstraintConsistency;
+import io.github.rcrida.jcsp.domains.Domain;
 import io.github.rcrida.jcsp.domains.IntRangeDomain;
 import io.github.rcrida.jcsp.domains.SetIntervalDomain;
+import io.github.rcrida.jcsp.solver.listener.SolverListener;
 import io.github.rcrida.jcsp.variables.Variable;
 import org.junit.jupiter.api.Test;
 
+import java.time.Duration;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
@@ -159,6 +165,78 @@ public class SetBranchingSolverTest {
         var solution = Solver.Factory.INSTANCE.createSolver(csp, objective).getSolution();
         assertThat(solution).isPresent();
         assertThat(solution.get().getValue(a)).contains(Set.of(3));
+    }
+
+    // ── Limits and cancellation ──────────────────────────────────────────────
+
+    @Test
+    void nodeLimitStopsBranchingSilently_andStatisticsReflectsBranchSteps() {
+        Variable<Set<Integer>> a = F.create("a_nodelimit");
+        var csp = ConstraintSatisfactionProblem.builder()
+                .variableDomain(a, SetIntervalDomain.of(Set.of(), Set.of(1, 2), 1, 1))
+                .build();
+        Statistics statistics = new Statistics();
+        var limited = SetBranchingSolver.builder().inner(SINGLETON_EXTRACTOR)
+                .limits(SolverLimits.ofNodes(1)).statistics(statistics).build();
+
+        assertThat(limited.getSolutions(csp).findFirst()).isEmpty();
+        assertThat(statistics.getNodesExplored().get()).isGreaterThan(0);
+    }
+
+    @Test
+    void timeLimitStopsBranchingSilently() {
+        Variable<Set<Integer>> a = F.create("a_timelimit");
+        var csp = ConstraintSatisfactionProblem.builder()
+                .variableDomain(a, SetIntervalDomain.of(Set.of(), Set.of(1, 2), 1, 1))
+                .build();
+        var limited = SetBranchingSolver.builder().inner(SINGLETON_EXTRACTOR)
+                .limits(SolverLimits.ofTime(Duration.ofNanos(1))).build();
+
+        assertThat(limited.getSolutions(csp).findFirst()).isEmpty();
+    }
+
+    @Test
+    void cancellationStopsBranchingSilently_neverThrows() {
+        Variable<Set<Integer>> a = F.create("a_cancel");
+        var csp = ConstraintSatisfactionProblem.builder()
+                .variableDomain(a, SetIntervalDomain.of(Set.of(), Set.of(1, 2), 1, 1))
+                .build();
+        var cancellation = new Cancellation();
+        cancellation.cancel();
+        var cancelled = SetBranchingSolver.builder().inner(SINGLETON_EXTRACTOR).cancellation(cancellation).build();
+
+        assertThat(cancelled.getSolutions(csp).findFirst()).isEmpty();
+        assertThat(cancelled.getSolution(csp)).isEmpty();
+    }
+
+    @Test
+    void repropagate_cancelledMidFixpoint_convertsToEmptyOptional_notThrown() {
+        // n∈{1,2}, m∈{1}, notEquals(n,m): AC3 (early in FixpointPropagation.PROPAGATORS) narrows n
+        // to {2} during the branch step's repropagation, firing onPropagatorProgress; cancelling
+        // right then means the *next* propagator's own "between propagators" check trips mid-round
+        // -- a SolverCancelledException from deep inside FixpointPropagation.applyFixpoint, not from
+        // branch()'s own direct check (which ran, and passed, before repropagation even started).
+        Variable<Set<Integer>> a = F.create("a_midcancel");
+        Variable<Integer> n = F.create("n_midcancel");
+        Variable<Integer> m = F.create("m_midcancel");
+        var csp = ConstraintSatisfactionProblem.builder()
+                .variableDomain(a, SetIntervalDomain.of(Set.of(), Set.of(1, 2), 1, 1))
+                .variableDomain(n, IntRangeDomain.of(1, 2))
+                .variableDomain(m, IntRangeDomain.of(1, 1))
+                .notEqualsConstraint(n, m)
+                .build();
+        var cancellation = new Cancellation();
+        SolverListener listener = new SolverListener() {
+            @Override
+            public void onPropagatorProgress(ConstraintConsistency propagator, Map<Variable<?>, Domain<?>> before,
+                                              Map<Variable<?>, Domain<?>> after, double beforeSum, double afterSum) {
+                cancellation.cancel();
+            }
+        };
+        var cancelling = SetBranchingSolver.builder().inner(SINGLETON_EXTRACTOR)
+                .listener(listener).cancellation(cancellation).build();
+
+        assertThat(cancelling.getSolutions(csp).findFirst()).isEmpty();
     }
 
     @Test

@@ -39,6 +39,13 @@ import java.util.stream.Stream;
  * back into the store. This is orthogonal to the incumbent-bound pruning above: a nogood records a
  * genuine constraint violation (permanently true regardless of the incumbent), while the bound cut
  * records a cost dominance relative to the current incumbent -- the two prunings compose freely.
+ * <p>
+ * {@link #cancellation} is checked at the same site as {@link #limits}, and behaves the same way a
+ * limit hit does: the affected candidate is filtered out, so the stream simply yields whatever
+ * improving solutions were already found. Unlike {@link DomWdegLubySearch}, this class has no
+ * distinct single-solution algorithm of its own -- {@code getSolution()} just consumes this
+ * stream -- so it never throws {@link SolverCancelledException}; the caller gets back the best
+ * incumbent found so far, exactly like today's {@link LimitExceededException} asymmetry.
  */
 @Slf4j
 @Value
@@ -61,13 +68,15 @@ public class BranchAndBoundSolver implements Solver {
     @NonNull Statistics statistics = new Statistics();
     @Builder.Default
     @NonNull SolverListener listener = SolverListener.NONE;
+    @Builder.Default
+    @NonNull Cancellation cancellation = Cancellation.NEVER;
 
     @Override
     public Stream<Assignment> getSolutions(@NonNull ConstraintSatisfactionProblem csp) {
         log.info("Search space before branch-and-bound = {}", csp.getSearchSpace());
         double[] incumbent = {Double.MAX_VALUE};
         long deadline = limits.deadlineNanos();
-        return search(csp, Assignment.builder().statistics(statistics).listener(listener).build(), incumbent, deadline);
+        return search(csp, Assignment.builder().statistics(statistics).listener(listener).cancellation(cancellation).build(), incumbent, deadline);
     }
 
     private Stream<Assignment> search(ConstraintSatisfactionProblem csp,
@@ -101,6 +110,9 @@ public class BranchAndBoundSolver implements Solver {
         return domainValuesOrderer.order(csp, variable, assignment)
                 .map(value -> assignment.withValue(variable, value))
                 .filter(next -> {
+                    if (cancellation.isCancelled()) {
+                        return false;
+                    }
                     if (limits.isNodeLimitExceeded(next.getStatistics().getNodesExplored().get())
                             || limits.isTimeLimitExceeded(deadline)) {
                         limits.markLimitReached();
@@ -113,9 +125,15 @@ public class BranchAndBoundSolver implements Solver {
                     }
                     return true;
                 })
-                .flatMap(next -> inferOrExplain(cspWithNogoods, variable, next)
-                        .map(inferred -> search(inferred, next, incumbent, deadline))
-                        .orElseGet(Stream::empty));
+                .flatMap(next -> {
+                    try {
+                        return inferOrExplain(cspWithNogoods, variable, next)
+                                .map(inferred -> search(inferred, next, incumbent, deadline))
+                                .orElseGet(Stream::empty);
+                    } catch (SolverCancelledException e) {
+                        return Stream.empty();
+                    }
+                });
     }
 
     /**

@@ -5,6 +5,7 @@ import lombok.EqualsAndHashCode;
 import lombok.experimental.SuperBuilder;
 import lombok.extern.slf4j.Slf4j;
 import io.github.rcrida.jcsp.ConstraintSatisfactionProblem;
+import io.github.rcrida.jcsp.assignments.Statistics;
 import io.github.rcrida.jcsp.domains.BoundedDomain;
 import io.github.rcrida.jcsp.solver.listener.SolverListener;
 import org.jspecify.annotations.NonNull;
@@ -39,6 +40,8 @@ public class PropagationFixpointSolver extends SolverDecorator {
     /** When true, snaps non-singleton bounded domains to midpoints after propagation converges. */
     boolean snap;
     @Builder.Default @NonNull SolverListener listener = SolverListener.NONE;
+    @Builder.Default @NonNull Statistics statistics = new Statistics();
+    @Builder.Default @NonNull Cancellation cancellation = Cancellation.NEVER;
 
     @Override
     protected @NonNull Optional<ConstraintSatisfactionProblem> preprocess(
@@ -47,12 +50,26 @@ public class PropagationFixpointSolver extends SolverDecorator {
         return runFixpoint(csp);
     }
 
+    /**
+     * Catches {@link SolverCancelledException} around every {@link FixpointPropagation#applyFixpoint}
+     * call and converts it to {@link Optional#empty()} -- this one-time preprocessing pass has no
+     * distinct single-solution algorithm of its own (see {@link DomWdegLubySearch}'s own Javadoc for
+     * the one call path that's allowed to let it through), so a cancelled preprocess stops silently
+     * the same way a {@link io.github.rcrida.jcsp.assignments.SolverLimits} hit would, indistinguishable
+     * from genuine infeasibility here just like it already is for
+     * {@link io.github.rcrida.jcsp.assignments.SolverLimits}.
+     */
     private @NonNull Optional<ConstraintSatisfactionProblem> runFixpoint(
             @NonNull ConstraintSatisfactionProblem csp) {
         var current = csp;
         boolean changed = true;
         while (changed) {
-            var result = FixpointPropagation.applyFixpoint(current, null, listener);
+            Optional<ConstraintSatisfactionProblem> result;
+            try {
+                result = FixpointPropagation.applyFixpoint(current, null, listener, statistics, cancellation);
+            } catch (SolverCancelledException e) {
+                return Optional.empty();
+            }
             if (result.isEmpty()) return Optional.empty();
             changed = FixpointPropagation.domainSum(result.get()) < FixpointPropagation.domainSum(current);
             current = result.get();

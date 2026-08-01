@@ -41,6 +41,14 @@ import org.jspecify.annotations.NonNull;
  * and passed by reference into every builder that needs to fire {@link SolverListener} events (see
  * {@link Solver.Factory#INSTANCE}) -- but, unlike {@code statistics}, is never mutated by the
  * library itself; it's purely a caller-supplied callback.
+ * <p>
+ * {@code cancellation} is threaded the same way {@code limits} is -- read once at construction time
+ * and passed by reference into every builder that checks it -- but where {@code limits} caps work
+ * by a pre-configured node/time budget, {@code cancellation} is an external stop signal a caller
+ * can trigger at any point during the solve, e.g. from a callback on a registered {@code listener}.
+ * It mirrors {@code limits}' own asymmetry: {@link BoundSolver#getSolution()} throws {@link
+ * SolverCancelledException} only in the satisfaction chain; every other path (both chains'
+ * {@code getSolutions()}, the optimization chain's {@code getSolution()}) stops silently instead.
  */
 @Value
 @Builder
@@ -49,4 +57,5 @@ public class SolverConfig {
     @Builder.Default boolean nogoodLearningEnabled = true;
     @Builder.Default @NonNull Statistics statistics = new Statistics();
     @Builder.Default @NonNull SolverListener listener = SolverListener.NONE;
+    @Builder.Default @NonNull Cancellation cancellation = Cancellation.NEVER;
 }

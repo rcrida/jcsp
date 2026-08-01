@@ -36,7 +36,7 @@ Traditional Java constraint satisfaction problem (CSP) solvers were designed ove
 - **Flexible constraint types**: unary, binary (equals, not-equals, offset, comparator, logic, element over fixed array, absolute-difference, division, predicate, tuples, subset, disjoint, intersection-cardinality), and n-ary (AllDiff, AtMostOne, AtLeastN, AtMostN, ExactlyOne, Sum, Product, Linear, Count, Among, Inverse, GlobalCardinality, NValue, Cumulative, BinPacking, Max, Min, Element over variables, Tuples, Increasing, Decreasing, Lex, predicate, Circuit, Diffn, Regular)
 - **Boolean domain**: `BooleanDomain` for modelling binary assignment problems (e.g. timetabling as a 0-1 matrix)
 - **Functional style**: immutable value objects, composable solver decorators, and a lazy `Stream<Assignment>` API throughout
-- **Solver configuration**: `createSolver(csp, config)` takes an optional `SolverConfig` builder bundling search limits and nogood-learning behavior. `SolverLimits` caps work by node count and/or wall-clock time; `getSolution()` throws `LimitExceededException` (carrying `Statistics`) when a limit is hit — distinguishable from a genuine UNSAT result (`Optional.empty()`). `getSolutions()` truncates the stream silently instead. `nogoodLearningEnabled(false)` disables nogood learning (CDCL) entirely, for problem shapes where learned nogoods rarely get reused
+- **Solver configuration**: `createSolver(csp, config)` takes an optional `SolverConfig` builder bundling search limits, cancellation, and nogood-learning behavior. `SolverLimits` caps work by node count and/or wall-clock time; `getSolution()` throws `LimitExceededException` (carrying `Statistics`) when a limit is hit — distinguishable from a genuine UNSAT result (`Optional.empty()`). `getSolutions()` truncates the stream silently instead. A `Cancellation` token lets a caller stop a solve from outside — e.g. from a `SolverListener` callback — mirroring the same silent-except-one-throw-site behavior. `nogoodLearningEnabled(false)` disables nogood learning (CDCL) entirely, for problem shapes where learned nogoods rarely get reused
 - **Heuristics**: dom/wdeg variable ordering with Luby restarts (Boussemart et al. 2004) for the satisfaction terminal solver; MRV variable selection for the optimization chain; LCV value ordering; and Minimum Degree variable elimination for tree decomposition
 - **Nogood learning**: both terminal solvers — `DomWdegLubySearch` (satisfaction) and `BranchAndBoundSolver` (optimization) — record a learned nogood (a partial assignment guaranteed to fail) on every domain wipeout, explained as a byproduct of the same propagation pass that detects the wipeout (no separate re-derivation pass); future search nodes whose assignment subsumes a learned nogood are pruned immediately, and nogoods persist across Luby restarts (satisfaction) or across the whole search (optimization). Nogood bookkeeping is cached across search nodes, so a growing nogood set pays for itself in pruning power without a matching rise in per-node overhead
 - **Local search**: `LocalSolver.Factory.INSTANCE` wires the full pipeline (NC + AC3 + bounds/value propagation → independent subproblem decomposition → terminal solver) and supports both satisfaction and optimization. Terminal solver is auto-selected: WalkSAT for all-boolean satisfaction CSPs without counting constraints, LargeNeighborhoodSearch for optimization with `ExactlyOneConstraint`s, and otherwise `RaceLocalSolver` runs MinConflicts and TabuSearch concurrently and returns whichever finds a solution first. All `maxAttempts` restarts run in parallel; independent subproblems are also solved concurrently. Seeded by `RandomAssignmentFactory`, `GreedyAssignmentFactory`, or `FallbackAssignmentFactory` for hybrid restart strategies
@@ -192,6 +192,26 @@ try {
 ```
 
 `getSolutions()` truncates the stream silently when a limit is hit — useful for anytime search where partial results are acceptable.
+
+**Cancellation** — a `Cancellation` token lets a caller stop a solve from *outside*, e.g. from a `SolverListener` callback that observes something worth stopping for:
+
+```java
+Cancellation cancellation = new Cancellation();
+SolverListener listener = new SolverListener() {
+    @Override
+    public void onIncumbentImproved(Assignment solution, double cost) {
+        if (cost <= targetCost) cancellation.cancel();  // good enough, stop searching
+    }
+};
+
+BoundSolver solver = Solver.Factory.INSTANCE.createSolver(csp, objective,
+    SolverConfig.builder()
+        .listener(listener)
+        .cancellation(cancellation)
+        .build());
+```
+
+Behaves exactly like a `SolverLimits` hit: `getSolutions()` truncates the stream silently in both chains, and `getSolution()` throws `SolverCancelledException` only in the satisfaction chain (mirroring `LimitExceededException`'s own scoping exactly) — the optimization chain's `getSolution()` returns the best incumbent found so far instead. A caller that needs to know *whether* a solve stopped because of cancellation, rather than genuine completion, should check `cancellation.isCancelled()` itself, since silent paths don't distinguish the two.
 
 **Disabling nogood learning (CDCL)** — both terminal solvers (`DomWdegLubySearch` for satisfaction, `BranchAndBoundSolver` for optimization) learn a nogood on every domain wipeout by default, which pays off when learned nogoods get reused later in the search. For problem shapes where they rarely do (e.g. searches that backtrack very little, or where the same conflict rarely recurs), that explanation cost is pure overhead. Set `nogoodLearningEnabled(false)` to skip it entirely — dom/wdeg variable-ordering weight updates (satisfaction chain) and incumbent-bound pruning (optimization chain) are both unaffected, since they're separate mechanisms:
 

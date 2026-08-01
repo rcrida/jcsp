@@ -44,6 +44,14 @@ import java.util.stream.Stream;
  * see {@code SolverConfig.getStatistics()} for how a caller retrieves it regardless of outcome.
  * A lightweight {@link BudgetExceeded} sentinel (pre-allocated, no stack trace) unwinds the
  * recursion when the budget is exhausted.
+ * <p>
+ * {@link #cancellation} is checked the same way {@link #limits} is, at every site {@link #limits}
+ * is: {@link #getSolutions}/{@link #searchStream} stop silently (matching how a limit hit already
+ * behaves there); {@link #getSolution}/{@link #searchOne} throw {@link SolverCancelledException}
+ * instead. This is the only call path in the whole solver chain that surfaces {@link
+ * SolverCancelledException} (or {@link LimitExceededException}) to an external caller, since it's
+ * the only {@code getSolution()} implementation with an algorithm of its own rather than one
+ * defined purely as consuming {@link #getSolutions}'s stream.
  */
 @Slf4j
 @Value
@@ -69,6 +77,7 @@ public class DomWdegLubySearch implements Solver {
      */
     @NonNull Statistics statistics;
     @NonNull SolverListener listener;
+    @NonNull Cancellation cancellation;
 
     /** Partial builder: sets defaults and validates preconditions in {@link #build}. */
     public static class DomWdegLubySearchBuilder {
@@ -78,11 +87,12 @@ public class DomWdegLubySearch implements Solver {
         private NogoodStore nogoodStore = new NogoodStore();
         private Statistics statistics = new Statistics();
         private SolverListener listener = SolverListener.NONE;
+        private Cancellation cancellation = Cancellation.NEVER;
 
         public DomWdegLubySearch build() {
             if (lubyUnit <= 0) throw new IllegalArgumentException("lubyUnit must be positive, got: " + lubyUnit);
             if (maxRestarts <= 0) throw new IllegalArgumentException("maxRestarts must be positive, got: " + maxRestarts);
-            return new DomWdegLubySearch(lubyUnit, maxRestarts, domainValuesOrderer, inference, limits, nogoodStore, statistics, listener);
+            return new DomWdegLubySearch(lubyUnit, maxRestarts, domainValuesOrderer, inference, limits, nogoodStore, statistics, listener, cancellation);
         }
     }
 
@@ -100,7 +110,7 @@ public class DomWdegLubySearch implements Solver {
     public Stream<Assignment> getSolutions(@NonNull ConstraintSatisfactionProblem csp) {
         var selector = new DomWdegVariableSelector(csp.getConstraints());
         long deadline = limits.deadlineNanos();
-        return searchStream(csp, Assignment.builder().statistics(statistics).listener(listener).build(), selector, deadline);
+        return searchStream(csp, Assignment.builder().statistics(statistics).listener(listener).cancellation(cancellation).build(), selector, deadline);
     }
 
     @Override
@@ -111,7 +121,7 @@ public class DomWdegLubySearch implements Solver {
             long budget = (long) lubyUnit * luby(k);
             int[] failures = {0};
             try {
-                Assignment root = Assignment.builder().statistics(statistics).listener(listener).build();
+                Assignment root = Assignment.builder().statistics(statistics).listener(listener).cancellation(cancellation).build();
                 Optional<Assignment> result = searchOne(csp, root, selector, failures, budget, deadline);
                 if (result.isPresent()) {
                     log.info("dom/wdeg+Luby: solution found at restart {}", k);
@@ -126,6 +136,9 @@ public class DomWdegLubySearch implements Solver {
             } catch (LimitsExceeded ignored) {
                 log.info("dom/wdeg+Luby: limit exceeded at restart {}", k);
                 throw new LimitExceededException(statistics);
+            } catch (SolverCancelledException e) {
+                log.info("dom/wdeg+Luby: cancelled at restart {}", k);
+                throw e;
             }
         }
         log.warn("dom/wdeg+Luby: exhausted {} restarts without solution", maxRestarts);
@@ -145,6 +158,9 @@ public class DomWdegLubySearch implements Solver {
         return domainValuesOrderer.order(csp, variable, assignment)
                 .flatMap(value -> {
                     Assignment next = assignment.withValue((Variable<Object>) variable, value);
+                    if (cancellation.isCancelled()) {
+                        return Stream.empty();
+                    }
                     if (limits.isNodeLimitExceeded(next.getStatistics().getNodesExplored().get())
                             || limits.isTimeLimitExceeded(deadline)) {
                         limits.markLimitReached();
@@ -156,9 +172,13 @@ public class DomWdegLubySearch implements Solver {
                         listener.onBacktrack(variable, next);
                         return Stream.empty();
                     }
-                    return inferOrExplain(cspWithNogoods, variable, next, selector)
-                            .map(inferredCsp -> searchStream(inferredCsp, next, selector, deadline))
-                            .orElseGet(Stream::empty);
+                    try {
+                        return inferOrExplain(cspWithNogoods, variable, next, selector)
+                                .map(inferredCsp -> searchStream(inferredCsp, next, selector, deadline))
+                                .orElseGet(Stream::empty);
+                    } catch (SolverCancelledException e) {
+                        return Stream.empty();
+                    }
                 });
     }
 
@@ -204,6 +224,9 @@ public class DomWdegLubySearch implements Solver {
         Variable<?> variable = selector.select(csp, assignment);
         for (Object value : domainValuesOrderer.order(csp, variable, assignment).toList()) {
             Assignment next = assignment.withValue((Variable<Object>) variable, value);
+            if (cancellation.isCancelled()) {
+                throw new SolverCancelledException(statistics);
+            }
             if (limits.isNodeLimitExceeded(next.getStatistics().getNodesExplored().get())
                     || limits.isTimeLimitExceeded(deadline)) {
                 limits.markLimitReached();

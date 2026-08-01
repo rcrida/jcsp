@@ -97,6 +97,27 @@ public class PropagationFixpointSolverTest {
     }
 
     @Test
+    void cancelledBeforePreprocessing_stopsSilently_notThrown() {
+        // x1={1}, x2={1..2} — not otherwise infeasible, so a real (non-empty) fixpoint round would
+        // run; a pre-cancelled token must still make preprocessing stop silently (Optional.empty()),
+        // never surfacing SolverCancelledException (this layer has no distinct getSolution() of its own).
+        Variable<Integer> x1 = F.create("cancelx1"), x2 = F.create("cancelx2");
+        var csp = ConstraintSatisfactionProblem.builder()
+                .variableDomain(x1, IntRangeDomain.of(1, 1))
+                .variableDomain(x2, IntRangeDomain.of(1, 2))
+                .build();
+        var cancellation = new Cancellation();
+        cancellation.cancel();
+        var solver = PropagationFixpointSolver.builder()
+                .inner(c -> Stream.empty())
+                .cancellation(cancellation)
+                .build();
+
+        assertThat(solver.getSolutions(csp)).isEmpty();
+        assertThat(solver.getSolution(csp)).isEmpty();
+    }
+
+    @Test
     void fullChain_macFailureDuringSearch_coversPostMacEmptyBranch() {
         // biPredicateConstraint(a==b) contradicts notEqualsConstraint(a,b).
         // Top-level AC3 misses the contradiction (each value has separate support in the other constraint).

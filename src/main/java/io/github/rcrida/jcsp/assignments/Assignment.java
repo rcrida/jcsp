@@ -5,6 +5,7 @@ import lombok.Singular;
 import lombok.extern.slf4j.Slf4j;
 import lombok.val;
 import io.github.rcrida.jcsp.ConstraintSatisfactionProblem;
+import io.github.rcrida.jcsp.solver.Cancellation;
 import io.github.rcrida.jcsp.solver.listener.SolverListener;
 import io.github.rcrida.jcsp.variables.Variable;
 import org.jspecify.annotations.NonNull;
@@ -18,11 +19,13 @@ import java.util.Set;
 
 @Slf4j
 @Builder(toBuilder = true)
-public record Assignment(@Singular Map<Variable<?>, Object> values, Statistics statistics, SolverListener listener) {
+public record Assignment(@Singular Map<Variable<?>, Object> values, Statistics statistics, SolverListener listener,
+                          Cancellation cancellation) {
 
     public Assignment {
         if (statistics == null) statistics = new Statistics();
         if (listener == null) listener = SolverListener.NONE;
+        if (cancellation == null) cancellation = Cancellation.NEVER;
     }
 
     public static Assignment empty() {
@@ -42,22 +45,23 @@ public record Assignment(@Singular Map<Variable<?>, Object> values, Statistics s
     }
 
     /**
-     * Constructs an {@link Assignment} directly from an already-built values map, statistics, and
-     * listener, skipping the Lombok builder's ArrayList-based accumulation entirely — for hot
-     * per-candidate construction paths (e.g. {@link io.github.rcrida.jcsp.solver.LargeNeighborhoodSolver}'s
-     * per-combo enumeration) where the caller already owns a freshly-built map it will never
-     * mutate again. {@link #values} is wrapped
-     * in an unmodifiable view (an O(1) wrap, not a copy) so the returned {@link Assignment} still
-     * gets the same immutability guarantee {@link #getValues} callers rely on elsewhere, even
-     * though this path never goes through the builder's own defensive copy. {@code statistics} and
-     * {@code listener} are required, not defaulted, so a caller deriving from an existing
-     * {@link Assignment} must explicitly carry its {@link #statistics}/{@link #listener} forward
-     * (e.g. {@code base.getStatistics()}/{@code base.listener()}) rather than silently starting a
-     * fresh, disconnected {@link Statistics}/{@link SolverListener} for the derived one.
+     * Constructs an {@link Assignment} directly from an already-built values map, statistics,
+     * listener, and cancellation token, skipping the Lombok builder's ArrayList-based accumulation
+     * entirely — for hot per-candidate construction paths (e.g.
+     * {@link io.github.rcrida.jcsp.solver.LargeNeighborhoodSolver}'s per-combo enumeration) where
+     * the caller already owns a freshly-built map it will never mutate again. {@link #values} is
+     * wrapped in an unmodifiable view (an O(1) wrap, not a copy) so the returned {@link Assignment}
+     * still gets the same immutability guarantee {@link #getValues} callers rely on elsewhere, even
+     * though this path never goes through the builder's own defensive copy. {@code statistics},
+     * {@code listener}, and {@code cancellation} are required, not defaulted, so a caller deriving
+     * from an existing {@link Assignment} must explicitly carry its {@link #statistics}/
+     * {@link #listener}/{@link #cancellation} forward (e.g. {@code
+     * base.getStatistics()}/{@code base.listener()}/{@code base.cancellation()}) rather than
+     * silently starting a fresh, disconnected one for the derived {@link Assignment}.
      */
     public static Assignment ofTrusted(@NonNull Map<Variable<?>, Object> values, @NonNull Statistics statistics,
-                                        @NonNull SolverListener listener) {
-        return new Assignment(Collections.unmodifiableMap(values), statistics, listener);
+                                        @NonNull SolverListener listener, @NonNull Cancellation cancellation) {
+        return new Assignment(Collections.unmodifiableMap(values), statistics, listener, cancellation);
     }
 
     @SuppressWarnings("unchecked")
