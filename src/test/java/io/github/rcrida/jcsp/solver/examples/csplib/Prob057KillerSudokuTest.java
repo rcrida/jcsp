@@ -2,16 +2,26 @@ package io.github.rcrida.jcsp.solver.examples.csplib;
 
 import io.github.rcrida.jcsp.ConstraintSatisfactionProblem;
 import io.github.rcrida.jcsp.assignments.Assignment;
+import io.github.rcrida.jcsp.assignments.Statistics;
+import io.github.rcrida.jcsp.consistency.ConstraintConsistency;
 import io.github.rcrida.jcsp.constraints.Operator;
 import io.github.rcrida.jcsp.domains.Domain;
 import io.github.rcrida.jcsp.domains.IntRangeDomain;
+import io.github.rcrida.jcsp.solver.Cancellation;
+import io.github.rcrida.jcsp.solver.FixpointPropagation;
 import io.github.rcrida.jcsp.solver.Solver;
+import io.github.rcrida.jcsp.solver.SolverCancelledException;
+import io.github.rcrida.jcsp.solver.listener.SolverListener;
 import io.github.rcrida.jcsp.variables.Variable;
 import lombok.val;
+import org.jspecify.annotations.NonNull;
 import org.junit.jupiter.api.Test;
 
+import java.util.Comparator;
 import java.util.HashSet;
+import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicReference;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -134,5 +144,89 @@ public class Prob057KillerSudokuTest {
         val csp = killerSudoku();
         val solver = Solver.Factory.INSTANCE.createSolver(csp);
         assertThat(solver.getSolutions()).hasSize(1);
+    }
+
+    /**
+     * Demonstrates using {@link SolverListener#onPropagatorProgress} plus {@link Cancellation} to
+     * surface just the *next* single deduction a human solving the puzzle by hand could make --
+     * not a guess. Deliberately runs {@link FixpointPropagation#applyFixpoint} directly rather than
+     * the full search-capable {@link Solver.Factory#createSolver}: a real backtracking guess isn't a
+     * legitimate "hint", so only propagation (which never guesses) is a sound source of one, and
+     * each returned {@link Clue} is verified below to actually narrow toward -- never away from --
+     * the puzzle's known unique solution.
+     */
+    @Test
+    void listenForPropagationIncrementToHintNextStep() {
+        var csp = killerSudoku();
+        for (int i = 1; i <= 10; i++) {
+            val clue = getClue(csp);
+            assertThat(clue).as("hint %d: propagation alone should still be able to deduce something", i).isNotNull();
+            System.out.println(clue);
+
+            Domain<Integer> domainBeforeThisHint = csp.getDomain(clue.variable());
+            assertThat(clue.domain().size())
+                    .as("hint %d should strictly narrow %s's domain", i, clue.variable())
+                    .isLessThan(domainBeforeThisHint.size());
+            assertThat(clue.domain().contains(solutionValueFor(clue.variable())))
+                    .as("hint %d for %s must still contain the puzzle's known solution value", i, clue.variable())
+                    .isTrue();
+
+            csp = csp.toBuilder()
+                    .variableDomain(clue.variable(), clue.domain())
+                    .build();
+        }
+    }
+
+    private static int solutionValueFor(Variable<Integer> variable) {
+        for (int r = 0; r < 9; r++) {
+            for (int c = 0; c < 9; c++) {
+                if (VARIABLES[r][c].equals(variable)) return SOLUTION[r][c];
+            }
+        }
+        throw new AssertionError("variable not part of the killer sudoku grid: " + variable);
+    }
+
+    private record Clue(ConstraintConsistency propagator, Variable<Integer> variable, Domain<Integer> domain) {
+        @Override
+        public String toString() {
+            return String.format("%s -> %s=%s", propagator, variable, domain);
+        }
+    }
+
+    /**
+     * Runs the propagator fixpoint directly (bypassing the decorator chain entirely) and relies on
+     * {@link SolverCancelledException} -- thrown by {@link FixpointPropagation} the moment {@link
+     * #getListener} cancels on the very first domain-narrowing event -- to stop after exactly one
+     * deduction rather than running the whole fixpoint to convergence. A round that narrows nothing
+     * at all (propagation alone is stuck; a guess would be needed) returns normally instead of
+     * throwing, leaving {@code clue} unset -- {@link #listenForPropagationIncrementToHintNextStep}
+     * asserts against that explicitly rather than risking a silent {@code null}.
+     */
+    private static Clue getClue(ConstraintSatisfactionProblem csp) {
+        val cancellation = new Cancellation();
+        val clue = new AtomicReference<Clue>();
+        val listener = getListener(clue, cancellation);
+        try {
+            FixpointPropagation.applyFixpoint(csp, null, listener, new Statistics(), cancellation);
+        } catch (SolverCancelledException expected) {
+            // Deliberate: getListener() cancels as soon as it captures the first deduction.
+        }
+        return clue.get();
+    }
+
+    private static @NonNull SolverListener getListener(AtomicReference<Clue> clueAtomicReference, Cancellation cancellation) {
+        return new SolverListener() {
+            @Override
+            public void onPropagatorProgress(ConstraintConsistency propagator, Map<Variable<?>, Domain<?>> domainsBefore, Map<Variable<?>, Domain<?>> domainsAfter, double domainSumBefore, double domainSumAfter) {
+                val changed = domainsAfter.entrySet().stream()
+                        .filter(e -> !e.getValue().equals(domainsBefore.get(e.getKey())))
+                        .toList();
+                val min = changed.stream()
+                        .min(Comparator.comparing(e -> e.getValue().size()))
+                        .orElseThrow();
+                clueAtomicReference.compareAndSet(null, new Clue(propagator, (Variable<Integer>) min.getKey(), (Domain<Integer>) min.getValue()));
+                cancellation.cancel();
+            }
+        };
     }
 }
