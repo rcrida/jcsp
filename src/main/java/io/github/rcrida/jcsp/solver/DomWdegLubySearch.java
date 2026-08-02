@@ -158,12 +158,8 @@ public class DomWdegLubySearch implements Solver {
         return domainValuesOrderer.order(csp, variable, assignment)
                 .flatMap(value -> {
                     Assignment next = assignment.withValue((Variable<Object>) variable, value);
-                    if (cancellation.isCancelled()) {
-                        return Stream.empty();
-                    }
-                    if (limits.isNodeLimitExceeded(next.getStatistics().getNodesExplored().get())
-                            || limits.isTimeLimitExceeded(deadline)) {
-                        limits.markLimitReached();
+                    if (limits.checkStop(cancellation, next.getStatistics().getNodesExplored().get(), deadline)
+                            != SolverLimits.StopReason.NONE) {
                         return Stream.empty();
                     }
                     ConstraintSatisfactionProblem cspWithNogoods = nogoodStore.apply(csp);
@@ -224,13 +220,10 @@ public class DomWdegLubySearch implements Solver {
         Variable<?> variable = selector.select(csp, assignment);
         for (Object value : domainValuesOrderer.order(csp, variable, assignment).toList()) {
             Assignment next = assignment.withValue((Variable<Object>) variable, value);
-            if (cancellation.isCancelled()) {
-                throw new SolverCancelledException(statistics);
-            }
-            if (limits.isNodeLimitExceeded(next.getStatistics().getNodesExplored().get())
-                    || limits.isTimeLimitExceeded(deadline)) {
-                limits.markLimitReached();
-                throw LimitsExceeded.INSTANCE;
+            switch (limits.checkStop(cancellation, next.getStatistics().getNodesExplored().get(), deadline)) {
+                case CANCELLED -> throw new SolverCancelledException(statistics);
+                case LIMIT_EXCEEDED -> throw LimitsExceeded.INSTANCE;
+                case NONE -> {}
             }
             ConstraintSatisfactionProblem cspWithNogoods = nogoodStore.apply(csp);
             if (!next.isConsistent(cspWithNogoods)) {

@@ -118,18 +118,25 @@ public class SetBranchingSolver extends SolverDecorator {
     private Stream<Assignment> branch(ConstraintSatisfactionProblem csp, Variable target, SetBoundedDomain domain,
                                        Object element, boolean forceIn, long deadline) {
         statistics.incrementNodesExplored();
-        if (cancellation.isCancelled()) {
+        if (limits.checkStop(cancellation, statistics.getNodesExplored().get(), deadline) != SolverLimits.StopReason.NONE) {
             return Stream.empty();
         }
-        if (limits.isNodeLimitExceeded(statistics.getNodesExplored().get()) || limits.isTimeLimitExceeded(deadline)) {
-            limits.markLimitReached();
-            return Stream.empty();
-        }
-        Optional<ConstraintSatisfactionProblem> next = forceIn
+        BranchOutcome outcome = forceIn
                 ? forceIn(csp, target, domain, element)
                 : excludeFrom(csp, target, domain, element);
-        return next.stream().flatMap(c -> allFeasible(c, deadline));
+        listener.onSetBranchExplored(target, element, forceIn, outcome.narrowedDomain(), outcome.repropagated().isPresent());
+        return outcome.repropagated().stream().flatMap(c -> allFeasible(c, deadline));
     }
+
+    /**
+     * {@code narrowedDomain} is the direct, pre-repropagation result of forcing/excluding {@code
+     * element} -- exactly what {@link #forceIn}/{@link #excludeFrom} compute before handing off to
+     * {@link #repropagate} -- carried alongside the post-repropagation {@link
+     * ConstraintSatisfactionProblem} purely so {@link #branch} can report both to {@link
+     * io.github.rcrida.jcsp.solver.listener.SolverListener#onSetBranchExplored} without recomputing
+     * the narrowed domain a second time.
+     */
+    private record BranchOutcome(SetBoundedDomain<?> narrowedDomain, Optional<ConstraintSatisfactionProblem> repropagated) {}
 
     @Nullable
     static Variable<?> findMostUndeterminedSet(ConstraintSatisfactionProblem csp) {
@@ -168,20 +175,20 @@ public class SetBranchingSolver extends SolverDecorator {
      * states and do need their own checks.
      */
     @SuppressWarnings({"unchecked", "rawtypes"})
-    private Optional<ConstraintSatisfactionProblem> forceIn(ConstraintSatisfactionProblem csp, Variable target,
-                                                              SetBoundedDomain domain, Object element) {
+    private BranchOutcome forceIn(ConstraintSatisfactionProblem csp, Variable target,
+                                   SetBoundedDomain domain, Object element) {
         SetBoundedDomain narrowed = domain.withLowerBound(Set.of(element));
-        return repropagate(csp.withDomain(target, narrowed));
+        return new BranchOutcome(narrowed, repropagate(csp.withDomain(target, narrowed)));
     }
 
     /** Never produces an empty domain either, for the symmetric reason {@link #forceIn} doesn't. */
     @SuppressWarnings({"unchecked", "rawtypes"})
-    private Optional<ConstraintSatisfactionProblem> excludeFrom(ConstraintSatisfactionProblem csp, Variable target,
-                                                                  SetBoundedDomain domain, Object element) {
+    private BranchOutcome excludeFrom(ConstraintSatisfactionProblem csp, Variable target,
+                                       SetBoundedDomain domain, Object element) {
         Set restricted = new HashSet<>(domain.getUpperBound());
         restricted.remove(element);
         SetBoundedDomain narrowed = domain.withUpperBound(restricted);
-        return repropagate(csp.withDomain(target, narrowed));
+        return new BranchOutcome(narrowed, repropagate(csp.withDomain(target, narrowed)));
     }
 
     /**

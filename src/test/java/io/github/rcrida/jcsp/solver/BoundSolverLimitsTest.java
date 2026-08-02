@@ -19,9 +19,12 @@ class BoundSolverLimitsTest {
      * 8-queens: minimum constraint-graph degree = 7 == targetTreewidth, so TreeDecompositionSolver
      * early-exits and CutsetConditioning's complexity check also rejects decomposition — both
      * fall through to DomWdegLubySearch.getSolutions(), where limits apply.
+     * <p>
+     * Package-private (not {@code private}) so {@link BoundSolverCancellationTest} can reuse this
+     * exact fixture rather than maintaining its own copy.
      */
     @SuppressWarnings("unchecked")
-    private static ConstraintSatisfactionProblem satisfiable() {
+    static ConstraintSatisfactionProblem satisfiable() {
         int n = 8;
         Variable<Integer>[] queens = new Variable[n];
         for (int i = 0; i < n; i++) queens[i] = VF.create("q" + i);
@@ -38,7 +41,7 @@ class BoundSolverLimitsTest {
         return builder.build();
     }
 
-    private static ConstraintSatisfactionProblem unsatisfiable() {
+    static ConstraintSatisfactionProblem unsatisfiable() {
         Variable<Integer> x = VF.create("x");
         Variable<Integer> y = VF.create("y");
         return ConstraintSatisfactionProblem.builder()

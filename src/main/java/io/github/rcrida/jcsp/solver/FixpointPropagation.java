@@ -8,6 +8,7 @@ import io.github.rcrida.jcsp.consistency.ConstraintConsistency;
 import io.github.rcrida.jcsp.consistency.fixpoint.FixpointConsistency;
 import io.github.rcrida.jcsp.consistency.fixpoint.NogoodFixpointConsistency;
 import io.github.rcrida.jcsp.consistency.arc.AC3;
+import io.github.rcrida.jcsp.solver.listener.PropagationListener;
 import io.github.rcrida.jcsp.solver.listener.SolverListener;
 import io.github.rcrida.jcsp.constraints.binary.AbsoluteDifferenceConstraint;
 import io.github.rcrida.jcsp.constraints.binary.BinaryComparatorConstraint;
@@ -263,12 +264,42 @@ public final class FixpointPropagation {
                                        boolean debugEnabled,
                                        @NonNull SolverListener listener) {
         if (!debugEnabled && listener == SolverListener.NONE) return;
+        SumComparison sums = notifyIfDomainSumReduced(propagator, before, after, listener);
+        if (sums.reduced()) {
+            log.debug("{} reduced domain-sum from {} to {}", propagator, sums.before(), sums.after());
+        }
+    }
+
+    /** {@code before}/{@code after} {@link #domainSum} results, and whether it actually decreased. */
+    record SumComparison(double before, double after) {
+        boolean reduced() {
+            return after < before;
+        }
+    }
+
+    /**
+     * Shared "compute {@link #domainSum} before/after, notify on decrease" idiom, factored out so
+     * {@link #logIfDomainSumReduced} (this class's own fixpoint loop) and {@code
+     * LocalSolver.Factory#applyPreprocessors} (its single-pass, non-fixpoint preprocessing) don't
+     * each maintain their own copy of it. Takes {@link PropagationListener} -- the common supertype
+     * of {@link SolverListener} and {@code LocalSolverListener} -- rather than either concrete type,
+     * since both callers' own listener types differ but both only ever need {@link
+     * PropagationListener#onPropagatorProgress} here. Returns the computed sums so a caller that
+     * also wants to act on them (like {@link #logIfDomainSumReduced}'s debug log) doesn't need to
+     * recompute {@link #domainSum} a second time. Deliberately doesn't include either caller's own
+     * cheap-when-unregistered gate (their sentinel {@code NONE} constants aren't comparable through
+     * the shared {@link PropagationListener} type) -- callers keep that check themselves.
+     */
+    static SumComparison notifyIfDomainSumReduced(@NonNull ConstraintConsistency propagator,
+                                                   @NonNull ConstraintSatisfactionProblem before,
+                                                   @NonNull ConstraintSatisfactionProblem after,
+                                                   @NonNull PropagationListener listener) {
         double beforeSum = domainSum(before);
         double afterSum = domainSum(after);
         if (afterSum < beforeSum) {
-            log.debug("{} reduced domain-sum from {} to {}", propagator, beforeSum, afterSum);
             listener.onPropagatorProgress(propagator, before.getVariableDomains(), after.getVariableDomains(), beforeSum, afterSum);
         }
+        return new SumComparison(beforeSum, afterSum);
     }
 
     /**

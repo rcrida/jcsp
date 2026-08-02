@@ -123,3 +123,14 @@ A push/streaming listener, not a pull/query API and not a strategy interface:
   `LargeNeighborhoodSolver` is unaffected: its multi-variable-combo-per-step shape has no single
   `(variable, value)` pair to report and deliberately bypasses `Assignment`'s builder machinery for
   performance (see its own Javadoc), so it reports solely via `onLocalSearchStep`.
+- **Added later (ADR-0011's cancellation work, follow-up code review)**: `SearchTreeListener` gained
+  `onSetBranchExplored(Variable, Object element, boolean forcedIn, Domain narrowedDomain, boolean
+  feasible)`, fired by `SetBranchingSolver`'s branch steps once `Statistics#incrementNodesExplored`
+  became public and those steps started counting toward the shared node total (ADR-0011) — a review
+  pass flagged that counting them without any matching listener event left `SolverListener` silently
+  blind to set-CP search-tree structure. Folded into one event (not a separate `onNodeExplored`/
+  `onBacktrack` pair) since `SetBranchingSolver` never builds an `Assignment` to attach a backtrack
+  event to. Also, `FixpointPropagation.logIfDomainSumReduced`'s before/after-`domainSum`-then-notify
+  idiom was extracted into a shared `notifyIfDomainSumReduced` (taking `PropagationListener`, the
+  common supertype of `SolverListener`/`LocalSolverListener`) so `LocalSolver.Factory#applyPreprocessors`
+  no longer keeps its own duplicate copy of the same comparison.

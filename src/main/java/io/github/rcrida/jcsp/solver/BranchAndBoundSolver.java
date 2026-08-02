@@ -110,12 +110,8 @@ public class BranchAndBoundSolver implements Solver {
         return domainValuesOrderer.order(csp, variable, assignment)
                 .map(value -> assignment.withValue(variable, value))
                 .filter(next -> {
-                    if (cancellation.isCancelled()) {
-                        return false;
-                    }
-                    if (limits.isNodeLimitExceeded(next.getStatistics().getNodesExplored().get())
-                            || limits.isTimeLimitExceeded(deadline)) {
-                        limits.markLimitReached();
+                    if (limits.checkStop(cancellation, next.getStatistics().getNodesExplored().get(), deadline)
+                            != SolverLimits.StopReason.NONE) {
                         return false;
                     }
                     if (!next.isConsistent(cspWithNogoods)) {

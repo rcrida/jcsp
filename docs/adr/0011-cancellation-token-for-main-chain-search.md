@@ -129,3 +129,16 @@ Two things came up while scoping this:
   `LimitExceededException` already lives with for every path except `DomWdegLubySearch.getSolution()`.
   A caller that needs to disambiguate should check its own `Cancellation` reference rather than rely
   on the return value/exception alone.
+- **Follow-up (code review)**: the "check cancellation, then check node/time limits and mark them
+  reached" block ended up duplicated near-identically across all four check sites
+  (`DomWdegLubySearch.searchStream`/`searchOne`, `BranchAndBoundSolver.searchValues`,
+  `SetBranchingSolver.branch`). Extracted into `SolverLimits.checkStop(Cancellation, long
+  nodesExplored, long deadlineNanos) -> StopReason` (`NONE`/`CANCELLED`/`LIMIT_EXCEEDED`), so the
+  three silent sites just check `!= StopReason.NONE` and `searchOne` (the one site allowed to throw)
+  switches on the result to pick which exception to raise. Declined the review's other two
+  simplification suggestions on this same change as not worth it: bundling `applyFixpoint`'s
+  `listener`/`statistics`/`cancellation` trio into a new parameter object (only 4 call sites, all
+  same-package and already tested — a new type to save 2 parameters felt like the premature
+  abstraction this project's own conventions warn against) and giving `SolverCancelledException` a
+  shared base class with `LimitExceededException` (the duplication is ~10 lines between two already
+  small, independently-readable classes).

@@ -132,9 +132,10 @@ public interface LocalSolver {
 
         /**
          * Runs {@link #PREPROCESSORS} once each (no fixpoint loop, unlike {@link FixpointPropagation}),
-         * notifying {@code listener} of any propagator that narrows the domain-sum -- same
-         * before/after-sum-comparison idiom as {@link FixpointPropagation#logIfDomainSumReduced},
-         * gated on {@code listener != LocalSolverListener.NONE} so the extra {@link
+         * notifying {@code listener} of any propagator that narrows the domain-sum via {@link
+         * FixpointPropagation#notifyIfDomainSumReduced} -- the same before/after-sum-comparison idiom
+         * {@link FixpointPropagation#logIfDomainSumReduced} uses, shared rather than duplicated here.
+         * Gated on {@code listener != LocalSolverListener.NONE} so the extra {@link
          * FixpointPropagation#domainSum} computation is skipped entirely when no listener is
          * registered.
          */
@@ -146,13 +147,7 @@ public interface LocalSolver {
                 var before = current.get();
                 current = p.apply(before);
                 if (listener != LocalSolverListener.NONE) {
-                    current.ifPresent(after -> {
-                        double beforeSum = FixpointPropagation.domainSum(before);
-                        double afterSum = FixpointPropagation.domainSum(after);
-                        if (afterSum < beforeSum) {
-                            listener.onPropagatorProgress(p, before.getVariableDomains(), after.getVariableDomains(), beforeSum, afterSum);
-                        }
-                    });
+                    current.ifPresent(after -> FixpointPropagation.notifyIfDomainSumReduced(p, before, after, listener));
                 }
             }
             return current;

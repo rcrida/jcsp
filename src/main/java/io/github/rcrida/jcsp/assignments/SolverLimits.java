@@ -1,10 +1,12 @@
 package io.github.rcrida.jcsp.assignments;
 
+import io.github.rcrida.jcsp.solver.Cancellation;
 import lombok.AccessLevel;
 import lombok.EqualsAndHashCode;
 import lombok.Getter;
 import lombok.ToString;
 import lombok.Value;
+import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 
 import java.time.Duration;
@@ -91,5 +93,27 @@ public class SolverLimits {
     /** Clears the limit-hit flag so this instance can be reused for a new search. */
     public void resetLimitReached() {
         limitReached.set(false);
+    }
+
+    /** Why {@link #checkStop} says a search should stop, or {@link #NONE} if it shouldn't. */
+    public enum StopReason { NONE, CANCELLED, LIMIT_EXCEEDED }
+
+    /**
+     * Combines a {@link Cancellation} check with this instance's own node/time limit check, in the
+     * order a caller should react to them: cancellation first (an active external stop signal), then
+     * node/time limits ({@link #markLimitReached()} is called as a side effect exactly when {@link
+     * StopReason#LIMIT_EXCEEDED} is returned, matching {@link #isNodeLimitExceeded}/{@link
+     * #isTimeLimitExceeded}'s own documented contract). Shared by every terminal solver/branching
+     * decorator that needs both checks at the same site ({@code DomWdegLubySearch}, {@code
+     * BranchAndBoundSolver}, {@code SetBranchingSolver}) so the check and its ordering can't silently
+     * drift between them.
+     */
+    public StopReason checkStop(@NonNull Cancellation cancellation, long nodesExplored, long deadlineNanos) {
+        if (cancellation.isCancelled()) return StopReason.CANCELLED;
+        if (isNodeLimitExceeded(nodesExplored) || isTimeLimitExceeded(deadlineNanos)) {
+            markLimitReached();
+            return StopReason.LIMIT_EXCEEDED;
+        }
+        return StopReason.NONE;
     }
 }

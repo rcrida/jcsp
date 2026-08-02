@@ -7,12 +7,14 @@ import io.github.rcrida.jcsp.assignments.Statistics;
 import io.github.rcrida.jcsp.consistency.ConstraintConsistency;
 import io.github.rcrida.jcsp.domains.Domain;
 import io.github.rcrida.jcsp.domains.IntRangeDomain;
+import io.github.rcrida.jcsp.domains.SetBoundedDomain;
 import io.github.rcrida.jcsp.domains.SetIntervalDomain;
 import io.github.rcrida.jcsp.solver.listener.SolverListener;
 import io.github.rcrida.jcsp.variables.Variable;
 import org.junit.jupiter.api.Test;
 
 import java.time.Duration;
+import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
@@ -118,6 +120,39 @@ public class SetBranchingSolverTest {
         assertThat(solution).isPresent();
         assertThat(solution.get().getValue(a)).contains(Set.of(2));
         assertThat(solution.get().getValue(b)).contains(Set.of(1));
+    }
+
+    @Test
+    void onSetBranchExplored_firesForBothThePrunedAndTheFeasibleBranch() {
+        // Same fixture as branches_oneInfeasibleBranch_backtracksToOther: forcing 1 into a conflicts
+        // with disjointConstraint(a,b) (pruned -- feasible=false), excluding 1 from a succeeds
+        // (feasible=true). Verifies onSetBranchExplored reports both outcomes, each with the direct,
+        // pre-repropagation narrowed domain that decision produced.
+        Variable<Set<Integer>> a = F.create("a_listener");
+        Variable<Set<Integer>> b = F.create("b_listener");
+        var csp = ConstraintSatisfactionProblem.builder()
+                .variableDomain(a, SetIntervalDomain.of(Set.of(), Set.of(1, 2), 1, 1))
+                .variableDomain(b, SetIntervalDomain.of(Set.of(), Set.of(1), 1, 1))
+                .disjointConstraint(a, b)
+                .build();
+
+        record BranchEvent(Variable<?> variable, Object element, boolean forcedIn, boolean feasible) {}
+        List<BranchEvent> events = new ArrayList<>();
+        SolverListener listener = new SolverListener() {
+            @Override
+            public void onSetBranchExplored(Variable<?> variable, Object element, boolean forcedIn,
+                                             Domain<?> narrowedDomain, boolean feasible) {
+                assertThat(narrowedDomain).isInstanceOf(SetBoundedDomain.class);
+                events.add(new BranchEvent(variable, element, forcedIn, feasible));
+            }
+        };
+
+        var solution = SetBranchingSolver.builder().inner(SINGLETON_EXTRACTOR).listener(listener).build().getSolution(csp);
+
+        assertThat(solution).isPresent();
+        assertThat(events).contains(
+                new BranchEvent(a, 1, true, false),
+                new BranchEvent(a, 1, false, true));
     }
 
     @Test
