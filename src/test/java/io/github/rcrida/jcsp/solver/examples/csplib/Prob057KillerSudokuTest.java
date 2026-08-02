@@ -3,6 +3,7 @@ package io.github.rcrida.jcsp.solver.examples.csplib;
 import io.github.rcrida.jcsp.ConstraintSatisfactionProblem;
 import io.github.rcrida.jcsp.assignments.Assignment;
 import io.github.rcrida.jcsp.assignments.Statistics;
+import io.github.rcrida.jcsp.consistency.ConsistencyResult;
 import io.github.rcrida.jcsp.consistency.ConstraintConsistency;
 import io.github.rcrida.jcsp.constraints.Operator;
 import io.github.rcrida.jcsp.domains.Domain;
@@ -24,6 +25,7 @@ import java.util.Set;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
  * Killer Sudoku (CSPLib prob057): a standard 9x9 Sudoku (row/column/box all-different) with no
@@ -149,11 +151,13 @@ public class Prob057KillerSudokuTest {
     /**
      * Demonstrates using {@link SolverListener#onPropagatorProgress} plus {@link Cancellation} to
      * surface just the *next* single deduction a human solving the puzzle by hand could make --
-     * not a guess. Deliberately runs {@link FixpointPropagation#applyFixpoint} directly rather than
-     * the full search-capable {@link Solver.Factory#createSolver}: a real backtracking guess isn't a
-     * legitimate "hint", so only propagation (which never guesses) is a sound source of one, and
-     * each returned {@link Clue} is verified below to actually narrow toward -- never away from --
-     * the puzzle's known unique solution.
+     * not a guess. Deliberately runs {@link FixpointPropagation#applyFixpointWithReason} directly
+     * rather than the full search-capable {@link Solver.Factory#createSolver}: a real backtracking
+     * guess isn't a legitimate "hint", so only propagation (which never guesses) is a sound source
+     * of one, and each returned {@link Clue} is verified below to actually narrow toward -- never
+     * away from -- the puzzle's known unique solution. See {@link #getClue} for how a genuine
+     * contradiction (propagation alone proving the current state unsatisfiable) is distinguished
+     * from simply having nothing left to deduce.
      */
     @Test
     void listenForPropagationIncrementToHintNextStep() {
@@ -177,6 +181,28 @@ public class Prob057KillerSudokuTest {
         }
     }
 
+    @Test
+    void getClue_detectsGenuineUnsatisfiability_andExplainsWhy() {
+        // Force two cells in the same row to the same singleton value -- a direct violation of
+        // allDiffConstraint(row) that AllDiff's own GAC propagation (Regin 1994) detects immediately
+        // as a Hall violation, with no search/guessing needed. Both cited cells are already
+        // singleton, so AllDiffConstraint#explainInfeasible derives a real, ground NogoodConstraint
+        // (not the "no explanation" fallback) -- getClue() must surface both the contradiction and
+        // that explanation, rather than silently returning null the way it would for a puzzle state
+        // that's merely stuck (needs a guess) rather than actually impossible.
+        var csp = killerSudoku();
+        var contradictory = csp.toBuilder()
+                .variableDomain(VARIABLES[0][0], IntRangeDomain.of(5, 5))
+                .variableDomain(VARIABLES[0][1], IntRangeDomain.of(5, 5))
+                .build();
+
+        assertThatThrownBy(() -> getClue(contradictory))
+                .isInstanceOf(AssertionError.class)
+                .hasMessageContaining("unsatisfiable")
+                .hasMessageContaining("<(r0c0, r0c1), nogood(r0c0!=5 OR r0c1!=5)>")
+                .hasMessageNotContaining("no explanation was derivable");
+    }
+
     private static int solutionValueFor(Variable<Integer> variable) {
         for (int r = 0; r < 9; r++) {
             for (int c = 0; c < 9; c++) {
@@ -194,22 +220,43 @@ public class Prob057KillerSudokuTest {
     }
 
     /**
-     * Runs the propagator fixpoint directly (bypassing the decorator chain entirely) and relies on
-     * {@link SolverCancelledException} -- thrown by {@link FixpointPropagation} the moment {@link
-     * #getListener} cancels on the very first domain-narrowing event -- to stop after exactly one
-     * deduction rather than running the whole fixpoint to convergence. A round that narrows nothing
-     * at all (propagation alone is stuck; a guess would be needed) returns normally instead of
-     * throwing, leaving {@code clue} unset -- {@link #listenForPropagationIncrementToHintNextStep}
-     * asserts against that explicitly rather than risking a silent {@code null}.
+     * Runs the propagator fixpoint directly (bypassing the decorator chain entirely) via {@link
+     * FixpointPropagation#applyFixpointWithReason}, and relies on {@link SolverCancelledException}
+     * -- thrown the moment {@link #getListener} cancels on the very first domain-narrowing event --
+     * to stop after exactly one deduction rather than running the whole fixpoint to convergence.
+     * Three distinct outcomes, not conflated into a single {@code null}:
+     * <ul>
+     *   <li>A deduction was captured: {@link SolverCancelledException} unwinds the call, {@code clue}
+     *       holds it.</li>
+     *   <li>The fixpoint converges with nothing left to narrow: returns normally, {@code
+     *       isInfeasible()} is {@code false}, {@code clue} stays unset -- propagation alone is stuck
+     *       (a guess would be needed), which {@link #listenForPropagationIncrementToHintNextStep}
+     *       asserts against explicitly.</li>
+     *   <li>Propagation itself proves the current domains contradictory: returns normally with
+     *       {@code isInfeasible()} {@code true} -- fails loudly here, citing {@link
+     *       ConsistencyResult#reason()} (a {@link io.github.rcrida.jcsp.constraints.nary.NogoodConstraint}
+     *       explaining which variables/values are jointly impossible) when the responsible
+     *       propagator's own {@code explainInfeasible} could derive one, rather than silently
+     *       returning {@code null} and leaving a caller to misread it as "no more hints, try a
+     *       guess" -- a contradiction is never fixed by guessing.</li>
+     * </ul>
      */
     private static Clue getClue(ConstraintSatisfactionProblem csp) {
         val cancellation = new Cancellation();
         val clue = new AtomicReference<Clue>();
         val listener = getListener(clue, cancellation);
+        ConsistencyResult result;
         try {
-            FixpointPropagation.applyFixpoint(csp, null, listener, new Statistics(), cancellation);
+            result = FixpointPropagation.applyFixpointWithReason(csp, null, listener, new Statistics(), cancellation);
         } catch (SolverCancelledException expected) {
             // Deliberate: getListener() cancels as soon as it captures the first deduction.
+            return clue.get();
+        }
+        if (result.isInfeasible()) {
+            throw new AssertionError(result.reason() != null
+                    ? "Propagation alone proved this puzzle state unsatisfiable: " + result.reason()
+                    : "Propagation alone proved this puzzle state unsatisfiable, but no explanation "
+                            + "was derivable from the responsible propagator");
         }
         return clue.get();
     }
