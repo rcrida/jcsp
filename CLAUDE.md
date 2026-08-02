@@ -15,7 +15,7 @@ Before adding a paragraph here, check whether it's actually a Javadoc-shaped mec
 <dependency>
     <groupId>io.github.rcrida</groupId>
     <artifactId>jcsp</artifactId>
-    <version>2.36.0</version>
+    <version>2.38.0</version>
 </dependency>
 ```
 
