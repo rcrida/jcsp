@@ -50,7 +50,10 @@ public class IntersectionCardinalityConstraint<E> extends BinaryConstraint<Set<E
 
     @Override
     public boolean isSatisfiedBy(@NonNull Set<E> leftValue, @NonNull Set<E> rightValue) {
-        long intersectionSize = leftValue.stream().filter(rightValue::contains).count();
+        long intersectionSize = 0;
+        for (E e : leftValue) {
+            if (rightValue.contains(e)) intersectionSize++;
+        }
         return operator.compare(intersectionSize, (long) bound);
     }
 

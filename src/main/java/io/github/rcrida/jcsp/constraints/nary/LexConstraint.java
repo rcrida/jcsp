@@ -14,7 +14,7 @@ import lombok.experimental.SuperBuilder;
 import lombok.val;
 import org.jspecify.annotations.NonNull;
 
-import java.util.Comparator;
+import java.util.Collections;
 import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.List;
@@ -205,13 +205,13 @@ public class LexConstraint<T extends Comparable<T>> extends NaryConstraint imple
     @SuppressWarnings("unchecked")
     private static <T extends Comparable<T>> T domainMax(Domain<T> domain) {
         if (domain instanceof NumericDomain<?> nd) return (T) nd.getMax();
-        return ((DiscreteDomain<T>) domain).stream().max(Comparator.naturalOrder()).orElseThrow();
+        return Collections.max(((DiscreteDomain<T>) domain).toList());
     }
 
     @SuppressWarnings("unchecked")
     private static <T extends Comparable<T>> T domainMin(Domain<T> domain) {
         if (domain instanceof NumericDomain<?> nd) return (T) nd.getMin();
-        return ((DiscreteDomain<T>) domain).stream().min(Comparator.naturalOrder()).orElseThrow();
+        return Collections.min(((DiscreteDomain<T>) domain).toList());
     }
 
     @SuppressWarnings("unchecked")

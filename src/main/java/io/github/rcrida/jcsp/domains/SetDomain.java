@@ -5,6 +5,7 @@ import org.jspecify.annotations.Nullable;
 
 import java.util.HashSet;
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Stream;
 
@@ -45,6 +46,18 @@ public interface SetDomain<T> extends DiscreteDomain<T> {
     @Override
     default Builder<T> toBuilder() {
         return new DefaultBuilder<>(values());
+    }
+
+    /**
+     * Overrides {@link DiscreteDomain}'s {@code stream().findFirst()} default: {@link #values()}
+     * gives direct access to the one element a singleton domain holds, so this is a plain iterator
+     * grab rather than building a whole Stream pipeline -- found via JFR profiling to be, across its
+     * many call sites (any code checking whether a variable is already decided), one of the largest
+     * single allocation sources in a search-heavy set-CP solve.
+     */
+    @Override
+    default Optional<T> singleValue() {
+        return isSingleton() ? Optional.of(values().iterator().next()) : Optional.empty();
     }
 
     static boolean domainEquals(SetDomain<?> self, Object o) {

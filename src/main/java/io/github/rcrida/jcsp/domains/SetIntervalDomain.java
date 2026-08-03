@@ -221,9 +221,14 @@ public record SetIntervalDomain<E>(Set<E> lowerBound, Set<E> upperBound, int min
     @Override
     public boolean contains(@Nullable Object value) {
         if (!(value instanceof Set<?> s)) return false;
-        return s.size() >= minCardinality && s.size() <= maxCardinality
-                && lowerBound.stream().allMatch(s::contains)
-                && s.stream().allMatch(upperBound::contains);
+        if (s.size() < minCardinality || s.size() > maxCardinality) return false;
+        for (E e : lowerBound) {
+            if (!s.contains(e)) return false;
+        }
+        for (Object e : s) {
+            if (!upperBound.contains(e)) return false;
+        }
+        return true;
     }
 
     /**

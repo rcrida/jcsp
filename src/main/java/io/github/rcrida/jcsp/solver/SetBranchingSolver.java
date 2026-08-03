@@ -15,7 +15,7 @@ import lombok.val;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 
-import java.util.Comparator;
+import java.util.Collections;
 import java.util.HashSet;
 import java.util.Map;
 import java.util.Optional;
@@ -141,11 +141,18 @@ public class SetBranchingSolver extends SolverDecorator {
 
     @Nullable
     static Variable<?> findMostUndeterminedSet(ConstraintSatisfactionProblem csp) {
-        return csp.getVariableDomains().entrySet().stream()
-                .filter(e -> e.getValue() instanceof SetBoundedDomain<?> sd && !sd.isSingleton())
-                .max(Comparator.comparingInt(e -> undeterminedCount((SetBoundedDomain<?>) e.getValue())))
-                .map(Map.Entry::getKey)
-                .orElse(null);
+        Variable<?> best = null;
+        int bestCount = -1;
+        for (Map.Entry<Variable<?>, ?> entry : csp.getVariableDomains().entrySet()) {
+            if (entry.getValue() instanceof SetBoundedDomain<?> sd && !sd.isSingleton()) {
+                int count = undeterminedCount(sd);
+                if (count > bestCount) {
+                    bestCount = count;
+                    best = entry.getKey();
+                }
+            }
+        }
+        return best;
     }
 
     /**
@@ -158,7 +165,7 @@ public class SetBranchingSolver extends SolverDecorator {
     private static Object pickElement(SetBoundedDomain domain) {
         Set undetermined = new HashSet<>(domain.getUpperBound());
         undetermined.removeAll(domain.getLowerBound());
-        return undetermined.stream().min(domain.getComparator()).orElseThrow();
+        return Collections.min(undetermined, domain.getComparator());
     }
 
     /**

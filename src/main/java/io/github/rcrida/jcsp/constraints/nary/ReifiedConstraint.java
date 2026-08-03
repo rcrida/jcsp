@@ -54,8 +54,7 @@ public class ReifiedConstraint extends NaryConstraint implements BinaryDecomposa
         Optional<Boolean> indValue = a.getValue(indicator);
         if (indValue.isEmpty()) return true;
 
-        boolean allBodyVarsAssigned = body.getVariables().stream().allMatch(v -> a.getValue(v).isPresent());
-        if (!allBodyVarsAssigned) return true;
+        if (!allBodyVarsAssigned(a)) return true;
 
         return indValue.get() == body.isSatisfiedBy(a);
     }
@@ -158,7 +157,17 @@ public class ReifiedConstraint extends NaryConstraint implements BinaryDecomposa
     }
 
     private boolean bodyFullyDetermined(Map<Variable<?>, Domain<?>> domains) {
-        return body.getVariables().stream().allMatch(v -> domains.get(v).isSingleton());
+        for (Variable<?> v : body.getVariables()) {
+            if (!domains.get(v).isSingleton()) return false;
+        }
+        return true;
+    }
+
+    private boolean allBodyVarsAssigned(Assignment a) {
+        for (Variable<?> v : body.getVariables()) {
+            if (a.getValue(v).isEmpty()) return false;
+        }
+        return true;
     }
 
     private boolean bodySatisfied(Map<Variable<?>, Domain<?>> domains) {
