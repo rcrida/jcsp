@@ -20,11 +20,17 @@ import org.jspecify.annotations.NonNull;
  * DomWdegLubySearch} and the optimization chain's {@link BranchAndBoundSolver}, which also folds a
  * {@link io.github.rcrida.jcsp.assignments.NogoodStore} into its search since 2026-07-18. {@code Solver.Factory} reads this once, at
  * construction time, via the shared {@code Solver.Factory#nogoodLearningInference} helper, to
- * decide which {@link io.github.rcrida.jcsp.consistency.Inference} to hand the terminal solver -- {@code FULL_PROPAGATION_INFERENCE}
- * when {@code true}, or {@link io.github.rcrida.jcsp.consistency.Inference#withoutReasonTracking}
- * wrapping it when {@code false} -- rather than either terminal solver branching on the flag
- * itself; either way {@code false} disables CDCL entirely: no explanation computation, no
- * accumulation, e.g. for problem shapes where learned nogoods rarely get reused.
+ * decide which {@link io.github.rcrida.jcsp.consistency.Inference} to hand the terminal solver --
+ * the per-solve {@link io.github.rcrida.jcsp.consistency.Inference} built by {@code
+ * Solver.Factory#propagationInference} when {@code true}, or {@link
+ * io.github.rcrida.jcsp.consistency.Inference#withoutReasonTracking} wrapping it when {@code
+ * false} -- rather than either terminal solver branching on the flag itself; either way {@code
+ * false} disables CDCL entirely: no explanation computation, no accumulation, e.g. for problem
+ * shapes where learned nogoods rarely get reused. The flag also decides (via {@code
+ * FixpointPropagation.Factory#forProblem}) whether the propagator fixpoint includes {@code
+ * NogoodFixpointConsistency} at all when {@code csp} carries no nogoods of its own yet -- nogoods
+ * already present on the problem (e.g. via {@code ConstraintSatisfactionProblem.Builder#nogood})
+ * are propagated regardless of this flag.
  * <p>
  * {@code statistics} is the shared token search writes into for the entire life of the returned
  * {@link BoundSolver}: every top-level search node -- across every independent subproblem and,

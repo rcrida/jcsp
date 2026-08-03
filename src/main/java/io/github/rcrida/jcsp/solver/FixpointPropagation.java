@@ -1,5 +1,7 @@
 package io.github.rcrida.jcsp.solver;
 
+import lombok.Builder;
+import lombok.Value;
 import lombok.extern.slf4j.Slf4j;
 import io.github.rcrida.jcsp.ConstraintSatisfactionProblem;
 import io.github.rcrida.jcsp.assignments.Statistics;
@@ -63,9 +65,9 @@ import java.util.Optional;
 import java.util.Set;
 
 /**
- * Runs AC3, AllDiff GAC, SumBoundConstraint bounds propagation, LinearBoundConstraint bounds propagation,
- * CountConstraint value propagation, InverseConstraint arc consistency, and AmongConstraint
- * value-set propagation in a combined fixpoint loop.
+ * Runs a list of propagators -- AC3, AllDiff GAC, SumBoundConstraint bounds propagation,
+ * LinearBoundConstraint bounds propagation, CountConstraint value propagation, InverseConstraint
+ * arc consistency, AmongConstraint value-set propagation, and so on -- in a combined fixpoint loop.
  *
  * <p>The propagators are not independent: AllDiff GAC can expose naked pairs that AC3 then
  * propagates to neighbouring constraints; sum, linear, count, inverse, and among propagation
@@ -73,29 +75,46 @@ import java.util.Set;
  * this feedback. This iterates until none of the propagators makes further progress, or exits
  * immediately with {@link Optional#empty()} as soon as any propagator detects infeasibility.
  *
- * <p>To add a new propagator for a {@link io.github.rcrida.jcsp.consistency.Propagatable} constraint
- * type, append {@code FixpointConsistency.of(MyConstraint.class)} to {@link #PROPAGATORS}.
+ * <p>An instance carries a fixed {@link #propagators} list, since which propagators can possibly
+ * do anything depends on which constraint types a given {@link ConstraintSatisfactionProblem}
+ * actually has -- {@link Factory#forProblem} computes that filtered list once per solve, called
+ * from {@link Solver.Factory}. {@link #FULL} is the always-everything instance, backed by the
+ * complete {@link #PROPAGATORS} catalog, used as the unfiltered fallback for direct/manual use and
+ * by {@link Solver.Factory#FULL_PROPAGATION_INFERENCE}.
  *
- * <p>A free-standing static utility rather than a method on {@link PropagationFixpointSolver}
- * because it's called from three structurally different places, only one of which has a natural
- * decorator instance to hang state off: {@link PropagationFixpointSolver}'s own one-time
- * preprocessing pass (before search starts), {@link Solver.Factory#FULL_PROPAGATION_INFERENCE} (a
- * static singleton {@link io.github.rcrida.jcsp.consistency.Inference} applied at every search
- * node, with no per-solve state of its own), and {@link SetBranchingSolver}'s branch
- * re-propagation for set-domain variables (a different class entirely).
+ * <p>To add a new propagator for a {@link io.github.rcrida.jcsp.consistency.Propagatable} constraint
+ * type, append {@code FixpointConsistency.of(MyConstraint.class)} to {@link #PROPAGATORS}: it is
+ * automatically picked up both by {@link #FULL} and by {@link Factory#forProblem}'s filtering, with
+ * no second place to update.
+ *
+ * <p>Not a free-standing static utility, despite being called from three structurally different
+ * places -- {@link PropagationFixpointSolver}'s own one-time preprocessing pass (before search
+ * starts), the per-solve {@link io.github.rcrida.jcsp.consistency.Inference} built in {@link
+ * Solver.Factory} (applied at every search node), and {@link SetBranchingSolver}'s branch
+ * re-propagation for set-domain variables (a different class entirely) -- because each of those
+ * three needs the same solve's filtered {@link #propagators} list, not the full catalog; each holds
+ * (or is handed) a {@link FixpointPropagation} instance to call.
  *
  * <p>Both {@link #applyFixpoint}/{@link #applyFixpointWithReason} check a caller-supplied {@link
  * Cancellation} token once per propagator within the round -- "between propagators" -- since a
- * single round runs every entry in {@link #PROPAGATORS} in sequence and this loop is itself the hot
+ * single round runs every entry in {@link #propagators} in sequence and this loop is itself the hot
  * path invoked at every search node, every {@link SetBranchingSolver} branch step, and once for
  * whole-CSP preprocessing. See each method's own Javadoc for the exact caller obligation this
  * creates.
  */
 @Slf4j
-public final class FixpointPropagation {
+@Value
+@Builder
+public class FixpointPropagation {
 
-    private FixpointPropagation() {
-    }
+    /**
+     * Defaults to {@link #PROPAGATORS} (the full catalog) rather than an empty list, so an
+     * accidental {@code FixpointPropagation.builder().build()} with no explicit {@code propagators}
+     * still runs every propagator instead of silently becoming a total no-op that looks like
+     * successful propagation. {@link #FULL} and {@link Factory#forProblem} both always set this
+     * explicitly, so the default only matters for a caller that builds one directly without either.
+     */
+    @Builder.Default @NonNull List<ConstraintConsistency> propagators = PROPAGATORS;
 
     public static final List<ConstraintConsistency> PROPAGATORS = List.of(
             FixpointConsistency.of(UnaryComparatorConstraint.class),
@@ -140,16 +159,89 @@ public final class FixpointPropagation {
             FixpointConsistency.of(SetMembershipConstraint.class)
     );
 
+    /** The always-everything instance, backed by the complete {@link #PROPAGATORS} catalog. */
+    public static final FixpointPropagation FULL = FixpointPropagation.builder().propagators(PROPAGATORS).build();
+
     /**
-     * Runs the full propagator fixpoint without snapping bounded domains. Called by
-     * {@link io.github.rcrida.jcsp.solver.Solver.Factory#FULL_PROPAGATION_INFERENCE} to apply
-     * all propagators during backtracking search, not just as a preprocessing pass.
+     * Builds a {@link FixpointPropagation} containing only the {@link #PROPAGATORS} entries that
+     * can possibly do anything for a given {@link ConstraintSatisfactionProblem} -- so the fixpoint
+     * loop never even calls into a propagator whose constraint type isn't present, rather than
+     * relying on that propagator's own internal empty-check to discover it has nothing to do.
+     * {@link Solver.Factory} calls {@link #forProblem} once per solve, since which propagators
+     * apply is a structural property of the CSP's constraint types that holds for the whole solve
+     * (constraints are never added or removed during search, only domains and nogoods).
+     */
+    public interface Factory {
+        Factory INSTANCE = new Factory() {
+            @Override
+            public FixpointPropagation forProblem(@NonNull ConstraintSatisfactionProblem csp,
+                                                   boolean nogoodLearningEnabled) {
+                return FixpointPropagation.builder()
+                        .propagators(PROPAGATORS.stream()
+                                .filter(propagator -> isApplicable(propagator, csp, nogoodLearningEnabled))
+                                .toList())
+                        .build();
+            }
+        };
+
+        /**
+         * @param nogoodLearningEnabled whether {@link NogoodFixpointConsistency#INSTANCE} should be
+         *                              included when {@code csp} itself has no nogoods yet -- a
+         *                              config-level decision ({@code
+         *                              SolverConfig#isNogoodLearningEnabled()}), not re-derived from
+         *                              current emptiness, since nogoods <em>learned</em> during the
+         *                              solve accumulate over the course of a solve under this same
+         *                              filtered list. This is independent of nogoods already present
+         *                              on {@code csp} when this is called (via {@code
+         *                              ConstraintSatisfactionProblem.Builder#nogood} or {@code
+         *                              #withNogoods}): those are propagated regardless of this flag,
+         *                              matching {@code nogoodLearningEnabled}'s documented meaning
+         *                              ("disables CDCL", not "ignore nogoods already on the
+         *                              problem") -- see {@link FixpointPropagation#isApplicable}.
+         */
+        FixpointPropagation forProblem(@NonNull ConstraintSatisfactionProblem csp, boolean nogoodLearningEnabled);
+    }
+
+    /**
+     * {@link NogoodFixpointConsistency#INSTANCE} and {@link AC3#INSTANCE} are singletons checked by
+     * identity; every other {@link #PROPAGATORS} entry is a {@link FixpointConsistency} targeting
+     * one constraint type. {@code nogoodLearningEnabled} alone would incorrectly drop nogoods a
+     * caller pre-seeded on {@code csp} before ever starting a solve with learning disabled, so
+     * {@link NogoodFixpointConsistency}'s own applicability additionally checks {@code
+     * csp.getNogoods()} directly -- included whenever learning is on <em>or</em> the problem already
+     * carries nogoods to propagate. The final branch falls back to {@code true} ("assume
+     * applicable") for anything that isn't one of the two singletons or a {@link
+     * FixpointConsistency}, rather than casting unconditionally: {@link #PROPAGATORS} is a public
+     * list documented as safe to append to, so a future non-{@link FixpointConsistency} entry must
+     * fail open (included, harmless if actually irrelevant) instead of throwing. That fallback
+     * branch is unreachable through {@link #PROPAGATORS} as it exists today -- every current entry
+     * is provably one of the three kinds above -- so it's covered directly (with a fabricated
+     * {@link ConstraintConsistency}) rather than chased through an integration scenario; package-private,
+     * not {@code private}, so a same-package test can call it directly. Not on {@link Factory}
+     * itself since interface members can only be {@code public} or {@code private}, neither of which
+     * a same-package test could reach without either widening this to public API or losing direct
+     * testability.
+     */
+    static boolean isApplicable(ConstraintConsistency propagator, ConstraintSatisfactionProblem csp,
+                                 boolean nogoodLearningEnabled) {
+        if (propagator == NogoodFixpointConsistency.INSTANCE) {
+            return nogoodLearningEnabled || !csp.getNogoods().isEmpty();
+        }
+        if (propagator == AC3.INSTANCE) return !csp.getAllBinaryConstraints().isEmpty();
+        return !(propagator instanceof FixpointConsistency fc) || fc.appliesTo(csp);
+    }
+
+    /**
+     * Runs {@link #propagators} to a combined fixpoint without snapping bounded domains. Called by
+     * the per-solve {@link io.github.rcrida.jcsp.consistency.Inference} {@link
+     * io.github.rcrida.jcsp.solver.Solver.Factory#propagationInference} builds to apply {@link
+     * #propagators} during backtracking search, not just as a preprocessing pass.
      * <p>
      * Tracks which variables' domains changed during the previous round and passes that set to
      * each propagator via {@link ConstraintConsistency#apply(ConstraintSatisfactionProblem, Set)},
      * so {@link NogoodFixpointConsistency} can skip re-checking nogoods that reference none of
      * them (see its javadoc). {@code initialSeed} is round 1's dirty-variable hint: {@link
-     * io.github.rcrida.jcsp.solver.Solver.Factory#FULL_PROPAGATION_INFERENCE} passes the diff between the pre- and post-MAC domains (plus any
+     * io.github.rcrida.jcsp.solver.Solver.Factory#propagationInference} passes the diff between the pre- and post-MAC domains (plus any
      * variable of a newly-learned nogood, which must always be checked once) rather than {@code
      * null}, since at a search node this call's input is exactly the parent's already-converged
      * CSP -- nothing else could have changed. {@code null} (a top-level preprocessing call, or any
@@ -163,19 +255,23 @@ public final class FixpointPropagation {
      * it's detected -- every caller except {@link DomWdegLubySearch#searchOne} must catch this and
      * convert it to their own existing "stopped early" behavior, since only that one call path is
      * meant to surface {@link SolverCancelledException} to an external caller (see
-     * {@code SolverConfig.getCancellation()}).
+     * {@code SolverConfig.getCancellation()}). Checked once up front too, before the round loop, so
+     * a cancellation request is still observed even when {@link #propagators} is empty (a filtered
+     * instance for a CSP with nothing to propagate) -- otherwise the per-propagator check inside the
+     * loop would never run at all and an already-cancelled caller would silently get a full result.
      */
-    public static Optional<ConstraintSatisfactionProblem> applyFixpoint(
+    public Optional<ConstraintSatisfactionProblem> applyFixpoint(
             @NonNull ConstraintSatisfactionProblem csp, @Nullable Set<Variable<?>> initialSeed,
             @NonNull SolverListener listener, @NonNull Statistics statistics, @NonNull Cancellation cancellation) {
         log.debug("applyFixpoint");
+        if (cancellation.isCancelled()) throw new SolverCancelledException(statistics);
         var current = csp;
         Set<Variable<?>> changedVariables = initialSeed;
         boolean changed = true;
         while (changed) {
             Map<Variable<?>, Domain<?>> before = current.getVariableDomains();
             double domainSumBefore = domainSum(current);
-            for (var propagator : PROPAGATORS) {
+            for (var propagator : propagators) {
                 if (cancellation.isCancelled()) throw new SolverCancelledException(statistics);
                 var beforePropagator = current;
                 var after = propagator.apply(current, changedVariables);
@@ -193,7 +289,7 @@ public final class FixpointPropagation {
      * Returns every variable whose domain in {@code after} differs from its domain in {@code
      * before} (added/removed variables cannot occur -- every propagator narrows an existing
      * domain, never changes the variable set). Public so {@link
-     * io.github.rcrida.jcsp.solver.Solver.Factory#FULL_PROPAGATION_INFERENCE} can reuse it to
+     * io.github.rcrida.jcsp.solver.Solver.Factory#propagationInference} can reuse it to
      * compute {@code applyFixpoint}'s round-1 seed from the pre-/post-MAC domains.
      */
     public static Set<Variable<?>> changedVariables(Map<Variable<?>, Domain<?>> before,
@@ -214,19 +310,21 @@ public final class FixpointPropagation {
      * on the feasible path (see each propagator's own {@code applyWithReason} override) — and only
      * the propagator that actually signals infeasibility contributes a reason, computed as part of
      * this same pass rather than a second, from-scratch, unseeded replay. {@code cancellation} is
-     * checked the same way -- and with the same caller obligations -- as in {@link #applyFixpoint}.
+     * checked the same way -- and with the same caller obligations, including the up-front check
+     * before the round loop -- as in {@link #applyFixpoint}.
      */
-    public static ConsistencyResult applyFixpointWithReason(
+    public ConsistencyResult applyFixpointWithReason(
             @NonNull ConstraintSatisfactionProblem csp, @Nullable Set<Variable<?>> initialSeed,
             @NonNull SolverListener listener, @NonNull Statistics statistics, @NonNull Cancellation cancellation) {
         log.debug("applyFixpointWithReason");
+        if (cancellation.isCancelled()) throw new SolverCancelledException(statistics);
         var current = csp;
         Set<Variable<?>> changedVariables = initialSeed;
         boolean changed = true;
         while (changed) {
             Map<Variable<?>, Domain<?>> before = current.getVariableDomains();
             double domainSumBefore = domainSum(current);
-            for (var propagator : PROPAGATORS) {
+            for (var propagator : propagators) {
                 if (cancellation.isCancelled()) throw new SolverCancelledException(statistics);
                 var beforePropagator = current;
                 ConsistencyResult after = propagator.applyWithReason(current, changedVariables);

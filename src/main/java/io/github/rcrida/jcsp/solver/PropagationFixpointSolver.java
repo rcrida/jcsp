@@ -13,10 +13,12 @@ import org.jspecify.annotations.NonNull;
 import java.util.Optional;
 
 /**
- * The one-time fixpoint-propagation preprocessing step in the solver decorator chain: runs
- * {@link FixpointPropagation}'s full propagator list to convergence before search starts, then (in
+ * The one-time fixpoint-propagation preprocessing step in the solver decorator chain: runs {@link
+ * #fixpointPropagation}'s propagator list to convergence before search starts, then (in
  * satisfaction mode) resolves any {@link BoundedDomain} variable that's still non-singleton by
- * snapping it to its interval midpoint.
+ * snapping it to its interval midpoint. {@link #fixpointPropagation} defaults to {@link
+ * FixpointPropagation#FULL} but {@link Solver.Factory} overrides it per solve with the filtered
+ * instance from {@link FixpointPropagation.Factory#forProblem}.
  *
  * <p>When {@link #snap} is true (satisfaction mode with {@link BoundedDomain} variables), any
  * non-singleton bounded domain remaining after propagation is snapped to its interval midpoint,
@@ -26,7 +28,8 @@ import java.util.Optional;
  *
  * <p>The propagation algorithm itself -- the propagator list and the fixpoint loop that runs it to
  * convergence -- lives in {@link FixpointPropagation}, not here: that logic is also called from
- * {@link Solver.Factory#FULL_PROPAGATION_INFERENCE} (per search node) and
+ * the per-solve {@link io.github.rcrida.jcsp.consistency.Inference} built by {@link
+ * Solver.Factory#propagationInference} (per search node) and
  * {@link SetBranchingSolver#repropagate} (per branch step), neither of which has an instance of
  * this class to call it on. This class only owns the parts specific to being a chain preprocessing
  * step: {@link #snap} and the convergence loop that layers bounded-domain snapping on top of a
@@ -42,6 +45,7 @@ public class PropagationFixpointSolver extends SolverDecorator {
     @Builder.Default @NonNull SolverListener listener = SolverListener.NONE;
     @Builder.Default @NonNull Statistics statistics = new Statistics();
     @Builder.Default @NonNull Cancellation cancellation = Cancellation.NEVER;
+    @Builder.Default @NonNull FixpointPropagation fixpointPropagation = FixpointPropagation.FULL;
 
     @Override
     protected @NonNull Optional<ConstraintSatisfactionProblem> preprocess(
@@ -66,7 +70,7 @@ public class PropagationFixpointSolver extends SolverDecorator {
         while (changed) {
             Optional<ConstraintSatisfactionProblem> result;
             try {
-                result = FixpointPropagation.applyFixpoint(current, null, listener, statistics, cancellation);
+                result = fixpointPropagation.applyFixpoint(current, null, listener, statistics, cancellation);
             } catch (SolverCancelledException e) {
                 return Optional.empty();
             }

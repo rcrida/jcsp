@@ -59,6 +59,7 @@ public class SetBranchingSolver extends SolverDecorator {
     @Builder.Default @NonNull SolverLimits limits = SolverLimits.unlimited();
     @Builder.Default @NonNull Cancellation cancellation = Cancellation.NEVER;
     @Builder.Default @NonNull Statistics statistics = new Statistics();
+    @Builder.Default @NonNull FixpointPropagation fixpointPropagation = FixpointPropagation.FULL;
 
     @Override
     public Stream<Assignment> getSolutions(@NonNull ConstraintSatisfactionProblem csp) {
@@ -210,7 +211,7 @@ public class SetBranchingSolver extends SolverDecorator {
      */
     private Optional<ConstraintSatisfactionProblem> repropagate(ConstraintSatisfactionProblem csp) {
         try {
-            return FixpointPropagation.applyFixpoint(csp, null, listener, statistics, cancellation);
+            return fixpointPropagation.applyFixpoint(csp, null, listener, statistics, cancellation);
         } catch (SolverCancelledException e) {
             return Optional.empty();
         }

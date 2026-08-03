@@ -247,7 +247,7 @@ public class Prob057KillerSudokuTest {
         val listener = getListener(clue, cancellation);
         ConsistencyResult result;
         try {
-            result = FixpointPropagation.applyFixpointWithReason(csp, null, listener, new Statistics(), cancellation);
+            result = FixpointPropagation.FULL.applyFixpointWithReason(csp, null, listener, new Statistics(), cancellation);
         } catch (SolverCancelledException expected) {
             // Deliberate: getListener() cancels as soon as it captures the first deduction.
             return clue.get();

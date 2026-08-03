@@ -9,9 +9,12 @@ import io.github.rcrida.jcsp.constraints.nary.NogoodConstraint;
 import io.github.rcrida.jcsp.constraints.nary.RangeNogoodConstraint;
 import io.github.rcrida.jcsp.domains.Domain;
 import io.github.rcrida.jcsp.variables.Variable;
+import lombok.AccessLevel;
+import lombok.RequiredArgsConstructor;
+import lombok.Value;
+import lombok.extern.slf4j.Slf4j;
+import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import java.util.List;
 import java.util.Map;
@@ -29,16 +32,13 @@ import java.util.concurrent.atomic.AtomicReference;
  * LocalSolver.Factory.PREPROCESSORS})
  * requires only a single {@code FixpointConsistency.of(MyConstraint.class)} entry.
  */
-public final class FixpointConsistency implements ConstraintConsistency {
-    private static final Logger log = LoggerFactory.getLogger(FixpointConsistency.class);
-
-    private final Class<? extends Propagatable> constraintType;
+@Slf4j
+@Value
+@RequiredArgsConstructor(access = AccessLevel.PRIVATE)
+public class FixpointConsistency implements ConstraintConsistency {
+    @NonNull Class<? extends Propagatable> constraintType;
 
     private record FilterCache(Set<Constraint> source, List<Propagatable> filtered) {}
-
-    private FixpointConsistency(Class<? extends Propagatable> constraintType) {
-        this.constraintType = constraintType;
-    }
 
     public static FixpointConsistency of(Class<? extends Propagatable> constraintType) {
         return new FixpointConsistency(constraintType);
@@ -77,6 +77,34 @@ public final class FixpointConsistency implements ConstraintConsistency {
         List<Propagatable> filtered = (List) source.stream().filter(constraintType::isInstance).toList();
         holder.set(new FilterCache(source, filtered));
         return filtered;
+    }
+
+    /**
+     * Whether {@code csp} contains at least one {@link #constraintType} instance -- i.e. whether
+     * this propagator could possibly do anything for it. Reuses {@link #filteredConstraints}'s own
+     * per-{@link ConstraintSatisfactionProblem} cache, so a caller deciding whether to include this
+     * propagator at all (see {@link io.github.rcrida.jcsp.solver.FixpointPropagation.Factory}) pays
+     * no extra cost beyond what {@link #apply}/{@link #applyWithReason} would compute anyway.
+     *
+     * <p>Also checks {@link ConstraintSatisfactionProblem#getAllBinaryConstraints()}, not just
+     * {@link #filteredConstraints}'s {@code csp.getConstraints()} source, because a sub-CSP built by
+     * {@code ConstraintSatisfactionProblem#withVariableSubset} (cutset/tree decomposition) can
+     * materialize a straddling {@code BinaryDecomposable}'s decomposition -- e.g. an
+     * {@code IncreasingConstraint}'s pairwise {@code BinaryComparatorConstraint}s, or a {@code
+     * PartitionConstraint}'s pairwise {@code DisjointConstraint}s -- as real structural constraints,
+     * even though the original constraint they came from is dropped once it straddles the cut. A
+     * filter computed once from the whole-solve top-level CSP (see {@link
+     * io.github.rcrida.jcsp.solver.FixpointPropagation.Factory#forProblem}) would otherwise never
+     * see those concrete types if the top-level CSP has no matching constraint of its own, silently
+     * losing propagation on exactly the sub-problems decomposition was meant to make tractable. Safe
+     * to check unconditionally for every {@link #constraintType}: {@link
+     * ConstraintSatisfactionProblem#getAllBinaryConstraints()} only ever contains {@code
+     * BinaryConstraint} instances, so this second check is a no-op for every non-binary {@link
+     * #constraintType} (e.g. {@code AllDiffConstraint}, {@code SumBoundConstraint}).
+     */
+    public boolean appliesTo(ConstraintSatisfactionProblem csp) {
+        return !filteredConstraints(csp).isEmpty()
+                || csp.getAllBinaryConstraints().stream().anyMatch(constraintType::isInstance);
     }
 
     @Override

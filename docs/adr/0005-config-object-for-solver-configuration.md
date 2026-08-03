@@ -50,3 +50,7 @@ are handed whichever `Inference` that helper returns.
   `boolean` once `ConflictExplainer` was merged into `Inference` (ADR-0002) — the config object's
   shape itself had to be revisited once that separate decision landed, illustrating that a config
   object doesn't freeze the *meaning* of its knobs, only their bundling.
+- Since ADR-0012, `nogoodLearningEnabled` also decides (together with whether the CSP already
+  carries nogoods) whether `NogoodFixpointConsistency` is filtered into the fixpoint loop's
+  propagator list at all — a second effect on top of picking which `Inference` wrapper to hand the
+  terminal solver, without changing this ADR's core decision to bundle the knob into `SolverConfig`.

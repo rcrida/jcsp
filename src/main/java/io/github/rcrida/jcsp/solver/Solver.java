@@ -45,7 +45,7 @@ public interface Solver {
 
     interface Factory {
         /**
-         * MAC followed by the full propagator fixpoint (all 17 propagatable constraint types).
+         * MAC followed by {@code fixpointPropagation}'s propagator fixpoint.
          * <p>
          * Seeds {@code applyFixpoint}'s round-1 dirty-variable hint from this call's own inputs,
          * rather than passing {@code null} (full first-round scan) as before: {@code problem} is
@@ -65,59 +65,75 @@ public interface Solver {
          * problem.getNogoods()} and the post-MAC result's are always identical -- there is no
          * "newly learned since problem" case to seed for here.
          * <p>
-         * A named singleton (not a lambda) so it can additionally override {@link
+         * Builds a named {@link Inference} (not a lambda) so it can additionally override {@link
          * Inference#applyWithReason}: a genuine single pass combining propagation and, on failure,
          * explanation, computed inline at the exact point of the wipeout instead of a separate,
          * from-scratch re-derivation. Falls back to the current assignment (matching {@link
          * Inference#applyWithReason}'s own default) whenever neither MAC nor the fixpoint could
          * derive anything tighter -- e.g. a wipeout on a non-singleton neighbour, or a Hall-set
          * violation over ungapped-but-non-singleton domains that even {@link io.github.rcrida.jcsp.constraints.nary.RangeNogoodConstraint}'s
-         * gaplessness gate declines to cite.
+         * gaplessness gate declines to cite. Parameterized by {@code fixpointPropagation} (which may
+         * be {@link FixpointPropagation#FULL} or a per-CSP-filtered instance -- hence this method's
+         * own name doesn't say "full") so {@link #FULL_PROPAGATION_INFERENCE} and the per-solve
+         * instance built in {@link #createSolver} below share this same body rather than duplicating
+         * it.
          */
-        Inference FULL_PROPAGATION_INFERENCE = new Inference() {
-            @Override
-            public Optional<ConstraintSatisfactionProblem> apply(ConstraintSatisfactionProblem problem,
-                                                                  Variable<?> variable, Assignment assignment) {
-                return MAC.INSTANCE.apply(problem, variable, assignment)
-                        .flatMap(afterMac -> FixpointPropagation.applyFixpoint(afterMac,
-                                FixpointPropagation.changedVariables(problem.getVariableDomains(), afterMac.getVariableDomains()),
-                                assignment.listener(), assignment.getStatistics(), assignment.cancellation()));
-            }
+        static Inference propagationInference(@NonNull FixpointPropagation fixpointPropagation) {
+            return new Inference() {
+                @Override
+                public Optional<ConstraintSatisfactionProblem> apply(ConstraintSatisfactionProblem problem,
+                                                                      Variable<?> variable, Assignment assignment) {
+                    return MAC.INSTANCE.apply(problem, variable, assignment)
+                            .flatMap(afterMac -> fixpointPropagation.applyFixpoint(afterMac,
+                                    FixpointPropagation.changedVariables(problem.getVariableDomains(), afterMac.getVariableDomains()),
+                                    assignment.listener(), assignment.getStatistics(), assignment.cancellation()));
+                }
 
-            @Override
-            public ConsistencyResult applyWithReason(ConstraintSatisfactionProblem problem,
-                                                      Variable<?> variable, Assignment assignment) {
-                ConsistencyResult macResult = MAC.INSTANCE.applyWithReason(problem, variable, assignment);
-                if (macResult.isInfeasible()) {
-                    return macResult.reason() != null ? macResult
-                            : ConsistencyResult.infeasible(GroundNogoodConstraint.of(assignment.getValues()));
+                @Override
+                public ConsistencyResult applyWithReason(ConstraintSatisfactionProblem problem,
+                                                          Variable<?> variable, Assignment assignment) {
+                    ConsistencyResult macResult = MAC.INSTANCE.applyWithReason(problem, variable, assignment);
+                    if (macResult.isInfeasible()) {
+                        return macResult.reason() != null ? macResult
+                                : ConsistencyResult.infeasible(GroundNogoodConstraint.of(assignment.getValues()));
+                    }
+                    ConstraintSatisfactionProblem afterMac = macResult.problem();
+                    ConsistencyResult fixpointResult = fixpointPropagation.applyFixpointWithReason(afterMac,
+                            FixpointPropagation.changedVariables(problem.getVariableDomains(), afterMac.getVariableDomains()),
+                            assignment.listener(), assignment.getStatistics(), assignment.cancellation());
+                    if (fixpointResult.isInfeasible() && fixpointResult.reason() == null) {
+                        return ConsistencyResult.infeasible(GroundNogoodConstraint.of(assignment.getValues()));
+                    }
+                    return fixpointResult;
                 }
-                ConstraintSatisfactionProblem afterMac = macResult.problem();
-                ConsistencyResult fixpointResult = FixpointPropagation.applyFixpointWithReason(afterMac,
-                        FixpointPropagation.changedVariables(problem.getVariableDomains(), afterMac.getVariableDomains()),
-                        assignment.listener(), assignment.getStatistics(), assignment.cancellation());
-                if (fixpointResult.isInfeasible() && fixpointResult.reason() == null) {
-                    return ConsistencyResult.infeasible(GroundNogoodConstraint.of(assignment.getValues()));
-                }
-                return fixpointResult;
-            }
-        };
+            };
+        }
+
+        /**
+         * The unfiltered, always-everything {@link Inference}, backed by {@link
+         * FixpointPropagation#FULL} -- the direct/manual-use fallback referenced by tests that build
+         * a terminal solver ({@link DomWdegLubySearch}, {@link BranchAndBoundSolver}) themselves,
+         * bypassing {@link #createSolver}. {@link #createSolver} itself never uses this singleton: it
+         * builds its own per-solve {@link Inference} from the CSP-filtered {@link FixpointPropagation}
+         * computed via {@link FixpointPropagation.Factory#forProblem}.
+         */
+        Inference FULL_PROPAGATION_INFERENCE = propagationInference(FixpointPropagation.FULL);
 
         /** Bisection precision for {@link BisectionConditioningSolver} in the optimization chain. */
         double DEFAULT_BISECTION_EPSILON = 1e-3;
 
         /**
-         * Picks between the real reason-deriving {@link #FULL_PROPAGATION_INFERENCE} and a wrapper
+         * Picks between the real reason-deriving {@link #propagationInference} result and a wrapper
          * that never derives one, per {@code SolverConfig.isNogoodLearningEnabled()}. Shared by both
          * chains' wiring below so the choice lives in exactly one place: the terminal solvers
          * ({@link DomWdegLubySearch}, {@link BranchAndBoundSolver}) stay free of any "should I
          * explain" branch of their own -- they just call {@link Inference#applyWithReason} and react
          * to whatever reason comes back.
          */
-        static Inference nogoodLearningInference(@NonNull SolverConfig config) {
-            return config.isNogoodLearningEnabled()
-                    ? FULL_PROPAGATION_INFERENCE
-                    : Inference.withoutReasonTracking(FULL_PROPAGATION_INFERENCE);
+        static Inference nogoodLearningInference(@NonNull SolverConfig config,
+                                                  @NonNull FixpointPropagation fixpointPropagation) {
+            Inference base = propagationInference(fixpointPropagation);
+            return config.isNogoodLearningEnabled() ? base : Inference.withoutReasonTracking(base);
         }
 
         /**
@@ -173,8 +189,9 @@ public interface Solver {
                         .anyMatch(BoundedDomain.class::isInstance);
                 boolean hasSets = csp.getVariableDomains().values().stream()
                         .anyMatch(SetBoundedDomain.class::isInstance);
+                val fixpointPropagation = FixpointPropagation.Factory.INSTANCE.forProblem(csp, config.isNogoodLearningEnabled());
                 val treeSolver = new TreeSolver(BFSTopologicalSorter.INSTANCE, DefaultValueOrderer.INSTANCE, TreeUnassignedVariableSelector.Factory.INSTANCE);
-                val inference = nogoodLearningInference(config);
+                val inference = nogoodLearningInference(config, fixpointPropagation);
                 // Built fresh per sub-problem (not shared) so each independent sub-problem gets its own
                 // NogoodStore, correctly sized and scoped to just its own variables -- see
                 // IndependentSubproblemSolver's javadoc for why sharing one across sub-problems is unsound.
@@ -209,7 +226,8 @@ public interface Solver {
                 val independentSubproblemSolver = IndependentSubproblemSolver.builder().innerFactory(innerFactory).build();
                 Solver afterPropagation = hasSets
                         ? SetBranchingSolver.builder().inner(independentSubproblemSolver).listener(config.getListener())
-                                .limits(limits).cancellation(cancellation).statistics(config.getStatistics()).build()
+                                .limits(limits).cancellation(cancellation).statistics(config.getStatistics())
+                                .fixpointPropagation(fixpointPropagation).build()
                         : independentSubproblemSolver;
                 val propagationFixpointSolver = PropagationFixpointSolver.builder()
                         .inner(afterPropagation)
@@ -217,6 +235,7 @@ public interface Solver {
                         .listener(config.getListener())
                         .statistics(config.getStatistics())
                         .cancellation(cancellation)
+                        .fixpointPropagation(fixpointPropagation)
                         .build();
                 Solver chain = NodeConsistentSolver.builder().inner(propagationFixpointSolver).build();
                 return new BoundSolver() {
@@ -248,11 +267,12 @@ public interface Solver {
                         .anyMatch(BoundedDomain.class::isInstance);
                 boolean hasSets = csp.getVariableDomains().values().stream()
                         .anyMatch(SetBoundedDomain.class::isInstance);
+                val fixpointPropagation = FixpointPropagation.Factory.INSTANCE.forProblem(csp, config.isNogoodLearningEnabled());
                 val branchAndBound = BranchAndBoundSolver.builder()
                         .objective(objective)
                         .unassignedVariableSelector(MinimumRemainingValuesSelector.INSTANCE)
                         .domainValuesOrderer(LeastConstrainingValueOrderer.INSTANCE)
-                        .inference(nogoodLearningInference(config))
+                        .inference(nogoodLearningInference(config, fixpointPropagation))
                         .limits(limits)
                         .nogoodStore(NogoodStore.forProblem(csp))
                         .statistics(config.getStatistics())
@@ -268,7 +288,8 @@ public interface Solver {
                         : branchAndBound;
                 Solver afterPropagation = hasSets
                         ? SetBranchingSolver.builder().inner(terminal).objective(objective).listener(config.getListener())
-                                .limits(limits).cancellation(cancellation).statistics(config.getStatistics()).build()
+                                .limits(limits).cancellation(cancellation).statistics(config.getStatistics())
+                                .fixpointPropagation(fixpointPropagation).build()
                         : terminal;
                 val propagationFixpointSolver = PropagationFixpointSolver.builder()
                         .inner(afterPropagation)
@@ -276,6 +297,7 @@ public interface Solver {
                         .listener(config.getListener())
                         .statistics(config.getStatistics())
                         .cancellation(cancellation)
+                        .fixpointPropagation(fixpointPropagation)
                         .build();
                 Solver chain = NodeConsistentSolver.builder().inner(propagationFixpointSolver).build();
                 return new BoundSolver() {

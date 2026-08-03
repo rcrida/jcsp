@@ -35,8 +35,8 @@ public class FixpointPropagationTest {
                 .variableDomain(z, IntRangeDomain.of(1, 3))
                 .nogood(nogood)
                 .build();
-        assertThat(FixpointPropagation.applyFixpoint(csp, Set.of(z), SolverListener.NONE, new Statistics(), Cancellation.NEVER)).hasValue(csp);
-        assertThat(FixpointPropagation.applyFixpoint(csp, null, SolverListener.NONE, new Statistics(), Cancellation.NEVER)).isEmpty();
+        assertThat(FixpointPropagation.FULL.applyFixpoint(csp, Set.of(z), SolverListener.NONE, new Statistics(), Cancellation.NEVER)).hasValue(csp);
+        assertThat(FixpointPropagation.FULL.applyFixpoint(csp, null, SolverListener.NONE, new Statistics(), Cancellation.NEVER)).isEmpty();
     }
 
     @Test
@@ -47,12 +47,12 @@ public class FixpointPropagationTest {
         cancellation.cancel();
         var statistics = new Statistics();
 
-        assertThatThrownBy(() -> FixpointPropagation.applyFixpoint(csp, null, SolverListener.NONE, statistics, cancellation))
+        assertThatThrownBy(() -> FixpointPropagation.FULL.applyFixpoint(csp, null, SolverListener.NONE, statistics, cancellation))
                 .isInstanceOf(SolverCancelledException.class)
                 .extracting(e -> ((SolverCancelledException) e).getStatistics())
                 .isSameAs(statistics);
 
-        assertThatThrownBy(() -> FixpointPropagation.applyFixpointWithReason(csp, null, SolverListener.NONE, statistics, cancellation))
+        assertThatThrownBy(() -> FixpointPropagation.FULL.applyFixpointWithReason(csp, null, SolverListener.NONE, statistics, cancellation))
                 .isInstanceOf(SolverCancelledException.class);
     }
 

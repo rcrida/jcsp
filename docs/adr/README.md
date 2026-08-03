@@ -65,3 +65,4 @@ section instead.
 | [0009](0009-joint-continuous-discrete-optimization.md) | Joint continuous/discrete optimization (LP relaxation) | Proposed |
 | [0010](0010-push-listener-for-solve-progress.md) | Push-listener mechanism for solve progress | Accepted |
 | [0011](0011-cancellation-token-for-main-chain-search.md) | Cancellation token for main-chain search | Accepted |
+| [0012](0012-per-csp-propagator-filtering.md) | Per-CSP propagator filtering for the fixpoint loop | Accepted |
