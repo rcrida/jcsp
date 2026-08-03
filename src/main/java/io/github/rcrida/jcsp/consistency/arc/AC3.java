@@ -211,14 +211,21 @@ public class AC3 implements ConstraintConsistency {
     private static Optional<DiscreteDomain<?>> revise(Map<Variable<?>, Domain<?>> domains, Arc arc, BinaryConstraint<?, ?> constraint) {
         if (!(domains.get(arc.getFrom()) instanceof DiscreteDomain<?> D_i)) return Optional.empty();
         if (!(domains.get(arc.getTo()) instanceof DiscreteDomain<?> D_j)) return Optional.empty();
-        // D_j is materialised once and iterated with a plain loop, not D_j.stream(), for every
-        // x in D_i: profiling found repeatedly creating a fresh Stream pipeline for the same,
-        // unchanging D_j -- once per x -- to be a real cost in this O(|D_i| * |D_j|) hot loop.
+        // Both D_i and D_j are materialised once via toList() (every concrete DiscreteDomain is
+        // also a SetDomain, whose toList() is List.copyOf(values()) -- no Stream pipeline at all)
+        // and iterated with plain loops, not .stream().filter(...): profiling found the Stream/
+        // Spliterator/SpinedNodeBuilder machinery of a per-revise() (never mind per-x) pipeline to
+        // be the single largest allocation source in the whole solver, this being O(nodes * arcs)
+        // in call count even though each individual D_i/D_j is typically tiny.
         val jValues = D_j.toList();
-        val valuesToDelete = D_i.stream()
-                .filter(x -> !hasSupport(constraint, arc, x, jValues))
-                .toList();
-        if (valuesToDelete.isEmpty()) return Optional.empty();
+        List<Object> valuesToDelete = null;
+        for (Object x : D_i.toList()) {
+            if (!hasSupport(constraint, arc, x, jValues)) {
+                if (valuesToDelete == null) valuesToDelete = new ArrayList<>();
+                valuesToDelete.add(x);
+            }
+        }
+        if (valuesToDelete == null) return Optional.empty();
         val revisedBuilder = D_i.toBuilder();
         valuesToDelete.forEach(revisedBuilder::delete);
         return Optional.of(revisedBuilder.build());
