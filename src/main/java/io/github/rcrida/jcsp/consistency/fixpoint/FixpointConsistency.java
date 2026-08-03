@@ -114,25 +114,25 @@ public class FixpointConsistency implements ConstraintConsistency {
         if (constraints.isEmpty()) {
             return Optional.of(csp);
         }
-        var current = csp;
+        DomainAccumulator domains = new DomainAccumulator(csp.getVariableDomains());
         boolean changed = true;
         while (changed) {
             changed = false;
             for (Propagatable constraint : constraints) {
-                var result = constraint.propagate(current.getVariableDomains());
+                var result = constraint.propagate(domains.view());
                 if (result.isEmpty()) {
                     log.debug("{}: infeasible detected", name);
                     return Optional.empty();
                 }
                 var updates = result.get();
                 if (!updates.isEmpty()) {
-                    current = current.withDomains(updates);
+                    domains.record(updates);
                     changed = true;
                 }
             }
         }
         log.debug("{}: fixpoint reached", name);
-        return Optional.of(current);
+        return Optional.of(domains.finish(csp));
     }
 
     /**
@@ -171,27 +171,27 @@ public class FixpointConsistency implements ConstraintConsistency {
                                              @Nullable Set<Variable<?>> changedSinceLastRun) {
         List<Propagatable> constraints = filteredConstraints(csp);
         if (constraints.isEmpty()) return ConsistencyResult.feasible(csp);
-        var current = csp;
+        DomainAccumulator domains = new DomainAccumulator(csp.getVariableDomains());
         boolean changed = true;
         while (changed) {
             changed = false;
             for (Propagatable constraint : constraints) {
-                Optional<Map<Variable<?>, Domain<?>>> result = constraint.propagate(current.getVariableDomains());
+                Optional<Map<Variable<?>, Domain<?>>> result = constraint.propagate(domains.view());
                 if (result.isEmpty()) {
-                    NogoodConstraint reason = constraint.explainInfeasible(current.getVariableDomains()).orElse(null);
+                    NogoodConstraint reason = constraint.explainInfeasible(domains.view()).orElse(null);
                     if (reason == null) {
                         reason = RangeNogoodConstraint.fromCurrentBounds(
-                                ((Constraint) constraint).getVariables(), current.getVariableDomains()).orElse(null);
+                                ((Constraint) constraint).getVariables(), domains.view()).orElse(null);
                     }
                     return ConsistencyResult.infeasible(reason);
                 }
                 var updates = result.get();
                 if (!updates.isEmpty()) {
-                    current = current.withDomains(updates);
+                    domains.record(updates);
                     changed = true;
                 }
             }
         }
-        return ConsistencyResult.feasible(current);
+        return ConsistencyResult.feasible(domains.finish(csp));
     }
 }

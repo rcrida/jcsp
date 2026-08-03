@@ -64,25 +64,25 @@ public final class NogoodFixpointConsistency implements ConstraintConsistency {
             log.debug("NogoodConstraint: no nogood references a changed variable, skipping");
             return Optional.of(csp);
         }
-        var current = csp;
+        DomainAccumulator domains = new DomainAccumulator(csp.getVariableDomains());
         boolean changed = true;
         while (changed) {
             changed = false;
             for (NogoodConstraint constraint : toCheck) {
-                var result = constraint.propagate(current.getVariableDomains());
+                var result = constraint.propagate(domains.view());
                 if (result.isEmpty()) {
                     log.debug("NogoodConstraint: infeasible detected");
                     return Optional.empty();
                 }
                 var updates = result.get();
                 if (!updates.isEmpty()) {
-                    current = current.withDomains(updates);
+                    domains.record(updates);
                     changed = true;
                 }
             }
         }
         log.debug("NogoodConstraint: fixpoint reached");
-        return Optional.of(current);
+        return Optional.of(domains.finish(csp));
     }
 
     /**
@@ -129,23 +129,23 @@ public final class NogoodFixpointConsistency implements ConstraintConsistency {
         if (nogoods.isEmpty()) return ConsistencyResult.feasible(csp);
         Collection<NogoodConstraint> toCheck = relevant(nogoods, changedSinceLastRun);
         if (toCheck.isEmpty()) return ConsistencyResult.feasible(csp);
-        var current = csp;
+        DomainAccumulator domains = new DomainAccumulator(csp.getVariableDomains());
         boolean changed = true;
         while (changed) {
             changed = false;
             for (NogoodConstraint constraint : toCheck) {
-                var result = constraint.propagate(current.getVariableDomains());
+                var result = constraint.propagate(domains.view());
                 if (result.isEmpty()) {
                     return ConsistencyResult.infeasible(
-                            constraint.explainInfeasible(current.getVariableDomains()).orElse(null));
+                            constraint.explainInfeasible(domains.view()).orElse(null));
                 }
                 var updates = result.get();
                 if (!updates.isEmpty()) {
-                    current = current.withDomains(updates);
+                    domains.record(updates);
                     changed = true;
                 }
             }
         }
-        return ConsistencyResult.feasible(current);
+        return ConsistencyResult.feasible(domains.finish(csp));
     }
 }
