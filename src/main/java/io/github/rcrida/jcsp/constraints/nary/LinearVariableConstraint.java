@@ -7,6 +7,7 @@ import io.github.rcrida.jcsp.constraints.Operator;
 import io.github.rcrida.jcsp.domains.Domain;
 import io.github.rcrida.jcsp.variables.Variable;
 import lombok.EqualsAndHashCode;
+import lombok.Getter;
 import lombok.experimental.SuperBuilder;
 import org.jspecify.annotations.NonNull;
 
@@ -37,9 +38,9 @@ import java.util.stream.Collectors;
 @SuperBuilder
 @EqualsAndHashCode(callSuper = true)
 public class LinearVariableConstraint<N extends Number> extends NaryConstraint implements Propagatable {
-    @NonNull private final Map<Variable<N>, N> coefficients;
-    @NonNull private final Variable<N> target;
-    @NonNull private final Operator operator;
+    @Getter @NonNull private final Map<Variable<N>, N> coefficients;
+    @Getter @NonNull private final Variable<N> target;
+    @Getter @NonNull private final Operator operator;
 
     public static <N extends Number> LinearVariableConstraint<N> of(@NonNull Map<Variable<N>, N> coefficients,
                                                                       @NonNull Operator operator,

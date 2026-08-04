@@ -7,6 +7,7 @@ import io.github.rcrida.jcsp.domains.DiscreteDomain;
 import io.github.rcrida.jcsp.domains.Domain;
 import io.github.rcrida.jcsp.variables.Variable;
 import lombok.EqualsAndHashCode;
+import lombok.Getter;
 import lombok.experimental.SuperBuilder;
 import org.jspecify.annotations.NonNull;
 
@@ -31,8 +32,8 @@ import java.util.stream.Collectors;
 @EqualsAndHashCode(callSuper = true)
 public class SumBoundConstraint<N extends Number> extends UniformNaryConstraint<N> implements Propagatable {
     private static final Set<Operator> PROPAGATING_OPERATORS = EnumSet.of(Operator.EQ, Operator.LEQ, Operator.GEQ);
-    @NonNull private final N bound;
-    @NonNull private final Operator operator;
+    @Getter @NonNull private final N bound;
+    @Getter @NonNull private final Operator operator;
 
     public static <N extends Number> SumBoundConstraint<N> of(@NonNull Set<Variable<N>> variables,
                                                          @NonNull Operator operator,

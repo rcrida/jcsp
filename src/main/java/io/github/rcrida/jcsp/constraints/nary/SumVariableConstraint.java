@@ -7,6 +7,7 @@ import io.github.rcrida.jcsp.constraints.Operator;
 import io.github.rcrida.jcsp.domains.Domain;
 import io.github.rcrida.jcsp.variables.Variable;
 import lombok.EqualsAndHashCode;
+import lombok.Getter;
 import lombok.experimental.SuperBuilder;
 import org.jspecify.annotations.NonNull;
 
@@ -35,9 +36,9 @@ import java.util.stream.Collectors;
 @SuperBuilder
 @EqualsAndHashCode(callSuper = true)
 public class SumVariableConstraint<N extends Number> extends NaryConstraint implements Propagatable {
-    @NonNull private final Set<Variable<N>> summedVariables;
-    @NonNull private final Variable<N> target;
-    @NonNull private final Operator operator;
+    @Getter @NonNull private final Set<Variable<N>> summedVariables;
+    @Getter @NonNull private final Variable<N> target;
+    @Getter @NonNull private final Operator operator;
 
     public static <N extends Number> SumVariableConstraint<N> of(@NonNull Set<Variable<N>> variables,
                                                                    @NonNull Operator operator,
