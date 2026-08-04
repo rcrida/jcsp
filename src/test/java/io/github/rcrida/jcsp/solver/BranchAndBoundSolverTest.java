@@ -7,6 +7,7 @@ import io.github.rcrida.jcsp.assignments.NogoodStore;
 import io.github.rcrida.jcsp.assignments.SolverLimits;
 import io.github.rcrida.jcsp.consistency.ConsistencyResult;
 import io.github.rcrida.jcsp.consistency.Inference;
+import io.github.rcrida.jcsp.constraints.Operator;
 import io.github.rcrida.jcsp.domains.IntRangeDomain;
 import io.github.rcrida.jcsp.solver.backtrackingsearch.order.DefaultValueOrderer;
 import io.github.rcrida.jcsp.solver.backtrackingsearch.selector.MinimumRemainingValuesSelector;
@@ -16,6 +17,7 @@ import org.junit.jupiter.api.Test;
 
 import java.time.Duration;
 import java.util.Optional;
+import java.util.Set;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.function.ToDoubleFunction;
 
@@ -266,5 +268,97 @@ public class BranchAndBoundSolverTest {
         for (int i = 1; i < costs.size(); i++) {
             assertThat(costs.get(i)).isLessThan(costs.get(i - 1));
         }
+    }
+
+    // ── LP relaxation pruning (ADR-0009) ────────────────────────────────────
+
+    // x,y,z in [0,3] (max sum 9), sum(x,y,z) >= 8, minimize x+y+z -> true optimum 8.
+    // Branching x=0 or x=1 first (fixed order) leaves y+z<=6, which can't reach the remaining
+    // 8 or 7 needed -- the LP relaxation is infeasible there even though the plain
+    // objective.applyAsDouble(partial) check (x alone contributes 0 or 1) wouldn't prune it,
+    // exercising isPruned's LP-infeasible branch. x=2/x=3 branches are LP-feasible with a bound
+    // of exactly 8, so once the first cost-8 solution sets the incumbent, later same-bound
+    // branches get pruned by the dominance check (bound >= incumbent) too.
+    private static final Variable<Integer> LP_X = F.create("lp_x");
+    private static final Variable<Integer> LP_Y = F.create("lp_y");
+    private static final Variable<Integer> LP_Z = F.create("lp_z");
+
+    private static final ConstraintSatisfactionProblem LP_CSP = ConstraintSatisfactionProblem.builder()
+            .variableDomain(LP_X, IntRangeDomain.of(0, 3))
+            .variableDomain(LP_Y, IntRangeDomain.of(0, 3))
+            .variableDomain(LP_Z, IntRangeDomain.of(0, 3))
+            .sumConstraint(Set.of(LP_X, LP_Y, LP_Z), Operator.GEQ, 8)
+            .build();
+
+    private static io.github.rcrida.jcsp.solver.backtrackingsearch.selector.UnassignedVariableSelector fixedOrder(
+            Variable<Integer> x, Variable<Integer> y, Variable<Integer> z) {
+        return (csp, assignment) -> java.util.stream.Stream.of(x, y, z)
+                .filter(v -> assignment.getValue(v).isEmpty())
+                .findFirst()
+                .orElseThrow();
+    }
+
+    /**
+     * Narrows just-assigned {@code variable} to an {@link io.github.rcrida.jcsp.domains.AssignedDomain}
+     * -- the same construct {@code MAC} uses for search-time domain narrowing -- and nothing else, so
+     * {@code csp.getDomain(v)} (what {@code LpModelBuilder} reads its box bounds from) reflects search
+     * decisions without conflating in any constraint-propagator pruning of its own.
+     */
+    @SuppressWarnings("unchecked")
+    private static Inference narrowAssignedToSingleton() {
+        return (csp, variable, assignment) -> Optional.of(csp.toBuilder()
+                .variableDomain((Variable<Object>) variable,
+                        new io.github.rcrida.jcsp.domains.AssignedDomain(assignment.getValues().get(variable)))
+                .build());
+    }
+
+    private static BranchAndBoundSolver lpSolver(ToDoubleFunction<Assignment> objective) {
+        return BranchAndBoundSolver.builder()
+                .objective(objective)
+                .unassignedVariableSelector(fixedOrder(LP_X, LP_Y, LP_Z))
+                .domainValuesOrderer(DefaultValueOrderer.INSTANCE)
+                .inference(narrowAssignedToSingleton())
+                .statistics(new io.github.rcrida.jcsp.assignments.Statistics())
+                .build();
+    }
+
+    @Test
+    void linearObjective_prunesInfeasibleAndDominatedBranches_findsCorrectOptimum() {
+        LinearObjective linearObjective = LinearObjective.builder()
+                .coefficient(LP_X, 1.0).coefficient(LP_Y, 1.0).coefficient(LP_Z, 1.0)
+                .build();
+
+        // Exhausts the whole stream (not just getSolution()'s first element) so search continues
+        // past the first found solution (x=2,y=3,z=3, cost 8) into the x=3 branch, whose own LP
+        // bound (8) now equals the incumbent (8) -- exercising the dominance-prune ("bound >=
+        // incumbent") branch, not just the earlier LP-infeasible-subtree branch (x=0/x=1).
+        BranchAndBoundSolver solver = lpSolver(linearObjective);
+        var improving = solver.getSolutions(LP_CSP).toList();
+
+        assertThat(improving).hasSize(1);
+        assertThat(linearObjective.applyAsDouble(improving.get(0))).isCloseTo(8.0, org.assertj.core.api.Assertions.within(1e-9));
+    }
+
+    @Test
+    void linearObjective_explorestFewerNodesThanPlainObjective() {
+        LinearObjective linearObjective = LinearObjective.builder()
+                .coefficient(LP_X, 1.0).coefficient(LP_Y, 1.0).coefficient(LP_Z, 1.0)
+                .build();
+        // Same real cost function, but not `instanceof LinearObjective` -- exercises isPruned's
+        // plain (non-LP) branch for an apples-to-apples comparison.
+        ToDoubleFunction<Assignment> plainObjective = linearObjective::applyAsDouble;
+
+        BranchAndBoundSolver withLp = lpSolver(linearObjective);
+        BranchAndBoundSolver withoutLp = lpSolver(plainObjective);
+
+        var lpSolutions = withLp.getSolutions(LP_CSP).toList();
+        var plainSolutions = withoutLp.getSolutions(LP_CSP).toList();
+
+        assertThat(lpSolutions).isNotEmpty();
+        assertThat(plainSolutions).isNotEmpty();
+        assertThat(linearObjective.applyAsDouble(lpSolutions.getLast())).isEqualTo(8.0);
+        assertThat(plainObjective.applyAsDouble(plainSolutions.getLast())).isEqualTo(8.0);
+        assertThat(withLp.getStatistics().getNodesExplored().get())
+                .isLessThan(withoutLp.getStatistics().getNodesExplored().get());
     }
 }

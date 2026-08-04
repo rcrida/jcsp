@@ -14,6 +14,7 @@ import io.github.rcrida.jcsp.consistency.Inference;
 import io.github.rcrida.jcsp.solver.listener.SolverListener;
 import io.github.rcrida.jcsp.solver.backtrackingsearch.order.DomainValuesOrderer;
 import io.github.rcrida.jcsp.solver.backtrackingsearch.selector.UnassignedVariableSelector;
+import io.github.rcrida.jcsp.solver.lp.LpModelBuilder;
 import io.github.rcrida.jcsp.variables.Variable;
 import org.jspecify.annotations.NonNull;
 
@@ -46,6 +47,19 @@ import java.util.stream.Stream;
  * distinct single-solution algorithm of its own -- {@code getSolution()} just consumes this
  * stream -- so it never throws {@link SolverCancelledException}; the caller gets back the best
  * incumbent found so far, exactly like today's {@link LimitExceededException} asymmetry.
+ * <p>
+ * When {@link #objective} is itself a {@link LinearObjective}, the plain {@code
+ * objective.applyAsDouble(partial) >= incumbent} pruning check for non-complete assignments is
+ * replaced with a per-node {@link io.github.rcrida.jcsp.solver.lp.LpModelBuilder#solve} call (see
+ * ADR-0009): a strictly tighter (never looser) bound under the same non-negative-coefficients/
+ * non-negative-domain assumption the plain check already requires, and an immediate prune on LP
+ * infeasibility -- a relaxation's infeasibility already proves the unrelaxed subtree is infeasible
+ * too. No separate opt-in is needed: {@link Solver.Factory} passing a {@link LinearObjective} as
+ * {@code objective} (it implements {@link ToDoubleFunction}{@code <Assignment>}) is what triggers
+ * this. Complete assignments are unaffected -- their real cost is exact, so relaxing it would only
+ * add solve cost for no benefit. Variable/value ordering and the rest of the optimization chain
+ * (e.g. {@link BisectionConditioningSolver} still running before this class) are unaffected;
+ * narrowing those to account for a joint LP relaxation is deferred future work.
  */
 @Slf4j
 @Value
@@ -83,18 +97,36 @@ public class BranchAndBoundSolver implements Solver {
                                        Assignment assignment,
                                        double[] incumbent,
                                        long deadline) {
-        if (objective.applyAsDouble(assignment) >= incumbent[0]) {
-            return Stream.empty();
-        }
         if (assignment.isComplete(csp)) {
             double cost = objective.applyAsDouble(assignment);
+            if (cost >= incumbent[0]) {
+                return Stream.empty();
+            }
             incumbent[0] = cost;
             log.info("Found improving solution with cost {}: {}", cost, assignment);
             listener.onIncumbentImproved(assignment, cost);
             return Stream.of(assignment);
         }
+        if (isPruned(csp, assignment, incumbent[0])) {
+            return Stream.empty();
+        }
         val variable = unassignedVariableSelector.select(csp, assignment);
         return searchValues(variable, csp, assignment, incumbent, deadline);
+    }
+
+    /**
+     * The optimistic pruning check for a non-complete {@code assignment}: when {@link #objective}
+     * is itself a {@link LinearObjective}, this gives a strictly tighter bound (see this class's own
+     * Javadoc and ADR-0009) than the plain {@link #objective}-on-a-partial-assignment check it
+     * replaces, and prunes immediately when the LP relaxation itself is infeasible.
+     */
+    private boolean isPruned(ConstraintSatisfactionProblem csp, Assignment assignment, double incumbent) {
+        if (objective instanceof LinearObjective linearObjective) {
+            return LpModelBuilder.solve(csp, linearObjective)
+                    .map(bound -> bound.lowerBound() >= incumbent)
+                    .orElse(true);
+        }
+        return objective.applyAsDouble(assignment) >= incumbent;
     }
 
     /**
