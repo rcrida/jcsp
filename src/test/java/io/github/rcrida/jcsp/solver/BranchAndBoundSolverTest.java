@@ -361,4 +361,75 @@ public class BranchAndBoundSolverTest {
         assertThat(withLp.getStatistics().getNodesExplored().get())
                 .isLessThan(withoutLp.getStatistics().getNodesExplored().get());
     }
+
+    // ── Fractional-variable branching (ADR-0009 Phase 3) ────────────────────
+
+    @Test
+    void mostFractionalLpVariable_branchedBeforeConfiguredSelectorsChoice() {
+        // minimize x+y s.t. x+2y>=5, x,y in [0,3]: y is twice as "efficient" against the
+        // constraint, so the LP optimum is x=0, y=2.5 (cost 2.5) -- y is fractional, x isn't.
+        // fixedOrder always tries x first, so seeing y visited first proves fractional selection
+        // overrode the configured selector rather than falling back to it.
+        Variable<Integer> x = F.create("frac_x");
+        Variable<Integer> y = F.create("frac_y");
+        var csp = ConstraintSatisfactionProblem.builder()
+                .variableDomain(x, IntRangeDomain.of(0, 3))
+                .variableDomain(y, IntRangeDomain.of(0, 3))
+                .linearConstraint(java.util.Map.of(x, 1, y, 2), Operator.GEQ, 5)
+                .build();
+        LinearObjective linearObjective = LinearObjective.builder()
+                .coefficient(x, 1.0).coefficient(y, 1.0)
+                .build();
+
+        var visitOrder = new java.util.ArrayList<Variable<?>>();
+        io.github.rcrida.jcsp.solver.backtrackingsearch.order.DomainValuesOrderer recording =
+                (c, variable, assignment) -> {
+                    visitOrder.add(variable);
+                    return DefaultValueOrderer.INSTANCE.order(c, variable, assignment);
+                };
+
+        io.github.rcrida.jcsp.solver.backtrackingsearch.selector.UnassignedVariableSelector xThenY =
+                (c, assignment) -> assignment.getValue(x).isEmpty() ? x : y;
+
+        BranchAndBoundSolver solver = BranchAndBoundSolver.builder()
+                .objective(linearObjective)
+                .unassignedVariableSelector(xThenY) // x tried before y when not overridden
+                .domainValuesOrderer(recording)
+                .inference(narrowAssignedToSingleton())
+                .build();
+
+        var solution = solver.getSolution(csp);
+
+        assertThat(solution).isPresent();
+        assertThat(visitOrder.get(0)).isEqualTo(y);
+    }
+
+    @Test
+    void allIntegralLpSolution_fallsBackToConfiguredSelector() {
+        // Every vertex of {x,y,z in [0,3], sum>=8} that minimizes x+y+z is already all-integer
+        // (e.g. x=2,y=3,z=3), so no LP-covered variable is fractional -- selectFractionalVariable
+        // finds no candidate and falls back to unassignedVariableSelector, which fixedOrder pins to
+        // x first.
+        LinearObjective linearObjective = LinearObjective.builder()
+                .coefficient(LP_X, 1.0).coefficient(LP_Y, 1.0).coefficient(LP_Z, 1.0)
+                .build();
+        var visitOrder = new java.util.ArrayList<Variable<?>>();
+        io.github.rcrida.jcsp.solver.backtrackingsearch.order.DomainValuesOrderer recording =
+                (c, variable, assignment) -> {
+                    visitOrder.add(variable);
+                    return DefaultValueOrderer.INSTANCE.order(c, variable, assignment);
+                };
+
+        BranchAndBoundSolver solver = BranchAndBoundSolver.builder()
+                .objective(linearObjective)
+                .unassignedVariableSelector(fixedOrder(LP_X, LP_Y, LP_Z))
+                .domainValuesOrderer(recording)
+                .inference(narrowAssignedToSingleton())
+                .build();
+
+        var solution = solver.getSolution(LP_CSP);
+
+        assertThat(solution).isPresent();
+        assertThat(visitOrder.get(0)).isEqualTo(LP_X);
+    }
 }

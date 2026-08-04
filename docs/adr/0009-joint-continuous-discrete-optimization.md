@@ -100,3 +100,24 @@ license-compatibility concern — pin an MIT-licensed release specifically to av
   builder described above (collect linear constraints + variable bounds into an ojAlgo
   `ExpressionsBasedModel`), not a reordering of `BisectionConditioningSolver` and
   `BranchAndBoundSolver`.
+
+## Future work
+
+- **Binary MIP variable-domain splitting** (`x <= floor(v)` / `x >= ceil(v)` on the most fractional
+  variable, each child re-solving the LP with the narrowed bound) instead of the "most fractional
+  variable, full domain enumeration" branching landed so far. Not just a bigger version of that
+  change — it needs a different branch shape entirely: `BranchAndBoundSolver`'s recursion currently
+  only ever pins a variable to one concrete value (`assignment.withValue(variable, value)`); a binary
+  split instead narrows the variable's *domain* while leaving it unassigned, the shape
+  `BisectionConditioningSolver` already uses for continuous variables (`narrow(csp, target, lo, hi)`)
+  but that `BranchAndBoundSolver` has no path for today. Everything downstream of variable selection
+  — nogood learning, `SolverListener#onBacktrack`, consistency-checking against `cspWithNogoods` — is
+  wired for concrete per-value branches; a range branch would need its own nogood shape (probably
+  `RangeNogoodConstraint`, which exists but isn't integrated into this class's CDCL loop) and new
+  listener semantics, not just a new value to plug into the existing ones. Lower priority than it
+  would be for a general-purpose MIP solver: binary splitting's main payoff is avoiding enumeration of
+  domains too large to enumerate, and jcsp's typical CSP-style domains are small enough that full
+  enumeration isn't leaving much on the table — especially since every child already gets its own
+  fresh, tight LP bound (Phase 2) regardless of whether it arrived via a pinned value or a narrowed
+  range. Worth revisiting if wide integer domains (hundreds/thousands of values) become a real jcsp
+  workload.

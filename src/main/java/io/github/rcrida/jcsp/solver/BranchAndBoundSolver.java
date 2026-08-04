@@ -14,6 +14,7 @@ import io.github.rcrida.jcsp.consistency.Inference;
 import io.github.rcrida.jcsp.solver.listener.SolverListener;
 import io.github.rcrida.jcsp.solver.backtrackingsearch.order.DomainValuesOrderer;
 import io.github.rcrida.jcsp.solver.backtrackingsearch.selector.UnassignedVariableSelector;
+import io.github.rcrida.jcsp.solver.lp.LpBound;
 import io.github.rcrida.jcsp.solver.lp.LpModelBuilder;
 import io.github.rcrida.jcsp.variables.Variable;
 import org.jspecify.annotations.NonNull;
@@ -50,21 +51,32 @@ import java.util.stream.Stream;
  * <p>
  * When {@link #objective} is itself a {@link LinearObjective}, the plain {@code
  * objective.applyAsDouble(partial) >= incumbent} pruning check for non-complete assignments is
- * replaced with a per-node {@link io.github.rcrida.jcsp.solver.lp.LpModelBuilder#solve} call (see
- * ADR-0009): a strictly tighter (never looser) bound under the same non-negative-coefficients/
- * non-negative-domain assumption the plain check already requires, and an immediate prune on LP
- * infeasibility -- a relaxation's infeasibility already proves the unrelaxed subtree is infeasible
- * too. No separate opt-in is needed: {@link Solver.Factory} passing a {@link LinearObjective} as
- * {@code objective} (it implements {@link ToDoubleFunction}{@code <Assignment>}) is what triggers
- * this. Complete assignments are unaffected -- their real cost is exact, so relaxing it would only
- * add solve cost for no benefit. Variable/value ordering and the rest of the optimization chain
- * (e.g. {@link BisectionConditioningSolver} still running before this class) are unaffected;
- * narrowing those to account for a joint LP relaxation is deferred future work.
+ * replaced with a single per-node {@link io.github.rcrida.jcsp.solver.lp.LpModelBuilder#solve} call
+ * (see ADR-0009), reused for two purposes: (1) a strictly tighter (never looser) bound than the
+ * plain check under the same non-negative-coefficients/non-negative-domain assumption it already
+ * requires, with an immediate prune on LP infeasibility -- a relaxation's infeasibility already
+ * proves the unrelaxed subtree is infeasible too; and (2), when not pruned, choosing which variable
+ * to branch on next: the currently-unassigned variable whose LP-relaxed value is farthest from an
+ * integer (standard MIP "most fractional" branching), falling back to {@link
+ * #unassignedVariableSelector} when every LP-covered unassigned variable already has an integral
+ * value, or none are LP-covered at all. This only changes <em>which</em> variable is decided next,
+ * not how its domain is split -- unlike textbook MIP branching's binary {@code x<=floor(v)}/
+ * {@code x>=ceil(v)} children, this class still enumerates {@link #domainValuesOrderer}'s full
+ * ordering for whichever variable is chosen, so the benefit is search-order quality, not a
+ * fundamentally tighter per-child bound. No separate opt-in is needed: {@link Solver.Factory}
+ * passing a {@link LinearObjective} as {@code objective} (it implements {@link
+ * ToDoubleFunction}{@code <Assignment>}) is what triggers this. Complete assignments are unaffected
+ * -- their real cost is exact, so relaxing it would only add solve cost for no benefit. The rest of
+ * the optimization chain (e.g. {@link BisectionConditioningSolver} still running before this class)
+ * is unaffected; narrowing that to account for a joint LP relaxation is deferred future work.
  */
 @Slf4j
 @Value
 @Builder
 public class BranchAndBoundSolver implements Solver {
+    /** Below this, an LP-relaxed value is treated as already integral rather than fractional. */
+    private static final double FRACTIONAL_EPSILON = 1e-6;
+
     @NonNull UnassignedVariableSelector unassignedVariableSelector;
     @NonNull DomainValuesOrderer domainValuesOrderer;
     @NonNull Inference inference;
@@ -107,26 +119,47 @@ public class BranchAndBoundSolver implements Solver {
             listener.onIncumbentImproved(assignment, cost);
             return Stream.of(assignment);
         }
-        if (isPruned(csp, assignment, incumbent[0])) {
-            return Stream.empty();
+        Variable<?> variable;
+        if (objective instanceof LinearObjective linearObjective) {
+            Optional<LpBound> bound = LpModelBuilder.solve(csp, linearObjective);
+            if (bound.isEmpty() || bound.get().lowerBound() >= incumbent[0]) {
+                return Stream.empty();
+            }
+            variable = selectFractionalVariable(assignment, bound.get())
+                    .orElseGet(() -> unassignedVariableSelector.select(csp, assignment));
+        } else {
+            if (objective.applyAsDouble(assignment) >= incumbent[0]) {
+                return Stream.empty();
+            }
+            variable = unassignedVariableSelector.select(csp, assignment);
         }
-        val variable = unassignedVariableSelector.select(csp, assignment);
         return searchValues(variable, csp, assignment, incumbent, deadline);
     }
 
     /**
-     * The optimistic pruning check for a non-complete {@code assignment}: when {@link #objective}
-     * is itself a {@link LinearObjective}, this gives a strictly tighter bound (see this class's own
-     * Javadoc and ADR-0009) than the plain {@link #objective}-on-a-partial-assignment check it
-     * replaces, and prunes immediately when the LP relaxation itself is infeasible.
+     * Among {@code bound}'s LP-covered variables that {@code assignment} hasn't decided yet, picks
+     * the one whose relaxed value is farthest from an integer ({@code min(frac, 1-frac)}, maximal at
+     * a half-integer) -- standard MIP "most fractional" branching. {@link Optional#empty()} when no
+     * unassigned variable is LP-covered, or every covered one is already within {@link
+     * #FRACTIONAL_EPSILON} of an integer, letting the caller fall back to {@link
+     * #unassignedVariableSelector}.
      */
-    private boolean isPruned(ConstraintSatisfactionProblem csp, Assignment assignment, double incumbent) {
-        if (objective instanceof LinearObjective linearObjective) {
-            return LpModelBuilder.solve(csp, linearObjective)
-                    .map(bound -> bound.lowerBound() >= incumbent)
-                    .orElse(true);
+    private Optional<Variable<?>> selectFractionalVariable(Assignment assignment, LpBound bound) {
+        Variable<?> best = null;
+        double bestFractionality = FRACTIONAL_EPSILON;
+        for (var entry : bound.solution().entrySet()) {
+            Variable<?> variable = entry.getKey();
+            if (assignment.getValue(variable).isPresent()) {
+                continue;
+            }
+            double value = entry.getValue();
+            double fractionality = Math.min(value - Math.floor(value), Math.ceil(value) - value);
+            if (fractionality > bestFractionality) {
+                bestFractionality = fractionality;
+                best = variable;
+            }
         }
-        return objective.applyAsDouble(assignment) >= incumbent;
+        return Optional.ofNullable(best);
     }
 
     /**
