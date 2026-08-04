@@ -199,15 +199,19 @@ public record SetIntervalDomain<E>(Set<E> lowerBound, Set<E> upperBound, int min
     @Override
     public Comparator<E> getComparator() { return comparator; }
 
+    /** No-op check first: a repeat call with an already-subsumed {@code forcedIn} (common once a propagator's forced element has already narrowed in) skips the copy and the constructor's resort entirely. */
     @Override
     public SetIntervalDomain<E> withLowerBound(@NonNull Set<E> forcedIn) {
+        if (lowerBound.containsAll(forcedIn)) return this;
         var newLower = new HashSet<>(lowerBound);
         newLower.addAll(forcedIn);
         return new SetIntervalDomain<>(newLower, upperBound, minCardinality, maxCardinality, comparator);
     }
 
+    /** No-op check first, mirroring {@link #withLowerBound}. */
     @Override
     public SetIntervalDomain<E> withUpperBound(@NonNull Set<E> restrictedTo) {
+        if (restrictedTo.containsAll(upperBound)) return this;
         var newUpper = new HashSet<>(upperBound);
         newUpper.retainAll(restrictedTo);
         return new SetIntervalDomain<>(lowerBound, newUpper, minCardinality, maxCardinality, comparator);
