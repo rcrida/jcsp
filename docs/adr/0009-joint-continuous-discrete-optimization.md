@@ -1,6 +1,6 @@
 # 0009. Joint continuous/discrete optimization (LP relaxation)
 
-**Status**: Decided — design only, not yet implemented
+**Status**: Implemented
 
 ## Context
 
@@ -43,22 +43,32 @@ integer variable's integrality requirement is exactly what gets dropped for the 
 
 **New API surface**: `BranchAndBoundSolver`'s objective is `ToDoubleFunction<Assignment>` — opaque,
 so it can't be introspected for LP coefficients. This requires a new, explicit `LinearObjective` type
-(coefficients over variables plus a constant) supplied alongside the existing objective. This is
-additive: the existing `ToDoubleFunction<Assignment>` overload remains for nonlinear objectives; a
-new `createSolver(csp, LinearObjective, config)` overload opts into LP-bound pruning.
+(coefficients over variables plus a constant) supplied alongside the existing objective. `LinearObjective`
+implements `ToDoubleFunction<Assignment>` itself, so it passes straight through the *existing*
+`createSolver(csp, objective, config)` overload with no new overload needed: `BranchAndBoundSolver`
+detects it via `objective instanceof LinearObjective` at the one call site that needs the coefficients
+(`LpModelBuilder.solve`), and everything described below activates automatically whenever a caller
+passes one in place of an opaque `ToDoubleFunction`.
 
-**Wiring**: default-on whenever a `LinearObjective` is supplied and the CSP has `BoundedDomain` or
-relaxable discrete-numeric variables — an LP model is built and solved once per B&B search node,
-giving a strictly tighter (but still sound) lower bound than today's
-`objective.applyAsDouble(assignment) >= incumbent[0]` partial-assignment check, and replacing
-`BisectionConditioningSolver`'s blind bisection for the part of the problem the LP model covers. Once
-every discrete variable in a branch is fixed, solving the LP over the remaining continuous
-sub-problem is already exact — no bisection needed for continuous variables fully covered by the
-linear model. `BisectionConditioningSolver` isn't deleted, but narrows to continuous variables that
-also participate in constraints the LP can't see (e.g. `productConstraint`/`divisionConstraint`/
-`comparatorConstraint` chains). Branching switches to picking the *most fractional* variable from the
-LP's optimal solution (standard MIP branching) rather than blind interval bisection or plain MRV,
-whenever an LP model is active.
+**Wiring**: `BranchAndBoundSolver` is the optimization chain's terminal solver unconditionally —
+`Solver.Factory` no longer nests it inside `BisectionConditioningSolver`, so discrete variables get
+decided *before* any continuous variable is touched, not after. Two mechanisms make this sound: (1)
+per-node LP-bound pruning (a single `LpModelBuilder.solve` call reused for both the incumbent-bound
+check and, per Phase 3, most-fractional-variable branching); (2) `BranchAndBoundSolver` recognises
+when every non-`BoundedDomain` ("discrete") variable is decided but `BoundedDomain` ones remain open
+(`isDiscreteComplete`) and resolves the continuous residual itself (`resolveContinuousResidual`):
+first the exact fast path — when `objective` is a `LinearObjective`, the same node's LP solution
+already gives the optimal value for every `BoundedDomain` variable the LP model covers, and with
+every discrete variable already pinned that's no longer an approximation, just the residual
+sub-problem's exact solution, accepted only if it's complete and passes a full consistency check
+(catching a `BoundedDomain` variable that also participates in a constraint the LP can't see, e.g.
+`productConstraint`) — falling back to a fresh, single-use `BisectionConditioningSolver` over just
+that residual otherwise. `BisectionConditioningSolver` itself is unchanged; it's now invoked as an
+internal subroutine (once per discrete-complete leaf) rather than sitting at the top of the chain.
+Relies on `unassignedVariableSelector` preferring discrete variables while any remain open —
+`MinimumRemainingValuesSelector` (what `Solver.Factory` always wires in) satisfies this by
+construction, since a non-singleton `BoundedDomain`'s `size()` is `Integer.MAX_VALUE`, larger than
+any realistic discrete domain.
 
 **LP engine**: [ojAlgo](https://www.ojalgo.org/), taken as jcsp's first real (non-annotation)
 compile-scope dependency. jcsp is MIT-licensed; ojAlgo's current releases are also MIT, so there's no
@@ -87,19 +97,27 @@ license-compatibility concern — pin an MIT-licensed release specifically to av
 - First real (non-annotation) compile-scope dependency in jcsp's history — Maven Central consumers
   now transitively pull in ojAlgo. Worth calling out explicitly in the README alongside the existing
   dependency list.
-- New public API surface: a `LinearObjective` type and a `createSolver(csp, LinearObjective,
-  SolverConfig)` overload, additive to the existing `ToDoubleFunction<Assignment>` overload.
-- Because wiring is default-on (not opt-in), every existing mixed continuous/discrete optimization
-  test's search behavior can shift once this lands — ship alongside a regression test modelling
-  MIPLIB's `flugpl` instance (the case that originally motivated this ADR — see
-  `project_jcsp_bisection_incumbent_pruning` in project memory for the earlier abandoned attempt) and
-  re-verify `ContinuousOptimizationTest`, `Prob061JobShopSchedulingTest`, and any other test that
-  exercises `BisectionConditioningSolver`.
-- Don't re-propose "just reorder the chain" for a mixed continuous/discrete optimization problem —
-  that was the rejected alternative this ADR replaces. The real starting point is the LP model
-  builder described above (collect linear constraints + variable bounds into an ojAlgo
-  `ExpressionsBasedModel`), not a reordering of `BisectionConditioningSolver` and
-  `BranchAndBoundSolver`.
+- New public API surface: just the `LinearObjective` type. No new `createSolver` overload was needed
+  in the end — `LinearObjective` implementing `ToDoubleFunction<Assignment>` was enough for it to
+  flow through the existing `objective` parameter and be detected via `instanceof`.
+- The chain reorder changes search behavior for every mixed continuous/discrete optimization problem
+  solved via the optimization chain, not just `LinearObjective`-driven ones (a plain `ToDoubleFunction`
+  objective still gets the discrete-first ordering, just without the LP fast path — its continuous
+  residual always resolves via the `BisectionConditioningSolver` fallback). Landed alongside
+  `FlugplTest` (`solver.examples.miplib`, transcribed from MIPLIB's `flugpl.mps`, the case that
+  originally motivated this ADR — see `project_jcsp_bisection_incumbent_pruning` in project memory
+  for the earlier abandoned attempt) and re-verified against the full existing suite (2219 tests,
+  zero failures) rather than a hand-picked subset.
+- The naive version of "just reorder the chain" (a fixed decorator swap, no per-node LP resolution)
+  remains rejected for the reason given above — the two mechanisms in the Wiring section
+  (per-node LP-bound pruning/branching, and `resolveContinuousResidual`'s fast-path-then-bisection
+  residual handling) are what make the actual reorder sound rather than just differently wrong.
+- `BisectionConditioningSolver.getSolution()` is `getSolutions().findFirst()` — the *first* improving
+  point found, not the best. Using it as a subroutine (as `resolveContinuousResidual`'s fallback
+  does) requires exhausting `getSolutions()` and taking the last element instead; see
+  `feedback_bisectionconditioningsolver_pitfalls` in project memory for this and a related pitfall
+  (its own re-propagation loop can't see non-linear constraints, so a naive fallback test with two+
+  jointly-constrained continuous variables risks exponential blowup or outright unsatisfiability).
 
 ## Future work
 

@@ -64,11 +64,24 @@ public class BisectionConditioningSolver extends SolverDecorator {
 
     @Override
     public Stream<Assignment> getSolutions(@NonNull ConstraintSatisfactionProblem csp) {
+        return getSolutions(csp, Double.MAX_VALUE);
+    }
+
+    /**
+     * Package-private overload letting a same-package caller seed the incumbent {@link #allFeasible}
+     * threads through its recursion, instead of always starting from "nothing found yet" ({@link
+     * Double#MAX_VALUE}). Used by {@link BranchAndBoundSolver#resolveContinuousResidual} to carry its
+     * own already-known incumbent into a per-leaf bisection fallback, so a residual that can't
+     * possibly beat a bound already found elsewhere in the search tree is pruned immediately instead
+     * of being fully (and uselessly) explored. {@link #getSolutions(ConstraintSatisfactionProblem)}
+     * itself is unaffected -- it always seeds {@link Double#MAX_VALUE}.
+     */
+    Stream<Assignment> getSolutions(@NonNull ConstraintSatisfactionProblem csp, double incumbentSeed) {
         val target = findWidestBounded(csp);
         if (target == null) {
             return getInner().getSolutions(csp);
         }
-        return allFeasible(csp, new double[]{Double.MAX_VALUE});
+        return allFeasible(csp, new double[]{incumbentSeed});
     }
 
     /**

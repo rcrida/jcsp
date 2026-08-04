@@ -9,6 +9,8 @@ import io.github.rcrida.jcsp.consistency.ConsistencyResult;
 import io.github.rcrida.jcsp.consistency.Inference;
 import io.github.rcrida.jcsp.constraints.Operator;
 import io.github.rcrida.jcsp.domains.IntRangeDomain;
+import io.github.rcrida.jcsp.domains.IntervalDomain;
+import io.github.rcrida.jcsp.domains.NumericDiscreteDomain;
 import io.github.rcrida.jcsp.solver.backtrackingsearch.order.DefaultValueOrderer;
 import io.github.rcrida.jcsp.solver.backtrackingsearch.selector.MinimumRemainingValuesSelector;
 import io.github.rcrida.jcsp.solver.listener.SolverListener;
@@ -22,6 +24,7 @@ import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.function.ToDoubleFunction;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 public class BranchAndBoundSolverTest {
     static final Variable.Factory F = Variable.Factory.INSTANCE;
@@ -431,5 +434,179 @@ public class BranchAndBoundSolverTest {
 
         assertThat(solution).isPresent();
         assertThat(visitOrder.get(0)).isEqualTo(LP_X);
+    }
+
+    // ── Continuous residual resolution (ADR-0009 Phase 4) ───────────────────
+    // These go through Solver.Factory (not a hand-built BranchAndBoundSolver) so real propagation
+    // narrows domains the way production use does -- resolveContinuousResidual's LP fast path and
+    // bisection fallback both depend on that, unlike the LP-pruning/fractional-branching tests above
+    // which deliberately isolate BranchAndBoundSolver with a minimal custom Inference.
+
+    @Test
+    void purelyContinuousLinearObjective_resolvedViaLpFastPath() {
+        // minimize x+y s.t. x+y>=5, x,y in [0,10] -- both covered by the objective and the linear
+        // constraint, so the LP fill is complete and consistent: accepted without ever falling back
+        // to bisection.
+        Variable<Double> x = F.create("residual_x");
+        Variable<Double> y = F.create("residual_y");
+        var csp = ConstraintSatisfactionProblem.builder()
+                .variableDomain(x, IntervalDomain.of(0.0, 10.0))
+                .variableDomain(y, IntervalDomain.of(0.0, 10.0))
+                .linearConstraint(java.util.Map.of(x, 1.0, y, 1.0), Operator.GEQ, 5.0)
+                .build();
+        LinearObjective objective = LinearObjective.builder().coefficient(x, 1.0).coefficient(y, 1.0).build();
+
+        var solution = Solver.Factory.INSTANCE.createSolver(csp, objective).getSolution();
+
+        assertThat(solution).isPresent();
+        assertThat(objective.applyAsDouble(solution.get())).isCloseTo(5.0, org.assertj.core.api.Assertions.within(1e-6));
+    }
+
+    // Both tests below use a single continuous variable and an inequality predicate deliberately:
+    // BisectionConditioningSolver's own re-propagation loop only re-runs SumBound/SumVariable/
+    // LinearBound/LinearVariable propagators (the same four LpModelBuilder recognises) -- any
+    // constraint that makes the LP fill wrong is, by construction, also invisible to bisection's own
+    // narrowing, so it only gets checked once every variable is fully singleton. With two jointly
+    // constrained variables and no propagation help, that's an exponential blind grid search; worse,
+    // an EQ constraint on a genuinely nonlinear relationship (e.g. x*y=12) is essentially impossible
+    // to land on exactly via independent-axis bisection to a fixed epsilon at all (confirmed: an
+    // earlier two-variable, product-EQ version of this test ran for 554s and returned no solution).
+    // A single variable with an inequality predicate avoids both problems: one variable bisects in
+    // ~14 steps regardless, and an inequality defines an open region bisection can actually land in.
+
+    @Test
+    void lpFillInconsistentWithNonLpVisibleConstraint_fallsBackToBisection() {
+        // minimize x (no linear constraint on it at all) s.t. x>=5 via a predicateConstraint
+        // (invisible to LpModelBuilder). The LP fill picks x's box minimum (1), which violates the
+        // predicate -- complete but inconsistent, rejected, falling back to bisection, which
+        // converges to the true constrained optimum x=5.
+        Variable<Double> x = F.create("residual_px");
+        var csp = ConstraintSatisfactionProblem.builder()
+                .variableDomain(x, IntervalDomain.of(1.0, 10.0))
+                .predicateConstraint(x, v -> v >= 5.0)
+                .build();
+        LinearObjective objective = LinearObjective.builder().coefficient(x, 1.0).build();
+
+        var solution = Solver.Factory.INSTANCE.createSolver(csp, objective).getSolution();
+
+        assertThat(solution).isPresent();
+        double xVal = (Double) solution.get().getValue(x).orElseThrow();
+        assertThat(xVal).isCloseTo(5.0, org.assertj.core.api.Assertions.within(1e-2));
+    }
+
+    @Test
+    void lpFillIncomplete_variableNotLpCovered_fallsBackToBisection() {
+        // x isn't in the objective (a constant 0) or any linear constraint, so LpModelBuilder's
+        // relevantVariables is empty and the LP fill leaves x completely unassigned (incomplete,
+        // rejected before consistency is even checked) -- falling back to bisection to find any
+        // point satisfying x>=5.
+        Variable<Double> x = F.create("residual_qx");
+        var csp = ConstraintSatisfactionProblem.builder()
+                .variableDomain(x, IntervalDomain.of(1.0, 10.0))
+                .predicateConstraint(x, v -> v >= 5.0)
+                .build();
+        LinearObjective objective = LinearObjective.builder().constant(0.0).build();
+
+        var solution = Solver.Factory.INSTANCE.createSolver(csp, objective).getSolution();
+
+        assertThat(solution).isPresent();
+        double xVal = (Double) solution.get().getValue(x).orElseThrow();
+        assertThat(xVal).isGreaterThanOrEqualTo(5.0);
+    }
+
+    @Test
+    void continuousResidualGenuinelyInfeasible_returnsEmpty() {
+        // x>=15 is unsatisfiable within [1,10] -- both the LP fill and the bisection fallback fail,
+        // so resolveContinuousResidual (and therefore resolveComplete) returns nothing at all.
+        Variable<Double> x = F.create("residual_infeasible_x");
+        var csp = ConstraintSatisfactionProblem.builder()
+                .variableDomain(x, IntervalDomain.of(1.0, 10.0))
+                .predicateConstraint(x, v -> v >= 15.0)
+                .build();
+        LinearObjective objective = LinearObjective.builder().coefficient(x, 1.0).build();
+
+        var solution = Solver.Factory.INSTANCE.createSolver(csp, objective).getSolution();
+
+        assertThat(solution).isEmpty();
+    }
+
+    @Test
+    void continuousResidualAlreadySingletonFromPropagation_extractedNotLost() {
+        // Regression test for a real bug caught in code review: BisectionConditioningSolver.getSolutions
+        // has a top-level shortcut (findWidestBounded(csp) == null -> delegate straight to inner)
+        // separate from the isFullyDetermined() check deeper in allFeasible -- it fires whenever
+        // there's nothing left to bisect at all, which is the common case where propagation already
+        // collapsed the continuous residual to a singleton, not just a rare/defensive one. An earlier
+        // version of resolveContinuousResidual used a Stream.empty() inner here, silently losing a
+        // trivially-available solution whenever this shortcut fired.
+        //
+        // n in {1,2,3} (discrete, via NumericDiscreteDomain<Double> so it can share a linear
+        // constraint with x), x in [0,10] (continuous), n+x=5. n never gets a chance to be the
+        // "widest bounded" variable at all -- the moment n is assigned, the SAME inference step that
+        // narrows n's own domain to a singleton also propagates x down to a singleton via n+x=5,
+        // before x is ever selected through the ordinary branching path. Not a LinearObjective --
+        // this forces resolveContinuousResidual straight to the bisection fallback, whose top-level
+        // shortcut then fires immediately since x is already singleton.
+        Variable<Double> n = F.create("residual_singleton_n");
+        Variable<Double> x = F.create("residual_singleton_x");
+        var csp = ConstraintSatisfactionProblem.builder()
+                .variableDomain(n, NumericDiscreteDomain.of(1.0, 2.0, 3.0))
+                .variableDomain(x, IntervalDomain.of(0.0, 10.0))
+                .linearConstraint(java.util.Map.of(n, 1.0, x, 1.0), Operator.EQ, 5.0)
+                .build();
+        ToDoubleFunction<Assignment> objective = a -> a.getValue(n).map(v -> (Double) v).orElse(0.0);
+
+        var solution = Solver.Factory.INSTANCE.createSolver(csp, objective).getSolution();
+
+        assertThat(solution).isPresent();
+        assertThat(solution.get().getValue(n)).contains(1.0);
+        assertThat(solution.get().getValue(x)).contains(4.0);
+    }
+
+    @Test
+    void mixedDiscreteAndContinuous_discreteDecidedBeforeContinuousResolved() {
+        // n in {1,2,3} with n>=2 (discrete), x in [0,10] with x>=3 (continuous). True optimum:
+        // n=2, x=3, cost=5 -- only reachable if n is decided (branched) before x is resolved.
+        Variable<Integer> n = F.create("residual_n");
+        Variable<Double> x = F.create("residual_mixed_x");
+        var csp = ConstraintSatisfactionProblem.builder()
+                .variableDomain(n, IntRangeDomain.of(1, 3))
+                .variableDomain(x, IntervalDomain.of(0.0, 10.0))
+                .sumConstraint(Set.of(n), Operator.GEQ, 2)
+                .linearConstraint(java.util.Map.of(x, 1.0), Operator.GEQ, 3.0)
+                .build();
+        LinearObjective objective = LinearObjective.builder().coefficient(n, 1.0).coefficient(x, 1.0).build();
+
+        var solution = Solver.Factory.INSTANCE.createSolver(csp, objective).getSolution();
+
+        assertThat(solution).isPresent();
+        assertThat(objective.applyAsDouble(solution.get())).isCloseTo(5.0, org.assertj.core.api.Assertions.within(1e-6));
+    }
+
+    @Test
+    void unassignedVariableSelector_violatingDiscreteFirstContract_failsFast() {
+        // A custom selector that always picks the continuous variable, even while the discrete one
+        // remains unassigned, violates BranchAndBoundSolver's documented contract. requireDiscrete
+        // should catch this with a clear IllegalStateException rather than letting domainValuesOrderer
+        // crash confusingly trying to enumerate a non-singleton BoundedDomain.
+        Variable<Integer> n = F.create("contract_n");
+        Variable<Double> x = F.create("contract_x");
+        var csp = ConstraintSatisfactionProblem.builder()
+                .variableDomain(n, IntRangeDomain.of(1, 3))
+                .variableDomain(x, IntervalDomain.of(0.0, 10.0))
+                .build();
+        io.github.rcrida.jcsp.solver.backtrackingsearch.selector.UnassignedVariableSelector alwaysX =
+                (c, assignment) -> x;
+        BranchAndBoundSolver solver = BranchAndBoundSolver.builder()
+                .objective(a -> 0.0)
+                .unassignedVariableSelector(alwaysX)
+                .domainValuesOrderer(DefaultValueOrderer.INSTANCE)
+                .inference((problem, variable, assignment) -> Optional.of(problem))
+                .build();
+
+        assertThatThrownBy(() -> solver.getSolutions(csp).toList())
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("unassignedVariableSelector")
+                .hasMessageContaining("contract_x");
     }
 }

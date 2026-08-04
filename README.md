@@ -305,10 +305,12 @@ For problems with `IntervalDomain` variables the fixpoint snaps non-singleton in
 
 **Optimization** (`createSolver(csp, objective)`):
 ```
-NodeConsistency → PropagationFixpoint → BisectionConditioning (continuous only)
-    → SetBranching (set variables only) → BranchAndBound(MAC + full propagator fixpoint + nogood learning)
+NodeConsistency → PropagationFixpoint → SetBranching (set variables only)
+    → BranchAndBound(MAC + full propagator fixpoint + nogood learning)
 ```
-The fixpoint leaves intervals open for bisection. `BisectionConditioningSolver` bisects each non-singleton interval to within `DEFAULT_BISECTION_EPSILON`, repropagating bounds at each step; for purely discrete CSPs it is a passthrough. `SetBranchingSolver` does the analogous job for set variables, but via real branch-and-backtrack search rather than snapping — an arbitrary choice among a set variable's undetermined elements isn't safe to treat as "close enough", unlike a numeric midpoint. `BranchAndBound` then handles remaining discrete variables — like `DomWdegLubySearch` below, it folds a `NogoodStore` into its own search, so a domain wipeout's explanation (when one can be derived) is recorded and reused for the rest of the search; this is orthogonal to its own incumbent-bound pruning (`objective(partial) >= incumbent`), since a nogood records a genuine constraint violation while the bound cut records cost dominance relative to the current incumbent.
+`SetBranchingSolver` handles set variables via real branch-and-backtrack search rather than snapping — an arbitrary choice among a set variable's undetermined elements isn't safe to treat as "close enough", unlike a numeric midpoint. `BranchAndBound` is the terminal solver unconditionally, including when the problem has `IntervalDomain` variables — like `DomWdegLubySearch` below, it folds a `NogoodStore` into its own search, so a domain wipeout's explanation (when one can be derived) is recorded and reused for the rest of the search; this is orthogonal to its own incumbent-bound pruning (`objective(partial) >= incumbent`), since a nogood records a genuine constraint violation while the bound cut records cost dominance relative to the current incumbent. Discrete variables are always decided before any continuous one: `BranchAndBoundSolver` recognises when every discrete variable is pinned but `IntervalDomain` ones remain open, then resolves them itself — via an exact fast path (reusing an LP relaxation, see below) when possible, falling back to `BisectionConditioningSolver` (bisecting the widest interval to within `DEFAULT_BISECTION_EPSILON`, repropagating bounds at each step) as an internal subroutine otherwise.
+
+Passing a `LinearObjective` (an explicit `constant + Σ(coefficient·variable)` objective, in place of a plain lambda) unlocks a real LP relaxation, built and solved with [ojAlgo](https://www.ojalgo.org/) from the CSP's linear constraints and variable bounds: a strictly tighter per-node pruning bound, most-fractional-variable branching, and the exact fast path mentioned above for continuous variables once every discrete one is decided. See the Solver-Chain-adjacent Javadoc on `BranchAndBoundSolver` for the full mechanism.
 
 `PropagationFixpoint` runs a combined fixpoint loop over the propagators relevant to the given problem (AllDiff GAC, GCC, cumulative timetabling, table GAC, element domain filtering, bounds propagators, AC3, nogood checking, and more) — each can expose new reductions the others exploit. Only propagators whose constraint type is actually present are run: AC3 only when the problem has binary or binary-decomposable constraints, nogood checking only when nogood learning is enabled, and so on for every other propagator, so a problem with only a handful of constraint types never pays for the rest. Many highly-constrained problems (e.g. Zebra, Sudoku, MagicSquare) are solved entirely by propagation without any backtracking. During search, this same filtered propagator set is run to global fixpoint at every search node — not just during preprocessing.
 
@@ -368,6 +370,8 @@ InitialAssignmentFactory factory = FallbackAssignmentFactory.builder()
     <version>2.38.0</version>
 </dependency>
 ```
+
+jcsp pulls in [ojAlgo](https://www.ojalgo.org/) (MIT-licensed) as a transitive compile-scope dependency, used for the LP relaxation behind `LinearObjective`-driven optimization (see above).
 
 ## Building
 

@@ -11,6 +11,7 @@ import io.github.rcrida.jcsp.assignments.SolverLimits;
 import io.github.rcrida.jcsp.assignments.Statistics;
 import io.github.rcrida.jcsp.consistency.ConsistencyResult;
 import io.github.rcrida.jcsp.consistency.Inference;
+import io.github.rcrida.jcsp.domains.BoundedDomain;
 import io.github.rcrida.jcsp.solver.listener.SolverListener;
 import io.github.rcrida.jcsp.solver.backtrackingsearch.order.DomainValuesOrderer;
 import io.github.rcrida.jcsp.solver.backtrackingsearch.selector.UnassignedVariableSelector;
@@ -19,6 +20,8 @@ import io.github.rcrida.jcsp.solver.lp.LpModelBuilder;
 import io.github.rcrida.jcsp.variables.Variable;
 import org.jspecify.annotations.NonNull;
 
+import java.util.HashMap;
+import java.util.Map;
 import java.util.Optional;
 import java.util.function.ToDoubleFunction;
 import java.util.stream.Stream;
@@ -66,9 +69,35 @@ import java.util.stream.Stream;
  * fundamentally tighter per-child bound. No separate opt-in is needed: {@link Solver.Factory}
  * passing a {@link LinearObjective} as {@code objective} (it implements {@link
  * ToDoubleFunction}{@code <Assignment>}) is what triggers this. Complete assignments are unaffected
- * -- their real cost is exact, so relaxing it would only add solve cost for no benefit. The rest of
- * the optimization chain (e.g. {@link BisectionConditioningSolver} still running before this class)
- * is unaffected; narrowing that to account for a joint LP relaxation is deferred future work.
+ * -- their real cost is exact, so relaxing it would only add solve cost for no benefit.
+ * <p>
+ * This class now runs <em>before</em> {@link BisectionConditioningSolver} rather than after it (see
+ * ADR-0009): {@link Solver.Factory} wires this class directly as the optimization chain's terminal
+ * solver even when the problem has {@link BoundedDomain} variables, instead of nesting it inside
+ * {@link BisectionConditioningSolver}. Variable selection above only ever considers non-{@link
+ * BoundedDomain} ("discrete") variables -- {@link #isDiscreteComplete} recognises the point where
+ * every discrete variable is decided but {@link BoundedDomain} variables remain open, and {@link
+ * #resolveContinuousResidual} takes over from there: it fills them directly from the same node's LP
+ * solution when {@link #objective} is a {@link LinearObjective} and that fill is actually consistent
+ * against every constraint (exact, since with every discrete variable already pinned the LP is no
+ * longer an approximation for the remaining purely-continuous sub-problem), falling back to
+ * {@link BisectionConditioningSolver} -- now invoked internally, once per discrete-complete leaf
+ * rather than once for the whole search -- when the fast path doesn't apply or isn't sound (e.g. a
+ * {@link BoundedDomain} variable also participates in a constraint the LP can't see, like {@code
+ * productConstraint}). This is the fix for the MIPLIB {@code flugpl} case that originally motivated
+ * ADR-0009: continuous variables whose useful bounds depend on a still-open discrete decision are no
+ * longer bisected blind before that decision is even made. Relies on {@link
+ * #unassignedVariableSelector} preferring discrete variables while any remain undecided --
+ * {@link io.github.rcrida.jcsp.solver.backtrackingsearch.selector.MinimumRemainingValuesSelector}
+ * (what {@link Solver.Factory} always wires in) satisfies this by construction, since a
+ * non-singleton {@link BoundedDomain}'s {@code size()} is {@link Integer#MAX_VALUE} -- larger than
+ * any realistic discrete domain -- so it's never the smallest-remaining-domain choice while a
+ * discrete variable is still open. A caller supplying a custom selector directly to this class's
+ * builder must preserve that preference itself; {@link #requireDiscrete} fails fast with a clear
+ * {@link IllegalStateException} if it doesn't, rather than letting {@link
+ * io.github.rcrida.jcsp.solver.backtrackingsearch.order.LeastConstrainingValueOrderer} (and other
+ * {@link DomainValuesOrderer}s that assume a {@link io.github.rcrida.jcsp.domains.DiscreteDomain})
+ * crash confusingly trying to enumerate a non-singleton {@link BoundedDomain}, which they cannot do.
  */
 @Slf4j
 @Value
@@ -109,15 +138,8 @@ public class BranchAndBoundSolver implements Solver {
                                        Assignment assignment,
                                        double[] incumbent,
                                        long deadline) {
-        if (assignment.isComplete(csp)) {
-            double cost = objective.applyAsDouble(assignment);
-            if (cost >= incumbent[0]) {
-                return Stream.empty();
-            }
-            incumbent[0] = cost;
-            log.info("Found improving solution with cost {}: {}", cost, assignment);
-            listener.onIncumbentImproved(assignment, cost);
-            return Stream.of(assignment);
+        if (assignment.isComplete(csp) || isDiscreteComplete(csp, assignment)) {
+            return resolveComplete(csp, assignment, incumbent);
         }
         Variable<?> variable;
         if (objective instanceof LinearObjective linearObjective) {
@@ -125,7 +147,7 @@ public class BranchAndBoundSolver implements Solver {
             if (bound.isEmpty() || bound.get().lowerBound() >= incumbent[0]) {
                 return Stream.empty();
             }
-            variable = selectFractionalVariable(assignment, bound.get())
+            variable = selectFractionalVariable(csp, assignment, bound.get())
                     .orElseGet(() -> unassignedVariableSelector.select(csp, assignment));
         } else {
             if (objective.applyAsDouble(assignment) >= incumbent[0]) {
@@ -133,23 +155,150 @@ public class BranchAndBoundSolver implements Solver {
             }
             variable = unassignedVariableSelector.select(csp, assignment);
         }
+        requireDiscrete(csp, variable);
         return searchValues(variable, csp, assignment, incumbent, deadline);
     }
 
     /**
-     * Among {@code bound}'s LP-covered variables that {@code assignment} hasn't decided yet, picks
-     * the one whose relaxed value is farthest from an integer ({@code min(frac, 1-frac)}, maximal at
-     * a half-integer) -- standard MIP "most fractional" branching. {@link Optional#empty()} when no
-     * unassigned variable is LP-covered, or every covered one is already within {@link
-     * #FRACTIONAL_EPSILON} of an integer, letting the caller fall back to {@link
-     * #unassignedVariableSelector}.
+     * Fails fast, with a clear diagnosis, instead of letting {@link #domainValuesOrderer} crash
+     * confusingly deep inside itself (e.g. {@code LeastConstrainingValueOrderer} casting to {@code
+     * DiscreteDomain}) when {@link #unassignedVariableSelector} violates the discrete-first contract
+     * documented on this class: reaching this point already means a discrete variable is still open
+     * (the {@link #isDiscreteComplete} check in {@link #search} didn't short-circuit), so {@code
+     * variable} being a <em>non-singleton</em> {@link BoundedDomain} here can only mean the selector
+     * picked an unresolved continuous variable while a discrete one remained open. A <em>singleton</em>
+     * {@link BoundedDomain} is fine -- e.g. {@code flugpl}'s {@code STM1}, pinned by its own equality
+     * constraint before search even starts -- since {@link #domainValuesOrderer} implementations
+     * already special-case a singleton {@link BoundedDomain} the same way {@link
+     * io.github.rcrida.jcsp.solver.backtrackingsearch.selector.MinimumRemainingValuesSelector} (what
+     * {@link Solver.Factory} always wires in) naturally prefers it anyway, being the smallest
+     * possible domain size. A caller-supplied custom selector passed directly to this class's
+     * builder could still violate the non-singleton case.
      */
-    private Optional<Variable<?>> selectFractionalVariable(Assignment assignment, LpBound bound) {
+    private static void requireDiscrete(ConstraintSatisfactionProblem csp, Variable<?> variable) {
+        if (csp.getDomain(variable) instanceof BoundedDomain<?> bd && !bd.isSingleton()) {
+            throw new IllegalStateException(
+                    "unassignedVariableSelector selected non-singleton continuous variable '" + variable
+                            + "' while a discrete variable was still unassigned. BranchAndBoundSolver "
+                            + "requires unassignedVariableSelector to prefer discrete variables while any "
+                            + "remain open (see this class's own Javadoc); MinimumRemainingValuesSelector "
+                            + "satisfies this by construction.");
+        }
+    }
+
+    /**
+     * Whether every non-{@link BoundedDomain} ("discrete") variable in {@code csp} has a value in
+     * {@code assignment}, regardless of whether any {@link BoundedDomain} variable does. Vacuously
+     * true for a purely continuous problem (no discrete variables to wait for), which is what makes
+     * {@link #resolveComplete} degenerate correctly to "resolve the whole thing via {@link
+     * #resolveContinuousResidual}" for a CSP like {@code ContinuousOptimizationTest}'s.
+     */
+    private static boolean isDiscreteComplete(ConstraintSatisfactionProblem csp, Assignment assignment) {
+        return csp.getVariableDomains().entrySet().stream()
+                .filter(e -> !(e.getValue() instanceof BoundedDomain<?>))
+                .allMatch(e -> assignment.getValue(e.getKey()).isPresent());
+    }
+
+    /**
+     * Resolves whatever remains -- nothing, if {@code assignment} is already fully complete, or the
+     * open {@link BoundedDomain} variables via {@link #resolveContinuousResidual} otherwise -- into a
+     * single candidate solution, then applies the same cost/incumbent check every complete assignment
+     * gets.
+     */
+    private Stream<Assignment> resolveComplete(ConstraintSatisfactionProblem csp, Assignment assignment, double[] incumbent) {
+        Optional<Assignment> complete = assignment.isComplete(csp)
+                ? Optional.of(assignment)
+                : resolveContinuousResidual(csp, assignment, incumbent[0]);
+        if (complete.isEmpty()) {
+            return Stream.empty();
+        }
+        Assignment solution = complete.get();
+        double cost = objective.applyAsDouble(solution);
+        if (cost >= incumbent[0]) {
+            return Stream.empty();
+        }
+        incumbent[0] = cost;
+        log.info("Found improving solution with cost {}: {}", cost, solution);
+        listener.onIncumbentImproved(solution, cost);
+        return Stream.of(solution);
+    }
+
+    /**
+     * Fills the {@link BoundedDomain} variables {@code assignment} left open. Tries the exact fast
+     * path first -- when {@link #objective} is a {@link LinearObjective}, the same node's LP solution
+     * already gives the optimal value for every {@link BoundedDomain} variable the LP model covers;
+     * with every discrete variable already pinned, that's no longer an approximation for the
+     * remaining purely-continuous sub-problem, just its exact solution -- accepted only if it fills
+     * every open variable and satisfies every constraint (a {@link BoundedDomain} variable can
+     * participate in a constraint the LP can't see, e.g. {@code productConstraint}, which this
+     * consistency check catches). Falls back to a fresh, single-use {@link BisectionConditioningSolver}
+     * over just this residual otherwise, with {@link SolverDecorator#forcedSolution} as its own
+     * {@code inner}: {@link BisectionConditioningSolver#getSolutions} delegates straight to {@code
+     * inner} without bisecting at all whenever {@code csp} already has no non-singleton {@link
+     * BoundedDomain} variable left -- a common case, not just a defensive fallback, since a {@link
+     * BoundedDomain} residual variable can collapse to a singleton via propagation triggered by the
+     * very inference step that completes the last discrete decision, before {@link
+     * #unassignedVariableSelector} ever gets a chance to pick it up through the ordinary branching
+     * path. {@link SolverDecorator#forcedSolution} is exactly the right tool for that: extract the
+     * now-singleton values and validate them, the same way {@link BisectionConditioningSolver}'s own
+     * fully-bisected leaves already do internally. {@code incumbent} seeds the fallback's own
+     * bisection recursion (see {@link BisectionConditioningSolver#getSolutions(ConstraintSatisfactionProblem,
+     * double)}), so a residual that can't possibly beat a bound already found elsewhere in the outer
+     * search is pruned immediately rather than fully explored from scratch on every discrete-complete
+     * leaf.
+     */
+    private Optional<Assignment> resolveContinuousResidual(ConstraintSatisfactionProblem csp, Assignment assignment, double incumbent) {
+        if (objective instanceof LinearObjective linearObjective) {
+            Optional<Assignment> viaLp = LpModelBuilder.solve(csp, linearObjective)
+                    .map(bound -> mergeUnassigned(assignment, bound.solution()))
+                    .filter(candidate -> candidate.isComplete(csp) && candidate.isConsistent(csp));
+            if (viaLp.isPresent()) {
+                return viaLp;
+            }
+        }
+        BisectionConditioningSolver bisection = BisectionConditioningSolver.builder()
+                .inner(candidate -> SolverDecorator.forcedSolution(candidate).stream())
+                .epsilon(Solver.Factory.DEFAULT_BISECTION_EPSILON)
+                .objective(objective)
+                .build();
+        // Not bisection.getSolution(csp): that's BisectionConditioningSolver's own
+        // getSolutions(csp).findFirst() -- the first improving point its left-to-right recursive
+        // descent happens to reach, not the best one. Exhausting the full improving stream and
+        // taking the last element is what actually converges to this residual's optimum.
+        return bisection.getSolutions(csp, incumbent).reduce((a, b) -> b).map(assignment::merge);
+    }
+
+    /**
+     * Merges {@code values} into {@code assignment} for whichever of its keys {@code assignment}
+     * hasn't already decided -- {@code values} may cover more than just the currently-open variables
+     * (an LP model's {@link LpBound#solution()} spans every variable it built rows for, including
+     * already-singleton ones), so already-decided keys are left untouched rather than overwritten.
+     */
+    private static Assignment mergeUnassigned(Assignment assignment, Map<Variable<?>, Double> values) {
+        Map<Variable<?>, Object> unassigned = new HashMap<>();
+        for (var entry : values.entrySet()) {
+            if (assignment.getValue(entry.getKey()).isEmpty()) {
+                unassigned.put(entry.getKey(), entry.getValue());
+            }
+        }
+        return assignment.merge(Assignment.of(unassigned));
+    }
+
+    /**
+     * Among {@code bound}'s LP-covered variables that {@code assignment} hasn't decided yet and whose
+     * domain isn't a {@link BoundedDomain} (see this class's own Javadoc for why continuous variables
+     * are never a branching candidate here), picks the one whose relaxed value is farthest from an
+     * integer ({@code min(frac, 1-frac)}, maximal at a half-integer) -- standard MIP "most fractional"
+     * branching. {@link Optional#empty()} when no unassigned discrete variable is LP-covered, or
+     * every covered one is already within {@link #FRACTIONAL_EPSILON} of an integer, letting the
+     * caller fall back to {@link #unassignedVariableSelector}.
+     */
+    private Optional<Variable<?>> selectFractionalVariable(ConstraintSatisfactionProblem csp, Assignment assignment, LpBound bound) {
         Variable<?> best = null;
         double bestFractionality = FRACTIONAL_EPSILON;
         for (var entry : bound.solution().entrySet()) {
             Variable<?> variable = entry.getKey();
-            if (assignment.getValue(variable).isPresent()) {
+            if (assignment.getValue(variable).isPresent() || csp.getDomain(variable) instanceof BoundedDomain<?>) {
                 continue;
             }
             double value = entry.getValue();

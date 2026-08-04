@@ -29,7 +29,7 @@ import java.util.function.ToDoubleFunction;
 @Value
 @Builder
 public class LinearObjective implements ToDoubleFunction<Assignment> {
-    @Singular @NonNull Map<Variable<?>, Double> coefficients;
+    @Singular @NonNull Map<Variable<? extends Number>, Double> coefficients;
     @Builder.Default double constant = 0.0;
 
     @Override

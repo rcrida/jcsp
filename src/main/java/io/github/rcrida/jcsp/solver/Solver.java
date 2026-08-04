@@ -263,12 +263,13 @@ public interface Solver {
                                             @NonNull SolverConfig config) {
                 val limits = config.getLimits();
                 val cancellation = config.getCancellation();
-                boolean hasContinuous = csp.getVariableDomains().values().stream()
-                        .anyMatch(BoundedDomain.class::isInstance);
                 boolean hasSets = csp.getVariableDomains().values().stream()
                         .anyMatch(SetBoundedDomain.class::isInstance);
                 val fixpointPropagation = FixpointPropagation.Factory.INSTANCE.forProblem(csp, config.isNogoodLearningEnabled());
-                val branchAndBound = BranchAndBoundSolver.builder()
+                // Handles any BoundedDomain variables itself -- see this class's own Javadoc and
+                // ADR-0009 -- rather than being nested inside a BisectionConditioningSolver that runs
+                // first, so it's the chain's terminal solver unconditionally.
+                Solver terminal = BranchAndBoundSolver.builder()
                         .objective(objective)
                         .unassignedVariableSelector(MinimumRemainingValuesSelector.INSTANCE)
                         .domainValuesOrderer(LeastConstrainingValueOrderer.INSTANCE)
@@ -279,13 +280,6 @@ public interface Solver {
                         .listener(config.getListener())
                         .cancellation(cancellation)
                         .build();
-                Solver terminal = hasContinuous
-                        ? BisectionConditioningSolver.builder()
-                                .inner(branchAndBound)
-                                .epsilon(DEFAULT_BISECTION_EPSILON)
-                                .objective(objective)
-                                .build()
-                        : branchAndBound;
                 Solver afterPropagation = hasSets
                         ? SetBranchingSolver.builder().inner(terminal).objective(objective).listener(config.getListener())
                                 .limits(limits).cancellation(cancellation).statistics(config.getStatistics())

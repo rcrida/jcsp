@@ -131,4 +131,64 @@ public class BisectionConditioningSolverTest {
         double yVal = (Double) solution.get().getValue(y).orElseThrow();
         assertThat(xVal + yVal).isCloseTo(3.5, within(1e-6));
     }
+
+    // ── Incumbent-seeded getSolutions(csp, double) (ADR-0009 deferred item) ─
+
+    @Test
+    void seededIncumbent_alreadyBeatenPrunesImmediatelyWithoutBisecting() {
+        // minimize x, x in [0,10]. partialAssignmentLowerBound at the root is 0.0 (nothing is
+        // singleton yet, so the objective's "unassigned contributes nothing" convention applies) --
+        // seeding a bound already <= that (-1.0) must prune the whole residual in one check, before
+        // any bisection recursion happens at all.
+        Variable<Double> x = F.create("seed_x1");
+        var csp = ConstraintSatisfactionProblem.builder()
+                .variableDomain(x, IntervalDomain.of(0.0, 10.0))
+                .build();
+        BisectionConditioningSolver bisection = BisectionConditioningSolver.builder()
+                .inner(SINGLETON_EXTRACTOR)
+                .epsilon(1e-9)
+                .objective(a -> a.getValue(x).map(v -> (Double) v).orElse(0.0))
+                .build();
+
+        assertThat(bisection.getSolutions(csp, -1.0).toList()).isEmpty();
+    }
+
+    @Test
+    void seededIncumbent_stillFindsAGenuinelyImprovingSolution() {
+        // Same CSP/objective, but seeded with a real (non-trivial) incumbent that a feasible point
+        // (x close to 0) can still beat -- confirms seeding doesn't over-prune, only skips work that
+        // couldn't have improved on the seed anyway.
+        Variable<Double> x = F.create("seed_x2");
+        var csp = ConstraintSatisfactionProblem.builder()
+                .variableDomain(x, IntervalDomain.of(0.0, 10.0))
+                .build();
+        BisectionConditioningSolver bisection = BisectionConditioningSolver.builder()
+                .inner(SINGLETON_EXTRACTOR)
+                .epsilon(1e-3)
+                .objective(a -> a.getValue(x).map(v -> (Double) v).orElse(0.0))
+                .build();
+
+        var solutions = bisection.getSolutions(csp, 5.0).toList();
+
+        assertThat(solutions).isNotEmpty();
+        double best = (Double) solutions.getLast().getValue(x).orElseThrow();
+        assertThat(best).isLessThan(5.0);
+    }
+
+    @Test
+    void unseededGetSolutions_stillDefaultsToMaxValueIncumbent() {
+        // The public single-arg getSolutions(csp) must remain exactly as before -- unaffected by the
+        // new seeded overload existing alongside it.
+        Variable<Double> x = F.create("seed_x3");
+        var csp = ConstraintSatisfactionProblem.builder()
+                .variableDomain(x, IntervalDomain.of(0.0, 10.0))
+                .build();
+        BisectionConditioningSolver bisection = BisectionConditioningSolver.builder()
+                .inner(SINGLETON_EXTRACTOR)
+                .epsilon(1e-3)
+                .objective(a -> a.getValue(x).map(v -> (Double) v).orElse(0.0))
+                .build();
+
+        assertThat(bisection.getSolutions(csp).toList()).isNotEmpty();
+    }
 }
