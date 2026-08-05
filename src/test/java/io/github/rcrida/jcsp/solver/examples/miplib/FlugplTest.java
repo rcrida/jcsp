@@ -39,7 +39,7 @@ public class FlugplTest {
     static final double UNBOUNDED = 1_000_000.0;
 
     static NumericDiscreteDomain<Double> wholeRange(int min, int max) {
-        var builder = NumericSetDomain.<Double>builder();
+        var builder = NumericDiscreteDomain.<Double>builder();
         for (int i = min; i <= max; i++) {
             builder.value((double) i);
         }

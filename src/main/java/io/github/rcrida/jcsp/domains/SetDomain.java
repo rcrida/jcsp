@@ -1,13 +1,10 @@
 package io.github.rcrida.jcsp.domains;
 
-import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 
-import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
-import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 /**
@@ -46,7 +43,7 @@ public interface SetDomain<T> extends DiscreteDomain<T> {
 
     @Override
     default Builder<T> toBuilder() {
-        return new DefaultBuilder<>(values());
+        return new DiscreteDomain.DiscreteDomainBuilder<>(values());
     }
 
     /**
@@ -70,8 +67,9 @@ public interface SetDomain<T> extends DiscreteDomain<T> {
      * equals}, violating {@link Object#equals}'s contract. The common case -- comparing two {@link
      * SetDomain}s -- stays on the direct {@link Set#equals} path; the {@code stream}/{@code allMatch}
      * fallback (needed since a non-{@link SetDomain} {@link DiscreteDomain} has no {@link #values()}
-     * to compare against directly) is only reached for the one implementor that isn't a {@link
-     * SetDomain}, {@link ObjectSingletonDomain}.
+     * to compare against directly) is only reached for the implementors that aren't a {@link
+     * SetDomain}: {@link ObjectSingletonDomain}, {@link ObjectEmptyDomain}, {@link
+     * NumericSingletonDomain}, {@link NumericEmptyDomain}.
      */
     static boolean domainEquals(SetDomain<?> self, Object o) {
         if (self == o) return true;
@@ -84,35 +82,5 @@ public interface SetDomain<T> extends DiscreteDomain<T> {
 
     static int domainHashCode(SetDomain<?> self) {
         return self.values().hashCode();
-    }
-
-    class DefaultBuilder<T> implements DiscreteDomain.Builder<T> {
-        private final Set<T> mutableValues;
-
-        DefaultBuilder(Set<T> initial) {
-            this.mutableValues = new HashSet<>(initial);
-        }
-
-        @Override
-        public Builder<T> delete(@NonNull Object value) {
-            mutableValues.remove(value);
-            return this;
-        }
-
-        /**
-         * Returns an {@link ObjectSingletonDomain} when exactly one value remains, instead of always
-         * building an {@link ObjectSetDomain} -- so any propagator narrowing a domain down to a
-         * single value (not just search assigning one explicitly) gets the cheaper representation
-         * for every subsequent read. {@link ObjectSingletonDomain#equals} treats the two as
-         * interchangeable, so this is transparent to anything comparing domains.
-         */
-        @Override
-        @SuppressWarnings("unchecked")
-        public DiscreteDomain<T> build() {
-            if (mutableValues.size() == 1) {
-                return (DiscreteDomain<T>) new ObjectSingletonDomain(mutableValues.iterator().next());
-            }
-            return ObjectSetDomain.<T>builder().values(mutableValues).build();
-        }
     }
 }

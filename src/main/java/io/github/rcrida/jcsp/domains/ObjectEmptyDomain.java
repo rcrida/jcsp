@@ -9,18 +9,18 @@ import java.util.stream.Stream;
 
 /**
  * The empty analogue of {@link ObjectSingletonDomain}: the domain holding no values at all,
- * produced by {@link ObjectSetDomain.ObjectSetDomainBuilder#build} and {@link
- * SetDomain.DefaultBuilder#build} whenever narrowing empties a {@link SetDomain}-backed domain
- * completely. Unlike {@link ObjectSingletonDomain}, which needs one instance per value, there is
- * exactly one possible empty domain, so the single underlying instance is reused rather than
- * allocated per call -- purely for symmetry with {@link ObjectSingletonDomain}/{@link
- * NumericEmptyDomain}, not because empty-domain construction is a measured hot path (it isn't: an
- * empty domain is checked once with {@link #isEmpty()} and discarded immediately by every caller,
- * never read repeatedly the way a live domain is). Genuinely generic in {@code T}, unlike {@link
- * ObjectSingletonDomain} (which is fixed to {@code Object} since its single value's type can't be
- * recovered generically) -- there's no value here to lose the type of, so {@link #instance()} can
- * hand back a properly-typed {@code ObjectEmptyDomain<T>} with the unchecked cast contained
- * entirely inside that one method, the same shape as {@link NumericEmptyDomain#instance}.
+ * produced by {@link DiscreteDomain.DiscreteDomainBuilder#build} whenever narrowing empties a
+ * {@link SetDomain}-backed domain completely. Unlike {@link ObjectSingletonDomain}, which needs a
+ * genuinely distinct instance per value it holds, there is exactly one possible empty domain
+ * regardless of {@code T}, so the single underlying instance is reused rather than allocated per
+ * call -- purely for symmetry with {@link ObjectSingletonDomain}/{@link NumericEmptyDomain}, not
+ * because empty-domain construction is a measured hot path (it isn't: an empty domain is checked
+ * once with {@link #isEmpty()} and discarded immediately by every caller, never read repeatedly
+ * the way a live domain is). Having no value at all (unlike {@link ObjectSingletonDomain}, which
+ * infers {@code T} straight from its {@code value} field like any ordinary generic record) is
+ * exactly why this class needs the shared-instance-plus-cast trick: {@link #instance()} hands back
+ * a properly-typed {@code ObjectEmptyDomain<T>} with the unchecked cast contained entirely inside
+ * that one method, the same shape as {@link NumericEmptyDomain#instance}.
  * <p>
  * A plain final class rather than a record, unlike every other domain type: a {@code public
  * record}'s canonical constructor can't be more restrictive than the record itself (JLS
@@ -69,7 +69,7 @@ public final class ObjectEmptyDomain<T> implements DiscreteDomain<T> {
 
     @Override
     public Builder<T> toBuilder() {
-        return new SetDomain.DefaultBuilder<>(Set.of());
+        return new DiscreteDomain.DiscreteDomainBuilder<>(Set.of());
     }
 
     @Override

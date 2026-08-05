@@ -71,7 +71,7 @@ public record NumericSingletonDomain<N extends Number>(@NonNull N value) impleme
 
     @Override
     public Builder<N> toBuilder() {
-        return new SetDomain.DefaultBuilder<>(Set.of(value));
+        return new DiscreteDomain.DiscreteDomainBuilder<>(Set.of(value));
     }
 
     @Override

@@ -2,6 +2,7 @@ package io.github.rcrida.jcsp.domains;
 
 import org.junit.jupiter.api.Test;
 
+import java.util.List;
 import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -51,11 +52,24 @@ class NumericSetDomainTest {
 
     @Test
     void builder_neverAddedAnyValue_buildsNumericEmptyDomain() {
-        // Lombok's @Singular field starts null (not an empty collection) until first added --
-        // build() must tolerate a builder nothing was ever added to.
-        DiscreteDomain<Integer> built = NumericSetDomain.<Integer>builder().build();
+        DiscreteDomain<Integer> built = NumericDiscreteDomain.<Integer>builder().build();
 
         assertThat(built).isInstanceOf(NumericEmptyDomain.class);
         assertThat(built.isEmpty()).isTrue();
+    }
+
+    @Test
+    void builder_value_addsOneAtATime() {
+        NumericDiscreteDomain<Integer> built = NumericDiscreteDomain.<Integer>builder().value(1).value(2).build();
+
+        assertThat(built).isInstanceOf(NumericSetDomain.class);
+        assertThat(built.toList()).containsExactly(1, 2);
+    }
+
+    @Test
+    void builder_values_addsACollection() {
+        NumericDiscreteDomain<Integer> built = NumericDiscreteDomain.<Integer>builder().values(List.of(1, 2)).build();
+
+        assertThat(built.toList()).containsExactly(1, 2);
     }
 }

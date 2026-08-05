@@ -58,7 +58,7 @@ class ObjectEmptyDomainTest {
 
     @Test
     void equals_nonEmptyDomain_false() {
-        assertThat(ObjectEmptyDomain.instance().equals(new ObjectSingletonDomain("x"))).isFalse();
+        assertThat(ObjectEmptyDomain.instance().equals(new ObjectSingletonDomain<>("x"))).isFalse();
     }
 
     // ── Cross-type equality symmetry with every other DiscreteDomain kind that can be empty ──

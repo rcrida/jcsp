@@ -376,7 +376,7 @@ public class SumBoundConstraintTest {
         Variable<Float> f1 = F.create("f1");
         Variable<Float> f2 = F.create("f2");
         var c = SumBoundConstraint.of(Set.of(f1, f2), Operator.EQ, 8.0f);
-        var f1Domain = io.github.rcrida.jcsp.domains.ObjectSetDomain.<Float>builder();
+        var f1Domain = io.github.rcrida.jcsp.domains.DiscreteDomain.<Float>builder();
         for (float v = 0f; v <= 9f; v++) f1Domain.value(v);
         var domains = Map.<Variable<?>, io.github.rcrida.jcsp.domains.Domain<?>>of(
                 f1, f1Domain.build(),

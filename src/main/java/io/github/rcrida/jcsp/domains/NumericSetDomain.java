@@ -1,12 +1,8 @@
 package io.github.rcrida.jcsp.domains;
 
-import lombok.Builder;
-import lombok.Singular;
 import org.jspecify.annotations.NonNull;
 
-import java.util.Collections;
 import java.util.Comparator;
-import java.util.LinkedHashSet;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -14,14 +10,10 @@ import java.util.stream.Collectors;
  * The generic result of {@link NumericDomain}'s default {@link NumericDomain#withBounds}: a plain
  * {@link NumericDiscreteDomain} over an arbitrary filtered {@link Set}, for callers that don't know
  * (or need to know) which specific numeric domain type produced it — the numeric analogue of {@link
- * SetDomain.DefaultBuilder}'s own fallback to {@link ObjectSetDomain} for the same reason. Uses the
- * same {@code @Builder}/{@code @Singular} pattern as {@link ObjectSetDomain} rather than a
- * hand-written compact constructor, for the same defensive-copy-plus-insertion-order guarantee
- * Lombok's generated builder already gives that class (backed by a {@link java.util.LinkedHashSet}
- * internally — confirmed by disassembling the generated builder, not merely assumed).
+ * DiscreteDomain.DiscreteDomainBuilder}'s own fallback to {@link ObjectSetDomain} for the same
+ * reason.
  */
-@Builder(toBuilder = true)
-public record NumericSetDomain<N extends Number>(@Singular Set<N> values) implements NumericDiscreteDomain<N>, SetDomain<N> {
+public record NumericSetDomain<N extends Number>(@NonNull Set<N> values) implements NumericDiscreteDomain<N>, SetDomain<N> {
 
     @Override
     public N getMin() {
@@ -45,46 +37,19 @@ public record NumericSetDomain<N extends Number>(@Singular Set<N> values) implem
     }
 
     /**
-     * Makes Lombok's generated builder satisfy {@link SetDomain}'s abstract {@code toBuilder():
-     * DiscreteDomain.Builder<N>} covariantly — otherwise the generated {@link #toBuilder}
-     * (returning this class) and {@link SetDomain}'s own default clash on return type. Same trick
-     * {@link ObjectSetDomain}'s own nested builder subclass already relies on.
+     * Overrides {@link SetDomain}'s default, which would route through {@link
+     * DiscreteDomain.DiscreteDomainBuilder} and collapse to the plain {@link ObjectSingletonDomain}/
+     * {@link ObjectEmptyDomain} on narrowing -- losing {@link NumericDomain}-ness. Routes through
+     * {@link NumericDiscreteDomain.NumericDiscreteDomainBuilder} instead, so narrowing a {@link
+     * NumericSetDomain} down to zero or one value (e.g. via {@link
+     * io.github.rcrida.jcsp.consistency.arc.AC3} deleting individual unsupported values one at a
+     * time) still produces a {@link NumericSingletonDomain}/{@link NumericEmptyDomain}. Declared to
+     * return the concrete builder rather than the plain {@link DiscreteDomain.Builder} the
+     * overridden method promises, so a caller holding a {@link NumericSetDomain} reference gets the
+     * full add/delete/build API back, not just delete/build.
      */
-    public static class NumericSetDomainBuilder<N extends Number> implements DiscreteDomain.Builder<N> {
-        @Override
-        public DiscreteDomain.Builder<N> delete(@NonNull Object value) {
-            this.values.remove(value);
-            return this;
-        }
-
-        /**
-         * Overrides Lombok's generated {@code build()} (which would always construct a full {@link
-         * NumericSetDomain} even when narrowed to zero or one value) with {@link
-         * SetDomain.DefaultBuilder#build}'s singleton/empty optimizations -- this builder's own
-         * {@code toBuilder()}/{@code build()} otherwise shadow {@link SetDomain}'s default entirely,
-         * so without this override narrowing a {@link NumericSetDomain} down to zero or one value
-         * (e.g. via {@link io.github.rcrida.jcsp.consistency.arc.AC3} deleting individual unsupported
-         * values one at a time, or {@link NumericDiscreteDomain#of}) never reaches either. Returns
-         * {@link NumericSingletonDomain}/{@link NumericEmptyDomain} rather than the plain {@link
-         * ObjectSingletonDomain}/{@link ObjectEmptyDomain} so the result still satisfies {@link
-         * NumericDomain}, unlike {@link ObjectSetDomain.ObjectSetDomainBuilder#build}'s equivalent
-         * override. Declared to return {@link NumericDiscreteDomain} rather than the plain {@link
-         * DiscreteDomain} the overridden interface method promises, since every branch this can
-         * produce satisfies it -- lets callers like {@link NumericDomain#withBounds} skip an extra
-         * cast.
-         */
-        @Override
-        public NumericDiscreteDomain<N> build() {
-            // Lombok's @Singular field is left null until the first value/values() call, rather
-            // than eagerly allocated -- build() must tolerate that on a still-empty builder, same
-            // as a builder narrowed down to zero values by delete().
-            if (this.values == null || this.values.isEmpty()) {
-                return NumericEmptyDomain.instance();
-            }
-            if (this.values.size() == 1) {
-                return new NumericSingletonDomain<>(this.values.get(0));
-            }
-            return new NumericSetDomain<>(Collections.unmodifiableSet(new LinkedHashSet<>(this.values)));
-        }
+    @Override
+    public NumericDiscreteDomain.NumericDiscreteDomainBuilder<N> toBuilder() {
+        return new NumericDiscreteDomain.NumericDiscreteDomainBuilder<>(values);
     }
 }

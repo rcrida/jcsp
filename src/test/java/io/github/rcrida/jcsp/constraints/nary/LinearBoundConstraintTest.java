@@ -5,7 +5,6 @@ import io.github.rcrida.jcsp.assignments.Assignment;
 import io.github.rcrida.jcsp.constraints.Operator;
 import io.github.rcrida.jcsp.domains.DiscreteDomain;
 import io.github.rcrida.jcsp.domains.Domain;
-import io.github.rcrida.jcsp.domains.ObjectSetDomain;
 import io.github.rcrida.jcsp.domains.IntRangeDomain;
 import io.github.rcrida.jcsp.domains.IntervalDomain;
 import io.github.rcrida.jcsp.solver.Solver;
@@ -510,7 +509,7 @@ public class LinearBoundConstraintTest {
         Variable<Float> fx = F.create("fx");
         Variable<Float> fy = F.create("fy");
         var c = LinearBoundConstraint.of(Map.of(fx, 2.0f, fy, 3.0f), Operator.EQ, 12.0f);
-        var fxDomain = ObjectSetDomain.<Float>builder();
+        var fxDomain = DiscreteDomain.<Float>builder();
         for (float v = 0f; v <= 9f; v++) fxDomain.value(v);
         var domains = Map.<Variable<?>, Domain<?>>of(
                 fx, fxDomain.build(),

@@ -105,7 +105,7 @@ class NumericSingletonDomainTest {
     @Test
     void equals_singletonDomain_bothDirections() {
         NumericSingletonDomain<Integer> numeric = new NumericSingletonDomain<>(5);
-        ObjectSingletonDomain plain = new ObjectSingletonDomain(5);
+        ObjectSingletonDomain<Integer> plain = new ObjectSingletonDomain<>(5);
 
         assertThat(numeric.equals(plain)).isTrue();
         assertThat(plain.equals(numeric)).isTrue();
@@ -141,6 +141,6 @@ class NumericSingletonDomainTest {
     @Test
     void hashCode_matchesObjectSingletonDomain() {
         assertThat(new NumericSingletonDomain<>(5).hashCode())
-                .isEqualTo(new ObjectSingletonDomain(5).hashCode());
+                .isEqualTo(new ObjectSingletonDomain<>(5).hashCode());
     }
 }

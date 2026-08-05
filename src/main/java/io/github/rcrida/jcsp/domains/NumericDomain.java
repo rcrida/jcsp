@@ -13,9 +13,9 @@ package io.github.rcrida.jcsp.domains;
  * double} in hand anyway (see {@link BoundedDomain#withBounds}'s own Javadoc). The default {@link
  * #withBounds} here instead assumes {@code this} is also a {@link DiscreteDomain} (true for every
  * non-{@link BoundedDomain} implementor) and filters its values through {@link
- * NumericSetDomain}'s own builder, which already collapses to a {@link NumericSingletonDomain} when
- * exactly one value survives the filter (see {@link NumericSetDomain.NumericSetDomainBuilder#build})
- * — the numeric analogue of {@link SetDomain.DefaultBuilder}'s own fallback to {@link
+ * NumericDiscreteDomain}'s builder, which already collapses to a {@link NumericSingletonDomain} when
+ * exactly one value survives the filter (see {@link NumericDiscreteDomain.NumericDiscreteDomainBuilder#build})
+ * — the numeric analogue of {@link DiscreteDomain.DiscreteDomainBuilder}'s own fallback to {@link
  * ObjectSetDomain} when the caller's specific concrete type isn't known. That builder's {@code
  * build()} is declared to return {@link NumericDiscreteDomain} (a subtype of this interface), so no
  * cast is needed here despite {@code this} method's own return type being the broader {@link
@@ -35,7 +35,7 @@ public interface NumericDomain<N extends Number> extends Domain<N> {
      */
     @SuppressWarnings("unchecked")
     default NumericDomain<N> withBounds(double newMin, double newMax) {
-        var builder = NumericSetDomain.<N>builder();
+        var builder = NumericDiscreteDomain.<N>builder();
         for (N value : ((DiscreteDomain<N>) this).toList()) {
             if (value.doubleValue() >= newMin && value.doubleValue() <= newMax) {
                 builder.value(value);

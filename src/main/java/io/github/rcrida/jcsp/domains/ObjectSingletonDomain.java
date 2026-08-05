@@ -10,28 +10,32 @@ import java.util.stream.Stream;
 
 /**
  * A domain holding exactly one value, used during search when a variable has been assigned to
- * limit the remaining search space, and by {@link SetDomain.DefaultBuilder#build} (or, for {@link
- * ObjectSetDomain}, its own builder override of the same optimization) whenever ordinary
- * propagation narrows a {@link SetDomain}-backed domain down to one remaining value -- most
- * instances in a real solve come from the latter, not an explicit search decision. {@link
- * NumericSetDomain} narrows to {@link NumericSingletonDomain} instead, via its own builder's
- * matching override -- {@link ObjectSingletonDomain} doesn't implement {@link NumericDomain}, which some
- * of that builder's callers (e.g. {@link NumericDomain#withBounds}'s default method) rely on.
+ * limit the remaining search space, and by {@link DiscreteDomain.DiscreteDomainBuilder#build}
+ * whenever ordinary propagation narrows a {@link SetDomain}-backed domain down to one remaining
+ * value -- most instances in a real solve come from the latter, not an explicit search decision.
+ * {@link NumericSetDomain} narrows to {@link NumericSingletonDomain} instead, via {@link
+ * NumericDiscreteDomain.NumericDiscreteDomainBuilder} -- {@link ObjectSingletonDomain} doesn't
+ * implement {@link NumericDomain}, which some of that builder's callers (e.g. {@link
+ * NumericDomain#withBounds}'s default method) rely on.
  * Implements
  * {@link DiscreteDomain} directly rather than {@link SetDomain}: {@link #contains}/{@link
  * #isEmpty}/{@link #size}/{@link #stream}/{@link #singleValue} all work straight against {@link
  * #value}, without materialising a throwaway {@code Set.of(value)} the way {@link SetDomain}'s
  * default implementations would need to -- worthwhile because this is one of the hottest paths in
- * the whole solver.
+ * the whole solver. Genuinely generic in {@code T} (unlike {@link ObjectEmptyDomain}'s shared
+ * single instance, which needs an internal unchecked cast precisely because there's no per-value
+ * state to infer {@code T} from) -- a normal generic record works fine here since every instance
+ * already holds its own distinctly-typed {@code value}, so callers like {@link
+ * DiscreteDomain.DiscreteDomainBuilder#build} construct one directly with no cast needed.
  * <p>
  * {@link #equals}/{@link #hashCode} still compare equal to any {@link DiscreteDomain} (not just
  * another {@link ObjectSingletonDomain}) holding the same single value -- e.g. a singleton {@link
  * IntRangeDomain} and an {@link ObjectSingletonDomain} holding the same value are equal in both directions
  * -- via {@link SetDomain#domainEquals}, which checks {@code instanceof DiscreteDomain} rather than
- * {@code instanceof SetDomain} specifically so this class (the one {@link DiscreteDomain}
- * implementor that isn't a {@link SetDomain}) doesn't break that symmetry.
+ * {@code instanceof SetDomain} specifically so this class (one of the {@link DiscreteDomain}
+ * implementors that isn't a {@link SetDomain}) doesn't break that symmetry.
  */
-public record ObjectSingletonDomain(@NonNull Object value) implements DiscreteDomain<Object> {
+public record ObjectSingletonDomain<T>(@NonNull T value) implements DiscreteDomain<T> {
     @Override
     public boolean contains(@Nullable Object v) {
         return value.equals(v);
@@ -53,23 +57,23 @@ public record ObjectSingletonDomain(@NonNull Object value) implements DiscreteDo
     }
 
     @Override
-    public Stream<Object> stream() {
+    public Stream<T> stream() {
         return Stream.of(value);
     }
 
     @Override
-    public List<Object> toList() {
+    public List<T> toList() {
         return List.of(value);
     }
 
     @Override
-    public Optional<Object> singleValue() {
+    public Optional<T> singleValue() {
         return Optional.of(value);
     }
 
     @Override
-    public Builder<Object> toBuilder() {
-        return new SetDomain.DefaultBuilder<>(Set.of(value));
+    public Builder<T> toBuilder() {
+        return new DiscreteDomain.DiscreteDomainBuilder<>(Set.of(value));
     }
 
     @Override

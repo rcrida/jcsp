@@ -10,8 +10,8 @@ import java.util.stream.Stream;
 
 /**
  * The numeric analogue of {@link ObjectEmptyDomain}: the empty {@link NumericDiscreteDomain},
- * produced by {@link NumericSetDomain.NumericSetDomainBuilder#build} whenever narrowing empties a
- * {@link NumericSetDomain} completely. {@link #getMin()}/{@link #getMax()} throw, matching {@link
+ * produced by {@link NumericDiscreteDomain.NumericDiscreteDomainBuilder#build} whenever narrowing
+ * empties a {@link NumericSetDomain} completely. {@link #getMin()}/{@link #getMax()} throw, matching {@link
  * NumericSetDomain}'s own pre-existing behavior for an empty domain (its {@code
  * values.stream().min/max(...).orElseThrow()}) -- callers must not ask an empty domain for
  * bounds, the same contract as before this class existed, just enforced with an explicit message
@@ -76,7 +76,7 @@ public final class NumericEmptyDomain<N extends Number> implements NumericDiscre
 
     @Override
     public Builder<N> toBuilder() {
-        return new SetDomain.DefaultBuilder<>(Set.of());
+        return new DiscreteDomain.DiscreteDomainBuilder<>(Set.of());
     }
 
     @Override
