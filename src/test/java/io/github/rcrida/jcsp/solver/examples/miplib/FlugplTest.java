@@ -4,6 +4,7 @@ import io.github.rcrida.jcsp.ConstraintSatisfactionProblem;
 import io.github.rcrida.jcsp.constraints.Operator;
 import io.github.rcrida.jcsp.domains.IntervalDomain;
 import io.github.rcrida.jcsp.domains.NumericDiscreteDomain;
+import io.github.rcrida.jcsp.domains.NumericSetDomain;
 import io.github.rcrida.jcsp.solver.LinearObjective;
 import io.github.rcrida.jcsp.solver.Solver;
 import io.github.rcrida.jcsp.variables.Variable;
@@ -26,7 +27,7 @@ import static org.assertj.core.api.Assertions.within;
  * determined by them. Transcribed directly from MIPLIB's {@code flugpl.mps} (fetched from
  * miplib.zib.de), not simplified -- see the field comments below for the row-by-row correspondence.
  * All 18 variables are modelled as {@code Variable<Double>} (the 11 integer ones via a whole-number
- * {@link NumericDiscreteDomain}, not {@code Variable<Integer>}) so every constraint can use a single
+ * {@link NumericSetDomain}, not {@code Variable<Integer>}) so every constraint can use a single
  * uniform {@code Map<Variable<Double>, Double>} -- {@link io.github.rcrida.jcsp.constraints.nary.LinearBoundConstraint}
  * requires one numeric type per constraint, and this model's rows genuinely mix continuous and
  * integer variables (e.g. {@code ANZ2: 0.9*STM1 + ANM1 - STM2 = 0}).
@@ -38,7 +39,7 @@ public class FlugplTest {
     static final double UNBOUNDED = 1_000_000.0;
 
     static NumericDiscreteDomain<Double> wholeRange(int min, int max) {
-        var builder = NumericDiscreteDomain.<Double>builder();
+        var builder = NumericSetDomain.<Double>builder();
         for (int i = min; i <= max; i++) {
             builder.value((double) i);
         }

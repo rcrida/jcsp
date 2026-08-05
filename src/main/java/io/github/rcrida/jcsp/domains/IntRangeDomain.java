@@ -7,13 +7,14 @@ import java.util.Set;
 /**
  * Represents a domain of integers defined by an inclusive range. Every call site that used to
  * build one from an arbitrary {@code Set<Integer>} (frequently gapped, despite the class's name)
- * now uses {@link NumericDiscreteDomain} instead, so in practice this is only ever constructed via
+ * now uses {@link NumericSetDomain} instead, so in practice this is only ever constructed via
  * {@link #of} — a record's canonical constructor can't be declared more restrictive than the
  * record itself (it would need to be non-{@code public}, which isn't viable for a type this
  * library exposes across packages), so that's enforced by convention plus the assertion below
  * rather than access control.
  */
-public record IntRangeDomain(Set<Integer> values, int min, int max) implements SetDomain<Integer>, NumericDomain<Integer> {
+public record IntRangeDomain(Set<Integer> values, int min, int max)
+        implements SetDomain<Integer>, NumericDiscreteDomain<Integer> {
     public IntRangeDomain {
         values = Collections.unmodifiableSet(new LinkedHashSet<>(values));
         assert values.isEmpty() || (min == Collections.min(values) && max == Collections.max(values))

@@ -127,7 +127,7 @@ public class SingletonDomainTest {
     }
 
     // ── SetDomain.DefaultBuilder.build() returns SingletonDomain once narrowed to one value ──
-    // IntRangeDomain (unlike DomainObjectSet/NumericDiscreteDomain, which have their own Lombok
+    // IntRangeDomain (unlike DomainObjectSet/NumericSetDomain, which have their own Lombok
     // @Builder(toBuilder = true)) has no toBuilder()/build() of its own, so narrowing it via
     // toBuilder() genuinely exercises SetDomain.DefaultBuilder.
 

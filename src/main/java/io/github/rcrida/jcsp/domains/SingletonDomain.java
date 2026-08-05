@@ -13,12 +13,11 @@ import java.util.stream.Stream;
  * limit the remaining search space, and by {@link SetDomain.DefaultBuilder#build} (or, for {@link
  * DomainObjectSet}, its own builder override of the same optimization) whenever ordinary
  * propagation narrows a {@link SetDomain}-backed domain down to one remaining value -- most
- * instances in a real solve come from the latter, not an explicit search decision. The one
- * exception is {@link NumericDiscreteDomain}: its builder deliberately keeps Lombok's generated
- * {@code build()} rather than collapsing to a {@link SingletonDomain}, because {@link
- * NumericDomain#withBounds}'s default method (the main producer of narrowed {@link
- * NumericDiscreteDomain}s) is typed to return {@link NumericDomain}, which {@link SingletonDomain}
- * doesn't implement. Implements
+ * instances in a real solve come from the latter, not an explicit search decision. {@link
+ * NumericSetDomain} narrows to {@link NumericSingletonDomain} instead, via its own builder's
+ * matching override -- {@link SingletonDomain} doesn't implement {@link NumericDomain}, which some
+ * of that builder's callers (e.g. {@link NumericDomain#withBounds}'s default method) rely on.
+ * Implements
  * {@link DiscreteDomain} directly rather than {@link SetDomain}: {@link #contains}/{@link
  * #isEmpty}/{@link #size}/{@link #stream}/{@link #singleValue} all work straight against {@link
  * #value}, without materialising a throwaway {@code Set.of(value)} the way {@link SetDomain}'s
