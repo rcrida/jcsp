@@ -41,6 +41,11 @@ public class ObjectSingletonDomainTest {
     }
 
     @Test
+    void testToString() {
+        assertThat(new ObjectSingletonDomain("x").toString()).isEqualTo("{x}");
+    }
+
+    @Test
     void equals_sameValue() {
         assertThat(new ObjectSingletonDomain("x").equals(new ObjectSingletonDomain("x"))).isTrue();
     }
@@ -167,14 +172,14 @@ public class ObjectSingletonDomainTest {
     }
 
     @Test
-    void objectSetDomainBuilder_neverAddedAnyValue_buildsEmptyObjectSetDomain() {
+    void objectSetDomainBuilder_neverAddedAnyValue_buildsObjectEmptyDomain() {
         // Lombok's @Singular field starts null (not an empty collection) until first added --
-        // build() must tolerate a builder nothing was ever added to. Distinct from
+        // build() must tolerate a builder nothing was ever added to. A distinct code path from
         // DiscreteDomain.of()'s empty case, which always routes through values(List.of()) and so
-        // never leaves the field null.
+        // never leaves the field null, even though both now produce the same ObjectEmptyDomain.
         DiscreteDomain<Object> built = ObjectSetDomain.builder().build();
 
-        assertThat(built).isInstanceOf(ObjectSetDomain.class);
+        assertThat(built).isInstanceOf(ObjectEmptyDomain.class);
         assertThat(built.isEmpty()).isTrue();
     }
 }

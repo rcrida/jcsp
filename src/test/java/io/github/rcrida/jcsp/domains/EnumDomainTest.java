@@ -34,4 +34,9 @@ public class EnumDomainTest {
     void stream() {
         assertThat(domain.stream()).containsOnly(Colour.RED, Colour.GREEN, Colour.BLUE);
     }
+
+    @Test
+    void testToString() {
+        assertThat(domain.toString()).isEqualTo("{RED, GREEN, BLUE}");
+    }
 }

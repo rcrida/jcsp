@@ -84,4 +84,9 @@ public record NumericSingletonDomain<N extends Number>(@NonNull N value) impleme
     public int hashCode() {
         return value.hashCode();
     }
+
+    @Override
+    public String toString() {
+        return "{" + value + "}";
+    }
 }

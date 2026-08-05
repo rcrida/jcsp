@@ -44,10 +44,10 @@ class NumericDomainTest {
     }
 
     @Test
-    void withBounds_narrowedToNoValues_returnsEmptyNumericSetDomain() {
+    void withBounds_narrowedToNoValues_returnsNumericEmptyDomain() {
         NumericDomain<Integer> narrowed = IntRangeDomain.of(1, 5).withBounds(100, 200);
 
-        assertThat(narrowed).isInstanceOf(NumericSetDomain.class);
+        assertThat(narrowed).isInstanceOf(NumericEmptyDomain.class);
         assertThat(narrowed.isEmpty()).isTrue();
     }
 

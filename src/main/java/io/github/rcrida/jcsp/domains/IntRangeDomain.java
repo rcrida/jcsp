@@ -46,6 +46,6 @@ public record IntRangeDomain(Set<Integer> values, int min, int max)
 
     @Override
     public String toString() {
-        return "IntRangeDomain[" + min + ".." + max + "]";
+        return "[" + min + ".." + max + "]";
     }
 }

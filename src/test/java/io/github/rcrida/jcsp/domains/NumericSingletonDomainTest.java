@@ -94,6 +94,11 @@ class NumericSingletonDomainTest {
                 .isEqualTo(new NumericSingletonDomain<>(5).hashCode());
     }
 
+    @Test
+    void testToString() {
+        assertThat(new NumericSingletonDomain<>(5).toString()).isEqualTo("{5}");
+    }
+
     // ── Cross-type equality symmetry with ObjectSingletonDomain and SetDomain -- NumericSingletonDomain
     // is a DiscreteDomain like both, so all three must agree on equal single-valued domains. ──
 

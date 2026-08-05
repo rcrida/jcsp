@@ -68,4 +68,9 @@ public class BooleanDomainTest {
     void hashCode_consistent() {
         assertThat(BooleanDomain.INSTANCE.hashCode()).isEqualTo(new BooleanDomain().hashCode());
     }
+
+    @Test
+    void testToString() {
+        assertThat(BooleanDomain.INSTANCE.toString()).isEqualTo("{true, false}");
+    }
 }

@@ -1,6 +1,7 @@
 package io.github.rcrida.jcsp.domains;
 
 import java.util.Set;
+import java.util.stream.Collectors;
 
 /**
  * Represents a domain containing the two boolean values {@code true} and {@code false}.
@@ -20,4 +21,9 @@ public record BooleanDomain() implements SetDomain<Boolean> {
 
     @Override
     public int hashCode() { return SetDomain.domainHashCode(this); }
+
+    @Override
+    public String toString() {
+        return "{true, false}";
+    }
 }

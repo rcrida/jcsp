@@ -8,6 +8,7 @@ import java.util.Collections;
 import java.util.Comparator;
 import java.util.LinkedHashSet;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 /**
  * The generic result of {@link NumericDomain}'s default {@link NumericDomain#withBounds}: a plain
@@ -38,6 +39,11 @@ public record NumericSetDomain<N extends Number>(@Singular Set<N> values) implem
     @Override
     public int hashCode() { return SetDomain.domainHashCode(this); }
 
+    @Override
+    public String toString() {
+        return values.stream().map(Object::toString).collect(Collectors.joining(", ", "{", "}"));
+    }
+
     /**
      * Makes Lombok's generated builder satisfy {@link SetDomain}'s abstract {@code toBuilder():
      * DiscreteDomain.Builder<N>} covariantly — otherwise the generated {@link #toBuilder}
@@ -53,25 +59,27 @@ public record NumericSetDomain<N extends Number>(@Singular Set<N> values) implem
 
         /**
          * Overrides Lombok's generated {@code build()} (which would always construct a full {@link
-         * NumericSetDomain} even when narrowed to one value) with {@link
-         * SetDomain.DefaultBuilder#build}'s singleton optimization -- this builder's own {@code
-         * toBuilder()}/{@code build()} otherwise shadow {@link SetDomain}'s default entirely, so
-         * without this override narrowing a {@link NumericSetDomain} down to one value (e.g. via
-         * {@link io.github.rcrida.jcsp.consistency.arc.AC3} deleting individual unsupported values
-         * one at a time, or {@link NumericDiscreteDomain#of}) never reaches a singleton domain.
-         * Returns {@link NumericSingletonDomain} rather than plain {@link ObjectSingletonDomain} so the
-         * result still satisfies {@link NumericDomain}, unlike {@link
-         * ObjectSetDomain.ObjectSetDomainBuilder#build}'s equivalent override. Declared to return
-         * {@link NumericDiscreteDomain} rather than the plain {@link DiscreteDomain} the overridden
-         * interface method promises, since both branches this can produce satisfy it -- lets callers
-         * like {@link NumericDomain#withBounds} skip an extra cast.
+         * NumericSetDomain} even when narrowed to zero or one value) with {@link
+         * SetDomain.DefaultBuilder#build}'s singleton/empty optimizations -- this builder's own
+         * {@code toBuilder()}/{@code build()} otherwise shadow {@link SetDomain}'s default entirely,
+         * so without this override narrowing a {@link NumericSetDomain} down to zero or one value
+         * (e.g. via {@link io.github.rcrida.jcsp.consistency.arc.AC3} deleting individual unsupported
+         * values one at a time, or {@link NumericDiscreteDomain#of}) never reaches either. Returns
+         * {@link NumericSingletonDomain}/{@link NumericEmptyDomain} rather than the plain {@link
+         * ObjectSingletonDomain}/{@link ObjectEmptyDomain} so the result still satisfies {@link
+         * NumericDomain}, unlike {@link ObjectSetDomain.ObjectSetDomainBuilder#build}'s equivalent
+         * override. Declared to return {@link NumericDiscreteDomain} rather than the plain {@link
+         * DiscreteDomain} the overridden interface method promises, since every branch this can
+         * produce satisfies it -- lets callers like {@link NumericDomain#withBounds} skip an extra
+         * cast.
          */
         @Override
         public NumericDiscreteDomain<N> build() {
             // Lombok's @Singular field is left null until the first value/values() call, rather
-            // than eagerly allocated -- build() must tolerate that on a still-empty builder.
-            if (this.values == null) {
-                return new NumericSetDomain<>(Set.of());
+            // than eagerly allocated -- build() must tolerate that on a still-empty builder, same
+            // as a builder narrowed down to zero values by delete().
+            if (this.values == null || this.values.isEmpty()) {
+                return NumericEmptyDomain.instance();
             }
             if (this.values.size() == 1) {
                 return new NumericSingletonDomain<>(this.values.get(0));

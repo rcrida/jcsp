@@ -25,6 +25,11 @@ class NumericSetDomainTest {
         assertThat(((NumericSetDomain<Integer>) domain).values()).containsExactlyInAnyOrder(1, 2, 3);
     }
 
+    @Test
+    void testToString() {
+        assertThat(NumericDiscreteDomain.of(1, 2, 3).toString()).isEqualTo("{1, 2, 3}");
+    }
+
     // ── Value-by-value deletion (the AC3 arc-revision path -- polymorphic toBuilder()/delete(),
     // distinct from the withBounds path covered by NumericDomainTest) ──
 
@@ -37,20 +42,20 @@ class NumericSetDomainTest {
     }
 
     @Test
-    void toBuilder_deletedDownToZeroValues_buildsEmptyNumericSetDomain() {
+    void toBuilder_deletedDownToZeroValues_buildsNumericEmptyDomain() {
         DiscreteDomain<Integer> narrowed = new NumericSetDomain<>(Set.of(1)).toBuilder().delete(1).build();
 
-        assertThat(narrowed).isInstanceOf(NumericSetDomain.class);
+        assertThat(narrowed).isInstanceOf(NumericEmptyDomain.class);
         assertThat(narrowed.isEmpty()).isTrue();
     }
 
     @Test
-    void builder_neverAddedAnyValue_buildsEmptyNumericSetDomain() {
+    void builder_neverAddedAnyValue_buildsNumericEmptyDomain() {
         // Lombok's @Singular field starts null (not an empty collection) until first added --
         // build() must tolerate a builder nothing was ever added to.
         DiscreteDomain<Integer> built = NumericSetDomain.<Integer>builder().build();
 
-        assertThat(built).isInstanceOf(NumericSetDomain.class);
+        assertThat(built).isInstanceOf(NumericEmptyDomain.class);
         assertThat(built.isEmpty()).isTrue();
     }
 }

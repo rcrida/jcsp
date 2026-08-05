@@ -82,4 +82,9 @@ public record ObjectSingletonDomain(@NonNull Object value) implements DiscreteDo
     public int hashCode() {
         return value.hashCode();
     }
+
+    @Override
+    public String toString() {
+        return "{" + value + "}";
+    }
 }

@@ -52,7 +52,7 @@ public class IntRangeDomainTest {
 
     @Test
     void testToString() {
-        assertThat(IntRangeDomain.of(5, 10).toString()).isEqualTo("IntRangeDomain[5..10]");
+        assertThat(IntRangeDomain.of(5, 10).toString()).isEqualTo("[5..10]");
     }
 
     @Test

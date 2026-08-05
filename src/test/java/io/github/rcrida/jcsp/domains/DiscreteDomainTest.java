@@ -23,10 +23,10 @@ class DiscreteDomainTest {
     }
 
     @Test
-    void of_noValues_returnsEmptyObjectSetDomain() {
+    void of_noValues_returnsObjectEmptyDomain() {
         DiscreteDomain<Object> domain = DiscreteDomain.of();
 
-        assertThat(domain).isInstanceOf(ObjectSetDomain.class);
+        assertThat(domain).isInstanceOf(ObjectEmptyDomain.class);
         assertThat(domain.isEmpty()).isTrue();
     }
 }
