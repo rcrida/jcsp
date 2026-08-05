@@ -3,7 +3,7 @@ package io.github.rcrida.jcsp.constraints.nary;
 import io.github.rcrida.jcsp.ConstraintSatisfactionProblem;
 import io.github.rcrida.jcsp.assignments.Assignment;
 import io.github.rcrida.jcsp.domains.Domain;
-import io.github.rcrida.jcsp.domains.DomainObjectSet;
+import io.github.rcrida.jcsp.domains.ObjectSetDomain;
 import io.github.rcrida.jcsp.domains.IntRangeDomain;
 import io.github.rcrida.jcsp.solver.Solver;
 import io.github.rcrida.jcsp.variables.Variable;
@@ -62,25 +62,25 @@ public class InverseConstraintTest {
         // invf[1] (j=1): value 1 would mean f[0]=2 — impossible since f[0]={1}. Remove 1.
         // invf[2] (j=2): value 1 would mean f[0]=3 — impossible. Remove 1.
         var domains = Map.<Variable<?>, Domain<?>>of(
-                f0, DomainObjectSet.<Integer>builder().value(1).build(),
+                f0, ObjectSetDomain.<Integer>builder().value(1).build(),
                 f1, domain123(), f2, domain123(),
                 g0, domain123(), g1, domain123(), g2, domain123());
         var result = constraint.propagate(domains);
         assertThat(result).isPresent();
-        assertThat(result.get().get(g1)).isEqualTo(DomainObjectSet.<Integer>builder().value(2).value(3).build());
-        assertThat(result.get().get(g2)).isEqualTo(DomainObjectSet.<Integer>builder().value(2).value(3).build());
+        assertThat(result.get().get(g1)).isEqualTo(ObjectSetDomain.<Integer>builder().value(2).value(3).build());
+        assertThat(result.get().get(g2)).isEqualTo(ObjectSetDomain.<Integer>builder().value(2).value(3).build());
     }
 
     @Test
     void propagate_removes_value_from_invf_when_absent_from_f() {
         // f0 excludes 2: invf[1] can't be 1 (that would mean f[0]=2, impossible)
         var domains = Map.<Variable<?>, Domain<?>>of(
-                f0, DomainObjectSet.<Integer>builder().value(1).value(3).build(),
+                f0, ObjectSetDomain.<Integer>builder().value(1).value(3).build(),
                 f1, domain123(), f2, domain123(),
                 g0, domain123(), g1, domain123(), g2, domain123());
         var result = constraint.propagate(domains);
         assertThat(result).isPresent();
-        assertThat(result.get().get(g1)).isEqualTo(DomainObjectSet.<Integer>builder().value(2).value(3).build());
+        assertThat(result.get().get(g1)).isEqualTo(ObjectSetDomain.<Integer>builder().value(2).value(3).build());
     }
 
     @Test
@@ -90,21 +90,21 @@ public class InverseConstraintTest {
         // f[2] domain: remove j=1 because 3 ∉ dom(g0={2}) → f2 becomes {2,3}
         var domains = Map.<Variable<?>, Domain<?>>of(
                 f0, domain123(), f1, domain123(), f2, domain123(),
-                g0, DomainObjectSet.<Integer>builder().value(2).build(),
+                g0, ObjectSetDomain.<Integer>builder().value(2).build(),
                 g1, domain123(), g2, domain123());
         var result = constraint.propagate(domains);
         assertThat(result).isPresent();
-        assertThat(result.get().get(f0)).isEqualTo(DomainObjectSet.<Integer>builder().value(2).value(3).build());
-        assertThat(result.get().get(f2)).isEqualTo(DomainObjectSet.<Integer>builder().value(2).value(3).build());
+        assertThat(result.get().get(f0)).isEqualTo(ObjectSetDomain.<Integer>builder().value(2).value(3).build());
+        assertThat(result.get().get(f2)).isEqualTo(ObjectSetDomain.<Integer>builder().value(2).value(3).build());
     }
 
     @Test
     void propagate_infeasible_emptyDomain() {
         // f0={1}, g0 forced empty: f[0]=1 requires invf[0]=1, but g0={2,3} → g0 would become empty
         var domains = Map.<Variable<?>, Domain<?>>of(
-                f0, DomainObjectSet.<Integer>builder().value(1).build(),
+                f0, ObjectSetDomain.<Integer>builder().value(1).build(),
                 f1, domain123(), f2, domain123(),
-                g0, DomainObjectSet.<Integer>builder().value(2).value(3).build(),
+                g0, ObjectSetDomain.<Integer>builder().value(2).value(3).build(),
                 g1, domain123(), g2, domain123());
         assertThat(constraint.propagate(domains)).isEmpty();
     }
@@ -121,23 +121,23 @@ public class InverseConstraintTest {
         // which neither f[0] nor f[1] has → both removed, hitting the builder non-null branch.
         // invf[0] prunes from {1,2,3} to {3}.
         var domains = Map.<Variable<?>, Domain<?>>of(
-                f0, DomainObjectSet.<Integer>builder().value(2).value(3).build(),
-                f1, DomainObjectSet.<Integer>builder().value(2).value(3).build(),
+                f0, ObjectSetDomain.<Integer>builder().value(2).value(3).build(),
+                f1, ObjectSetDomain.<Integer>builder().value(2).value(3).build(),
                 f2, domain123(),
                 g0, domain123(), g1, domain123(), g2, domain123());
         var result = constraint.propagate(domains);
         assertThat(result).isPresent();
-        assertThat(result.get().get(g0)).isEqualTo(DomainObjectSet.<Integer>builder().value(3).build());
+        assertThat(result.get().get(g0)).isEqualTo(ObjectSetDomain.<Integer>builder().value(3).build());
     }
 
     @Test
     void propagate_pass1_infeasible_invfBecomesEmpty() {
         // f[0]={2,3}, f[1]={2,3}, f[2]={2,3}: no f can be 1, so invf[0]={1,2} exhausted → infeasible.
         var domains = Map.<Variable<?>, Domain<?>>of(
-                f0, DomainObjectSet.<Integer>builder().value(2).value(3).build(),
-                f1, DomainObjectSet.<Integer>builder().value(2).value(3).build(),
-                f2, DomainObjectSet.<Integer>builder().value(2).value(3).build(),
-                g0, DomainObjectSet.<Integer>builder().value(1).value(2).build(),
+                f0, ObjectSetDomain.<Integer>builder().value(2).value(3).build(),
+                f1, ObjectSetDomain.<Integer>builder().value(2).value(3).build(),
+                f2, ObjectSetDomain.<Integer>builder().value(2).value(3).build(),
+                g0, ObjectSetDomain.<Integer>builder().value(1).value(2).build(),
                 g1, domain123(), g2, domain123());
         assertThat(constraint.propagate(domains)).isEmpty();
     }
@@ -149,12 +149,12 @@ public class InverseConstraintTest {
         // f[0] prunes from {1,2,3} to {3}.
         var domains = Map.<Variable<?>, Domain<?>>of(
                 f0, domain123(), f1, domain123(), f2, domain123(),
-                g0, DomainObjectSet.<Integer>builder().value(2).value(3).build(),
-                g1, DomainObjectSet.<Integer>builder().value(2).value(3).build(),
+                g0, ObjectSetDomain.<Integer>builder().value(2).value(3).build(),
+                g1, ObjectSetDomain.<Integer>builder().value(2).value(3).build(),
                 g2, domain123());
         var result = constraint.propagate(domains);
         assertThat(result).isPresent();
-        assertThat(result.get().get(f0)).isEqualTo(DomainObjectSet.<Integer>builder().value(3).build());
+        assertThat(result.get().get(f0)).isEqualTo(ObjectSetDomain.<Integer>builder().value(3).build());
     }
 
     // --- explainInfeasible() ---
@@ -164,9 +164,9 @@ public class InverseConstraintTest {
         // g0={1}: only val=1 is a candidate, requiring f[0] to contain 1. f0={2} excludes it,
         // so g0's only value is removed → g0 empty. f0 is singleton, so the reason is sound.
         var domains = Map.<Variable<?>, Domain<?>>of(
-                f0, DomainObjectSet.<Integer>builder().value(2).build(),
+                f0, ObjectSetDomain.<Integer>builder().value(2).build(),
                 f1, domain123(), f2, domain123(),
-                g0, DomainObjectSet.<Integer>builder().value(1).build(),
+                g0, ObjectSetDomain.<Integer>builder().value(1).build(),
                 g1, domain123(), g2, domain123());
         assertThat(constraint.propagate(domains)).isEmpty();
         assertThat(constraint.explainInfeasible(domains)).contains(GroundNogoodConstraint.of(Map.of(f0, 2)));
@@ -177,10 +177,10 @@ public class InverseConstraintTest {
         // Same setup as propagate_pass1_infeasible_invfBecomesEmpty: f0 and f1 (the culprits
         // excluding invf[0]'s two candidate values) are not singleton, so no reason is sound.
         var domains = Map.<Variable<?>, Domain<?>>of(
-                f0, DomainObjectSet.<Integer>builder().value(2).value(3).build(),
-                f1, DomainObjectSet.<Integer>builder().value(2).value(3).build(),
-                f2, DomainObjectSet.<Integer>builder().value(2).value(3).build(),
-                g0, DomainObjectSet.<Integer>builder().value(1).value(2).build(),
+                f0, ObjectSetDomain.<Integer>builder().value(2).value(3).build(),
+                f1, ObjectSetDomain.<Integer>builder().value(2).value(3).build(),
+                f2, ObjectSetDomain.<Integer>builder().value(2).value(3).build(),
+                g0, ObjectSetDomain.<Integer>builder().value(1).value(2).build(),
                 g1, domain123(), g2, domain123());
         assertThat(constraint.propagate(domains)).isEmpty();
         assertThat(constraint.explainInfeasible(domains)).isEmpty();
@@ -191,9 +191,9 @@ public class InverseConstraintTest {
         // f0={1}: pass 1 leaves g0 untouched (no support issue), but pass 2 finds f0's only
         // value (1) unsupported by g0={2} → f0 emptied. g0 is singleton, so the reason is sound.
         var domains = Map.<Variable<?>, Domain<?>>of(
-                f0, DomainObjectSet.<Integer>builder().value(1).build(),
+                f0, ObjectSetDomain.<Integer>builder().value(1).build(),
                 f1, domain123(), f2, domain123(),
-                g0, DomainObjectSet.<Integer>builder().value(2).build(),
+                g0, ObjectSetDomain.<Integer>builder().value(2).build(),
                 g1, domain123(), g2, domain123());
         assertThat(constraint.propagate(domains)).isEmpty();
         assertThat(constraint.explainInfeasible(domains)).contains(GroundNogoodConstraint.of(Map.of(g0, 2)));
@@ -204,9 +204,9 @@ public class InverseConstraintTest {
         // Same setup as propagate_infeasible_emptyDomain: g0 (the culprit excluding f0's only
         // value) is not singleton, so no reason is sound.
         var domains = Map.<Variable<?>, Domain<?>>of(
-                f0, DomainObjectSet.<Integer>builder().value(1).build(),
+                f0, ObjectSetDomain.<Integer>builder().value(1).build(),
                 f1, domain123(), f2, domain123(),
-                g0, DomainObjectSet.<Integer>builder().value(2).value(3).build(),
+                g0, ObjectSetDomain.<Integer>builder().value(2).value(3).build(),
                 g1, domain123(), g2, domain123());
         assertThat(constraint.propagate(domains)).isEmpty();
         assertThat(constraint.explainInfeasible(domains)).isEmpty();
@@ -218,8 +218,8 @@ public class InverseConstraintTest {
         // (in both passes) without ever emptying one, so explainInfeasible finds nothing to report.
         var domains = Map.<Variable<?>, Domain<?>>of(
                 f0, domain123(), f1, domain123(), f2, domain123(),
-                g0, DomainObjectSet.<Integer>builder().value(2).value(3).build(),
-                g1, DomainObjectSet.<Integer>builder().value(2).value(3).build(),
+                g0, ObjectSetDomain.<Integer>builder().value(2).value(3).build(),
+                g1, ObjectSetDomain.<Integer>builder().value(2).value(3).build(),
                 g2, domain123());
         assertThat(constraint.propagate(domains)).isPresent();
         assertThat(constraint.explainInfeasible(domains)).isEmpty();
@@ -260,9 +260,9 @@ public class InverseConstraintTest {
     void solver_infeasible_detectsViaInverseConsistency() {
         // f0 forced to 1 but g0 forced to 2 → f[0]=1 requires invf[0]=1, contradiction
         var csp = ConstraintSatisfactionProblem.builder()
-                .variableDomain(f0, DomainObjectSet.<Integer>builder().value(1).build())
+                .variableDomain(f0, ObjectSetDomain.<Integer>builder().value(1).build())
                 .variableDomain(f1, domain123()).variableDomain(f2, domain123())
-                .variableDomain(g0, DomainObjectSet.<Integer>builder().value(2).build())
+                .variableDomain(g0, ObjectSetDomain.<Integer>builder().value(2).build())
                 .variableDomain(g1, domain123()).variableDomain(g2, domain123())
                 .inverseConstraint(fVars, invfVars)
                 .build();

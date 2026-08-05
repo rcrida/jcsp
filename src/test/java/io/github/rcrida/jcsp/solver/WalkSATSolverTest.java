@@ -4,7 +4,7 @@ import io.github.rcrida.jcsp.ConstraintSatisfactionProblem;
 import io.github.rcrida.jcsp.assignments.Assignment;
 import io.github.rcrida.jcsp.constraints.binary.BinaryNotEqualsConstraint;
 import io.github.rcrida.jcsp.domains.BooleanDomain;
-import io.github.rcrida.jcsp.domains.DomainObjectSet;
+import io.github.rcrida.jcsp.domains.ObjectSetDomain;
 import io.github.rcrida.jcsp.domains.IntervalDomain;
 import io.github.rcrida.jcsp.solver.assignmentfactory.InitialAssignmentFactory;
 import io.github.rcrida.jcsp.solver.assignmentfactory.RandomAssignmentFactory;
@@ -26,7 +26,7 @@ public class WalkSATSolverTest {
     void domainObjectSetWithBothBooleans_treatedAsFlippable() {
         Variable<Boolean> x = F.create("x");
         Variable<Boolean> y = F.create("y");
-        var both = DomainObjectSet.<Boolean>builder().value(true).value(false).build();
+        var both = ObjectSetDomain.<Boolean>builder().value(true).value(false).build();
         var csp = ConstraintSatisfactionProblem.builder()
                 .variableDomain(x, both)
                 .variableDomain(y, BooleanDomain.INSTANCE)
@@ -66,9 +66,9 @@ public class WalkSATSolverTest {
     }
 
     @Test
-    void singletonDomainObjectSet_varsEmpty_returnsEmpty() {
+    void singletonObjectSetDomain_varsEmpty_returnsEmpty() {
         Variable<Boolean> x = F.create("x");
-        var singleton = DomainObjectSet.<Boolean>builder().value(false).build();
+        var singleton = ObjectSetDomain.<Boolean>builder().value(false).build();
         var csp = ConstraintSatisfactionProblem.builder()
                 .variableDomain(x, singleton)
                 .equalsConstraint(x, true)
@@ -91,9 +91,9 @@ public class WalkSATSolverTest {
     @Test
     void canFlip_returnsTrueForBooleanDomainsAndFalseForOthers() {
         assertThat(WalkSATSolver.canFlip(BooleanDomain.INSTANCE)).isTrue();
-        assertThat(WalkSATSolver.canFlip(DomainObjectSet.<Boolean>builder().value(true).value(false).build())).isTrue();
+        assertThat(WalkSATSolver.canFlip(ObjectSetDomain.<Boolean>builder().value(true).value(false).build())).isTrue();
         assertThat(WalkSATSolver.canFlip(IntervalDomain.of(0.0, 1.0))).isFalse();
-        assertThat(WalkSATSolver.canFlip(DomainObjectSet.<Boolean>builder().value(true).build())).isFalse();
+        assertThat(WalkSATSolver.canFlip(ObjectSetDomain.<Boolean>builder().value(true).build())).isFalse();
     }
 
     @Test

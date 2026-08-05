@@ -30,7 +30,7 @@ class FullPropagationInferenceTest {
     @Test
     void applyWithReason_macWipesSingletonNeighbour_citesBothValuesDirectly() {
         // y's only possible value is 1, but notEquals(x,y) forbids y=1 once x=1. MAC assigns x=1
-        // (singleton via SingletonDomain): the notEquals arc wipes y's domain entirely -- and since
+        // (singleton via ObjectSingletonDomain): the notEquals arc wipes y's domain entirely -- and since
         // y was already singleton ({1}) before the wipeout, AC3's allSingletonReason cites both
         // values directly. Unlike the old MacAndFixpointConflictExplainer (which never attempted
         // this and always fell back to the raw assignment on a MAC failure), this is a genuine

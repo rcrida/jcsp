@@ -133,7 +133,7 @@ public class BinaryComparatorConstraint<T extends Comparable<T>> extends BinaryC
      *     <li>Mixed discrete/bounded pairs: the one case with real payoff. By the time search
      *     runs, the bounded side is already snapped to a singleton; if a live discrete variable's
      *     search-time assignment then conflicts with it, MAC wraps that assignment in a singleton
-     *     {@link io.github.rcrida.jcsp.domains.SingletonDomain} before this method runs, so it attributes the conflict to
+     *     {@link io.github.rcrida.jcsp.domains.ObjectSingletonDomain} before this method runs, so it attributes the conflict to
      *     {@code {discreteVar: assignedValue}} (plus the bounded side) instead of the caller
      *     falling back to the entire accumulated partial assignment — a nogood that prunes that
      *     discrete choice across branches and Luby restarts, not just the one search path.</li>

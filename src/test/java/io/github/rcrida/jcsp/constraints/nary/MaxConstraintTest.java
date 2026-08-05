@@ -3,7 +3,7 @@ package io.github.rcrida.jcsp.constraints.nary;
 import io.github.rcrida.jcsp.assignments.Assignment;
 import io.github.rcrida.jcsp.constraints.Operator;
 import io.github.rcrida.jcsp.domains.Domain;
-import io.github.rcrida.jcsp.domains.DomainObjectSet;
+import io.github.rcrida.jcsp.domains.ObjectSetDomain;
 import io.github.rcrida.jcsp.domains.IntRangeDomain;
 import io.github.rcrida.jcsp.domains.IntervalDomain;
 import io.github.rcrida.jcsp.variables.Variable;
@@ -282,7 +282,7 @@ public class MaxConstraintTest {
         // upper-clip: a clips to {0,1,2}, maxs[a] set to 3; b already <= 3 (unchanged)
         // lower-bound: only a has tracked max=3 (from clip); forced narrow({0,1,2}, 3, 3) → empty → infeasible
         Variable<Integer> a = F.create("a_mx3"), b = F.create("b_mx3");
-        var domA = DomainObjectSet.<Integer>builder().value(0).value(1).value(2).value(4).build();
+        var domA = ObjectSetDomain.<Integer>builder().value(0).value(1).value(2).value(4).build();
         var domB = IntRangeDomain.of(0, 2);
         var domains = Map.<Variable<?>, Domain<?>>of(a, domA, b, domB);
         assertThat(MaxConstraint.of(Set.of(a, b), Operator.EQ, 3).propagate(domains)).isEmpty();

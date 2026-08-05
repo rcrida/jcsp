@@ -13,8 +13,8 @@ duplicate `equals`/`hashCode`/`toString` and any shared enumeration or bounds lo
 ## Decision
 
 Every concrete `Domain` implementation is a Java record: `IntervalDomain(double min, double max)`,
-`DomainObjectSet<T>(Set<T> values)`, `IntRangeDomain(Set<Integer> values, int min, int max)`,
-`EnumDomain<E>(Set<E> values)`, `BooleanDomain()`, `SingletonDomain(Object value)`,
+`ObjectSetDomain<T>(Set<T> values)`, `IntRangeDomain(Set<Integer> values, int min, int max)`,
+`EnumDomain<E>(Set<E> values)`, `BooleanDomain()`, `ObjectSingletonDomain(Object value)`,
 `AssignmentDomain(Set<Assignment> values)`, `SetIntervalDomain<E>(...)`,
 `NumericDiscreteDomain<N extends Number>(Set<N> values)`. Records get `equals`/`hashCode`/`toString`
 for free from their components, which is correct here since domain identity genuinely is structural
@@ -23,7 +23,7 @@ for free from their components, which is correct here since domain identity genu
 Shared behavior lives in interfaces with default methods, not superclasses (records can't extend a
 class): `SetDomain<T> extends DiscreteDomain<T>` declares a single `values(): Set<T>` accessor and
 derives every other `DiscreteDomain` method from it by default, so any set-backed concrete record
-(`DomainObjectSet`, `IntRangeDomain`, `EnumDomain`, `BooleanDomain`, `SingletonDomain`,
+(`ObjectSetDomain`, `IntRangeDomain`, `EnumDomain`, `BooleanDomain`, `ObjectSingletonDomain`,
 `AssignmentDomain`, `NumericDiscreteDomain`) gets `stream()`/`toList()`/`toBuilder()` etc. without
 reimplementing them, plus static `domainEquals`/`domainHashCode` helpers so cross-type equality
 works (two `SetDomain` instances with the same `values()` are equal regardless of concrete record
@@ -39,7 +39,7 @@ since `T` isn't bounded to `Number`.
   invariant that a compact constructor couldn't express.
 - **A hand-written compact constructor for `NumericDiscreteDomain`** instead of the
   `@Builder(toBuilder = true)`/`@Singular Set<N> values` pattern. Tried first, then dropped once
-  disassembling `DomainObjectSet`'s generated builder (via `javap`) confirmed it already used the
+  disassembling `ObjectSetDomain`'s generated builder (via `javap`) confirmed it already used the
   same `LinkedHashSet`-backed pattern — reusing the existing convention was simpler than a bespoke
   compact constructor doing the same thing.
 - **Casting through a raw `BoundedDomain` reference for `T`-typed narrowing calls**, in
@@ -51,10 +51,10 @@ since `T` isn't bounded to `Number`.
 
 ## Consequences
 
-- A domain kind that's generic over an arbitrary, non-numeric `T` (e.g. `DomainObjectSet<T>`,
+- A domain kind that's generic over an arbitrary, non-numeric `T` (e.g. `ObjectSetDomain<T>`,
   `EnumDomain<E>` — used for the `String` golfer names in `Prob010SocialGolfersTest`) cannot
   implement `NumericDomain`, so `NumericBounds`' shared helpers fall back to a stream scan for those;
-  this fallback is load-bearing, confirmed by `NumericBoundsTest`'s `DomainObjectSet`-based gapped-
+  this fallback is load-bearing, confirmed by `NumericBoundsTest`'s `ObjectSetDomain`-based gapped-
   domain tests, and can't simply be replaced by a direct `NumericDomain` cast.
 - `IntRangeDomain` caches `min`/`max` as extra record components rather than recomputing them per
   call, but this cache is only trustworthy because every non-`of(int,int)` external construction

@@ -3,7 +3,7 @@ package io.github.rcrida.jcsp.constraints.nary;
 import io.github.rcrida.jcsp.assignments.Assignment;
 import io.github.rcrida.jcsp.constraints.Operator;
 import io.github.rcrida.jcsp.domains.Domain;
-import io.github.rcrida.jcsp.domains.DomainObjectSet;
+import io.github.rcrida.jcsp.domains.ObjectSetDomain;
 import io.github.rcrida.jcsp.domains.IntRangeDomain;
 import io.github.rcrida.jcsp.domains.IntervalDomain;
 import io.github.rcrida.jcsp.variables.Variable;
@@ -284,7 +284,7 @@ public class MinConstraintTest {
         // Lower pass: raise a's min to 3 → a becomes {4}; b unchanged
         // Upper pass: only a has min(tracked)=3 ≤ 3; clip a's max (4) down to 3 → narrow({4},3,3)=∅ → infeasible
         Variable<Integer> a = F.create("a_mn3"), b = F.create("b_mn3");
-        var domA = DomainObjectSet.<Integer>builder().value(2).value(4).build();
+        var domA = ObjectSetDomain.<Integer>builder().value(2).value(4).build();
         var domB = IntRangeDomain.of(4, 5);
         var domains = Map.<Variable<?>, Domain<?>>of(a, domA, b, domB);
         assertThat(MinConstraint.of(Set.of(a, b), Operator.EQ, 3).propagate(domains)).isEmpty();

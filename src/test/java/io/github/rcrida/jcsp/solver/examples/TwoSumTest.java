@@ -4,7 +4,7 @@ import io.github.rcrida.jcsp.solver.Solver;
 import lombok.val;
 import io.github.rcrida.jcsp.ConstraintSatisfactionProblem;
 import io.github.rcrida.jcsp.constraints.Operator;
-import io.github.rcrida.jcsp.domains.DomainObjectSet;
+import io.github.rcrida.jcsp.domains.ObjectSetDomain;
 import io.github.rcrida.jcsp.domains.IntRangeDomain;
 import io.github.rcrida.jcsp.variables.Variable;
 import org.junit.jupiter.api.Test;
@@ -33,7 +33,7 @@ public class TwoSumTest {
     static final Variable<Integer> VJ = F.create("vj");
 
     static ConstraintSatisfactionProblem problem() {
-        val valueDomain = DomainObjectSet.<Integer>builder().values(ARRAY).build();
+        val valueDomain = ObjectSetDomain.<Integer>builder().values(ARRAY).build();
         return ConstraintSatisfactionProblem.builder()
                 .variableDomain(I,  IntRangeDomain.of(1, 4))
                 .variableDomain(J,  IntRangeDomain.of(1, 4))

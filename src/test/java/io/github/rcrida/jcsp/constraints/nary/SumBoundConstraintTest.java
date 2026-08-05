@@ -348,7 +348,7 @@ public class SumBoundConstraintTest {
         var c = SumBoundConstraint.of(Set.of(d1, d2), Operator.EQ, 10.0);
         var domains = Map.<Variable<?>, io.github.rcrida.jcsp.domains.Domain<?>>of(
                 d1, IntervalDomain.of(0.0, 10.0),
-                d2, io.github.rcrida.jcsp.domains.DomainObjectSet.<Double>builder().value(2.0).value(8.0).build());
+                d2, io.github.rcrida.jcsp.domains.ObjectSetDomain.<Double>builder().value(2.0).value(8.0).build());
         var result = c.propagate(domains);
         assertThat(result).isPresent();
         // newMin(d1) = 10 - max(d2) = 10 - 8 = 2; newMax(d1) = 10 - min(d2) = 10 - 2 = 8
@@ -365,7 +365,7 @@ public class SumBoundConstraintTest {
         Variable<Double> d2 = F.create("d2");
         var c = SumBoundConstraint.of(Set.of(d1, d2), Operator.EQ, 10.0);
         var domains = Map.<Variable<?>, io.github.rcrida.jcsp.domains.Domain<?>>of(
-                d1, io.github.rcrida.jcsp.domains.DomainObjectSet.<Double>builder().value(0.0).value(1.0).build(),
+                d1, io.github.rcrida.jcsp.domains.ObjectSetDomain.<Double>builder().value(0.0).value(1.0).build(),
                 d2, IntervalDomain.of(9.2, 9.8));
         assertThat(c.propagate(domains)).isEmpty();
     }
@@ -376,11 +376,11 @@ public class SumBoundConstraintTest {
         Variable<Float> f1 = F.create("f1");
         Variable<Float> f2 = F.create("f2");
         var c = SumBoundConstraint.of(Set.of(f1, f2), Operator.EQ, 8.0f);
-        var f1Domain = io.github.rcrida.jcsp.domains.DomainObjectSet.<Float>builder();
+        var f1Domain = io.github.rcrida.jcsp.domains.ObjectSetDomain.<Float>builder();
         for (float v = 0f; v <= 9f; v++) f1Domain.value(v);
         var domains = Map.<Variable<?>, io.github.rcrida.jcsp.domains.Domain<?>>of(
                 f1, f1Domain.build(),
-                f2, io.github.rcrida.jcsp.domains.DomainObjectSet.<Float>builder().value(5.0f).build());
+                f2, io.github.rcrida.jcsp.domains.ObjectSetDomain.<Float>builder().value(5.0f).build());
         var result = c.propagate(domains);
         assertThat(result).isPresent();
         @SuppressWarnings("unchecked")
@@ -434,7 +434,7 @@ public class SumBoundConstraintTest {
         // present — use a domain where the required value is absent instead.
         var c = SumBoundConstraint.of(Set.of(v1, v2), Operator.EQ, 10);
         var domains = Map.<Variable<?>, Domain<?>>of(
-                v1, io.github.rcrida.jcsp.domains.DomainObjectSet.<Integer>builder().value(0).value(4).build(),
+                v1, io.github.rcrida.jcsp.domains.ObjectSetDomain.<Integer>builder().value(0).value(4).build(),
                 v2, IntRangeDomain.of(9, 9));
         // v1 must equal 1 (10-9), which is absent from {0,4} → infeasible; v1 has no singleton
         // value to blame, so even though v2 is pinned, the explanation can't be sound without v1.

@@ -2,7 +2,7 @@ package io.github.rcrida.jcsp.constraints.nary;
 
 import io.github.rcrida.jcsp.assignments.Assignment;
 import io.github.rcrida.jcsp.domains.Domain;
-import io.github.rcrida.jcsp.domains.DomainObjectSet;
+import io.github.rcrida.jcsp.domains.ObjectSetDomain;
 import io.github.rcrida.jcsp.domains.SetIntervalDomain;
 import io.github.rcrida.jcsp.variables.Variable;
 import org.junit.jupiter.api.Test;
@@ -83,7 +83,7 @@ public class SetBoundsNogoodConstraintTest {
     @Test
     void fromCurrentBounds_nonSetBoundedVariable_returnsEmpty() {
         Variable<Integer> x = F.create("ex");
-        var domains = Map.<Variable<?>, Domain<?>>of(x, DomainObjectSet.<Integer>builder().value(1).build());
+        var domains = Map.<Variable<?>, Domain<?>>of(x, ObjectSetDomain.<Integer>builder().value(1).build());
         assertThat(SetBoundsNogoodConstraint.fromCurrentBounds(Set.of(x), domains)).isEmpty();
     }
 

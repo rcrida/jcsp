@@ -4,7 +4,7 @@ import io.github.rcrida.jcsp.ConstraintSatisfactionProblem;
 import io.github.rcrida.jcsp.constraints.Operator;
 import io.github.rcrida.jcsp.constraints.nary.SetBoundsNogoodConstraint;
 import io.github.rcrida.jcsp.domains.Domain;
-import io.github.rcrida.jcsp.domains.DomainObjectSet;
+import io.github.rcrida.jcsp.domains.ObjectSetDomain;
 import io.github.rcrida.jcsp.domains.SetIntervalDomain;
 import io.github.rcrida.jcsp.solver.Solver;
 import io.github.rcrida.jcsp.variables.Variable;
@@ -55,15 +55,15 @@ public class IntersectionCardinalityConstraintTest {
     // --- propagate: non-SetBoundedDomain sides ---
 
     @Test void propagate_nonSetBoundedDomainSides_noOp() {
-        var lDomain = DomainObjectSet.<Set<Integer>>builder().value(Set.of(1)).build();
-        var rDomain = DomainObjectSet.<Set<Integer>>builder().value(Set.of(1)).build();
+        var lDomain = ObjectSetDomain.<Set<Integer>>builder().value(Set.of(1)).build();
+        var rDomain = ObjectSetDomain.<Set<Integer>>builder().value(Set.of(1)).build();
         var result = IntersectionCardinalityConstraint.of(L, R, Operator.LEQ, 0).propagate(Map.of(L, lDomain, R, rDomain));
         assertThat(result).contains(Map.of());
     }
 
     @Test void propagate_onlyRightNonSetBoundedDomain_noOp() {
         var lDomain = SetIntervalDomain.of(Set.of(1), Set.of(1, 2, 3), 0, 3);
-        var rDomain = DomainObjectSet.<Set<Integer>>builder().value(Set.of(1)).build();
+        var rDomain = ObjectSetDomain.<Set<Integer>>builder().value(Set.of(1)).build();
         var result = IntersectionCardinalityConstraint.of(L, R, Operator.LEQ, 0).propagate(Map.of(L, lDomain, R, rDomain));
         assertThat(result).contains(Map.of());
     }

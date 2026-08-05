@@ -3,7 +3,7 @@ package io.github.rcrida.jcsp.consistency.node;
 import lombok.val;
 import io.github.rcrida.jcsp.ConstraintSatisfactionProblem;
 import io.github.rcrida.jcsp.constraints.Operator;
-import io.github.rcrida.jcsp.domains.DomainObjectSet;
+import io.github.rcrida.jcsp.domains.ObjectSetDomain;
 import io.github.rcrida.jcsp.domains.EnumDomain;
 import io.github.rcrida.jcsp.domains.IntervalDomain;
 import io.github.rcrida.jcsp.variables.Variable;
@@ -30,7 +30,7 @@ public class NodeConsistencyTest {
         System.out.println(problem);
         val arcConstrainedProblem = NodeConsistency.INSTANCE.apply(problem).get();
         System.out.println(arcConstrainedProblem);
-        assertThat(arcConstrainedProblem.getVariableDomains().get(SA)).isEqualTo(DomainObjectSet.builder().values(List.of(Colour.BLUE, Colour.RED)).build());
+        assertThat(arcConstrainedProblem.getVariableDomains().get(SA)).isEqualTo(ObjectSetDomain.builder().values(List.of(Colour.BLUE, Colour.RED)).build());
     }
 
     @Test
@@ -135,8 +135,8 @@ public class NodeConsistencyTest {
         assertThat(result).isPresent();
         val updatedProblem = result.get();
         assertThat(updatedProblem.getVariableDomains().get(WA)).isEqualTo(
-                DomainObjectSet.builder().values(List.of(Colour.RED, Colour.BLUE)).build());
+                ObjectSetDomain.builder().values(List.of(Colour.RED, Colour.BLUE)).build());
         assertThat(updatedProblem.getVariableDomains().get(NT)).isEqualTo(
-                DomainObjectSet.builder().values(List.of(Colour.GREEN, Colour.BLUE)).build());
+                ObjectSetDomain.builder().values(List.of(Colour.GREEN, Colour.BLUE)).build());
     }
 }

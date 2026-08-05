@@ -16,7 +16,7 @@ import java.util.Optional;
  * io.github.rcrida.jcsp.domains.BoundedDomain} (e.g. {@link io.github.rcrida.jcsp.domains.IntervalDomain})
  * and {@link io.github.rcrida.jcsp.domains.IntRangeDomain} — falling back to a plain enumerable
  * {@link DiscreteDomain} scan for domain kinds that don't implement it (e.g. {@link
- * io.github.rcrida.jcsp.domains.DomainObjectSet}).
+ * io.github.rcrida.jcsp.domains.ObjectSetDomain}).
  */
 public final class NumericBounds {
     private NumericBounds() {}

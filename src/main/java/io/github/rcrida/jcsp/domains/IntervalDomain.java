@@ -7,7 +7,7 @@ import java.util.Optional;
 /**
  * A continuous domain of {@code double} values in the inclusive range {@code [min, max]}.
  * <p>
- * Unlike {@link DomainObjectSet}-based domains, values are not enumerated: {@link DiscreteDomain#stream()}
+ * Unlike {@link ObjectSetDomain}-based domains, values are not enumerated: {@link DiscreteDomain#stream()}
  * and {@link DiscreteDomain#toBuilder()} are unsupported. Narrowing is performed via {@link #withBounds}.
  * <p>
  * Supported by the following constraint types via interval-arithmetic bounds propagation:

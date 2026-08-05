@@ -5,7 +5,7 @@ import io.github.rcrida.jcsp.assignments.Assignment;
 import io.github.rcrida.jcsp.constraints.Operator;
 import io.github.rcrida.jcsp.domains.DiscreteDomain;
 import io.github.rcrida.jcsp.domains.Domain;
-import io.github.rcrida.jcsp.domains.DomainObjectSet;
+import io.github.rcrida.jcsp.domains.ObjectSetDomain;
 import io.github.rcrida.jcsp.domains.IntRangeDomain;
 import io.github.rcrida.jcsp.domains.IntervalDomain;
 import io.github.rcrida.jcsp.solver.Solver;
@@ -303,8 +303,8 @@ public class LinearBoundConstraintTest {
         Variable<Integer> ny = F.create("ny");
         var c = LinearBoundConstraint.of(Map.of(nx, 2, ny, 3), Operator.EQ, 7);
         var domains = Map.<Variable<?>, Domain<?>>of(
-                nx, DomainObjectSet.<Integer>builder().value(0).value(4).build(),
-                ny, DomainObjectSet.<Integer>builder().value(1).build());
+                nx, ObjectSetDomain.<Integer>builder().value(0).value(4).build(),
+                ny, ObjectSetDomain.<Integer>builder().value(1).build());
         assertThat(c.propagate(domains)).isEmpty();
     }
 
@@ -497,7 +497,7 @@ public class LinearBoundConstraintTest {
         var c = LinearBoundConstraint.of(Map.of(dx, 1.0, dy, 1.0), Operator.EQ, 10.0);
         var domains = Map.<Variable<?>, Domain<?>>of(
                 dx, IntervalDomain.of(0.0, 10.0),
-                dy, DomainObjectSet.<Double>builder().value(2.0).value(8.0).build());
+                dy, ObjectSetDomain.<Double>builder().value(2.0).value(8.0).build());
         var result = c.propagate(domains);
         assertThat(result).isPresent();
         assertThat(result.get().get(dx)).isEqualTo(IntervalDomain.of(2.0, 8.0));
@@ -510,11 +510,11 @@ public class LinearBoundConstraintTest {
         Variable<Float> fx = F.create("fx");
         Variable<Float> fy = F.create("fy");
         var c = LinearBoundConstraint.of(Map.of(fx, 2.0f, fy, 3.0f), Operator.EQ, 12.0f);
-        var fxDomain = DomainObjectSet.<Float>builder();
+        var fxDomain = ObjectSetDomain.<Float>builder();
         for (float v = 0f; v <= 9f; v++) fxDomain.value(v);
         var domains = Map.<Variable<?>, Domain<?>>of(
                 fx, fxDomain.build(),
-                fy, DomainObjectSet.<Float>builder().value(2.0f).build());
+                fy, ObjectSetDomain.<Float>builder().value(2.0f).build());
         var result = c.propagate(domains);
         assertThat(result).isPresent();
         @SuppressWarnings("unchecked")
@@ -531,7 +531,7 @@ public class LinearBoundConstraintTest {
         Variable<Double> dy = F.create("dy");
         var c = LinearBoundConstraint.of(Map.of(dx, 1.0, dy, 1.0), Operator.EQ, 10.0);
         var domains = Map.<Variable<?>, Domain<?>>of(
-                dx, DomainObjectSet.<Double>builder().value(0.0).value(1.0).build(),
+                dx, ObjectSetDomain.<Double>builder().value(0.0).value(1.0).build(),
                 dy, IntervalDomain.of(9.2, 9.8));
         assertThat(c.propagate(domains)).isEmpty();
     }
@@ -581,8 +581,8 @@ public class LinearBoundConstraintTest {
         Variable<Integer> ny = F.create("ny");
         var c = LinearBoundConstraint.of(Map.of(nx, 2, ny, 3), Operator.EQ, 7);
         var domains = Map.<Variable<?>, Domain<?>>of(
-                nx, DomainObjectSet.<Integer>builder().value(0).value(4).build(),
-                ny, DomainObjectSet.<Integer>builder().value(1).build());
+                nx, ObjectSetDomain.<Integer>builder().value(0).value(4).build(),
+                ny, ObjectSetDomain.<Integer>builder().value(1).build());
         var result = c.propagateWithReasons(domains);
         assertThat(result.isInfeasible()).isTrue();
         assertThat(result.reason()).isNull();

@@ -4,7 +4,7 @@ import io.github.rcrida.jcsp.assignments.Assignment;
 import io.github.rcrida.jcsp.constraints.binary.BinaryConstraint;
 import io.github.rcrida.jcsp.constraints.binary.DisjointConstraint;
 import io.github.rcrida.jcsp.domains.Domain;
-import io.github.rcrida.jcsp.domains.DomainObjectSet;
+import io.github.rcrida.jcsp.domains.ObjectSetDomain;
 import io.github.rcrida.jcsp.domains.SetIntervalDomain;
 import io.github.rcrida.jcsp.variables.Variable;
 import org.junit.jupiter.api.Test;
@@ -73,7 +73,7 @@ public class PartitionConstraintTest {
     @Test
     void propagate_nonSetBoundedDomainPart_noOp() {
         var c = PartitionConstraint.of(Set.of(P1, P2), Set.of(1, 2));
-        var p1Dom = DomainObjectSet.<Set<Integer>>builder().value(Set.of(1)).build();
+        var p1Dom = ObjectSetDomain.<Set<Integer>>builder().value(Set.of(1)).build();
         var p2Dom = SetIntervalDomain.of(Set.<Integer>of(), Set.of(2), 0, 1);
         var result = c.propagate(Map.of(P1, p1Dom, P2, p2Dom));
         assertThat(result).contains(Map.of());

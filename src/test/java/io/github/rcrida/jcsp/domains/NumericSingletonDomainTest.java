@@ -94,13 +94,13 @@ class NumericSingletonDomainTest {
                 .isEqualTo(new NumericSingletonDomain<>(5).hashCode());
     }
 
-    // ── Cross-type equality symmetry with SingletonDomain and SetDomain -- NumericSingletonDomain
+    // ── Cross-type equality symmetry with ObjectSingletonDomain and SetDomain -- NumericSingletonDomain
     // is a DiscreteDomain like both, so all three must agree on equal single-valued domains. ──
 
     @Test
     void equals_singletonDomain_bothDirections() {
         NumericSingletonDomain<Integer> numeric = new NumericSingletonDomain<>(5);
-        SingletonDomain plain = new SingletonDomain(5);
+        ObjectSingletonDomain plain = new ObjectSingletonDomain(5);
 
         assertThat(numeric.equals(plain)).isTrue();
         assertThat(plain.equals(numeric)).isTrue();
@@ -118,7 +118,7 @@ class NumericSingletonDomainTest {
     @Test
     void equals_domainObjectSet_bothDirections() {
         NumericSingletonDomain<Integer> numeric = new NumericSingletonDomain<>(5);
-        DomainObjectSet<Integer> set = new DomainObjectSet<>(Set.of(5));
+        ObjectSetDomain<Integer> set = new ObjectSetDomain<>(Set.of(5));
 
         assertThat(numeric.equals(set)).isTrue();
         assertThat(set.equals(numeric)).isTrue();
@@ -134,8 +134,8 @@ class NumericSingletonDomainTest {
     }
 
     @Test
-    void hashCode_matchesSingletonDomain() {
+    void hashCode_matchesObjectSingletonDomain() {
         assertThat(new NumericSingletonDomain<>(5).hashCode())
-                .isEqualTo(new SingletonDomain(5).hashCode());
+                .isEqualTo(new ObjectSingletonDomain(5).hashCode());
     }
 }

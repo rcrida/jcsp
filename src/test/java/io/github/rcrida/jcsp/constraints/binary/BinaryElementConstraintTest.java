@@ -2,7 +2,7 @@ package io.github.rcrida.jcsp.constraints.binary;
 
 import io.github.rcrida.jcsp.ConstraintSatisfactionProblem;
 import io.github.rcrida.jcsp.assignments.Assignment;
-import io.github.rcrida.jcsp.domains.DomainObjectSet;
+import io.github.rcrida.jcsp.domains.ObjectSetDomain;
 import io.github.rcrida.jcsp.domains.IntRangeDomain;
 import io.github.rcrida.jcsp.solver.Solver;
 import io.github.rcrida.jcsp.variables.Variable;
@@ -67,7 +67,7 @@ public class BinaryElementConstraintTest {
     @Test
     void solver_elementConstraint_exactSolutions() {
         // result must equal the array value at the given index; each index maps to exactly one result.
-        var resultDomain = DomainObjectSet.<String>builder().values(ARRAY).build();
+        var resultDomain = ObjectSetDomain.<String>builder().values(ARRAY).build();
         var csp = ConstraintSatisfactionProblem.builder()
                 .variableDomain(INDEX, IntRangeDomain.of(1, 3))
                 .variableDomain(RESULT, resultDomain)

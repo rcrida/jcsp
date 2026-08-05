@@ -16,7 +16,7 @@ package io.github.rcrida.jcsp.domains;
  * NumericSetDomain}'s own builder, which already collapses to a {@link NumericSingletonDomain} when
  * exactly one value survives the filter (see {@link NumericSetDomain.NumericSetDomainBuilder#build})
  * — the numeric analogue of {@link SetDomain.DefaultBuilder}'s own fallback to {@link
- * DomainObjectSet} when the caller's specific concrete type isn't known. That builder's {@code
+ * ObjectSetDomain} when the caller's specific concrete type isn't known. That builder's {@code
  * build()} is declared to return {@link NumericDiscreteDomain} (a subtype of this interface), so no
  * cast is needed here despite {@code this} method's own return type being the broader {@link
  * NumericDomain} -- kept broad so {@link BoundedDomain} can still narrow its own override to {@code

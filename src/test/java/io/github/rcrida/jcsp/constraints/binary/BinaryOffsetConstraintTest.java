@@ -4,7 +4,7 @@ import io.github.rcrida.jcsp.constraints.Operator;
 import io.github.rcrida.jcsp.constraints.nary.GroundNogoodConstraint;
 import io.github.rcrida.jcsp.domains.Domain;
 import io.github.rcrida.jcsp.domains.DiscreteDomain;
-import io.github.rcrida.jcsp.domains.DomainObjectSet;
+import io.github.rcrida.jcsp.domains.ObjectSetDomain;
 import io.github.rcrida.jcsp.domains.IntRangeDomain;
 import io.github.rcrida.jcsp.domains.NumericDiscreteDomain;
 import io.github.rcrida.jcsp.domains.IntervalDomain;
@@ -232,7 +232,7 @@ public class BinaryOffsetConstraintTest {
 
     @Test void propagate_leftBounded_rightDiscrete_clipsLeft() {
         // L=Interval[0,10], R={8.0}, L+3<=R: L.max=min(10,8-3)=5
-        var discrete = DomainObjectSet.<Double>builder().value(8.0).build();
+        var discrete = ObjectSetDomain.<Double>builder().value(8.0).build();
         var result = BinaryOffsetConstraint.of(L, O, Operator.LEQ, R)
                 .propagate(Map.of(L, IntervalDomain.of(0.0, 10.0), R, discrete)).orElseThrow();
         assertThat(((IntervalDomain) result.get(L)).getMax()).isEqualTo(5.0);
@@ -241,7 +241,7 @@ public class BinaryOffsetConstraintTest {
 
     @Test void propagate_leftDiscrete_rightBounded_clipsRight() {
         // L={2.0,5.0}, R=Interval[0,10], L+3>=R: R.max=min(10,5+3)=8
-        var discrete = DomainObjectSet.<Double>builder().value(2.0).value(5.0).build();
+        var discrete = ObjectSetDomain.<Double>builder().value(2.0).value(5.0).build();
         var result = BinaryOffsetConstraint.of(L, O, Operator.GEQ, R)
                 .propagate(Map.of(L, discrete, R, IntervalDomain.of(0.0, 10.0))).orElseThrow();
         assertThat(((IntervalDomain) result.get(R)).getMax()).isEqualTo(8.0);

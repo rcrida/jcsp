@@ -16,9 +16,9 @@ public class AssignmentDomainTest {
     Variable<Integer> variable1 = VARIABLE_FACTORY.create("V1");
     Variable<String> variable2 = VARIABLE_FACTORY.create("V2");
     Variable<Boolean> variable3 = VARIABLE_FACTORY.create("V3");
-    Domain<Integer> domain1 = DomainObjectSet.<Integer>builder().values(List.of(1, 2)).build();
-    Domain<String> domain2 = DomainObjectSet.<String>builder().values(List.of("a", "b")).build();
-    Domain<Boolean> domain3 = DomainObjectSet.<Boolean>builder().values(List.of(true, false)).build();
+    Domain<Integer> domain1 = ObjectSetDomain.<Integer>builder().values(List.of(1, 2)).build();
+    Domain<String> domain2 = ObjectSetDomain.<String>builder().values(List.of("a", "b")).build();
+    Domain<Boolean> domain3 = ObjectSetDomain.<Boolean>builder().values(List.of(true, false)).build();
     ConstraintSatisfactionProblem csp = ConstraintSatisfactionProblem.builder()
             .variableDomain(variable1, domain1)
             .variableDomain(variable2, domain2)

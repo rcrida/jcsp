@@ -11,11 +11,11 @@ import java.util.stream.Stream;
 /**
  * A domain holding exactly one value, used during search when a variable has been assigned to
  * limit the remaining search space, and by {@link SetDomain.DefaultBuilder#build} (or, for {@link
- * DomainObjectSet}, its own builder override of the same optimization) whenever ordinary
+ * ObjectSetDomain}, its own builder override of the same optimization) whenever ordinary
  * propagation narrows a {@link SetDomain}-backed domain down to one remaining value -- most
  * instances in a real solve come from the latter, not an explicit search decision. {@link
  * NumericSetDomain} narrows to {@link NumericSingletonDomain} instead, via its own builder's
- * matching override -- {@link SingletonDomain} doesn't implement {@link NumericDomain}, which some
+ * matching override -- {@link ObjectSingletonDomain} doesn't implement {@link NumericDomain}, which some
  * of that builder's callers (e.g. {@link NumericDomain#withBounds}'s default method) rely on.
  * Implements
  * {@link DiscreteDomain} directly rather than {@link SetDomain}: {@link #contains}/{@link
@@ -25,13 +25,13 @@ import java.util.stream.Stream;
  * the whole solver.
  * <p>
  * {@link #equals}/{@link #hashCode} still compare equal to any {@link DiscreteDomain} (not just
- * another {@link SingletonDomain}) holding the same single value -- e.g. a singleton {@link
- * IntRangeDomain} and a {@link SingletonDomain} holding the same value are equal in both directions
+ * another {@link ObjectSingletonDomain}) holding the same single value -- e.g. a singleton {@link
+ * IntRangeDomain} and an {@link ObjectSingletonDomain} holding the same value are equal in both directions
  * -- via {@link SetDomain#domainEquals}, which checks {@code instanceof DiscreteDomain} rather than
  * {@code instanceof SetDomain} specifically so this class (the one {@link DiscreteDomain}
  * implementor that isn't a {@link SetDomain}) doesn't break that symmetry.
  */
-public record SingletonDomain(@NonNull Object value) implements DiscreteDomain<Object> {
+public record ObjectSingletonDomain(@NonNull Object value) implements DiscreteDomain<Object> {
     @Override
     public boolean contains(@Nullable Object v) {
         return value.equals(v);

@@ -2,7 +2,7 @@ package io.github.rcrida.jcsp.constraints.nary;
 
 import io.github.rcrida.jcsp.ConstraintSatisfactionProblem;
 import io.github.rcrida.jcsp.assignments.Assignment;
-import io.github.rcrida.jcsp.domains.DomainObjectSet;
+import io.github.rcrida.jcsp.domains.ObjectSetDomain;
 import io.github.rcrida.jcsp.domains.IntRangeDomain;
 import io.github.rcrida.jcsp.solver.Solver;
 import io.github.rcrida.jcsp.variables.Variable;
@@ -72,10 +72,10 @@ public class NaryElementConstraintTest {
         // A domain = {x}, result domain = {y} — index=1 has no support, should be pruned
         var domains = Map.<Variable<?>, io.github.rcrida.jcsp.domains.Domain<?>>of(
                 INDEX, IntRangeDomain.of(1, 3),
-                RESULT, DomainObjectSet.<String>builder().value("beta").value("gamma").build(),
-                A, DomainObjectSet.<String>builder().value("alpha").build(),
-                B, DomainObjectSet.<String>builder().value("beta").build(),
-                C, DomainObjectSet.<String>builder().value("gamma").build()
+                RESULT, ObjectSetDomain.<String>builder().value("beta").value("gamma").build(),
+                A, ObjectSetDomain.<String>builder().value("alpha").build(),
+                B, ObjectSetDomain.<String>builder().value("beta").build(),
+                C, ObjectSetDomain.<String>builder().value("gamma").build()
         );
         var result = constraint.propagate(domains);
         assertThat(result).isPresent();
@@ -90,10 +90,10 @@ public class NaryElementConstraintTest {
         // index can be 1 or 2; A={alpha}, B={beta}; result initially has extra value "gamma"
         var domains = Map.<Variable<?>, io.github.rcrida.jcsp.domains.Domain<?>>of(
                 INDEX, IntRangeDomain.of(1, 2),
-                RESULT, DomainObjectSet.<String>builder().value("alpha").value("beta").value("gamma").build(),
-                A, DomainObjectSet.<String>builder().value("alpha").build(),
-                B, DomainObjectSet.<String>builder().value("beta").build(),
-                C, DomainObjectSet.<String>builder().value("gamma").build()
+                RESULT, ObjectSetDomain.<String>builder().value("alpha").value("beta").value("gamma").build(),
+                A, ObjectSetDomain.<String>builder().value("alpha").build(),
+                B, ObjectSetDomain.<String>builder().value("beta").build(),
+                C, ObjectSetDomain.<String>builder().value("gamma").build()
         );
         var result = constraint.propagate(domains);
         assertThat(result).isPresent();
@@ -107,11 +107,11 @@ public class NaryElementConstraintTest {
     void propagate_prunesSelectedVarWhenIndexSingleton() {
         // index={2} singleton; B has extra values not in result; result={beta}
         var domains = Map.<Variable<?>, io.github.rcrida.jcsp.domains.Domain<?>>of(
-                INDEX, DomainObjectSet.<Integer>builder().value(2).build(),
-                RESULT, DomainObjectSet.<String>builder().value("beta").build(),
-                A, DomainObjectSet.<String>builder().value("alpha").build(),
-                B, DomainObjectSet.<String>builder().value("beta").value("extra").build(),
-                C, DomainObjectSet.<String>builder().value("gamma").build()
+                INDEX, ObjectSetDomain.<Integer>builder().value(2).build(),
+                RESULT, ObjectSetDomain.<String>builder().value("beta").build(),
+                A, ObjectSetDomain.<String>builder().value("alpha").build(),
+                B, ObjectSetDomain.<String>builder().value("beta").value("extra").build(),
+                C, ObjectSetDomain.<String>builder().value("gamma").build()
         );
         var result = constraint.propagate(domains);
         assertThat(result).isPresent();
@@ -126,10 +126,10 @@ public class NaryElementConstraintTest {
         // result={x}, all var domains have no overlap with {x}
         var domains = Map.<Variable<?>, io.github.rcrida.jcsp.domains.Domain<?>>of(
                 INDEX, IntRangeDomain.of(1, 3),
-                RESULT, DomainObjectSet.<String>builder().value("x").build(),
-                A, DomainObjectSet.<String>builder().value("alpha").build(),
-                B, DomainObjectSet.<String>builder().value("beta").build(),
-                C, DomainObjectSet.<String>builder().value("gamma").build()
+                RESULT, ObjectSetDomain.<String>builder().value("x").build(),
+                A, ObjectSetDomain.<String>builder().value("alpha").build(),
+                B, ObjectSetDomain.<String>builder().value("beta").build(),
+                C, ObjectSetDomain.<String>builder().value("gamma").build()
         );
         assertThat(constraint.propagate(domains)).isEmpty();
     }
@@ -138,11 +138,11 @@ public class NaryElementConstraintTest {
     void propagate_infeasibleWhenSelectedVarBecomesEmpty() {
         // index={1} singleton; A={alpha}; result={beta} — A ∩ result = ∅
         var domains = Map.<Variable<?>, io.github.rcrida.jcsp.domains.Domain<?>>of(
-                INDEX, DomainObjectSet.<Integer>builder().value(1).build(),
-                RESULT, DomainObjectSet.<String>builder().value("beta").build(),
-                A, DomainObjectSet.<String>builder().value("alpha").build(),
-                B, DomainObjectSet.<String>builder().value("beta").build(),
-                C, DomainObjectSet.<String>builder().value("gamma").build()
+                INDEX, ObjectSetDomain.<Integer>builder().value(1).build(),
+                RESULT, ObjectSetDomain.<String>builder().value("beta").build(),
+                A, ObjectSetDomain.<String>builder().value("alpha").build(),
+                B, ObjectSetDomain.<String>builder().value("beta").build(),
+                C, ObjectSetDomain.<String>builder().value("gamma").build()
         );
         assertThat(constraint.propagate(domains)).isEmpty();
     }
@@ -153,10 +153,10 @@ public class NaryElementConstraintTest {
         // Each index maps uniquely: 3 solutions (one per index value)
         var csp = ConstraintSatisfactionProblem.builder()
                 .variableDomain(INDEX, IntRangeDomain.of(1, 3))
-                .variableDomain(RESULT, DomainObjectSet.<String>builder().value("10").value("20").value("30").build())
-                .variableDomain(A, DomainObjectSet.<String>builder().value("10").build())
-                .variableDomain(B, DomainObjectSet.<String>builder().value("20").build())
-                .variableDomain(C, DomainObjectSet.<String>builder().value("30").build())
+                .variableDomain(RESULT, ObjectSetDomain.<String>builder().value("10").value("20").value("30").build())
+                .variableDomain(A, ObjectSetDomain.<String>builder().value("10").build())
+                .variableDomain(B, ObjectSetDomain.<String>builder().value("20").build())
+                .variableDomain(C, ObjectSetDomain.<String>builder().value("30").build())
                 .elementVariableConstraint(INDEX, RESULT, VARS)
                 .build();
         assertThat(Solver.Factory.INSTANCE.createSolver(csp).getSolutions()).hasSize(3);
@@ -174,7 +174,7 @@ public class NaryElementConstraintTest {
         Variable<Integer> res = F.create("res");
         var csp = ConstraintSatisfactionProblem.builder()
                 .variableDomain(idx, IntRangeDomain.of(1, 2))
-                .variableDomain(res, DomainObjectSet.<Integer>builder().value(1).value(3).build())
+                .variableDomain(res, ObjectSetDomain.<Integer>builder().value(1).value(3).build())
                 .variableDomain(varA, IntRangeDomain.of(1, 2))
                 .variableDomain(varB, IntRangeDomain.of(3, 4))
                 .elementVariableConstraint(idx, res, List.of(varA, varB))
@@ -186,10 +186,10 @@ public class NaryElementConstraintTest {
     void propagate_noOpWhenIndexIsBoundedDomain() {
         var domains = Map.<Variable<?>, io.github.rcrida.jcsp.domains.Domain<?>>of(
                 INDEX, IntervalDomain.of(1.0, 3.0),
-                RESULT, DomainObjectSet.<String>builder().value("alpha").build(),
-                A, DomainObjectSet.<String>builder().value("alpha").build(),
-                B, DomainObjectSet.<String>builder().value("beta").build(),
-                C, DomainObjectSet.<String>builder().value("gamma").build()
+                RESULT, ObjectSetDomain.<String>builder().value("alpha").build(),
+                A, ObjectSetDomain.<String>builder().value("alpha").build(),
+                B, ObjectSetDomain.<String>builder().value("beta").build(),
+                C, ObjectSetDomain.<String>builder().value("gamma").build()
         );
         assertThat(constraint.propagate(domains)).isPresent().hasValueSatisfying(m -> assertThat(m).isEmpty());
     }
@@ -199,9 +199,9 @@ public class NaryElementConstraintTest {
         var domains = Map.<Variable<?>, io.github.rcrida.jcsp.domains.Domain<?>>of(
                 INDEX, IntRangeDomain.of(1, 3),
                 RESULT, IntervalDomain.of(0.0, 10.0),
-                A, DomainObjectSet.<String>builder().value("alpha").build(),
-                B, DomainObjectSet.<String>builder().value("beta").build(),
-                C, DomainObjectSet.<String>builder().value("gamma").build()
+                A, ObjectSetDomain.<String>builder().value("alpha").build(),
+                B, ObjectSetDomain.<String>builder().value("beta").build(),
+                C, ObjectSetDomain.<String>builder().value("gamma").build()
         );
         assertThat(constraint.propagate(domains)).isPresent().hasValueSatisfying(m -> assertThat(m).isEmpty());
     }
@@ -210,10 +210,10 @@ public class NaryElementConstraintTest {
     void propagate_noOpWhenVarIsBoundedDomain() {
         var domains = Map.<Variable<?>, io.github.rcrida.jcsp.domains.Domain<?>>of(
                 INDEX, IntRangeDomain.of(1, 3),
-                RESULT, DomainObjectSet.<String>builder().value("alpha").build(),
+                RESULT, ObjectSetDomain.<String>builder().value("alpha").build(),
                 A, IntervalDomain.of(0.0, 1.0),
-                B, DomainObjectSet.<String>builder().value("beta").build(),
-                C, DomainObjectSet.<String>builder().value("gamma").build()
+                B, ObjectSetDomain.<String>builder().value("beta").build(),
+                C, ObjectSetDomain.<String>builder().value("gamma").build()
         );
         assertThat(constraint.propagate(domains)).isPresent().hasValueSatisfying(m -> assertThat(m).isEmpty());
     }
@@ -222,11 +222,11 @@ public class NaryElementConstraintTest {
     void propagate_prunesOutOfBoundsIndices() {
         // index ∈ {0,1,2,3,4,5} but only 3 vars — 0 (i<1) and 4,5 (i>size) are out of bounds
         var domains = Map.<Variable<?>, io.github.rcrida.jcsp.domains.Domain<?>>of(
-                INDEX, DomainObjectSet.<Integer>builder().value(0).value(1).value(2).value(3).value(4).value(5).build(),
-                RESULT, DomainObjectSet.<String>builder().value("alpha").value("beta").value("gamma").build(),
-                A, DomainObjectSet.<String>builder().value("alpha").build(),
-                B, DomainObjectSet.<String>builder().value("beta").build(),
-                C, DomainObjectSet.<String>builder().value("gamma").build()
+                INDEX, ObjectSetDomain.<Integer>builder().value(0).value(1).value(2).value(3).value(4).value(5).build(),
+                RESULT, ObjectSetDomain.<String>builder().value("alpha").value("beta").value("gamma").build(),
+                A, ObjectSetDomain.<String>builder().value("alpha").build(),
+                B, ObjectSetDomain.<String>builder().value("beta").build(),
+                C, ObjectSetDomain.<String>builder().value("gamma").build()
         );
         var result = constraint.propagate(domains);
         assertThat(result).isPresent();
@@ -243,10 +243,10 @@ public class NaryElementConstraintTest {
         // excluded for lack of overlap with result, and every cited variable is singleton.
         var domains = Map.<Variable<?>, io.github.rcrida.jcsp.domains.Domain<?>>of(
                 INDEX, IntRangeDomain.of(1, 3),
-                RESULT, DomainObjectSet.<String>builder().value("x").build(),
-                A, DomainObjectSet.<String>builder().value("alpha").build(),
-                B, DomainObjectSet.<String>builder().value("beta").build(),
-                C, DomainObjectSet.<String>builder().value("gamma").build()
+                RESULT, ObjectSetDomain.<String>builder().value("x").build(),
+                A, ObjectSetDomain.<String>builder().value("alpha").build(),
+                B, ObjectSetDomain.<String>builder().value("beta").build(),
+                C, ObjectSetDomain.<String>builder().value("gamma").build()
         );
         assertThat(constraint.propagate(domains)).isEmpty();
         assertThat(constraint.explainInfeasible(domains))
@@ -258,10 +258,10 @@ public class NaryElementConstraintTest {
         // A is not singleton (still no overlap with result), so no reason is sound.
         var domains = Map.<Variable<?>, io.github.rcrida.jcsp.domains.Domain<?>>of(
                 INDEX, IntRangeDomain.of(1, 3),
-                RESULT, DomainObjectSet.<String>builder().value("x").build(),
-                A, DomainObjectSet.<String>builder().value("alpha").value("delta").build(),
-                B, DomainObjectSet.<String>builder().value("beta").build(),
-                C, DomainObjectSet.<String>builder().value("gamma").build()
+                RESULT, ObjectSetDomain.<String>builder().value("x").build(),
+                A, ObjectSetDomain.<String>builder().value("alpha").value("delta").build(),
+                B, ObjectSetDomain.<String>builder().value("beta").build(),
+                C, ObjectSetDomain.<String>builder().value("gamma").build()
         );
         assertThat(constraint.propagate(domains)).isEmpty();
         assertThat(constraint.explainInfeasible(domains)).isEmpty();
@@ -271,11 +271,11 @@ public class NaryElementConstraintTest {
     void explainInfeasible_allOutOfBounds_returnsEmpty() {
         // Every candidate is out of bounds — nothing to cite, no variable is ever consulted.
         var domains = Map.<Variable<?>, io.github.rcrida.jcsp.domains.Domain<?>>of(
-                INDEX, DomainObjectSet.<Integer>builder().value(0).value(4).build(),
-                RESULT, DomainObjectSet.<String>builder().value("alpha").build(),
-                A, DomainObjectSet.<String>builder().value("alpha").build(),
-                B, DomainObjectSet.<String>builder().value("beta").build(),
-                C, DomainObjectSet.<String>builder().value("gamma").build()
+                INDEX, ObjectSetDomain.<Integer>builder().value(0).value(4).build(),
+                RESULT, ObjectSetDomain.<String>builder().value("alpha").build(),
+                A, ObjectSetDomain.<String>builder().value("alpha").build(),
+                B, ObjectSetDomain.<String>builder().value("beta").build(),
+                C, ObjectSetDomain.<String>builder().value("gamma").build()
         );
         assertThat(constraint.propagate(domains)).isEmpty();
         assertThat(constraint.explainInfeasible(domains)).isEmpty();
@@ -286,11 +286,11 @@ public class NaryElementConstraintTest {
         // 0 and 4 are out of bounds (uncited); 1 and 2 are in-bounds but unsupported (cited via
         // A and B); index 3 (C) never appears in the domain at all, so C must not be cited.
         var domains = Map.<Variable<?>, io.github.rcrida.jcsp.domains.Domain<?>>of(
-                INDEX, DomainObjectSet.<Integer>builder().value(0).value(1).value(2).value(4).build(),
-                RESULT, DomainObjectSet.<String>builder().value("x").build(),
-                A, DomainObjectSet.<String>builder().value("alpha").build(),
-                B, DomainObjectSet.<String>builder().value("beta").build(),
-                C, DomainObjectSet.<String>builder().value("gamma").build()
+                INDEX, ObjectSetDomain.<Integer>builder().value(0).value(1).value(2).value(4).build(),
+                RESULT, ObjectSetDomain.<String>builder().value("x").build(),
+                A, ObjectSetDomain.<String>builder().value("alpha").build(),
+                B, ObjectSetDomain.<String>builder().value("beta").build(),
+                C, ObjectSetDomain.<String>builder().value("gamma").build()
         );
         assertThat(constraint.propagate(domains)).isEmpty();
         assertThat(constraint.explainInfeasible(domains))

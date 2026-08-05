@@ -9,18 +9,18 @@ import java.util.Set;
 import java.util.stream.Stream;
 
 /**
- * The numeric analogue of {@link SingletonDomain}: a domain holding exactly one {@link Number}
+ * The numeric analogue of {@link ObjectSingletonDomain}: a domain holding exactly one {@link Number}
  * value, produced by {@link NumericDomain#withBounds}'s default method whenever bounds-narrowing a
  * {@link NumericDomain} (e.g. {@link IntRangeDomain}, {@link NumericSetDomain}) leaves exactly one
- * value -- the same allocation-avoidance {@link SingletonDomain} already gives non-numeric {@link
+ * value -- the same allocation-avoidance {@link ObjectSingletonDomain} already gives non-numeric {@link
  * SetDomain}-backed domains, without materialising a throwaway {@code Set.of(value)} or {@link
  * NumericSetDomain} wrapper. Implements {@link NumericDiscreteDomain} (unlike {@link
- * SingletonDomain}, which implements neither {@link NumericDomain} nor {@link
+ * ObjectSingletonDomain}, which implements neither {@link NumericDomain} nor {@link
  * NumericDiscreteDomain}) specifically so it satisfies {@link NumericDomain#withBounds}'s own
- * return-type contract -- see {@link SingletonDomain}'s Javadoc for why plain {@link
- * SingletonDomain} can't be used here instead.
+ * return-type contract -- see {@link ObjectSingletonDomain}'s Javadoc for why plain {@link
+ * ObjectSingletonDomain} can't be used here instead.
  * <p>
- * {@link #equals}/{@link #hashCode} follow {@link SingletonDomain}'s same cross-type contract:
+ * {@link #equals}/{@link #hashCode} follow {@link ObjectSingletonDomain}'s same cross-type contract:
  * equal to any {@link DiscreteDomain} (numeric or not) holding the same single value.
  */
 public record NumericSingletonDomain<N extends Number>(@NonNull N value) implements NumericDiscreteDomain<N> {

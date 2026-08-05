@@ -3,7 +3,7 @@ package io.github.rcrida.jcsp.solver.backtrackingsearch.order;
 import io.github.rcrida.jcsp.ConstraintSatisfactionProblem;
 import io.github.rcrida.jcsp.assignments.Assignment;
 import io.github.rcrida.jcsp.domains.Domain;
-import io.github.rcrida.jcsp.domains.DomainObjectSet;
+import io.github.rcrida.jcsp.domains.ObjectSetDomain;
 import io.github.rcrida.jcsp.domains.IntervalDomain;
 import io.github.rcrida.jcsp.variables.Variable;
 import org.junit.jupiter.api.Test;
@@ -14,7 +14,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 public class DefaultValueOrdererTest {
     static Variable.Factory FACTORY = Variable.Factory.INSTANCE;
-    static Domain DOMAIN = DomainObjectSet.builder().value(1).value(2).value(3).build();
+    static Domain DOMAIN = ObjectSetDomain.builder().value(1).value(2).value(3).build();
     static Variable A = FACTORY.create("A");
     static Variable B = FACTORY.create("B");
     static ConstraintSatisfactionProblem CSP = ConstraintSatisfactionProblem.builder()

@@ -12,7 +12,7 @@ import java.util.Set;
  * Represents a set-based implementation of the {@link SetDomain} interface.
  */
 @Builder(toBuilder = true)
-public record DomainObjectSet<T>(@Singular Set<T> values) implements SetDomain<T> {
+public record ObjectSetDomain<T>(@Singular Set<T> values) implements SetDomain<T> {
 
     @Override
     public boolean equals(Object o) { return SetDomain.domainEquals(this, o); }
@@ -20,7 +20,7 @@ public record DomainObjectSet<T>(@Singular Set<T> values) implements SetDomain<T
     @Override
     public int hashCode() { return SetDomain.domainHashCode(this); }
 
-    public static class DomainObjectSetBuilder<T> implements DiscreteDomain.Builder<T> {
+    public static class ObjectSetDomainBuilder<T> implements DiscreteDomain.Builder<T> {
         @Override
         public DiscreteDomain.Builder<T> delete(@NonNull Object value) {
             this.values.remove(value);
@@ -29,12 +29,12 @@ public record DomainObjectSet<T>(@Singular Set<T> values) implements SetDomain<T
 
         /**
          * Overrides Lombok's generated {@code build()} (which would always construct a full
-         * {@link DomainObjectSet} even when narrowed to one value) with {@link
-         * SetDomain.DefaultBuilder#build}'s SingletonDomain optimization -- this builder's own
-         * {@code toBuilder()}/{@code build()} otherwise shadow {@link SetDomain}'s default entirely,
-         * so without this override narrowing a {@link DomainObjectSet} down to one value (e.g. via
-         * {@link io.github.rcrida.jcsp.constraints.NumericBounds#narrow}) never reaches {@link
-         * SingletonDomain}.
+         * {@link ObjectSetDomain} even when narrowed to one value) with {@link
+         * SetDomain.DefaultBuilder#build}'s {@link ObjectSingletonDomain} optimization -- this
+         * builder's own {@code toBuilder()}/{@code build()} otherwise shadow {@link SetDomain}'s
+         * default entirely, so without this override narrowing an {@link ObjectSetDomain} down to
+         * one value (e.g. via {@link io.github.rcrida.jcsp.constraints.NumericBounds#narrow}) never
+         * reaches {@link ObjectSingletonDomain}.
          */
         @Override
         @SuppressWarnings("unchecked")
@@ -42,12 +42,12 @@ public record DomainObjectSet<T>(@Singular Set<T> values) implements SetDomain<T
             // Lombok's @Singular field is left null until the first value/values() call, rather
             // than eagerly allocated -- build() must tolerate that on a still-empty builder.
             if (this.values == null) {
-                return new DomainObjectSet<>(Set.of());
+                return new ObjectSetDomain<>(Set.of());
             }
             if (this.values.size() == 1) {
-                return (DiscreteDomain<T>) new SingletonDomain(this.values.get(0));
+                return (DiscreteDomain<T>) new ObjectSingletonDomain(this.values.get(0));
             }
-            return new DomainObjectSet<>(Collections.unmodifiableSet(new LinkedHashSet<>(this.values)));
+            return new ObjectSetDomain<>(Collections.unmodifiableSet(new LinkedHashSet<>(this.values)));
         }
     }
 }
