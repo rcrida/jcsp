@@ -6,7 +6,7 @@ import io.github.rcrida.jcsp.assignments.Assignment;
 import io.github.rcrida.jcsp.consistency.ConsistencyResult;
 import io.github.rcrida.jcsp.consistency.Inference;
 import io.github.rcrida.jcsp.constraints.binary.BinaryConstraint;
-import io.github.rcrida.jcsp.domains.AssignedDomain;
+import io.github.rcrida.jcsp.domains.SingletonDomain;
 import io.github.rcrida.jcsp.variables.Variable;
 
 import java.util.ArrayDeque;
@@ -43,7 +43,7 @@ public class MAC implements Inference {
                 .collect(Collectors.toSet());
         val queue = new ArrayDeque<>(variableConstraints);
         return AC3.INSTANCE.applyQueue(
-                problem.toBuilder().variableDomain((Variable<Object>) variable, new AssignedDomain(value)).build(),
+                problem.toBuilder().variableDomain((Variable<Object>) variable, new SingletonDomain(value)).build(),
                 queue);
     }
 
@@ -64,7 +64,7 @@ public class MAC implements Inference {
                 .collect(Collectors.toSet());
         val queue = new ArrayDeque<>(variableConstraints);
         return AC3.INSTANCE.applyQueueWithReason(
-                problem.toBuilder().variableDomain((Variable<Object>) variable, new AssignedDomain(value)).build(),
+                problem.toBuilder().variableDomain((Variable<Object>) variable, new SingletonDomain(value)).build(),
                 queue);
     }
 

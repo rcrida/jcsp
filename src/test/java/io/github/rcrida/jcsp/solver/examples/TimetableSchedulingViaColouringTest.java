@@ -4,6 +4,7 @@ import io.github.rcrida.jcsp.solver.Solver;
 import io.github.rcrida.jcsp.assignments.Assignment;
 import lombok.val;
 import io.github.rcrida.jcsp.ConstraintSatisfactionProblem;
+import io.github.rcrida.jcsp.domains.DiscreteDomain;
 import io.github.rcrida.jcsp.domains.DomainObjectSet;
 import io.github.rcrida.jcsp.variables.Variable;
 import org.junit.jupiter.api.Test;
@@ -103,7 +104,7 @@ public class TimetableSchedulingViaColouringTest {
                 return as.slot() != bs.slot() || as.teacher() != bs.teacher();
             };
 
-    static DomainObjectSet domainFor(Subject subject) {
+    static DiscreteDomain domainFor(Subject subject) {
         val builder = DomainObjectSet.builder();
         for (TimeSlot slot : TimeSlot.values())
             for (Teacher teacher : ELIGIBLE_TEACHERS.get(subject))

@@ -14,7 +14,7 @@ duplicate `equals`/`hashCode`/`toString` and any shared enumeration or bounds lo
 
 Every concrete `Domain` implementation is a Java record: `IntervalDomain(double min, double max)`,
 `DomainObjectSet<T>(Set<T> values)`, `IntRangeDomain(Set<Integer> values, int min, int max)`,
-`EnumDomain<E>(Set<E> values)`, `BooleanDomain()`, `AssignedDomain(Object value)`,
+`EnumDomain<E>(Set<E> values)`, `BooleanDomain()`, `SingletonDomain(Object value)`,
 `AssignmentDomain(Set<Assignment> values)`, `SetIntervalDomain<E>(...)`,
 `NumericDiscreteDomain<N extends Number>(Set<N> values)`. Records get `equals`/`hashCode`/`toString`
 for free from their components, which is correct here since domain identity genuinely is structural
@@ -23,7 +23,7 @@ for free from their components, which is correct here since domain identity genu
 Shared behavior lives in interfaces with default methods, not superclasses (records can't extend a
 class): `SetDomain<T> extends DiscreteDomain<T>` declares a single `values(): Set<T>` accessor and
 derives every other `DiscreteDomain` method from it by default, so any set-backed concrete record
-(`DomainObjectSet`, `IntRangeDomain`, `EnumDomain`, `BooleanDomain`, `AssignedDomain`,
+(`DomainObjectSet`, `IntRangeDomain`, `EnumDomain`, `BooleanDomain`, `SingletonDomain`,
 `AssignmentDomain`, `NumericDiscreteDomain`) gets `stream()`/`toList()`/`toBuilder()` etc. without
 reimplementing them, plus static `domainEquals`/`domainHashCode` helpers so cross-type equality
 works (two `SetDomain` instances with the same `values()` are equal regardless of concrete record

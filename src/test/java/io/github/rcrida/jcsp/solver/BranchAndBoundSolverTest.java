@@ -302,7 +302,7 @@ public class BranchAndBoundSolverTest {
     }
 
     /**
-     * Narrows just-assigned {@code variable} to an {@link io.github.rcrida.jcsp.domains.AssignedDomain}
+     * Narrows just-assigned {@code variable} to an {@link io.github.rcrida.jcsp.domains.SingletonDomain}
      * -- the same construct {@code MAC} uses for search-time domain narrowing -- and nothing else, so
      * {@code csp.getDomain(v)} (what {@code LpModelBuilder} reads its box bounds from) reflects search
      * decisions without conflating in any constraint-propagator pruning of its own.
@@ -311,7 +311,7 @@ public class BranchAndBoundSolverTest {
     private static Inference narrowAssignedToSingleton() {
         return (csp, variable, assignment) -> Optional.of(csp.toBuilder()
                 .variableDomain((Variable<Object>) variable,
-                        new io.github.rcrida.jcsp.domains.AssignedDomain(assignment.getValues().get(variable)))
+                        new io.github.rcrida.jcsp.domains.SingletonDomain(assignment.getValues().get(variable)))
                 .build());
     }
 

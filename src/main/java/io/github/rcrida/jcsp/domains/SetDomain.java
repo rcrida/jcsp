@@ -60,10 +60,25 @@ public interface SetDomain<T> extends DiscreteDomain<T> {
         return isSingleton() ? Optional.of(values().iterator().next()) : Optional.empty();
     }
 
+    /**
+     * Checked against any {@link DiscreteDomain}, not just another {@link SetDomain} -- {@link
+     * SingletonDomain} implements {@link DiscreteDomain} directly (not this interface, to avoid
+     * materialising a throwaway {@code Set} on every hot-path check) but must still compare equal to
+     * a {@link SetDomain} holding the same single value, and vice versa; narrowing this check to
+     * {@code SetDomain} would make that comparison asymmetric depending on which side calls {@code
+     * equals}, violating {@link Object#equals}'s contract. The common case -- comparing two {@link
+     * SetDomain}s -- stays on the direct {@link Set#equals} path; the {@code stream}/{@code allMatch}
+     * fallback (needed since a non-{@link SetDomain} {@link DiscreteDomain} has no {@link #values()}
+     * to compare against directly) is only reached for the one implementor that isn't a {@link
+     * SetDomain}, {@link SingletonDomain}.
+     */
     static boolean domainEquals(SetDomain<?> self, Object o) {
         if (self == o) return true;
-        if (!(o instanceof SetDomain<?> other)) return false;
-        return self.values().equals(other.values());
+        if (o instanceof SetDomain<?> setOther) {
+            return self.values().equals(setOther.values());
+        }
+        return o instanceof DiscreteDomain<?> other
+                && self.size() == other.size() && self.values().stream().allMatch(other::contains);
     }
 
     static int domainHashCode(SetDomain<?> self) {
@@ -83,8 +98,19 @@ public interface SetDomain<T> extends DiscreteDomain<T> {
             return this;
         }
 
+        /**
+         * Returns an {@link SingletonDomain} when exactly one value remains, instead of always
+         * building a {@link DomainObjectSet} -- so any propagator narrowing a domain down to a
+         * single value (not just search assigning one explicitly) gets the cheaper representation
+         * for every subsequent read. {@link SingletonDomain#equals} treats the two as
+         * interchangeable, so this is transparent to anything comparing domains.
+         */
         @Override
+        @SuppressWarnings("unchecked")
         public DiscreteDomain<T> build() {
+            if (mutableValues.size() == 1) {
+                return (DiscreteDomain<T>) new SingletonDomain(mutableValues.iterator().next());
+            }
             return DomainObjectSet.<T>builder().values(mutableValues).build();
         }
     }
