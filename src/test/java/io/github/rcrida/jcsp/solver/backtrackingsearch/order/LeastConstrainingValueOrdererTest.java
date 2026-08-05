@@ -2,8 +2,8 @@ package io.github.rcrida.jcsp.solver.backtrackingsearch.order;
 
 import io.github.rcrida.jcsp.ConstraintSatisfactionProblem;
 import io.github.rcrida.jcsp.assignments.Assignment;
+import io.github.rcrida.jcsp.domains.DiscreteDomain;
 import io.github.rcrida.jcsp.domains.Domain;
-import io.github.rcrida.jcsp.domains.ObjectSetDomain;
 import io.github.rcrida.jcsp.domains.IntervalDomain;
 import io.github.rcrida.jcsp.variables.Variable;
 import org.junit.jupiter.api.Test;
@@ -20,7 +20,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  */
 class LeastConstrainingValueOrdererTest {
     static Variable.Factory FACTORY = Variable.Factory.INSTANCE;
-    static Domain<Integer> DOMAIN = ObjectSetDomain.<Integer>builder().value(1).value(2).value(3).build();
+    static Domain<Integer> DOMAIN = DiscreteDomain.of(1, 2, 3);
 
     @Test
     void singleBinaryConstraint() {

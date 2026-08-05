@@ -165,4 +165,16 @@ public class ObjectSingletonDomainTest {
         assertThat(narrowed).isInstanceOf(ObjectSetDomain.class);
         assertThat(narrowed.toList()).containsExactlyInAnyOrder("x", "y");
     }
+
+    @Test
+    void objectSetDomainBuilder_neverAddedAnyValue_buildsEmptyObjectSetDomain() {
+        // Lombok's @Singular field starts null (not an empty collection) until first added --
+        // build() must tolerate a builder nothing was ever added to. Distinct from
+        // DiscreteDomain.of()'s empty case, which always routes through values(List.of()) and so
+        // never leaves the field null.
+        DiscreteDomain<Object> built = ObjectSetDomain.builder().build();
+
+        assertThat(built).isInstanceOf(ObjectSetDomain.class);
+        assertThat(built.isEmpty()).isTrue();
+    }
 }

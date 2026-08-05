@@ -1,7 +1,7 @@
 package io.github.rcrida.jcsp.constraints;
 
+import io.github.rcrida.jcsp.domains.DiscreteDomain;
 import io.github.rcrida.jcsp.domains.Domain;
-import io.github.rcrida.jcsp.domains.ObjectSetDomain;
 import io.github.rcrida.jcsp.domains.IntRangeDomain;
 import io.github.rcrida.jcsp.variables.Variable;
 import org.junit.jupiter.api.Test;
@@ -111,7 +111,7 @@ public class NumericBoundsTest {
         // {0,10} (gapped, no 3) -- distinct infeasibility path from the aggregate check: the
         // per-variable narrowed range [3,3] simply doesn't overlap v1's actual domain values.
         var domains = Map.<Variable<?>, Domain<?>>of(
-                v1, ObjectSetDomain.<Integer>builder().value(0).value(10).build(),
+                v1, DiscreteDomain.of(0, 10),
                 v2, IntRangeDomain.of(0, 0), t, IntRangeDomain.of(3, 3));
         var result = NumericBounds.propagateWeightedSumVsTarget(
                 List.of(v1, v2), new double[]{1.0, 1.0}, t, Operator.EQ, domains);
@@ -124,7 +124,7 @@ public class NumericBoundsTest {
         // distinct infeasibility path as above, but for target's own narrowing instead.
         var domains = Map.<Variable<?>, Domain<?>>of(
                 v1, IntRangeDomain.of(3, 3), v2, IntRangeDomain.of(0, 0),
-                t, ObjectSetDomain.<Integer>builder().value(0).value(10).build());
+                t, DiscreteDomain.of(0, 10));
         var result = NumericBounds.propagateWeightedSumVsTarget(
                 List.of(v1, v2), new double[]{1.0, 1.0}, t, Operator.EQ, domains);
         assertThat(result).isEmpty();

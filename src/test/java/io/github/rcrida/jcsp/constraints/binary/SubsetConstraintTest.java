@@ -2,8 +2,8 @@ package io.github.rcrida.jcsp.constraints.binary;
 
 import io.github.rcrida.jcsp.ConstraintSatisfactionProblem;
 import io.github.rcrida.jcsp.constraints.nary.SetBoundsNogoodConstraint;
+import io.github.rcrida.jcsp.domains.DiscreteDomain;
 import io.github.rcrida.jcsp.domains.Domain;
-import io.github.rcrida.jcsp.domains.ObjectSetDomain;
 import io.github.rcrida.jcsp.domains.SetIntervalDomain;
 import io.github.rcrida.jcsp.solver.Solver;
 import io.github.rcrida.jcsp.variables.Variable;
@@ -53,15 +53,15 @@ public class SubsetConstraintTest {
     // --- propagate: non-SetBoundedDomain sides ---
 
     @Test void propagate_nonSetBoundedDomainSides_noOp() {
-        var lDomain = ObjectSetDomain.<Set<Integer>>builder().value(Set.of(1)).value(Set.of(1, 2)).build();
-        var rDomain = ObjectSetDomain.<Set<Integer>>builder().value(Set.of(1, 2, 3)).build();
+        var lDomain = DiscreteDomain.of(Set.of(1), Set.of(1, 2));
+        var rDomain = DiscreteDomain.of(Set.of(1, 2, 3));
         var result = SubsetConstraint.of(L, R).propagate(Map.of(L, lDomain, R, rDomain));
         assertThat(result).contains(Map.of());
     }
 
     @Test void propagate_onlyRightNonSetBoundedDomain_noOp() {
         var lDomain = SetIntervalDomain.of(Set.of(1), Set.of(1, 2, 3), 0, 3);
-        var rDomain = ObjectSetDomain.<Set<Integer>>builder().value(Set.of(1, 2, 3)).build();
+        var rDomain = DiscreteDomain.of(Set.of(1, 2, 3));
         var result = SubsetConstraint.of(L, R).propagate(Map.of(L, lDomain, R, rDomain));
         assertThat(result).contains(Map.of());
     }

@@ -3,8 +3,8 @@ package io.github.rcrida.jcsp.constraints.nary;
 import io.github.rcrida.jcsp.ConstraintSatisfactionProblem;
 import io.github.rcrida.jcsp.assignments.Assignment;
 import io.github.rcrida.jcsp.constraints.Operator;
+import io.github.rcrida.jcsp.domains.DiscreteDomain;
 import io.github.rcrida.jcsp.domains.Domain;
-import io.github.rcrida.jcsp.domains.ObjectSetDomain;
 import io.github.rcrida.jcsp.domains.EnumDomain;
 import io.github.rcrida.jcsp.solver.Solver;
 import io.github.rcrida.jcsp.variables.Variable;
@@ -98,8 +98,8 @@ public class CountConstraintTest {
     static final Variable<Color> b = F.create("b");
     static final Variable<Color> c = F.create("c");
 
-    static final Domain<Color> RED_ONLY   = ObjectSetDomain.<Color>builder().value(Color.RED).build();
-    static final Domain<Color> NOT_RED    = ObjectSetDomain.<Color>builder().value(Color.GREEN).value(Color.BLUE).build();
+    static final Domain<Color> RED_ONLY   = DiscreteDomain.of(Color.RED);
+    static final Domain<Color> NOT_RED    = DiscreteDomain.of(Color.GREEN, Color.BLUE);
     static final Domain<Color> ALL_COLORS = EnumDomain.allOf(Color.class);
 
     @Test
@@ -196,8 +196,8 @@ public class CountConstraintTest {
 
     // --- propagateWithReasons() ---
 
-    static final Domain<Color> GREEN_ONLY = ObjectSetDomain.<Color>builder().value(Color.GREEN).build();
-    static final Domain<Color> BLUE_ONLY  = ObjectSetDomain.<Color>builder().value(Color.BLUE).build();
+    static final Domain<Color> GREEN_ONLY = DiscreteDomain.of(Color.GREEN);
+    static final Domain<Color> BLUE_ONLY  = DiscreteDomain.of(Color.BLUE);
 
     @Test
     void propagateWithReasons_feasible_returnsEmptyReason() {

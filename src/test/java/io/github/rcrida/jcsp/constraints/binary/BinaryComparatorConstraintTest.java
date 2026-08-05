@@ -184,8 +184,8 @@ public class BinaryComparatorConstraintTest {
         // no-op, same as before this class's discrete narrowing was added; ordering is enforced
         // purely by isSatisfiedBy plus AC3 during search.
         Variable<String> sl = F.create("sl"), sr = F.create("sr");
-        var lDomain = io.github.rcrida.jcsp.domains.ObjectSetDomain.<String>builder().value("a").value("b").build();
-        var rDomain = io.github.rcrida.jcsp.domains.ObjectSetDomain.<String>builder().value("x").value("y").build();
+        var lDomain = io.github.rcrida.jcsp.domains.DiscreteDomain.of("a", "b");
+        var rDomain = io.github.rcrida.jcsp.domains.DiscreteDomain.of("x", "y");
         var result = BinaryComparatorConstraint.of(sl, Operator.LEQ, sr).propagate(Map.of(sl, lDomain, sr, rDomain));
         assertThat(result).isPresent();
         assertThat(result.get()).isEmpty();
@@ -194,7 +194,7 @@ public class BinaryComparatorConstraintTest {
     @Test void propagate_leftBounded_rightDiscrete_clipsLeft() {
         // Left is IntervalDomain, right is discrete {3.0}: L.max clips to 3.
         Variable<Double> il = F.create("il_bd"), ir = F.create("ir_bd");
-        var discreteDouble = io.github.rcrida.jcsp.domains.ObjectSetDomain.<Double>builder().value(3.0).build();
+        var discreteDouble = io.github.rcrida.jcsp.domains.DiscreteDomain.of(3.0);
         var result = BinaryComparatorConstraint.of(il, Operator.LEQ, ir)
                 .propagate(Map.of(il, IntervalDomain.of(0.0, 10.0), ir, discreteDouble)).orElseThrow();
         assertThat(((IntervalDomain) result.get(il)).getMax()).isEqualTo(3.0);
@@ -203,7 +203,7 @@ public class BinaryComparatorConstraintTest {
 
     @Test void propagate_leftDiscrete_rightBounded_clipsRight() {
         // Left is discrete {2.0, 7.0}, right is IntervalDomain[0,8]: R.min clips to lMin=2.
-        var discreteLeft = io.github.rcrida.jcsp.domains.ObjectSetDomain.<Double>builder().value(2.0).value(7.0).build();
+        var discreteLeft = io.github.rcrida.jcsp.domains.DiscreteDomain.of(2.0, 7.0);
         var result = BinaryComparatorConstraint.of(L, Operator.LEQ, R)
                 .propagate(Map.of(L, discreteLeft, R, IntervalDomain.of(0.0, 8.0))).orElseThrow();
         assertThat(right(result).getMin()).isEqualTo(2.0);
@@ -212,7 +212,7 @@ public class BinaryComparatorConstraintTest {
 
     @Test void propagate_leftDiscrete_rightBounded_infeasible() {
         // Left discrete {5.0, 10.0}, right=Interval[0,3], L<=R: lMin=5 > rMax=3 → infeasible.
-        var discreteLeft = io.github.rcrida.jcsp.domains.ObjectSetDomain.<Double>builder().value(5.0).value(10.0).build();
+        var discreteLeft = io.github.rcrida.jcsp.domains.DiscreteDomain.of(5.0, 10.0);
         var result = BinaryComparatorConstraint.of(L, Operator.LEQ, R)
                 .propagate(Map.of(L, discreteLeft, R, IntervalDomain.of(0.0, 3.0)));
         assertThat(result).isEmpty();

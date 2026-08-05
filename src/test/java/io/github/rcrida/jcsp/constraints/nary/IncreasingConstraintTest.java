@@ -177,9 +177,9 @@ public class IncreasingConstraintTest {
         Variable<String> s2 = Variable.Factory.INSTANCE.create("s2");
         Variable<String> s3 = Variable.Factory.INSTANCE.create("s3");
         var chain = IncreasingConstraint.of(List.of(s1, s2, s3));
-        Domain<String> d1 = ObjectSetDomain.<String>builder().value("a").value("b").value("m").build();
-        Domain<String> d2 = ObjectSetDomain.<String>builder().value("c").value("d").build();
-        Domain<String> d3 = ObjectSetDomain.<String>builder().value("e").value("z").build();
+        Domain<String> d1 = DiscreteDomain.of("a", "b", "m");
+        Domain<String> d2 = DiscreteDomain.of("c", "d");
+        Domain<String> d3 = DiscreteDomain.of("e", "z");
         var result = chain.propagate(Map.of(s1, d1, s2, d2, s3, d3)).orElseThrow();
         assertThat(((ObjectSetDomain<String>) result.get(s1)).values()).containsExactlyInAnyOrder("a", "b");
         assertThat(result.containsKey(s2)).isFalse();
@@ -197,10 +197,9 @@ public class IncreasingConstraintTest {
         Variable<String> s2 = Variable.Factory.INSTANCE.create("s2b");
         Variable<String> s3 = Variable.Factory.INSTANCE.create("s3b");
         var chain = IncreasingConstraint.of(List.of(s1, s2, s3));
-        Domain<String> d1 = ObjectSetDomain.<String>builder().value("c").build();
-        Domain<String> d2 = ObjectSetDomain.<String>builder()
-                .value("a").value("b").value("c").value("d").value("e").value("z").build();
-        Domain<String> d3 = ObjectSetDomain.<String>builder().value("d").build();
+        Domain<String> d1 = DiscreteDomain.of("c");
+        Domain<String> d2 = DiscreteDomain.of("a", "b", "c", "d", "e", "z");
+        Domain<String> d3 = DiscreteDomain.of("d");
         var result = chain.propagate(Map.of(s1, d1, s2, d2, s3, d3)).orElseThrow();
         assertThat(((ObjectSetDomain<String>) result.get(s2)).values()).containsExactlyInAnyOrder("c", "d");
         assertThat(result.containsKey(s1)).isFalse();

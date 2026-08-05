@@ -3,8 +3,8 @@ package io.github.rcrida.jcsp.constraints.nary;
 import io.github.rcrida.jcsp.ConstraintSatisfactionProblem;
 import io.github.rcrida.jcsp.assignments.Assignment;
 import io.github.rcrida.jcsp.constraints.Operator;
+import io.github.rcrida.jcsp.domains.DiscreteDomain;
 import io.github.rcrida.jcsp.domains.Domain;
-import io.github.rcrida.jcsp.domains.ObjectSetDomain;
 import io.github.rcrida.jcsp.domains.EnumDomain;
 import io.github.rcrida.jcsp.solver.Solver;
 import io.github.rcrida.jcsp.variables.Variable;
@@ -26,9 +26,9 @@ public class AmongConstraintTest {
     // S = {RED, GREEN}
     static final Set<Color> S = Set.of(Color.RED, Color.GREEN);
 
-    static final Domain<Color> IN_S     = ObjectSetDomain.<Color>builder().value(Color.RED).value(Color.GREEN).build();
+    static final Domain<Color> IN_S     = DiscreteDomain.of(Color.RED, Color.GREEN);
     static final Domain<Color> MIXED    = EnumDomain.allOf(Color.class); // RED, GREEN, BLUE
-    static final Domain<Color> OUT_S    = ObjectSetDomain.<Color>builder().value(Color.BLUE).build();
+    static final Domain<Color> OUT_S    = DiscreteDomain.of(Color.BLUE);
 
     @Test
     void countInS_satisfied() {
@@ -173,8 +173,8 @@ public class AmongConstraintTest {
 
     // --- propagateWithReasons() ---
 
-    static final Domain<Color> RED_ONLY   = ObjectSetDomain.<Color>builder().value(Color.RED).build();
-    static final Domain<Color> GREEN_ONLY = ObjectSetDomain.<Color>builder().value(Color.GREEN).build();
+    static final Domain<Color> RED_ONLY   = DiscreteDomain.of(Color.RED);
+    static final Domain<Color> GREEN_ONLY = DiscreteDomain.of(Color.GREEN);
 
     @Test
     void propagateWithReasons_feasible_returnsEmptyReason() {
@@ -223,7 +223,7 @@ public class AmongConstraintTest {
         // maxCount=0 < 2, but neither impossible variable is pinned to a specific value.
         Variable<Integer> i1 = F.create("i1_among"), i2 = F.create("i2_among");
         var sInt = Set.of(1, 2);
-        var outS = ObjectSetDomain.<Integer>builder().value(3).value(4).build();
+        var outS = DiscreteDomain.of(3, 4);
         var c = AmongConstraint.of(Set.of(i1, i2), sInt, Operator.EQ, 2);
         var result = c.propagateWithReasons(Map.of(i1, outS, i2, outS));
         assertThat(result.isInfeasible()).isTrue();

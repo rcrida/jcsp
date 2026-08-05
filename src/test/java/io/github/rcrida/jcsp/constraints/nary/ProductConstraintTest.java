@@ -3,8 +3,8 @@ package io.github.rcrida.jcsp.constraints.nary;
 import io.github.rcrida.jcsp.ConstraintSatisfactionProblem;
 import io.github.rcrida.jcsp.assignments.Assignment;
 import io.github.rcrida.jcsp.constraints.Operator;
+import io.github.rcrida.jcsp.domains.DiscreteDomain;
 import io.github.rcrida.jcsp.domains.Domain;
-import io.github.rcrida.jcsp.domains.ObjectSetDomain;
 import io.github.rcrida.jcsp.domains.IntRangeDomain;
 import io.github.rcrida.jcsp.domains.IntervalDomain;
 import io.github.rcrida.jcsp.solver.Solver;
@@ -236,8 +236,8 @@ public class ProductConstraintTest {
         // A={2,5}, B={1}, bound=4 (EQ): productMin=2, productMax=5, k=4 in [2,5]
         // LEQ clips A from {2,5} to {2}; GEQ then raises A to need ≥4 → {2}∩[4,5]=∅ → infeasible
         Variable<Integer> a = F.create("a_pr2"), b = F.create("b_pr2");
-        var domA = ObjectSetDomain.<Integer>builder().value(2).value(5).build();
-        var domB = ObjectSetDomain.<Integer>builder().value(1).build();
+        var domA = DiscreteDomain.of(2, 5);
+        var domB = DiscreteDomain.of(1);
         var domains = Map.<Variable<?>, Domain<?>>of(a, domA, b, domB);
         assertThat(ProductConstraint.of(Set.of(a, b), Operator.EQ, 4).propagate(domains)).isEmpty();
     }

@@ -20,6 +20,17 @@ public interface DiscreteDomain<T> extends Domain<T> {
     @Override
     default Optional<T> singleValue() { return isSingleton() ? stream().findFirst() : Optional.empty(); }
 
+    /**
+     * Builds a discrete domain from explicit values, collapsing to an {@link ObjectSingletonDomain}
+     * for exactly one value or an {@link ObjectSetDomain} otherwise -- see {@link
+     * ObjectSetDomain.ObjectSetDomainBuilder#build}. The numeric analogue is {@link
+     * NumericDiscreteDomain#of}.
+     */
+    @SafeVarargs
+    static <T> DiscreteDomain<T> of(T... values) {
+        return ObjectSetDomain.<T>builder().values(List.of(values)).build();
+    }
+
     interface Builder<T> {
         Builder<T> delete(@NonNull Object value);
         DiscreteDomain<T> build();

@@ -176,9 +176,9 @@ public class DecreasingConstraintTest {
         Variable<String> s2 = Variable.Factory.INSTANCE.create("s2");
         Variable<String> s3 = Variable.Factory.INSTANCE.create("s3");
         var chain = DecreasingConstraint.of(List.of(s1, s2, s3));
-        Domain<String> d1 = ObjectSetDomain.<String>builder().value("e").value("z").build();
-        Domain<String> d2 = ObjectSetDomain.<String>builder().value("c").value("d").build();
-        Domain<String> d3 = ObjectSetDomain.<String>builder().value("a").value("b").value("m").build();
+        Domain<String> d1 = DiscreteDomain.of("e", "z");
+        Domain<String> d2 = DiscreteDomain.of("c", "d");
+        Domain<String> d3 = DiscreteDomain.of("a", "b", "m");
         var result = chain.propagate(Map.of(s1, d1, s2, d2, s3, d3)).orElseThrow();
         assertThat(((ObjectSetDomain<String>) result.get(s3)).values()).containsExactlyInAnyOrder("a", "b");
         assertThat(result.containsKey(s1)).isFalse();

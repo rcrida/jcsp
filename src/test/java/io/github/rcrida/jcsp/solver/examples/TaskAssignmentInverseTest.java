@@ -2,7 +2,7 @@ package io.github.rcrida.jcsp.solver.examples;
 import io.github.rcrida.jcsp.solver.Solver;
 
 import io.github.rcrida.jcsp.ConstraintSatisfactionProblem;
-import io.github.rcrida.jcsp.domains.ObjectSetDomain;
+import io.github.rcrida.jcsp.domains.DiscreteDomain;
 import io.github.rcrida.jcsp.domains.IntRangeDomain;
 import io.github.rcrida.jcsp.variables.Variable;
 import lombok.val;
@@ -57,10 +57,10 @@ public class TaskAssignmentInverseTest {
     static ConstraintSatisfactionProblem buildProblem() {
         return ConstraintSatisfactionProblem.builder()
                 // Skill domains: each engineer can only do certain tasks
-                .variableDomain(task1, ObjectSetDomain.<Integer>builder().value(1).value(2).build())
-                .variableDomain(task2, ObjectSetDomain.<Integer>builder().value(2).value(3).build())
-                .variableDomain(task3, ObjectSetDomain.<Integer>builder().value(3).value(4).build())
-                .variableDomain(task4, ObjectSetDomain.<Integer>builder().value(1).value(4).build())
+                .variableDomain(task1, DiscreteDomain.of(1, 2))
+                .variableDomain(task2, DiscreteDomain.of(2, 3))
+                .variableDomain(task3, DiscreteDomain.of(3, 4))
+                .variableDomain(task4, DiscreteDomain.of(1, 4))
                 // Inverse mapping: knowing which engineer leads each task
                 .variableDomain(lead1, IntRangeDomain.of(1, N))
                 .variableDomain(lead2, IntRangeDomain.of(1, N))

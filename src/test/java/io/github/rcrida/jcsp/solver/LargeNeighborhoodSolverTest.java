@@ -3,7 +3,7 @@ package io.github.rcrida.jcsp.solver;
 import io.github.rcrida.jcsp.ConstraintSatisfactionProblem;
 import io.github.rcrida.jcsp.assignments.Assignment;
 import io.github.rcrida.jcsp.domains.BooleanDomain;
-import io.github.rcrida.jcsp.domains.ObjectSetDomain;
+import io.github.rcrida.jcsp.domains.DiscreteDomain;
 import io.github.rcrida.jcsp.solver.assignmentfactory.InitialAssignmentFactory;
 import io.github.rcrida.jcsp.solver.assignmentfactory.RandomAssignmentFactory;
 import io.github.rcrida.jcsp.variables.Variable;
@@ -172,7 +172,7 @@ public class LargeNeighborhoodSolverTest {
         // exists, returns empty, regardless of what LNS does with {y,z}.
         Variable<Boolean> x1 = F.create("x1"), x2 = F.create("x2");
         Variable<Boolean> y = F.create("y"), z = F.create("z");
-        var singletonFalse = ObjectSetDomain.<Boolean>builder().value(false).build();
+        var singletonFalse = DiscreteDomain.of(false);
         var csp = ConstraintSatisfactionProblem.builder()
                 .variableDomain(x1, singletonFalse)
                 .variableDomain(x2, singletonFalse)

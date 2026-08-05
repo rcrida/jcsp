@@ -3,8 +3,8 @@ package io.github.rcrida.jcsp.constraints.unary;
 import io.github.rcrida.jcsp.ConstraintSatisfactionProblem;
 import io.github.rcrida.jcsp.constraints.nary.SetBoundsNogoodConstraint;
 import io.github.rcrida.jcsp.domains.BooleanDomain;
+import io.github.rcrida.jcsp.domains.DiscreteDomain;
 import io.github.rcrida.jcsp.domains.Domain;
-import io.github.rcrida.jcsp.domains.ObjectSetDomain;
 import io.github.rcrida.jcsp.domains.SetIntervalDomain;
 import io.github.rcrida.jcsp.solver.Solver;
 import io.github.rcrida.jcsp.variables.Variable;
@@ -38,7 +38,7 @@ public class SetMembershipConstraintTest {
     // --- propagate: non-SetBoundedDomain ---
 
     @Test void propagate_nonSetBoundedDomain_noOp() {
-        var domain = ObjectSetDomain.<Set<Integer>>builder().value(Set.of(1)).value(Set.of(1, 2)).build();
+        var domain = DiscreteDomain.of(Set.of(1), Set.of(1, 2));
         var result = SetMembershipConstraint.of(S, 1).propagate(Map.of(S, domain));
         assertThat(result).contains(Map.of());
     }
@@ -90,7 +90,7 @@ public class SetMembershipConstraintTest {
     }
 
     @Test void isNecessarilySatisfied_falseForNonSetBoundedDomain() {
-        var domain = ObjectSetDomain.<Set<Integer>>builder().value(Set.of(1)).build();
+        var domain = DiscreteDomain.of(Set.of(1));
         assertThat(SetMembershipConstraint.of(S, 1).isNecessarilySatisfied(Map.of(S, domain))).isFalse();
     }
 

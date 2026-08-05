@@ -3,8 +3,8 @@ package io.github.rcrida.jcsp.solver.tree.selector;
 import io.github.rcrida.jcsp.ConstraintSatisfactionProblem;
 import io.github.rcrida.jcsp.assignments.Assignment;
 import io.github.rcrida.jcsp.consistency.arc.Arc;
+import io.github.rcrida.jcsp.domains.DiscreteDomain;
 import io.github.rcrida.jcsp.domains.Domain;
-import io.github.rcrida.jcsp.domains.ObjectSetDomain;
 import io.github.rcrida.jcsp.variables.Variable;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -20,7 +20,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 public class TopologicalUnassignedVariableSelectorTest {
     static final Variable.Factory FACTORY = Variable.Factory.INSTANCE;
-    static final Domain<Integer> DOMAIN = ObjectSetDomain.<Integer>builder().value(1).value(2).value(3).build();
+    static final Domain<Integer> DOMAIN = DiscreteDomain.of(1, 2, 3);
     static final Variable<Integer> A = FACTORY.create("A");
     static final Variable<Integer> B = FACTORY.create("B");
     static final List<Arc> ARCS = List.of(Arc.of(A, B));

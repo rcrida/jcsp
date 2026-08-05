@@ -8,7 +8,6 @@ import io.github.rcrida.jcsp.constraints.binary.BinaryNotEqualsConstraint;
 import io.github.rcrida.jcsp.constraints.binary.BinaryTuplesConstraint;
 import io.github.rcrida.jcsp.constraints.nary.GroundNogoodConstraint;
 import io.github.rcrida.jcsp.domains.DiscreteDomain;
-import io.github.rcrida.jcsp.domains.ObjectSetDomain;
 import io.github.rcrida.jcsp.domains.EnumDomain;
 import io.github.rcrida.jcsp.domains.IntRangeDomain;
 import io.github.rcrida.jcsp.domains.IntervalDomain;
@@ -53,8 +52,8 @@ public class AC3Test {
         System.out.println(problem);
         val arcConstrainedProblem = AC3.INSTANCE.apply(problem).get();
         System.out.println(arcConstrainedProblem);
-        assertThat(arcConstrainedProblem.getVariableDomains().get(left)).isEqualTo(ObjectSetDomain.builder().values(List.of(0, 1, 2, 3)).build());
-        assertThat(arcConstrainedProblem.getVariableDomains().get(right)).isEqualTo(ObjectSetDomain.builder().values(List.of(0, 1, 4, 9)).build());
+        assertThat(arcConstrainedProblem.getVariableDomains().get(left)).isEqualTo(DiscreteDomain.of(0, 1, 2, 3));
+        assertThat(arcConstrainedProblem.getVariableDomains().get(right)).isEqualTo(DiscreteDomain.of(0, 1, 4, 9));
     }
 
     @Test
@@ -163,7 +162,7 @@ public class AC3Test {
         // AC3 passes the first instanceof check (from IS discrete) but skips at the second (to is not).
         Variable<Double> d = Variable.Factory.INSTANCE.create("d_ac3b");
         Variable<Double> c = Variable.Factory.INSTANCE.create("c_ac3b");
-        var discreteDoubleDomain = ObjectSetDomain.<Double>builder().value(2.0).value(5.0).build();
+        var discreteDoubleDomain = DiscreteDomain.of(2.0, 5.0);
         var csp = ConstraintSatisfactionProblem.builder()
                 .variableDomain(d, discreteDoubleDomain)
                 .variableDomain(c, IntervalDomain.of(0.0, 10.0))

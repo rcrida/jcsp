@@ -1,8 +1,8 @@
 package io.github.rcrida.jcsp.constraints.nary;
 
 import io.github.rcrida.jcsp.assignments.Assignment;
+import io.github.rcrida.jcsp.domains.DiscreteDomain;
 import io.github.rcrida.jcsp.domains.Domain;
-import io.github.rcrida.jcsp.domains.ObjectSetDomain;
 import io.github.rcrida.jcsp.domains.IntRangeDomain;
 import io.github.rcrida.jcsp.domains.IntervalDomain;
 import io.github.rcrida.jcsp.domains.SetIntervalDomain;
@@ -211,14 +211,14 @@ public class RangeNogoodConstraintTest {
     void fromCurrentBounds_nonNumericVariable_returnsEmpty() {
         Variable<String> x = F.create("sx");
         var domains = Map.<Variable<?>, Domain<?>>of(
-                x, ObjectSetDomain.<String>builder().value("a").value("b").build());
+                x, DiscreteDomain.of("a", "b"));
         assertThat(RangeNogoodConstraint.fromCurrentBounds(Set.of(x), domains)).isEmpty();
     }
 
     @Test
     void fromCurrentBounds_emptyDomain_returnsEmpty() {
         Variable<Integer> x = F.create("ex");
-        var domains = Map.<Variable<?>, Domain<?>>of(x, ObjectSetDomain.<Integer>builder().build());
+        var domains = Map.<Variable<?>, Domain<?>>of(x, DiscreteDomain.of());
         assertThat(RangeNogoodConstraint.fromCurrentBounds(Set.of(x), domains)).isEmpty();
     }
 
@@ -239,7 +239,7 @@ public class RangeNogoodConstraintTest {
         // producing a RangeNogoodConstraint over a superset of the real domain.
         Variable<Integer> x = F.create("gx");
         var domains = Map.<Variable<?>, Domain<?>>of(
-                x, ObjectSetDomain.<Integer>builder().value(1).value(5).build());
+                x, DiscreteDomain.of(1, 5));
         assertThat(RangeNogoodConstraint.fromCurrentBounds(Set.of(x), domains)).isEmpty();
     }
 

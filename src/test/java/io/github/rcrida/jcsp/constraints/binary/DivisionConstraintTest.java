@@ -4,8 +4,8 @@ import io.github.rcrida.jcsp.ConstraintSatisfactionProblem;
 import io.github.rcrida.jcsp.assignments.Assignment;
 import io.github.rcrida.jcsp.constraints.Operator;
 import io.github.rcrida.jcsp.constraints.nary.GroundNogoodConstraint;
+import io.github.rcrida.jcsp.domains.DiscreteDomain;
 import io.github.rcrida.jcsp.domains.Domain;
-import io.github.rcrida.jcsp.domains.ObjectSetDomain;
 import io.github.rcrida.jcsp.domains.IntRangeDomain;
 import io.github.rcrida.jcsp.domains.IntervalDomain;
 import io.github.rcrida.jcsp.solver.Solver;
@@ -273,8 +273,8 @@ public class DivisionConstraintTest {
     @Test void propagate_eq_discreteDomain_infeasible_noExactRatio() {
         // X={5}, Y={3}, k=2 (EQ): xMin/yMax=5/3≈1.67<2 passes LEQ; xMax/yMin=5/3<2 fails GEQ → infeasible
         Variable<Integer> a = F.create("a_dv2"), b = F.create("b_dv2");
-        var domA = ObjectSetDomain.<Integer>builder().value(5).build();
-        var domB = ObjectSetDomain.<Integer>builder().value(3).build();
+        var domA = DiscreteDomain.of(5);
+        var domB = DiscreteDomain.of(3);
         assertThat(DivisionConstraint.of(a, b, Operator.EQ, 2).propagate(Map.of(a, domA, b, domB))).isEmpty();
     }
 
@@ -283,8 +283,8 @@ public class DivisionConstraintTest {
         // LEQ: newXMax=3*3=9 < 10 → X clips to {2}, xMax=2
         // GEQ: newXMin=3*1=3 > 2=xMin → narrow X to [3,2] → empty → infeasible
         Variable<Integer> a = F.create("a_dv3"), b = F.create("b_dv3");
-        var domA = ObjectSetDomain.<Integer>builder().value(2).value(10).build();
-        var domB = ObjectSetDomain.<Integer>builder().value(1).value(3).build();
+        var domA = DiscreteDomain.of(2, 10);
+        var domB = DiscreteDomain.of(1, 3);
         assertThat(DivisionConstraint.of(a, b, Operator.EQ, 3).propagate(Map.of(a, domA, b, domB))).isEmpty();
     }
 

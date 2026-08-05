@@ -303,8 +303,8 @@ public class LinearBoundConstraintTest {
         Variable<Integer> ny = F.create("ny");
         var c = LinearBoundConstraint.of(Map.of(nx, 2, ny, 3), Operator.EQ, 7);
         var domains = Map.<Variable<?>, Domain<?>>of(
-                nx, ObjectSetDomain.<Integer>builder().value(0).value(4).build(),
-                ny, ObjectSetDomain.<Integer>builder().value(1).build());
+                nx, DiscreteDomain.of(0, 4),
+                ny, DiscreteDomain.of(1));
         assertThat(c.propagate(domains)).isEmpty();
     }
 
@@ -497,7 +497,7 @@ public class LinearBoundConstraintTest {
         var c = LinearBoundConstraint.of(Map.of(dx, 1.0, dy, 1.0), Operator.EQ, 10.0);
         var domains = Map.<Variable<?>, Domain<?>>of(
                 dx, IntervalDomain.of(0.0, 10.0),
-                dy, ObjectSetDomain.<Double>builder().value(2.0).value(8.0).build());
+                dy, DiscreteDomain.of(2.0, 8.0));
         var result = c.propagate(domains);
         assertThat(result).isPresent();
         assertThat(result.get().get(dx)).isEqualTo(IntervalDomain.of(2.0, 8.0));
@@ -514,7 +514,7 @@ public class LinearBoundConstraintTest {
         for (float v = 0f; v <= 9f; v++) fxDomain.value(v);
         var domains = Map.<Variable<?>, Domain<?>>of(
                 fx, fxDomain.build(),
-                fy, ObjectSetDomain.<Float>builder().value(2.0f).build());
+                fy, DiscreteDomain.of(2.0f));
         var result = c.propagate(domains);
         assertThat(result).isPresent();
         @SuppressWarnings("unchecked")
@@ -531,7 +531,7 @@ public class LinearBoundConstraintTest {
         Variable<Double> dy = F.create("dy");
         var c = LinearBoundConstraint.of(Map.of(dx, 1.0, dy, 1.0), Operator.EQ, 10.0);
         var domains = Map.<Variable<?>, Domain<?>>of(
-                dx, ObjectSetDomain.<Double>builder().value(0.0).value(1.0).build(),
+                dx, DiscreteDomain.of(0.0, 1.0),
                 dy, IntervalDomain.of(9.2, 9.8));
         assertThat(c.propagate(domains)).isEmpty();
     }
@@ -581,8 +581,8 @@ public class LinearBoundConstraintTest {
         Variable<Integer> ny = F.create("ny");
         var c = LinearBoundConstraint.of(Map.of(nx, 2, ny, 3), Operator.EQ, 7);
         var domains = Map.<Variable<?>, Domain<?>>of(
-                nx, ObjectSetDomain.<Integer>builder().value(0).value(4).build(),
-                ny, ObjectSetDomain.<Integer>builder().value(1).build());
+                nx, DiscreteDomain.of(0, 4),
+                ny, DiscreteDomain.of(1));
         var result = c.propagateWithReasons(domains);
         assertThat(result.isInfeasible()).isTrue();
         assertThat(result.reason()).isNull();
