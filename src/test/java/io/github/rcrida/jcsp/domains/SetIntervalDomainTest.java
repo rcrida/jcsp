@@ -219,7 +219,7 @@ public class SetIntervalDomainTest {
     @Test
     void testToString() {
         var d = SetIntervalDomain.of(Set.of(1), Set.of(1, 2), 0, 2);
-        assertThat(d.toString()).isEqualTo("[[1] subsetOf S subsetOf [1, 2], |S| in [0, 2]]");
+        assertThat(d.toString()).isEqualTo("[[1] subsetOf S subsetOf [1, 2], |S| in [0..2]]");
     }
 
     @Test

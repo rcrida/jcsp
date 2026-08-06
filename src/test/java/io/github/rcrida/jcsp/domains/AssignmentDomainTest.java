@@ -43,4 +43,19 @@ public class AssignmentDomainTest {
                 Assignment.of(Map.<Variable<?>, Object>of(variable1, 2, variable2, "b", variable3, false))
         );
     }
+
+    @Test
+    void testToString() {
+        // values() is backed by a HashSet, and each Assignment's own field order comes from an
+        // unspecified-order Map internally, so neither element order nor per-element field order is
+        // guaranteed -- check the "{elem, elem, ...}" structure and content instead of one literal
+        // string.
+        List<String> expectedElements = assignmentDomain.values().stream().map(Object::toString).toList();
+
+        String actual = assignmentDomain.toString();
+        assertThat(actual).startsWith("{").endsWith("}");
+        String inner = actual.substring(1, actual.length() - 1);
+        List<String> actualElements = List.of(inner.split("(?<=}), (?=\\{)"));
+        assertThat(actualElements).containsExactlyInAnyOrderElementsOf(expectedElements);
+    }
 }

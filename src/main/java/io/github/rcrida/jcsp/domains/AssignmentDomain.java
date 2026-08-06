@@ -65,4 +65,7 @@ public record AssignmentDomain(Set<Assignment> values) implements SetDomain<Assi
         }
         return List.of(Assignment.builder().value(variable, domain.singleValue().orElseThrow()).build());
     }
+
+    @Override
+    public String toString() { return SetDomain.domainToString(this); }
 }

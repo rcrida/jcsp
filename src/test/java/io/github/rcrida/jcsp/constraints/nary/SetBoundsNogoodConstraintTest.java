@@ -313,6 +313,6 @@ public class SetBoundsNogoodConstraintTest {
         Variable<Set<Integer>> x = F.create("xx");
         var c = SetBoundsNogoodConstraint.of(Map.of(x, SetIntervalDomain.of(Set.of(1), Set.of(1, 2), 1, 2)));
         assertThat(c.toString()).isEqualTo(
-                "<(xx), nogood(xx not in [[1] subsetOf S subsetOf [1, 2], |S| in [1, 2]])>");
+                "<(xx), nogood(xx not in [[1] subsetOf S subsetOf [1, 2], |S| in [1..2]])>");
     }
 }

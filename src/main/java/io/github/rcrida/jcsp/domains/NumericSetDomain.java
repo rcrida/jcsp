@@ -4,7 +4,6 @@ import org.jspecify.annotations.NonNull;
 
 import java.util.Comparator;
 import java.util.Set;
-import java.util.stream.Collectors;
 
 /**
  * The generic result of {@link NumericDomain}'s default {@link NumericDomain#withBounds}: a plain
@@ -32,9 +31,7 @@ public record NumericSetDomain<N extends Number>(@NonNull Set<N> values) impleme
     public int hashCode() { return SetDomain.domainHashCode(this); }
 
     @Override
-    public String toString() {
-        return values.stream().map(Object::toString).collect(Collectors.joining(", ", "{", "}"));
-    }
+    public String toString() { return SetDomain.domainToString(this); }
 
     /**
      * Overrides {@link SetDomain}'s default, which would route through {@link

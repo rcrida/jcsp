@@ -288,6 +288,7 @@ public record SetIntervalDomain<E>(Set<E> lowerBound, Set<E> upperBound, int min
 
     @Override
     public String toString() {
-        return "[" + lowerBound + " subsetOf S subsetOf " + upperBound + ", |S| in [" + minCardinality + ", " + maxCardinality + "]]";
+        // use .. to denote countable range
+        return "[" + lowerBound + " subsetOf S subsetOf " + upperBound + ", |S| in [" + minCardinality + ".." + maxCardinality + "]]";
     }
 }

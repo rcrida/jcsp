@@ -5,7 +5,6 @@ import org.jspecify.annotations.NonNull;
 import java.util.Collections;
 import java.util.EnumSet;
 import java.util.Set;
-import java.util.stream.Collectors;
 
 /**
  * Represents a domain that restricts valid values to a predefined set of enum elements.
@@ -22,9 +21,7 @@ public record EnumDomain<E extends Enum<E>>(Set<E> values) implements SetDomain<
     public int hashCode() { return SetDomain.domainHashCode(this); }
 
     @Override
-    public String toString() {
-        return values.stream().map(Object::toString).collect(Collectors.joining(", ", "{", "}"));
-    }
+    public String toString() { return SetDomain.domainToString(this); }
 
     public static <E extends Enum<E>> EnumDomain<E> allOf(@NonNull Class<E> elementType) {
         return new EnumDomain<>(EnumSet.allOf(elementType));

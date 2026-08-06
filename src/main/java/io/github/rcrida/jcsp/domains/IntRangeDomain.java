@@ -46,6 +46,7 @@ public record IntRangeDomain(Set<Integer> values, int min, int max)
 
     @Override
     public String toString() {
+        // use .. to denote countable range
         return "[" + min + ".." + max + "]";
     }
 }

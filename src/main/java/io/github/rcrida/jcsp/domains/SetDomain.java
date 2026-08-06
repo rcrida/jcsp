@@ -5,6 +5,7 @@ import org.jspecify.annotations.Nullable;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
+import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 /**
@@ -82,5 +83,10 @@ public interface SetDomain<T> extends DiscreteDomain<T> {
 
     static int domainHashCode(SetDomain<?> self) {
         return self.values().hashCode();
+    }
+
+    /** Shared {@code toString()} formatting for every {@link SetDomain} record -- Object methods can't be interface defaults, so each implementor still overrides {@code toString()} itself and delegates here. */
+    static String domainToString(SetDomain<?> self) {
+        return self.values().stream().map(Object::toString).collect(Collectors.joining(", ", "{", "}"));
     }
 }
