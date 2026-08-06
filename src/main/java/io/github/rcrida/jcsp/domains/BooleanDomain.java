@@ -11,6 +11,11 @@ public record BooleanDomain() implements SetDomain<Boolean> {
 
     private static final Set<Boolean> BOOLEAN_VALUES = Set.of(true, false);
 
+    /** The narrowed domain containing only {@code true} -- an {@link ObjectSingletonDomain}, not a {@link BooleanDomain}. */
+    public static final DiscreteDomain<Boolean> TRUE_ONLY = INSTANCE.toBuilder().delete(false).build();
+    /** The narrowed domain containing only {@code false} -- an {@link ObjectSingletonDomain}, not a {@link BooleanDomain}. */
+    public static final DiscreteDomain<Boolean> FALSE_ONLY = INSTANCE.toBuilder().delete(true).build();
+
     @Override
     public Set<Boolean> values() {
         return BOOLEAN_VALUES;

@@ -45,6 +45,8 @@ import io.github.rcrida.jcsp.constraints.nary.MaxConstraint;
 import io.github.rcrida.jcsp.constraints.nary.MinConstraint;
 import io.github.rcrida.jcsp.constraints.nary.DecreasingConstraint;
 import io.github.rcrida.jcsp.constraints.nary.IncreasingConstraint;
+import io.github.rcrida.jcsp.constraints.nary.LinearBooleanBoundConstraint;
+import io.github.rcrida.jcsp.constraints.nary.LinearBooleanVariableConstraint;
 import io.github.rcrida.jcsp.constraints.nary.LinearBoundConstraint;
 import io.github.rcrida.jcsp.constraints.nary.LinearVariableConstraint;
 import io.github.rcrida.jcsp.constraints.nary.GroundNogoodConstraint;
@@ -1230,6 +1232,39 @@ public class ConstraintSatisfactionProblem {
          */
         public <N extends Number> ConstraintSatisfactionProblemBuilder linearConstraint(@NonNull Map<Variable<N>, N> coefficients, @NonNull Operator operator, @NonNull Variable<N> target) {
             return this.constraint(LinearVariableConstraint.of(coefficients, operator, target));
+        }
+
+        /**
+         * Create a weighted-sum (linear) constraint over boolean indicator variables, compared to a
+         * fixed bound: {@code a1*b1 + a2*b2 + ... <op> bound}, where each {@code true} contributes
+         * its coefficient and each {@code false} contributes zero. The boolean-indicator sibling of
+         * {@link #linearConstraint(Map, Operator, Number)} — needed because that method's {@code
+         * Map<Variable<N>, N>} requires the variable and the coefficient to share one {@link Number}
+         * type, so a {@code Variable<Boolean>} (e.g. a {@link #reifyConstraint} indicator) can never
+         * be a key there; a same-named overload isn't possible either, since {@code Map<Variable<N>,
+         * N>} and {@code Map<Variable<Boolean>, N>} erase to the same raw {@code Map} (JLS 8.4.2).
+         *
+         * @param coefficients map from boolean variable to its numeric coefficient
+         * @param operator     the comparison operator (e.g. {@link Operator#EQ}, {@link Operator#LEQ})
+         * @param bound        the value to compare the weighted sum against
+         * @return the builder
+         */
+        public <N extends Number> ConstraintSatisfactionProblemBuilder linearBooleanConstraint(@NonNull Map<Variable<Boolean>, N> coefficients, @NonNull Operator operator, @NonNull N bound) {
+            return this.constraint(LinearBooleanBoundConstraint.of(coefficients, operator, bound));
+        }
+
+        /**
+         * Create a weighted-sum (linear) constraint over boolean indicator variables, compared to a
+         * variable target rather than a fixed bound: {@code a1*b1 + a2*b2 + ... <op> target}. See
+         * {@link #linearBooleanConstraint(Map, Operator, Number)} for why this needs its own name.
+         *
+         * @param coefficients map from boolean variable to its numeric coefficient
+         * @param operator     the comparison operator (e.g. {@link Operator#EQ}, {@link Operator#LEQ})
+         * @param target       the variable to compare the weighted sum against
+         * @return the builder
+         */
+        public <N extends Number> ConstraintSatisfactionProblemBuilder linearBooleanConstraint(@NonNull Map<Variable<Boolean>, N> coefficients, @NonNull Operator operator, @NonNull Variable<N> target) {
+            return this.constraint(LinearBooleanVariableConstraint.of(coefficients, operator, target));
         }
 
         /**
