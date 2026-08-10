@@ -13,7 +13,7 @@ import java.util.stream.Stream;
  * value, produced by {@link NumericDomain#withBounds}'s default method whenever bounds-narrowing a
  * {@link NumericDomain} (e.g. {@link IntRangeDomain}, {@link NumericSetDomain}) leaves exactly one
  * value -- the same allocation-avoidance {@link ObjectSingletonDomain} already gives non-numeric {@link
- * SetDomain}-backed domains, without materialising a throwaway {@code Set.of(value)} or {@link
+ * DiscreteSetDomain}-backed domains, without materialising a throwaway {@code Set.of(value)} or {@link
  * NumericSetDomain} wrapper. Implements {@link NumericDiscreteDomain} (unlike {@link
  * ObjectSingletonDomain}, which implements neither {@link NumericDomain} nor {@link
  * NumericDiscreteDomain}) specifically so it satisfies {@link NumericDomain#withBounds}'s own

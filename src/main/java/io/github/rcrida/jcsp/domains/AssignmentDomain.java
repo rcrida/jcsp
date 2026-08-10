@@ -20,7 +20,7 @@ import java.util.stream.Stream;
  * decomposition. The domain consists of all the possible consistent combinations of values of the domains of each of the clique
  * variables.
  */
-public record AssignmentDomain(Set<Assignment> values) implements SetDomain<Assignment> {
+public record AssignmentDomain(Set<Assignment> values) implements DiscreteSetDomain<Assignment> {
     /**
      * Create the domain by iterating over all combinations of the clique variable domains, to create assignments and then
      * filter out any that are not consistent with the constraints of the original problem.
@@ -67,5 +67,5 @@ public record AssignmentDomain(Set<Assignment> values) implements SetDomain<Assi
     }
 
     @Override
-    public String toString() { return SetDomain.domainToString(this); }
+    public String toString() { return DiscreteSetDomain.domainToString(this); }
 }

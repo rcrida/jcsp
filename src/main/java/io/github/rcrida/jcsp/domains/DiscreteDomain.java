@@ -53,7 +53,7 @@ public interface DiscreteDomain<T> extends Domain<T> {
      * their {@link #toBuilder()} through this class, so the empty/singleton/many collapsing in
      * {@link #build} lives in exactly one place. Replaces two previously-separate builders (a
      * Lombok-generated one on {@link ObjectSetDomain}, and a hand-written {@code
-     * SetDomain.DefaultBuilder}) that used to duplicate this same collapsing logic and repeatedly
+     * DiscreteSetDomain.DefaultBuilder}) that used to duplicate this same collapsing logic and repeatedly
      * fought Lombok's builder-class-naming/return-type conventions.
      */
     final class DiscreteDomainBuilder<T> implements Builder<T> {

@@ -12,7 +12,7 @@ import java.util.Set;
  * DiscreteDomain.DiscreteDomainBuilder}'s own fallback to {@link ObjectSetDomain} for the same
  * reason.
  */
-public record NumericSetDomain<N extends Number>(@NonNull Set<N> values) implements NumericDiscreteDomain<N>, SetDomain<N> {
+public record NumericSetDomain<N extends Number>(@NonNull Set<N> values) implements NumericDiscreteDomain<N>, DiscreteSetDomain<N> {
 
     @Override
     public N getMin() {
@@ -25,16 +25,16 @@ public record NumericSetDomain<N extends Number>(@NonNull Set<N> values) impleme
     }
 
     @Override
-    public boolean equals(Object o) { return SetDomain.domainEquals(this, o); }
+    public boolean equals(Object o) { return DiscreteSetDomain.domainEquals(this, o); }
 
     @Override
-    public int hashCode() { return SetDomain.domainHashCode(this); }
+    public int hashCode() { return DiscreteSetDomain.domainHashCode(this); }
 
     @Override
-    public String toString() { return SetDomain.domainToString(this); }
+    public String toString() { return DiscreteSetDomain.domainToString(this); }
 
     /**
-     * Overrides {@link SetDomain}'s default, which would route through {@link
+     * Overrides {@link DiscreteSetDomain}'s default, which would route through {@link
      * DiscreteDomain.DiscreteDomainBuilder} and collapse to the plain {@link ObjectSingletonDomain}/
      * {@link ObjectEmptyDomain} on narrowing -- losing {@link NumericDomain}-ness. Routes through
      * {@link NumericDiscreteDomain.NumericDiscreteDomainBuilder} instead, so narrowing a {@link

@@ -10,7 +10,7 @@ import java.util.stream.Stream;
 /**
  * The empty analogue of {@link ObjectSingletonDomain}: the domain holding no values at all,
  * produced by {@link DiscreteDomain.DiscreteDomainBuilder#build} whenever narrowing empties a
- * {@link SetDomain}-backed domain completely. Unlike {@link ObjectSingletonDomain}, which needs a
+ * {@link DiscreteSetDomain}-backed domain completely. Unlike {@link ObjectSingletonDomain}, which needs a
  * genuinely distinct instance per value it holds, there is exactly one possible empty domain
  * regardless of {@code T}, so the single underlying instance is reused rather than allocated per
  * call -- purely for symmetry with {@link ObjectSingletonDomain}/{@link NumericEmptyDomain}, not

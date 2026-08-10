@@ -212,7 +212,7 @@ public class AC3 implements ConstraintConsistency {
         if (!(domains.get(arc.getFrom()) instanceof DiscreteDomain<?> D_i)) return Optional.empty();
         if (!(domains.get(arc.getTo()) instanceof DiscreteDomain<?> D_j)) return Optional.empty();
         // Both D_i and D_j are materialised once via toList() (every concrete DiscreteDomain is
-        // also a SetDomain, whose toList() is List.copyOf(values()) -- no Stream pipeline at all)
+        // also a DiscreteSetDomain, whose toList() is List.copyOf(values()) -- no Stream pipeline at all)
         // and iterated with plain loops, not .stream().filter(...): profiling found the Stream/
         // Spliterator/SpinedNodeBuilder machinery of a per-revise() (never mind per-x) pipeline to
         // be the single largest allocation source in the whole solver, this being O(nodes * arcs)

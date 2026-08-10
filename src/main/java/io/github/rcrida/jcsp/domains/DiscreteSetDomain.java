@@ -13,7 +13,7 @@ import java.util.stream.Stream;
  * {@link DiscreteDomain} methods in terms of {@link #values()}, so implementors only need to
  * supply that single method.
  */
-public interface SetDomain<T> extends DiscreteDomain<T> {
+public interface DiscreteSetDomain<T> extends DiscreteDomain<T> {
 
     Set<T> values();
 
@@ -60,33 +60,33 @@ public interface SetDomain<T> extends DiscreteDomain<T> {
     }
 
     /**
-     * Checked against any {@link DiscreteDomain}, not just another {@link SetDomain} -- {@link
+     * Checked against any {@link DiscreteDomain}, not just another {@link DiscreteSetDomain} -- {@link
      * ObjectSingletonDomain} implements {@link DiscreteDomain} directly (not this interface, to avoid
      * materialising a throwaway {@code Set} on every hot-path check) but must still compare equal to
-     * a {@link SetDomain} holding the same single value, and vice versa; narrowing this check to
-     * {@code SetDomain} would make that comparison asymmetric depending on which side calls {@code
+     * a {@link DiscreteSetDomain} holding the same single value, and vice versa; narrowing this check to
+     * {@code DiscreteSetDomain} would make that comparison asymmetric depending on which side calls {@code
      * equals}, violating {@link Object#equals}'s contract. The common case -- comparing two {@link
-     * SetDomain}s -- stays on the direct {@link Set#equals} path; the {@code stream}/{@code allMatch}
-     * fallback (needed since a non-{@link SetDomain} {@link DiscreteDomain} has no {@link #values()}
+     * DiscreteSetDomain}s -- stays on the direct {@link Set#equals} path; the {@code stream}/{@code allMatch}
+     * fallback (needed since a non-{@link DiscreteSetDomain} {@link DiscreteDomain} has no {@link #values()}
      * to compare against directly) is only reached for the implementors that aren't a {@link
-     * SetDomain}: {@link ObjectSingletonDomain}, {@link ObjectEmptyDomain}, {@link
+     * DiscreteSetDomain}: {@link ObjectSingletonDomain}, {@link ObjectEmptyDomain}, {@link
      * NumericSingletonDomain}, {@link NumericEmptyDomain}.
      */
-    static boolean domainEquals(SetDomain<?> self, Object o) {
+    static boolean domainEquals(DiscreteSetDomain<?> self, Object o) {
         if (self == o) return true;
-        if (o instanceof SetDomain<?> setOther) {
+        if (o instanceof DiscreteSetDomain<?> setOther) {
             return self.values().equals(setOther.values());
         }
         return o instanceof DiscreteDomain<?> other
                 && self.size() == other.size() && self.values().stream().allMatch(other::contains);
     }
 
-    static int domainHashCode(SetDomain<?> self) {
+    static int domainHashCode(DiscreteSetDomain<?> self) {
         return self.values().hashCode();
     }
 
-    /** Shared {@code toString()} formatting for every {@link SetDomain} record -- Object methods can't be interface defaults, so each implementor still overrides {@code toString()} itself and delegates here. */
-    static String domainToString(SetDomain<?> self) {
+    /** Shared {@code toString()} formatting for every {@link DiscreteSetDomain} record -- Object methods can't be interface defaults, so each implementor still overrides {@code toString()} itself and delegates here. */
+    static String domainToString(DiscreteSetDomain<?> self) {
         return self.values().stream().map(Object::toString).collect(Collectors.joining(", ", "{", "}"));
     }
 }

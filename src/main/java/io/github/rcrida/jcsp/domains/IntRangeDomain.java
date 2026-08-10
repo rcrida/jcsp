@@ -14,7 +14,7 @@ import java.util.Set;
  * rather than access control.
  */
 public record IntRangeDomain(Set<Integer> values, int min, int max)
-        implements SetDomain<Integer>, NumericDiscreteDomain<Integer> {
+        implements DiscreteSetDomain<Integer>, NumericDiscreteDomain<Integer> {
     public IntRangeDomain {
         values = Collections.unmodifiableSet(new LinkedHashSet<>(values));
         assert values.isEmpty() || (min == Collections.min(values) && max == Collections.max(values))
@@ -39,10 +39,10 @@ public record IntRangeDomain(Set<Integer> values, int min, int max)
     }
 
     @Override
-    public boolean equals(Object o) { return SetDomain.domainEquals(this, o); }
+    public boolean equals(Object o) { return DiscreteSetDomain.domainEquals(this, o); }
 
     @Override
-    public int hashCode() { return SetDomain.domainHashCode(this); }
+    public int hashCode() { return DiscreteSetDomain.domainHashCode(this); }
 
     @Override
     public String toString() {

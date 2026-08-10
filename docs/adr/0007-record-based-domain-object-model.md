@@ -21,12 +21,12 @@ for free from their components, which is correct here since domain identity genu
 (same values/bounds ⇒ same domain).
 
 Shared behavior lives in interfaces with default methods, not superclasses (records can't extend a
-class): `SetDomain<T> extends DiscreteDomain<T>` declares a single `values(): Set<T>` accessor and
+class): `DiscreteSetDomain<T> extends DiscreteDomain<T>` declares a single `values(): Set<T>` accessor and
 derives every other `DiscreteDomain` method from it by default, so any set-backed concrete record
 (`ObjectSetDomain`, `IntRangeDomain`, `EnumDomain`, `BooleanDomain`, `ObjectSingletonDomain`,
 `AssignmentDomain`, `NumericDiscreteDomain`) gets `stream()`/`toList()`/`toBuilder()` etc. without
 reimplementing them, plus static `domainEquals`/`domainHashCode` helpers so cross-type equality
-works (two `SetDomain` instances with the same `values()` are equal regardless of concrete record
+works (two `DiscreteSetDomain` instances with the same `values()` are equal regardless of concrete record
 type). `NumericDomain<N extends Number> extends Domain<N>` similarly centralizes `getMin()`/`getMax()`/
 `withBounds()` for the two domain kinds that can meaningfully expose numeric bounds
 (`BoundedDomain` and `IntRangeDomain`) — a fully generic `DiscreteDomain<T>` can't implement it,

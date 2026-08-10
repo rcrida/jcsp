@@ -82,8 +82,8 @@ public class ObjectSingletonDomainTest {
         assertThat(new ObjectSingletonDomain<>("x").size()).isEqualTo(1);
     }
 
-    // ── Cross-type equality symmetry with SetDomain (ObjectSingletonDomain is the one DiscreteDomain
-    // implementor that isn't a SetDomain, so both directions must agree) ────
+    // ── Cross-type equality symmetry with DiscreteSetDomain (ObjectSingletonDomain is the one DiscreteDomain
+    // implementor that isn't a DiscreteSetDomain, so both directions must agree) ────
 
     @Test
     void equals_singletonSetDomain_bothDirections() {
@@ -134,7 +134,7 @@ public class ObjectSingletonDomainTest {
     }
 
     // ── DiscreteDomain.DiscreteDomainBuilder.build() collapses to the cheapest representation --
-    // every SetDomain implementor (IntRangeDomain, ObjectSetDomain, ...) routes toBuilder() through
+    // every DiscreteSetDomain implementor (IntRangeDomain, ObjectSetDomain, ...) routes toBuilder() through
     // the same shared builder, so narrowing any of them exercises this identically. ──
 
     @Test

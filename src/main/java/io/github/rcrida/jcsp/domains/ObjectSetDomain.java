@@ -5,16 +5,16 @@ import org.jspecify.annotations.NonNull;
 import java.util.Set;
 
 /**
- * Represents a set-based implementation of the {@link SetDomain} interface.
+ * Represents a set-based implementation of the {@link DiscreteSetDomain} interface.
  */
-public record ObjectSetDomain<T>(@NonNull Set<T> values) implements SetDomain<T> {
+public record ObjectSetDomain<T>(@NonNull Set<T> values) implements DiscreteSetDomain<T> {
 
     @Override
-    public boolean equals(Object o) { return SetDomain.domainEquals(this, o); }
+    public boolean equals(Object o) { return DiscreteSetDomain.domainEquals(this, o); }
 
     @Override
-    public int hashCode() { return SetDomain.domainHashCode(this); }
+    public int hashCode() { return DiscreteSetDomain.domainHashCode(this); }
 
     @Override
-    public String toString() { return SetDomain.domainToString(this); }
+    public String toString() { return DiscreteSetDomain.domainToString(this); }
 }

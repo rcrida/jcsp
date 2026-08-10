@@ -6,7 +6,7 @@ import java.util.stream.Collectors;
 /**
  * Represents a domain containing the two boolean values {@code true} and {@code false}.
  */
-public record BooleanDomain() implements SetDomain<Boolean> {
+public record BooleanDomain() implements DiscreteSetDomain<Boolean> {
     public static final BooleanDomain INSTANCE = new BooleanDomain();
 
     private static final Set<Boolean> BOOLEAN_VALUES = Set.of(true, false);
@@ -22,10 +22,10 @@ public record BooleanDomain() implements SetDomain<Boolean> {
     }
 
     @Override
-    public boolean equals(Object o) { return SetDomain.domainEquals(this, o); }
+    public boolean equals(Object o) { return DiscreteSetDomain.domainEquals(this, o); }
 
     @Override
-    public int hashCode() { return SetDomain.domainHashCode(this); }
+    public int hashCode() { return DiscreteSetDomain.domainHashCode(this); }
 
     @Override
     public String toString() {
