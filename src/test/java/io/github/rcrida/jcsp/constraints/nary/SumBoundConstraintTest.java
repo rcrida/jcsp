@@ -403,28 +403,31 @@ public class SumBoundConstraintTest {
 
     @Test
     void propagateWithReasons_allSingleton_infeasible_attributesAll() {
-        // v1=v2=v3=3 (all singleton), sum=9 < 10 → infeasible; every value is a concrete fact,
-        // so the full set is a sound, self-contained explanation.
+        // v1=v2=v3=3 (all singleton), sum=9 < 10 → infeasible; each singleton domain is a
+        // degenerate [3,3] range, so RangeNogoodConstraint.fromCurrentBounds cites it directly.
         var domains = Map.<Variable<?>, Domain<?>>of(
                 v1, IntRangeDomain.of(3, 3),
                 v2, IntRangeDomain.of(3, 3),
                 v3, IntRangeDomain.of(3, 3));
         var result = eq10.propagateWithReasons(domains);
         assertThat(result.isInfeasible()).isTrue();
-        assertThat(result.reason()).isEqualTo(GroundNogoodConstraint.of(Map.of(v1, 3, v2, 3, v3, 3)));
+        assertThat(result.reason()).isEqualTo(RangeNogoodConstraint.of(Map.of(
+                v1, IntervalDomain.of(3, 3), v2, IntervalDomain.of(3, 3), v3, IntervalDomain.of(3, 3))));
     }
 
     @Test
-    void propagateWithReasons_notAllSingleton_initialCheckInfeasible_returnsEmptyReason() {
-        // v1,v2∈{1..3}, EQ 10: max sum = 6 < 10 → infeasible, but neither is pinned, so an
-        // unlisted open-domain variable can't be ruled out — falls back to empty.
+    void propagateWithReasons_notAllSingleton_initialCheckInfeasible_citesCurrentBounds() {
+        // v1,v2∈{1..3}, EQ 10: max sum = 6 < 10 → infeasible; neither is pinned, but both
+        // domains are gapless ranges, so RangeNogoodConstraint.fromCurrentBounds can still cite
+        // each variable's whole current domain as the (sound) reason.
         var c = SumBoundConstraint.of(Set.of(v1, v2), Operator.EQ, 10);
         var domains = Map.<Variable<?>, Domain<?>>of(
                 v1, IntRangeDomain.of(1, 3),
                 v2, IntRangeDomain.of(1, 3));
         var result = c.propagateWithReasons(domains);
         assertThat(result.isInfeasible()).isTrue();
-        assertThat(result.reason()).isNull();
+        assertThat(result.reason()).isEqualTo(RangeNogoodConstraint.of(Map.of(
+                v1, IntervalDomain.of(1, 3), v2, IntervalDomain.of(1, 3))));
     }
 
     @Test

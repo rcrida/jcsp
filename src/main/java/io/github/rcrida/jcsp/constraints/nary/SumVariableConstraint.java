@@ -115,13 +115,15 @@ public class SumVariableConstraint<N extends Number> extends NaryConstraint impl
     /**
      * Same shape as {@link SumBoundConstraint#explainInfeasible}: the sum's violation depends on
      * the combined contribution of every variable (including {@link #target}, now folded into
-     * {@link #getVariables()}), not any single one in isolation, so the fully collective
-     * explanation via {@link Propagatable#allSingletonReason} is the only sound, self-contained
-     * one.
+     * {@link #getVariables()}), not any single one in isolation, and {@link #propagate}'s bounds
+     * test needs no variable singleton, so {@link RangeNogoodConstraint#fromCurrentBounds} is
+     * tried first, falling back to {@link Propagatable#allSingletonReason}'s fully collective
+     * ground reason only when it can't safely cite some variable's domain as a range.
      */
     @Override
     public Optional<NogoodConstraint> explainInfeasible(@NonNull Map<Variable<?>, Domain<?>> domains) {
-        return GroundNogoodConstraint.fromReason(Propagatable.allSingletonReason(getVariables(), domains));
+        return RangeNogoodConstraint.fromCurrentBounds(getVariables(), domains)
+                .or(() -> GroundNogoodConstraint.fromReason(Propagatable.allSingletonReason(getVariables(), domains)));
     }
 
     @Override

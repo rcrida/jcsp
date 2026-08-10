@@ -75,13 +75,21 @@ public class NaryTuplesConstraint extends NaryConstraint implements Propagatable
     }
 
     /**
-     * Sound only when every constrained variable is currently singleton, via
-     * {@link Propagatable#allSingletonReason} — a partial subset can't rule out an unlisted
-     * open-domain variable still finding support from some tuple.
+     * {@link #propagate} already reports infeasibility purely from {@code liveTuples} being empty
+     * against the current domains, with no requirement that any variable be singleton, so
+     * {@link RangeNogoodConstraint#fromCurrentBounds} — citing each variable's current bounding
+     * interval — is tried first: it's sound here for the same propagator-agnostic reason it's
+     * sound for any {@link Propagatable}, per its own Javadoc, not because of anything specific to
+     * tuple support. Falls back to {@link Propagatable#allSingletonReason}'s fully collective
+     * ground reason only when it can't safely cite some variable's domain as a range (e.g. a
+     * gapped domain, common here since {@link #propagate} prunes individual unsupported values
+     * rather than contiguous ranges) — a partial subset can't rule out an unlisted open-domain
+     * variable still finding support from some tuple.
      */
     @Override
     public Optional<NogoodConstraint> explainInfeasible(@NonNull Map<Variable<?>, Domain<?>> domains) {
-        return GroundNogoodConstraint.fromReason(Propagatable.allSingletonReason(getVariables(), domains));
+        return RangeNogoodConstraint.fromCurrentBounds(getVariables(), domains)
+                .or(() -> GroundNogoodConstraint.fromReason(Propagatable.allSingletonReason(getVariables(), domains)));
     }
 
     @Override

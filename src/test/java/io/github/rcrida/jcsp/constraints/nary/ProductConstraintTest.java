@@ -251,16 +251,32 @@ public class ProductConstraintTest {
     }
 
     @Test void propagateWithReasons_infeasible_bothSingleton_attributesBoth() {
-        // X=[1,1], Y=[2,2], productMax=2, bound=5 (GEQ) > 2 → infeasible; both sides pinned.
+        // X=[1,1], Y=[2,2], productMax=2, bound=5 (GEQ) > 2 → infeasible; each singleton domain is
+        // a degenerate range, so RangeNogoodConstraint.fromCurrentBounds cites it directly.
         var result = ProductConstraint.of(Set.of(X, Y), Operator.GEQ, 5.0).propagateWithReasons(intervals(1, 1, 2, 2));
         assertThat(result.isInfeasible()).isTrue();
-        assertThat(result.reason()).isEqualTo(GroundNogoodConstraint.of(Map.of(X, 1.0, Y, 2.0)));
+        assertThat(result.reason()).isEqualTo(RangeNogoodConstraint.of(Map.of(
+                X, IntervalDomain.of(1.0, 1.0), Y, IntervalDomain.of(2.0, 2.0))));
     }
 
-    @Test void propagateWithReasons_infeasible_notAllSingleton_returnsEmptyReason() {
-        // X∈[1,2], Y∈[1,2]: infeasible (matches propagate_geq_infeasible_boundAboveProductMax()),
-        // but neither side is pinned to a single value, so no variable-value pair can be blamed.
+    @Test void propagateWithReasons_infeasible_notAllSingleton_citesCurrentBounds() {
+        // X∈[1,2], Y∈[1,2]: infeasible (matches propagate_geq_infeasible_boundAboveProductMax());
+        // neither side is pinned, but both are BoundedDomain, always safe to cite as a range, so
+        // RangeNogoodConstraint.fromCurrentBounds cites each variable's whole current interval.
         var result = ProductConstraint.of(Set.of(X, Y), Operator.GEQ, 5.0).propagateWithReasons(intervals(1, 2, 1, 2));
+        assertThat(result.isInfeasible()).isTrue();
+        assertThat(result.reason()).isEqualTo(RangeNogoodConstraint.of(Map.of(
+                X, IntervalDomain.of(1.0, 2.0), Y, IntervalDomain.of(1.0, 2.0))));
+    }
+
+    @Test void propagateWithReasons_gappedNonSingletonDomain_fallsThroughToEmptyReason() {
+        // a's domain {2,5} is gapped and non-singleton — RangeNogoodConstraint.fromCurrentBounds
+        // can't soundly cite it as a range, and the same gap means it isn't singleton either, so
+        // allSingletonReason's ground fallback can't cite it either: the overall result is the
+        // full-assignment fallback (empty), same as this class's pre-range-citation behaviour.
+        Variable<Integer> a = F.create("a_pr_gap"), b = F.create("b_pr_gap");
+        var domains = Map.<Variable<?>, Domain<?>>of(a, DiscreteDomain.of(2, 5), b, DiscreteDomain.of(1));
+        var result = ProductConstraint.of(Set.of(a, b), Operator.GEQ, 100).propagateWithReasons(domains);
         assertThat(result.isInfeasible()).isTrue();
         assertThat(result.reason()).isNull();
     }

@@ -4,6 +4,7 @@ import io.github.rcrida.jcsp.assignments.Assignment;
 import io.github.rcrida.jcsp.constraints.Operator;
 import io.github.rcrida.jcsp.domains.Domain;
 import io.github.rcrida.jcsp.domains.IntRangeDomain;
+import io.github.rcrida.jcsp.domains.IntervalDomain;
 import io.github.rcrida.jcsp.variables.Variable;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -99,20 +100,26 @@ public class LinearVariableConstraintTest {
 
     @Test
     void explainInfeasible_allSingleton_attributesAll() {
+        // Each singleton domain is a degenerate range, so RangeNogoodConstraint.fromCurrentBounds
+        // cites it directly instead of falling back to a ground reason.
         var domains = Map.<Variable<?>, Domain<?>>of(
                 v1, IntRangeDomain.of(3, 3), v2, IntRangeDomain.of(4, 4), t, IntRangeDomain.of(100, 100));
         var result = eq.propagateWithReasons(domains);
         assertThat(result.isInfeasible()).isTrue();
-        assertThat(result.reason()).isEqualTo(GroundNogoodConstraint.of(Map.of(v1, 3, v2, 4, t, 100)));
+        assertThat(result.reason()).isEqualTo(RangeNogoodConstraint.of(Map.of(
+                v1, IntervalDomain.of(3, 3), v2, IntervalDomain.of(4, 4), t, IntervalDomain.of(100, 100))));
     }
 
     @Test
-    void explainInfeasible_notAllSingleton_returnsEmptyReason() {
+    void explainInfeasible_notAllSingleton_citesCurrentBounds() {
+        // v2 isn't pinned, but its domain is still a gapless range, so
+        // RangeNogoodConstraint.fromCurrentBounds can cite its whole current domain.
         var domains = Map.<Variable<?>, Domain<?>>of(
                 v1, IntRangeDomain.of(3, 3), v2, IntRangeDomain.of(2, 10), t, IntRangeDomain.of(1000, 1000));
         var result = eq.propagateWithReasons(domains);
         assertThat(result.isInfeasible()).isTrue();
-        assertThat(result.reason()).isNull();
+        assertThat(result.reason()).isEqualTo(RangeNogoodConstraint.of(Map.of(
+                v1, IntervalDomain.of(3, 3), v2, IntervalDomain.of(2, 10), t, IntervalDomain.of(1000, 1000))));
     }
 
     // --- toString() / of() ---

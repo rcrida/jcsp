@@ -123,15 +123,17 @@ public class ProductConstraint<N extends Number> extends UniformNaryConstraint<N
      * variable, not any single variable in isolation — like {@link SumBoundConstraint}/
      * {@link LinearBoundConstraint} and unlike {@link MaxConstraint}/{@link MinConstraint}, a product
      * has no monotonic "one value alone already breaks the bound" case (a single large factor
-     * says nothing about the bound without knowing the other factors too). See
-     * {@link Propagatable#allSingletonReason} for why the fully collective explanation is the
-     * only sound, self-contained one — this also covers the discrete-gap corner case in the
-     * lower-bound pass ({@code raised.isEmpty()}), which falls back to an empty reason the same
-     * way.
+     * says nothing about the bound without knowing the other factors too). Neither the
+     * {@code productMin}/{@code productMax} bound check nor the discrete-gap corner case in the
+     * lower-bound pass ({@code raised.isEmpty()}) requires any variable to be singleton, so
+     * {@link RangeNogoodConstraint#fromCurrentBounds} is tried first, falling back to
+     * {@link Propagatable#allSingletonReason}'s fully collective ground reason only when it can't
+     * safely cite some variable's domain as a range.
      */
     @Override
     public Optional<NogoodConstraint> explainInfeasible(@NonNull Map<Variable<?>, Domain<?>> domains) {
-        return GroundNogoodConstraint.fromReason(Propagatable.allSingletonReason(getVariables(), domains));
+        return RangeNogoodConstraint.fromCurrentBounds(getVariables(), domains)
+                .or(() -> GroundNogoodConstraint.fromReason(Propagatable.allSingletonReason(getVariables(), domains)));
     }
 
     @Override

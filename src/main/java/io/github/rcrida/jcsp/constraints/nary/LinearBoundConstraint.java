@@ -190,12 +190,16 @@ public class LinearBoundConstraint<N extends Number> extends NaryConstraint impl
      * On infeasibility, the weighted sum's violation depends on the combined contribution of
      * every variable, not any single variable in isolation — unlike {@link MaxConstraint}/
      * {@link MinConstraint}, a weighted sum has no monotonic "one value alone already breaks the
-     * bound" case. See {@link Propagatable#allSingletonReason} for why the fully collective
-     * explanation is the only sound, self-contained one.
+     * bound" case. {@link #propagate}'s own infeasibility test ({@code totalMin}/{@code totalMax}
+     * against {@link #bound}) only ever depends on each variable's current domain bounds, not on
+     * any variable being singleton, so {@link RangeNogoodConstraint#fromCurrentBounds} is tried
+     * first, falling back to {@link Propagatable#allSingletonReason}'s fully collective ground
+     * reason only when it can't safely cite some variable's domain as a range.
      */
     @Override
     public Optional<NogoodConstraint> explainInfeasible(@NonNull Map<Variable<?>, Domain<?>> domains) {
-        return GroundNogoodConstraint.fromReason(Propagatable.allSingletonReason(getVariables(), domains));
+        return RangeNogoodConstraint.fromCurrentBounds(getVariables(), domains)
+                .or(() -> GroundNogoodConstraint.fromReason(Propagatable.allSingletonReason(getVariables(), domains)));
     }
 
     @SuppressWarnings("unchecked")

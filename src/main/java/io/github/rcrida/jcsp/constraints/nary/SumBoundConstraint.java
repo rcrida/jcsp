@@ -168,13 +168,18 @@ public class SumBoundConstraint<N extends Number> extends UniformNaryConstraint<
     /**
      * On infeasibility, the sum's violation depends on the combined total of every variable, not
      * any single variable in isolation — unlike {@link MaxConstraint}/{@link MinConstraint}, sum
-     * has no monotonic "one value alone already breaks the bound" case. See
-     * {@link Propagatable#allSingletonReason} for why the fully collective explanation is the
-     * only sound, self-contained one.
+     * has no monotonic "one value alone already breaks the bound" case. {@link #propagate}'s own
+     * infeasibility test ({@code totalMin}/{@code totalMax} against {@link #bound}) only ever
+     * depends on each variable's current domain bounds, not on any variable being singleton, so
+     * {@link RangeNogoodConstraint#fromCurrentBounds} — citing each variable's current bounding
+     * interval rather than requiring a ground value — is tried first; it degenerates to
+     * {@link Propagatable#allSingletonReason}'s fully collective ground reason only when some
+     * variable's domain isn't safely range-citable (e.g. a gapped discrete domain).
      */
     @Override
     public Optional<NogoodConstraint> explainInfeasible(@NonNull Map<Variable<?>, Domain<?>> domains) {
-        return GroundNogoodConstraint.fromReason(Propagatable.allSingletonReason(getVariables(), domains));
+        return RangeNogoodConstraint.fromCurrentBounds(getVariables(), domains)
+                .or(() -> GroundNogoodConstraint.fromReason(Propagatable.allSingletonReason(getVariables(), domains)));
     }
 
     @Override

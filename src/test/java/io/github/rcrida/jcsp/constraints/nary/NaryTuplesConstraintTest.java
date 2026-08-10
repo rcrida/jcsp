@@ -2,8 +2,10 @@ package io.github.rcrida.jcsp.constraints.nary;
 
 import io.github.rcrida.jcsp.ConstraintSatisfactionProblem;
 import io.github.rcrida.jcsp.assignments.Assignment;
+import io.github.rcrida.jcsp.domains.DiscreteDomain;
 import io.github.rcrida.jcsp.domains.Domain;
 import io.github.rcrida.jcsp.domains.IntRangeDomain;
+import io.github.rcrida.jcsp.domains.IntervalDomain;
 import io.github.rcrida.jcsp.solver.Solver;
 import io.github.rcrida.jcsp.variables.Variable;
 import org.junit.jupiter.api.BeforeEach;
@@ -114,17 +116,34 @@ public class NaryTuplesConstraintTest {
 
     @Test
     void explainInfeasible_allSingleton_returnsFullReason() {
-        // x=y=z={1}: no cyclic permutation of (1,2,3) has all three variables equal to 1
+        // x=y=z={1}: no cyclic permutation of (1,2,3) has all three variables equal to 1; each
+        // singleton domain is a degenerate range, so RangeNogoodConstraint.fromCurrentBounds
+        // cites it directly instead of falling back to a ground reason.
         var domains = Map.<Variable<?>, Domain<?>>of(
                 x, IntRangeDomain.of(1, 1), y, IntRangeDomain.of(1, 1), z, IntRangeDomain.of(1, 1));
-        assertThat(constraint.explainInfeasible(domains)).contains(GroundNogoodConstraint.of(Map.of(x, 1, y, 1, z, 1)));
+        assertThat(constraint.explainInfeasible(domains)).contains(RangeNogoodConstraint.of(Map.of(
+                x, IntervalDomain.of(1, 1), y, IntervalDomain.of(1, 1), z, IntervalDomain.of(1, 1))));
     }
 
     @Test
-    void explainInfeasible_notAllSingleton_returnsEmpty() {
-        // z is not singleton, even though no live tuple remains (see propagate_noLiveTuples_infeasible)
+    void explainInfeasible_notAllSingleton_citesCurrentBounds() {
+        // z is not singleton, even though no live tuple remains (see propagate_noLiveTuples_infeasible);
+        // its domain is still a gapless range, so RangeNogoodConstraint.fromCurrentBounds can cite
+        // its whole current domain rather than falling back to the full-assignment default.
         var domains = Map.<Variable<?>, Domain<?>>of(
                 x, IntRangeDomain.of(1, 1), y, IntRangeDomain.of(1, 1), z, IntRangeDomain.of(1, 2));
+        assertThat(constraint.explainInfeasible(domains)).contains(RangeNogoodConstraint.of(Map.of(
+                x, IntervalDomain.of(1, 1), y, IntervalDomain.of(1, 1), z, IntervalDomain.of(1, 2))));
+    }
+
+    @Test
+    void explainInfeasible_gappedNonSingletonDomain_fallsThroughToEmpty() {
+        // x's domain {4,6} is gapped and non-singleton — RangeNogoodConstraint.fromCurrentBounds
+        // can't soundly cite it as a range, and the same gap means it isn't singleton either, so
+        // allSingletonReason's ground fallback can't cite it either: the overall result is the
+        // full-assignment fallback (empty), same as this class's pre-range-citation behaviour.
+        var domains = Map.<Variable<?>, Domain<?>>of(
+                x, DiscreteDomain.of(4, 6), y, IntRangeDomain.of(1, 1), z, IntRangeDomain.of(1, 1));
         assertThat(constraint.explainInfeasible(domains)).isEmpty();
     }
 

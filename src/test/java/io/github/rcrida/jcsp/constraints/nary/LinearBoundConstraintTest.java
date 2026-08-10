@@ -549,26 +549,29 @@ public class LinearBoundConstraintTest {
 
     @Test
     void propagateWithReasons_allSingleton_infeasible_attributesAll() {
-        // x=5, y=5 (both singleton): 2*5 + 3*5 = 35 != 12 → infeasible; both concrete values are
-        // a sound, self-contained explanation.
+        // x=5, y=5 (both singleton): 2*5 + 3*5 = 35 != 12 → infeasible; each singleton domain is
+        // a degenerate [5,5] range, so RangeNogoodConstraint.fromCurrentBounds cites it directly.
         var domains = Map.<Variable<?>, Domain<?>>of(
                 x, IntRangeDomain.of(5, 5),
                 y, IntRangeDomain.of(5, 5));
         var result = eq12.propagateWithReasons(domains);
         assertThat(result.isInfeasible()).isTrue();
-        assertThat(result.reason()).isEqualTo(GroundNogoodConstraint.of(Map.of(x, 5, y, 5)));
+        assertThat(result.reason()).isEqualTo(RangeNogoodConstraint.of(Map.of(
+                x, IntervalDomain.of(5, 5), y, IntervalDomain.of(5, 5))));
     }
 
     @Test
-    void propagateWithReasons_notAllSingleton_initialCheckInfeasible_returnsEmptyReason() {
-        // 2*x + 3*y == 12, both domains {5..9}: min weighted sum = 25 > 12 → infeasible, but
-        // neither is pinned, so an unlisted open-domain variable can't be ruled out.
+    void propagateWithReasons_notAllSingleton_initialCheckInfeasible_citesCurrentBounds() {
+        // 2*x + 3*y == 12, both domains {5..9}: min weighted sum = 25 > 12 → infeasible; neither
+        // is pinned, but both domains are gapless ranges, so RangeNogoodConstraint.fromCurrentBounds
+        // can still cite each variable's whole current domain as the (sound) reason.
         var domains = Map.<Variable<?>, Domain<?>>of(
                 x, IntRangeDomain.of(5, 9),
                 y, IntRangeDomain.of(5, 9));
         var result = eq12.propagateWithReasons(domains);
         assertThat(result.isInfeasible()).isTrue();
-        assertThat(result.reason()).isNull();
+        assertThat(result.reason()).isEqualTo(RangeNogoodConstraint.of(Map.of(
+                x, IntervalDomain.of(5, 9), y, IntervalDomain.of(5, 9))));
     }
 
     @Test
