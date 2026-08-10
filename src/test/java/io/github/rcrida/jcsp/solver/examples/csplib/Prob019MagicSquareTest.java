@@ -37,8 +37,17 @@ public class Prob019MagicSquareTest {
     record MagicSquareProblem(ConstraintSatisfactionProblem csp, Variable<Integer>[][] cells) {}
 
     static MagicSquareProblem square() {
+        return square(N);
+    }
+
+    /** Order is a parameter, so larger squares can be built (e.g. for benchmarking); {@link #square()} pins it to {@link #N}. */
+    static MagicSquareProblem square(int n) {
+        int magic = n * (n * n + 1) / 2;
+        String[] indices = new String[n];
+        for (int i = 0; i < n; i++) indices[i] = String.valueOf(i + 1);
+
         val builder = ConstraintSatisfactionProblem.builder();
-        Variable<Integer>[][] cells = builder.create2dVariableArray(INDICES, INDICES, "c", IntRangeDomain.of(1, N * N));
+        Variable<Integer>[][] cells = builder.create2dVariableArray(indices, indices, "c", IntRangeDomain.of(1, n * n));
 
         // All cells must be distinct
         val allCells = new HashSet<Variable<Integer>>();
@@ -47,18 +56,25 @@ public class Prob019MagicSquareTest {
         builder.allDiffConstraint(allCells);
 
         // Row sums
-        for (int r = 0; r < N; r++)
-            builder.sumConstraint(Set.of(cells[r][0], cells[r][1], cells[r][2]), Operator.EQ, MAGIC);
+        for (int r = 0; r < n; r++)
+            builder.sumConstraint(Set.copyOf(List.of(cells[r])), Operator.EQ, magic);
 
         // Column sums
-        for (int c = 0; c < N; c++)
-            builder.sumConstraint(Set.of(cells[0][c], cells[1][c], cells[2][c]), Operator.EQ, MAGIC);
+        for (int c = 0; c < n; c++) {
+            Set<Variable<Integer>> column = new HashSet<>();
+            for (int r = 0; r < n; r++) column.add(cells[r][c]);
+            builder.sumConstraint(column, Operator.EQ, magic);
+        }
 
         // Main diagonal (top-left to bottom-right)
-        builder.sumConstraint(Set.of(cells[0][0], cells[1][1], cells[2][2]), Operator.EQ, MAGIC);
+        Set<Variable<Integer>> mainDiagonal = new HashSet<>();
+        for (int i = 0; i < n; i++) mainDiagonal.add(cells[i][i]);
+        builder.sumConstraint(mainDiagonal, Operator.EQ, magic);
 
         // Anti-diagonal (top-right to bottom-left)
-        builder.sumConstraint(Set.of(cells[0][2], cells[1][1], cells[2][0]), Operator.EQ, MAGIC);
+        Set<Variable<Integer>> antiDiagonal = new HashSet<>();
+        for (int i = 0; i < n; i++) antiDiagonal.add(cells[i][n - 1 - i]);
+        builder.sumConstraint(antiDiagonal, Operator.EQ, magic);
 
         return new MagicSquareProblem(builder.build(), cells);
     }

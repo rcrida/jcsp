@@ -24,29 +24,39 @@ public class Prob054NQueensTest {
     static Domain DOMAIN = IntRangeDomain.of(1, N);
     static Variable[] VARIABLES;
 
+    record NQueensProblem(ConstraintSatisfactionProblem csp, Variable[] variables) {}
+
     public static ConstraintSatisfactionProblem nQueens() {
+        val problem = nQueens(N);
+        VARIABLES = problem.variables();
+        return problem.csp();
+    }
+
+    /** Board size is a parameter, so a larger instance can be built (e.g. for benchmarking); unlike
+     * {@link #nQueens()}, this overload doesn't touch the shared static {@link #VARIABLES} field. */
+    public static NQueensProblem nQueens(int n) {
         val cspBuilder = ConstraintSatisfactionProblem.builder();
-        val labels = new String[N];
-        for (int i = 0; i < N; i++) {
-            labels[i] = String.valueOf(i+1);
+        val labels = new String[n];
+        for (int i = 0; i < n; i++) {
+            labels[i] = String.valueOf(i + 1);
         }
-        VARIABLES = cspBuilder.create1dVariableArray(labels, "Q", DOMAIN);
-        System.out.println(Arrays.toString(VARIABLES));
+        Variable[] variables = cspBuilder.create1dVariableArray(labels, "Q", IntRangeDomain.of(1, n));
+        System.out.println(Arrays.toString(variables));
         // vertical constraint
-        cspBuilder.allDiffConstraint(Set.of(VARIABLES));
+        cspBuilder.allDiffConstraint(Set.of(variables));
         // down right diagonal constraints
-        for (int i = 0; i < N; i++) {
-            for (int j = i + 1; j < N; j++) {
-                cspBuilder.offsetConstraint(VARIABLES[i], j - i, Operator.NEQ, VARIABLES[j]);
+        for (int i = 0; i < n; i++) {
+            for (int j = i + 1; j < n; j++) {
+                cspBuilder.offsetConstraint(variables[i], j - i, Operator.NEQ, variables[j]);
             }
         }
         // down left diagonal constraints
-        for (int i = 0; i < N; i++) {
+        for (int i = 0; i < n; i++) {
             for (int j = 0; j < i; j++) {
-                cspBuilder.offsetConstraint(VARIABLES[i], i - j, Operator.NEQ, VARIABLES[j]);
+                cspBuilder.offsetConstraint(variables[i], i - j, Operator.NEQ, variables[j]);
             }
         }
-        return cspBuilder.build();
+        return new NQueensProblem(cspBuilder.build(), variables);
     }
 
     static void printAssignment(Assignment assignment) {

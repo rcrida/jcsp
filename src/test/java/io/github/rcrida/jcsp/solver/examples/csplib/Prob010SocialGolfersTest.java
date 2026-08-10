@@ -72,45 +72,50 @@ public class Prob010SocialGolfersTest {
     static final Set<String> GOLFERS = Set.of("Alice", "Bob", "Carol", "Dave");
     static final int EXPECTED_SOLUTION_COUNT = 48;
 
-    static final List<List<Variable<Set<String>>>> GROUP = IntStream.range(0, N_ROUNDS)
-            .<List<Variable<Set<String>>>>mapToObj(r -> IntStream.range(0, N_GROUPS)
-                    .<Variable<Set<String>>>mapToObj(g -> F.create("round" + r + "group" + g))
-                    .toList())
-            .toList();
+    record ScheduleProblem(ConstraintSatisfactionProblem csp, List<List<Variable<Set<String>>>> group,
+                            Set<String> golfers, int perGroup) {}
 
-    static final ConstraintSatisfactionProblem CSP = buildCsp();
+    /** Instance size and golfer set are all parameters, so larger instances can be built (e.g. for benchmarking). */
+    static ScheduleProblem buildCsp(int groups, int perGroup, int rounds, Set<String> golfers) {
+        List<List<Variable<Set<String>>>> group = IntStream.range(0, rounds)
+                .<List<Variable<Set<String>>>>mapToObj(r -> IntStream.range(0, groups)
+                        .<Variable<Set<String>>>mapToObj(g -> F.create("round" + r + "group" + g))
+                        .toList())
+                .toList();
 
-    static ConstraintSatisfactionProblem buildCsp() {
         var builder = ConstraintSatisfactionProblem.builder();
-        for (int r = 0; r < N_ROUNDS; r++) {
-            for (int g = 0; g < N_GROUPS; g++) {
-                builder.variableDomain(GROUP.get(r).get(g), SetIntervalDomain.of(Set.of(), GOLFERS, N_PER_GROUP, N_PER_GROUP));
+        for (int r = 0; r < rounds; r++) {
+            for (int g = 0; g < groups; g++) {
+                builder.variableDomain(group.get(r).get(g), SetIntervalDomain.of(Set.of(), golfers, perGroup, perGroup));
             }
         }
 
         // Each round's groups partition the golfer set.
-        for (int r = 0; r < N_ROUNDS; r++) {
-            builder.partitionConstraint(Set.copyOf(GROUP.get(r)), GOLFERS);
+        for (int r = 0; r < rounds; r++) {
+            builder.partitionConstraint(Set.copyOf(group.get(r)), golfers);
         }
 
         // Each pair may play together at most once.
-        for (int r1 = 0; r1 < N_ROUNDS; r1++) {
-            for (int r2 = r1 + 1; r2 < N_ROUNDS; r2++) {
-                for (int g1 = 0; g1 < N_GROUPS; g1++) {
-                    for (int g2 = 0; g2 < N_GROUPS; g2++) {
-                        builder.intersectionCardinalityConstraint(GROUP.get(r1).get(g1), GROUP.get(r2).get(g2), Operator.LEQ, 1);
+        for (int r1 = 0; r1 < rounds; r1++) {
+            for (int r2 = r1 + 1; r2 < rounds; r2++) {
+                for (int g1 = 0; g1 < groups; g1++) {
+                    for (int g2 = 0; g2 < groups; g2++) {
+                        builder.intersectionCardinalityConstraint(group.get(r1).get(g1), group.get(r2).get(g2), Operator.LEQ, 1);
                     }
                 }
             }
         }
-        return builder.build();
+        return new ScheduleProblem(builder.build(), group, golfers, perGroup);
     }
+
+    static final ScheduleProblem PROBLEM = buildCsp(N_GROUPS, N_PER_GROUP, N_ROUNDS, GOLFERS);
+    static final ConstraintSatisfactionProblem CSP = PROBLEM.csp();
 
     @Test
     void getSolution_findsAValidSchedule() {
         val solution = Solver.Factory.INSTANCE.createSolver(CSP).getSolution();
         assertThat(solution).isPresent();
-        assertValidSchedule(solution.get());
+        assertValidSchedule(solution.get(), PROBLEM);
         System.out.println(solution);
     }
 
@@ -118,34 +123,40 @@ public class Prob010SocialGolfersTest {
     void getSolutions_findsExactlyEveryValidSchedule() {
         val solutions = Solver.Factory.INSTANCE.createSolver(CSP).getSolutions().toList();
         assertThat(solutions).hasSize(EXPECTED_SOLUTION_COUNT);
-        solutions.forEach(Prob010SocialGolfersTest::assertValidSchedule);
+        solutions.forEach(s -> assertValidSchedule(s, PROBLEM));
     }
 
     /**
      * Directly checks the three CSPLib constraints against a found assignment, independent of how
      * {@code buildCsp} decomposed them: group sizes, round-disjointness (and, since each round's
-     * groups must be disjoint <em>and</em> sized exactly {@code N_PER_GROUP} each, that a round's
-     * groups also fully cover {@code GOLFERS} — {@code N_GROUPS * N_PER_GROUP == |GOLFERS|}), and
-     * that no golfer pair is grouped together more than once across the whole schedule.
+     * groups must be disjoint <em>and</em> sized exactly {@code perGroup} each, that a round's
+     * groups also fully cover the golfer set), and that no golfer pair is grouped together more
+     * than once across the whole schedule.
      */
-    static void assertValidSchedule(Assignment assignment) {
-        Map<Set<String>, Integer> pairCounts = new HashMap<>();
-        for (int r = 0; r < N_ROUNDS; r++) {
-            Set<String> roundCoverage = new HashSet<>();
-            for (int g = 0; g < N_GROUPS; g++) {
-                Set<String> group = assignment.getValue(GROUP.get(r).get(g)).orElseThrow();
-                assertThat(group).hasSize(N_PER_GROUP);
-                assertThat(roundCoverage).doesNotContainAnyElementsOf(group);
-                roundCoverage.addAll(group);
+    static void assertValidSchedule(Assignment assignment, ScheduleProblem problem) {
+        List<List<Variable<Set<String>>>> group = problem.group();
+        Set<String> golfers = problem.golfers();
+        int perGroup = problem.perGroup();
+        int rounds = group.size();
+        int groups = group.isEmpty() ? 0 : group.get(0).size();
 
-                List<String> members = new ArrayList<>(group);
-                for (int i = 0; i < members.size(); i++) {
-                    for (int j = i + 1; j < members.size(); j++) {
-                        pairCounts.merge(Set.of(members.get(i), members.get(j)), 1, Integer::sum);
+        Map<Set<String>, Integer> pairCounts = new HashMap<>();
+        for (int r = 0; r < rounds; r++) {
+            Set<String> roundCoverage = new HashSet<>();
+            for (int g = 0; g < groups; g++) {
+                Set<String> members = assignment.getValue(group.get(r).get(g)).orElseThrow();
+                assertThat(members).hasSize(perGroup);
+                assertThat(roundCoverage).doesNotContainAnyElementsOf(members);
+                roundCoverage.addAll(members);
+
+                List<String> ordered = new ArrayList<>(members);
+                for (int i = 0; i < ordered.size(); i++) {
+                    for (int j = i + 1; j < ordered.size(); j++) {
+                        pairCounts.merge(Set.of(ordered.get(i), ordered.get(j)), 1, Integer::sum);
                     }
                 }
             }
-            assertThat(roundCoverage).isEqualTo(GOLFERS);
+            assertThat(roundCoverage).isEqualTo(golfers);
         }
         pairCounts.values().forEach(count -> assertThat(count).isLessThanOrEqualTo(1));
     }

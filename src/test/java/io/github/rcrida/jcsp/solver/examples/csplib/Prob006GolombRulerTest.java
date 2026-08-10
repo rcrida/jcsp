@@ -15,7 +15,6 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.stream.IntStream;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -35,30 +34,32 @@ public class Prob006GolombRulerTest {
     static final int N = 5;
     static final int OPTIMAL_LENGTH = 11;
 
-    static final List<Variable<Integer>> MARKS = IntStream.range(0, N)
-            .mapToObj(i -> F.<Integer>create("m" + i))
-            .toList();
+    record RulerProblem(ConstraintSatisfactionProblem csp, List<Variable<Integer>> marks) {}
 
-    static ConstraintSatisfactionProblem buildRuler(int maxLength) {
+    /** Order and ruler length are both parameters, so larger instances can be built (e.g. for benchmarking). */
+    static RulerProblem buildRuler(int n, int maxLength) {
+        List<Variable<Integer>> marks = new ArrayList<>();
+        for (int i = 0; i < n; i++) marks.add(F.create("m" + i));
+
         var builder = ConstraintSatisfactionProblem.builder();
-        MARKS.forEach(m -> builder.variableDomain(m, IntRangeDomain.of(0, maxLength)));
-        builder.equalsConstraint(MARKS.get(0), 0);
-        for (int i = 0; i < N - 1; i++) {
-            builder.comparatorConstraint(MARKS.get(i), Operator.LT, MARKS.get(i + 1));
+        marks.forEach(m -> builder.variableDomain(m, IntRangeDomain.of(0, maxLength)));
+        builder.equalsConstraint(marks.get(0), 0);
+        for (int i = 0; i < n - 1; i++) {
+            builder.comparatorConstraint(marks.get(i), Operator.LT, marks.get(i + 1));
         }
 
         List<Variable<Integer>> diffs = new ArrayList<>();
         Variable<Integer> firstGap = null;
         Variable<Integer> lastGap = null;
-        for (int i = 0; i < N; i++) {
-            for (int j = i + 1; j < N; j++) {
+        for (int i = 0; i < n; i++) {
+            for (int j = i + 1; j < n; j++) {
                 Variable<Integer> d = F.create("d" + i + j);
                 builder.variableDomain(d, IntRangeDomain.of(1, maxLength));
                 // d = marks[j] - marks[i]
-                builder.linearConstraint(Map.of(MARKS.get(j), 1, MARKS.get(i), -1), Operator.EQ, d);
+                builder.linearConstraint(Map.of(marks.get(j), 1, marks.get(i), -1), Operator.EQ, d);
                 diffs.add(d);
                 if (i == 0 && j == 1) firstGap = d;
-                if (i == N - 2 && j == N - 1) lastGap = d;
+                if (i == n - 2 && j == n - 1) lastGap = d;
             }
         }
         builder.allDiffConstraint(Set.copyOf(diffs));
@@ -67,14 +68,14 @@ public class Prob006GolombRulerTest {
         // the first gap to be smaller than the last gap keeps only one of each pair.
         builder.comparatorConstraint(firstGap, Operator.LT, lastGap);
 
-        return builder.build();
+        return new RulerProblem(builder.build(), marks);
     }
 
-    static void assertValidRuler(Assignment assignment) {
-        List<Integer> positions = MARKS.stream().map(m -> assignment.getValue(m).orElseThrow()).toList();
+    static void assertValidRuler(Assignment assignment, List<Variable<Integer>> marks) {
+        List<Integer> positions = marks.stream().map(m -> assignment.getValue(m).orElseThrow()).toList();
         Set<Integer> distances = new HashSet<>();
-        for (int i = 0; i < N; i++) {
-            for (int j = i + 1; j < N; j++) {
+        for (int i = 0; i < marks.size(); i++) {
+            for (int j = i + 1; j < marks.size(); j++) {
                 assertThat(distances.add(positions.get(j) - positions.get(i))).isTrue();
             }
         }
@@ -82,16 +83,17 @@ public class Prob006GolombRulerTest {
 
     @Test
     void solvable_atOptimalLength() {
-        val solutions = Solver.Factory.INSTANCE.createSolver(buildRuler(OPTIMAL_LENGTH)).getSolutions().toList();
+        val problem = buildRuler(N, OPTIMAL_LENGTH);
+        val solutions = Solver.Factory.INSTANCE.createSolver(problem.csp()).getSolutions().toList();
         // Exactly two order-5 Golomb rulers of length 11 exist up to reflection:
         // {0,1,4,9,11} and {0,2,7,8,11}.
         assertThat(solutions).hasSize(2);
-        solutions.forEach(Prob006GolombRulerTest::assertValidRuler);
-        solutions.forEach(s -> assertThat(s.getValue(MARKS.get(N - 1))).hasValue(OPTIMAL_LENGTH));
+        solutions.forEach(s -> assertValidRuler(s, problem.marks()));
+        solutions.forEach(s -> assertThat(s.getValue(problem.marks().get(N - 1))).hasValue(OPTIMAL_LENGTH));
     }
 
     @Test
     void unsolvable_belowOptimalLength() {
-        assertThat(Solver.Factory.INSTANCE.createSolver(buildRuler(OPTIMAL_LENGTH - 1)).getSolution()).isEmpty();
+        assertThat(Solver.Factory.INSTANCE.createSolver(buildRuler(N, OPTIMAL_LENGTH - 1).csp()).getSolution()).isEmpty();
     }
 }

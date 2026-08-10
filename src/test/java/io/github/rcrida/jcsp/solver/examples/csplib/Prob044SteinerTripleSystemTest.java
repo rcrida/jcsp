@@ -16,6 +16,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -66,70 +67,81 @@ import static org.assertj.core.api.Assertions.assertThat;
 public class Prob044SteinerTripleSystemTest {
     static final Variable.Factory F = Variable.Factory.INSTANCE;
     static final int N = 7;
-    static final int NUM_TRIPLES = 7;
-    static final Set<Integer> POINTS = Set.of(1, 2, 3, 4, 5, 6, 7);
     static final int EXPECTED_SOLUTION_COUNT = 30;
 
-    static final List<Variable<Set<Integer>>> TRIPLE = IntStream.range(0, NUM_TRIPLES)
-            .<Variable<Set<Integer>>>mapToObj(i -> F.create("triple" + i))
-            .toList();
+    record SteinerProblem(ConstraintSatisfactionProblem csp, List<Variable<Set<Integer>>> triples) {}
 
-    /** {@code MEMBER[i][p-1]} -- boolean, reified as {@code p in TRIPLE[i]}. */
-    static final List<List<Variable<Boolean>>> MEMBER = IntStream.range(0, NUM_TRIPLES)
-            .<List<Variable<Boolean>>>mapToObj(i -> IntStream.rangeClosed(1, N)
-                    .<Variable<Boolean>>mapToObj(p -> F.create("member" + i + "_" + p))
-                    .toList())
-            .toList();
+    /**
+     * Order is a parameter, so a larger instance can be built (e.g. for benchmarking). A Steiner
+     * triple system exists if and only if {@code n} is 1 or 3 (mod 6) (Kirkman 1847).
+     */
+    static SteinerProblem buildCsp(int n) {
+        if (n % 6 != 1 && n % 6 != 3) {
+            throw new IllegalArgumentException("Steiner triple systems only exist for order n = 1 or 3 (mod 6), got " + n);
+        }
+        int numTriples = n * (n - 1) / 6;
+        Set<Integer> points = IntStream.rangeClosed(1, n).boxed().collect(Collectors.toSet());
 
-    static final ConstraintSatisfactionProblem CSP = buildCsp();
+        List<Variable<Set<Integer>>> triples = IntStream.range(0, numTriples)
+                .<Variable<Set<Integer>>>mapToObj(i -> F.create("triple" + i))
+                .toList();
 
-    static ConstraintSatisfactionProblem buildCsp() {
+        // member[i][p-1] -- boolean, reified as "p in triples[i]".
+        List<List<Variable<Boolean>>> member = IntStream.range(0, numTriples)
+                .<List<Variable<Boolean>>>mapToObj(i -> IntStream.rangeClosed(1, n)
+                        .<Variable<Boolean>>mapToObj(p -> F.create("member" + i + "_" + p))
+                        .toList())
+                .toList();
+
         var builder = ConstraintSatisfactionProblem.builder();
-        for (int i = 0; i < NUM_TRIPLES; i++) {
-            builder.variableDomain(TRIPLE.get(i), SetIntervalDomain.of(Set.of(), POINTS, 3, 3));
-            for (int p = 1; p <= N; p++) {
-                Variable<Boolean> member = MEMBER.get(i).get(p - 1);
-                builder.variableDomain(member, BooleanDomain.INSTANCE);
-                builder.reifyConstraint(member, SetMembershipConstraint.of(TRIPLE.get(i), p));
+        for (int i = 0; i < numTriples; i++) {
+            builder.variableDomain(triples.get(i), SetIntervalDomain.of(Set.of(), points, 3, 3));
+            for (int p = 1; p <= n; p++) {
+                Variable<Boolean> m = member.get(i).get(p - 1);
+                builder.variableDomain(m, BooleanDomain.INSTANCE);
+                builder.reifyConstraint(m, SetMembershipConstraint.of(triples.get(i), p));
             }
         }
 
         // Any two triples share at most one point -- forces full, exactly-once pair coverage by
         // the counting argument in the class Javadoc.
-        for (int i = 0; i < NUM_TRIPLES; i++) {
-            for (int j = i + 1; j < NUM_TRIPLES; j++) {
-                builder.intersectionCardinalityConstraint(TRIPLE.get(i), TRIPLE.get(j), Operator.LEQ, 1);
+        for (int i = 0; i < numTriples; i++) {
+            for (int j = i + 1; j < numTriples; j++) {
+                builder.intersectionCardinalityConstraint(triples.get(i), triples.get(j), Operator.LEQ, 1);
             }
         }
 
         // Symmetry breaking: consecutive triples' membership rows are lexicographically ordered.
-        for (int i = 0; i < NUM_TRIPLES - 1; i++) {
-            builder.lexConstraint(MEMBER.get(i), Operator.LEQ, MEMBER.get(i + 1));
+        for (int i = 0; i < numTriples - 1; i++) {
+            builder.lexConstraint(member.get(i), Operator.LEQ, member.get(i + 1));
         }
 
-        return builder.build();
+        return new SteinerProblem(builder.build(), triples);
     }
+
+    static final SteinerProblem PROBLEM = buildCsp(N);
+    static final ConstraintSatisfactionProblem CSP = PROBLEM.csp();
 
     @Test
     void getSolutions_findsExactlyEveryLabeledSystem() {
         val solutions = Solver.Factory.INSTANCE.createSolver(CSP).getSolutions().toList();
         assertThat(solutions).hasSize(EXPECTED_SOLUTION_COUNT);
-        solutions.forEach(Prob044SteinerTripleSystemTest::assertValidSteinerSystem);
+        solutions.forEach(s -> assertValidSteinerSystem(s, PROBLEM.triples(), N));
     }
 
     /**
      * Directly checks the actual Steiner triple system property against a found assignment,
-     * independent of how {@code buildCsp} derived it: every triple has exactly 3 points, all 7
-     * triples are pairwise distinct, and every one of the {@code C(7,2) = 21} point-pairs is
-     * covered by exactly one triple.
+     * independent of how {@code buildCsp} derived it: every triple has exactly 3 points, all
+     * triples are pairwise distinct, and every one of the {@code C(n,2)} point-pairs is covered by
+     * exactly one triple.
      */
-    static void assertValidSteinerSystem(Assignment assignment) {
-        List<Set<Integer>> triples = TRIPLE.stream().map(t -> assignment.getValue(t).orElseThrow()).toList();
-        triples.forEach(triple -> assertThat(triple).hasSize(3));
-        assertThat(new HashSet<>(triples)).hasSize(NUM_TRIPLES);
+    static void assertValidSteinerSystem(Assignment assignment, List<Variable<Set<Integer>>> triples, int n) {
+        List<Set<Integer>> values = triples.stream().map(t -> assignment.getValue(t).orElseThrow()).toList();
+        values.forEach(triple -> assertThat(triple).hasSize(3));
+        assertThat(new HashSet<>(values)).hasSize(triples.size());
 
         Map<Set<Integer>, Integer> pairCounts = new HashMap<>();
-        for (Set<Integer> triple : triples) {
+        for (Set<Integer> triple : values) {
             List<Integer> members = triple.stream().sorted().toList();
             for (int a = 0; a < members.size(); a++) {
                 for (int b = a + 1; b < members.size(); b++) {
@@ -137,7 +149,7 @@ public class Prob044SteinerTripleSystemTest {
                 }
             }
         }
-        assertThat(pairCounts).hasSize(N * (N - 1) / 2);
+        assertThat(pairCounts).hasSize(n * (n - 1) / 2);
         pairCounts.values().forEach(count -> assertThat(count).isEqualTo(1));
     }
 }

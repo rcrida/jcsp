@@ -66,43 +66,53 @@ public class Prob049NumberPartitioningTest {
     static final Variable.Factory F = Variable.Factory.INSTANCE;
     static final int N = 8;
     static final int HALF = N / 2;
-    static final Set<Integer> UNIVERSE = IntStream.rangeClosed(1, N).boxed().collect(Collectors.toSet());
-    static final int TOTAL_SUM = IntStream.rangeClosed(1, N).sum();
-    static final int TOTAL_SUM_OF_SQUARES = IntStream.rangeClosed(1, N).map(k -> k * k).sum();
 
-    static final Variable<Set<Integer>> A = F.create("A");
-    static final Variable<Set<Integer>> B = F.create("B");
+    record PartitionProblem(ConstraintSatisfactionProblem csp, Set<Integer> universe,
+                             Variable<Set<Integer>> a, Variable<Set<Integer>> b, List<Variable<Boolean>> memberA) {}
 
-    /** {@code MEMBER_A[k-1]} -- boolean, reified as {@code k in A}. */
-    static final List<Variable<Boolean>> MEMBER_A = IntStream.rangeClosed(1, N)
-            .<Variable<Boolean>>mapToObj(k -> F.create("memberA" + k))
-            .toList();
+    /** Universe size is a parameter, so a larger instance can be built (e.g. for benchmarking). */
+    static PartitionProblem buildCsp(int n) {
+        int half = n / 2;
+        Set<Integer> universe = IntStream.rangeClosed(1, n).boxed().collect(Collectors.toSet());
+        int totalSum = IntStream.rangeClosed(1, n).sum();
+        int totalSumOfSquares = IntStream.rangeClosed(1, n).map(k -> k * k).sum();
 
-    static final ConstraintSatisfactionProblem CSP = buildCsp();
+        Variable<Set<Integer>> a = F.create("A");
+        Variable<Set<Integer>> b = F.create("B");
+        // memberA[k-1] -- boolean, reified as "k in a".
+        List<Variable<Boolean>> memberA = IntStream.rangeClosed(1, n)
+                .<Variable<Boolean>>mapToObj(k -> F.create("memberA" + k))
+                .toList();
 
-    static ConstraintSatisfactionProblem buildCsp() {
         var builder = ConstraintSatisfactionProblem.builder();
-        var setDomain = SetIntervalDomain.of(Set.of(), UNIVERSE, HALF, HALF);
-        builder.variableDomain(A, setDomain);
-        builder.variableDomain(B, setDomain);
-        builder.disjointConstraint(A, B);
-        builder.setMembershipConstraint(A, 1);
+        var setDomain = SetIntervalDomain.of(Set.of(), universe, half, half);
+        builder.variableDomain(a, setDomain);
+        builder.variableDomain(b, setDomain);
+        builder.disjointConstraint(a, b);
+        builder.setMembershipConstraint(a, 1);
 
         Map<Variable<Boolean>, Integer> weights = new HashMap<>();
         Map<Variable<Boolean>, Integer> squaredWeights = new HashMap<>();
-        for (int k = 1; k <= N; k++) {
-            Variable<Boolean> memberA = MEMBER_A.get(k - 1);
-            builder.variableDomain(memberA, BooleanDomain.INSTANCE);
-            builder.reifyConstraint(memberA, SetMembershipConstraint.of(A, k));
-            weights.put(memberA, k);
-            squaredWeights.put(memberA, k * k);
+        for (int k = 1; k <= n; k++) {
+            Variable<Boolean> member = memberA.get(k - 1);
+            builder.variableDomain(member, BooleanDomain.INSTANCE);
+            builder.reifyConstraint(member, SetMembershipConstraint.of(a, k));
+            weights.put(member, k);
+            squaredWeights.put(member, k * k);
         }
 
-        builder.linearBooleanConstraint(weights, Operator.EQ, TOTAL_SUM / 2);
-        builder.linearBooleanConstraint(squaredWeights, Operator.EQ, TOTAL_SUM_OF_SQUARES / 2);
+        builder.linearBooleanConstraint(weights, Operator.EQ, totalSum / 2);
+        builder.linearBooleanConstraint(squaredWeights, Operator.EQ, totalSumOfSquares / 2);
 
-        return builder.build();
+        return new PartitionProblem(builder.build(), universe, a, b, memberA);
     }
+
+    static final PartitionProblem PROBLEM = buildCsp(N);
+    static final ConstraintSatisfactionProblem CSP = PROBLEM.csp();
+    static final Set<Integer> UNIVERSE = PROBLEM.universe();
+    static final Variable<Set<Integer>> A = PROBLEM.a();
+    static final Variable<Set<Integer>> B = PROBLEM.b();
+    static final List<Variable<Boolean>> MEMBER_A = PROBLEM.memberA();
 
     /**
      * Every candidate partition with element 1 fixed in A, checked directly against the problem's
