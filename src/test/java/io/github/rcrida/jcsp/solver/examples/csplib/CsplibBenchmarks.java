@@ -89,6 +89,7 @@ public class CsplibBenchmarks {
     private ConstraintSatisfactionProblem carSequencing;
     private ConstraintSatisfactionProblem bibd;
     private ConstraintSatisfactionProblem warehouseLocation;
+    private ToDoubleFunction<Assignment> warehouseLocationObjective;
     private ConstraintSatisfactionProblem steelMillSlabDesign;
     private ConstraintSatisfactionProblem killerSudoku;
     private ConstraintSatisfactionProblem jobShopScheduling;
@@ -115,7 +116,9 @@ public class CsplibBenchmarks {
     public void setup() {
         carSequencing = Prob001CarSequencingTest.CSP;
         bibd = Prob028BalancedIncompleteBlockDesignTest.PROBLEM.csp();
-        warehouseLocation = Prob034WarehouseLocationTest.CSP;
+        var warehouseLocationInstance = Prob034WarehouseLocationTest.xcsp3Instance();
+        warehouseLocation = warehouseLocationInstance.csp();
+        warehouseLocationObjective = warehouseLocationInstance.objective();
         steelMillSlabDesign = Prob038SteelMillSlabDesignTest.CSP;
         killerSudoku = Prob057KillerSudokuTest.killerSudoku();
         jobShopScheduling = Prob061JobShopSchedulingTest.CSP;
@@ -159,7 +162,7 @@ public class CsplibBenchmarks {
 
     @Benchmark
     public void warehouseLocation(Blackhole bh) {
-        bh.consume(Solver.Factory.INSTANCE.createSolver(warehouseLocation, Prob034WarehouseLocationTest::totalCost).getSolution());
+        bh.consume(Solver.Factory.INSTANCE.createSolver(warehouseLocation, warehouseLocationObjective).getSolution());
     }
 
     @Benchmark

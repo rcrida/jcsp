@@ -1,0 +1,42 @@
+<instance format="XCSP3" type="COP">
+  <!--
+    Warehouse Location Problem (CSPLib prob034), "compact" variant, 5 stores/3 warehouses.
+    Hand-authored for this test suite (this instance's own data is itself constructed rather than
+    taken from CSPLib's published OR-Library files, which are 16-warehouse/50-store and too large
+    for a fast unit test, see Prob034WarehouseLocationTest's own comment) to mirror that test's
+    model: per-warehouse capacity via count, "how many distinct warehouses are used" via nValues,
+    and a per-store cost lookup (cost[i] = supplyCost[i][w[i]]) via element, so the final
+    objective, total supply cost plus a fixed cost per distinct warehouse used, reduces to a plain
+    weighted sum over the per-store cost variables plus the nValues count.
+  -->
+  <variables>
+    <var id="w0"> 0..2 </var>
+    <var id="w1"> 0..2 </var>
+    <var id="w2"> 0..2 </var>
+    <var id="w3"> 0..2 </var>
+    <var id="w4"> 0..2 </var>
+    <var id="count"> 1..3 </var>
+    <var id="cost0"> 1..9 </var>
+    <var id="cost1"> 1..9 </var>
+    <var id="cost2"> 1..9 </var>
+    <var id="cost3"> 1..9 </var>
+    <var id="cost4"> 1..9 </var>
+  </variables>
+  <constraints>
+    <count><list> w0 w1 w2 w3 w4 </list><values> 0 </values><condition> (le,5) </condition></count>
+    <count><list> w0 w1 w2 w3 w4 </list><values> 1 </values><condition> (le,5) </condition></count>
+    <count><list> w0 w1 w2 w3 w4 </list><values> 2 </values><condition> (le,5) </condition></count>
+    <nValues><list> w0 w1 w2 w3 w4 </list><condition> (eq,count) </condition></nValues>
+    <element><list startIndex="0"> 5 1 9 </list><index> w0 </index><value> cost0 </value></element>
+    <element><list startIndex="0"> 5 1 9 </list><index> w1 </index><value> cost1 </value></element>
+    <element><list startIndex="0"> 9 5 1 </list><index> w2 </index><value> cost2 </value></element>
+    <element><list startIndex="0"> 9 5 1 </list><index> w3 </index><value> cost3 </value></element>
+    <element><list startIndex="0"> 1 9 5 </list><index> w4 </index><value> cost4 </value></element>
+  </constraints>
+  <objectives>
+    <minimize type="sum">
+      <list> cost0 cost1 cost2 cost3 cost4 count </list>
+      <coeffs> 1 1 1 1 1 8 </coeffs>
+    </minimize>
+  </objectives>
+</instance>

@@ -4,9 +4,7 @@ import io.github.rcrida.jcsp.solver.Solver;
 
 import lombok.val;
 import io.github.rcrida.jcsp.ConstraintSatisfactionProblem;
-import io.github.rcrida.jcsp.assignments.Assignment;
-import io.github.rcrida.jcsp.constraints.Operator;
-import io.github.rcrida.jcsp.domains.IntRangeDomain;
+import io.github.rcrida.jcsp.parser.xcsp3.Xcsp3Instance;
 import io.github.rcrida.jcsp.variables.Variable;
 import org.junit.jupiter.api.Test;
 
@@ -41,21 +39,21 @@ import static org.assertj.core.api.Assertions.offset;
  * exactly 2 of the 3 warehouses) was confirmed by exhaustive brute force over all
  * {@code 3^5 = 243} possible assignments — strictly better than the 29.0 a "cheapest warehouse
  * per store" greedy assignment would give, which is the whole point of the test.
+ * <p>
+ * {@link #xcsp3Instance()} parses a hand-authored XCSP3 instance file (see its own comment for
+ * provenance) rather than building the CSP and objective via jcsp's constraint builder API:
+ * {@code count} per warehouse, {@code nValues} for the distinct-warehouse count, and {@code
+ * element} to look each store's cost up from its assigned warehouse -- which reduces the
+ * objective itself to a plain sum-type {@code minimize}, since {@code element}'s per-store result
+ * variables turn the original doubly-indexed {@code costs[i][w[i]]} lookup into a flat list the
+ * parser can already express. {@link CsplibBenchmarks} uses the same parsed instance's objective
+ * rather than a separate hand-rolled function.
  */
 public class Prob034WarehouseLocationTest {
     static final Variable.Factory F = Variable.Factory.INSTANCE;
     static final int NUM_STORES = 5;
     static final int NUM_WAREHOUSES = 3;
-    static final int FIXED_COST = 8;
     static final int[] CAPACITY = {5, 5, 5};
-
-    static final int[][] SUPPLY_COST = {
-            {5, 1, 9},
-            {5, 1, 9},
-            {9, 5, 1},
-            {9, 5, 1},
-            {1, 9, 5},
-    };
 
     static final List<Variable<Integer>> W = IntStream.range(0, NUM_STORES)
             .mapToObj(i -> F.<Integer>create("w" + i))
@@ -65,41 +63,24 @@ public class Prob034WarehouseLocationTest {
     static final double OPTIMAL_COST = 25.0;
     static final int OPTIMAL_DISTINCT_WAREHOUSES = 2;
 
-    static final ConstraintSatisfactionProblem CSP = buildCsp();
-
-    static ConstraintSatisfactionProblem buildCsp() {
-        var builder = ConstraintSatisfactionProblem.builder();
-        var warehouseDomain = IntRangeDomain.of(0, NUM_WAREHOUSES - 1);
-        W.forEach(w -> builder.variableDomain(w, warehouseDomain));
-        builder.variableDomain(COUNT, IntRangeDomain.of(1, NUM_WAREHOUSES));
-
-        for (int j = 0; j < NUM_WAREHOUSES; j++) {
-            builder.countConstraint(new HashSet<>(W), j, Operator.LEQ, CAPACITY[j]);
-        }
-        builder.nValueConstraint(new HashSet<>(W), COUNT);
-        return builder.build();
+    static Xcsp3Instance xcsp3Instance() {
+        return Xcsp3CsplibResource.parse("warehouse-location-5x3.xml");
     }
 
-    static double totalCost(Assignment a) {
-        double supply = 0;
-        for (int store = 0; store < NUM_STORES; store++) {
-            var w = a.getValue(W.get(store));
-            if (w.isPresent()) supply += SUPPLY_COST[store][w.get()];
-        }
-        double fixedPart = a.getValue(COUNT).map(c -> c * (double) FIXED_COST).orElse(0.0);
-        return supply + fixedPart;
-    }
+    static final ConstraintSatisfactionProblem CSP = xcsp3Instance().csp();
 
     @Test
     void optimize_consolidatesOntoFewerWarehousesThanGreedyAssignment() {
-        val result = Solver.Factory.INSTANCE.createSolver(CSP, Prob034WarehouseLocationTest::totalCost).getSolution();
+        val instance = xcsp3Instance();
+        val result = Solver.Factory.INSTANCE.createSolver(instance.csp(), instance.objective()).getSolution();
         assertThat(result).isPresent();
-        assertThat(totalCost(result.get())).isCloseTo(OPTIMAL_COST, offset(1e-9));
+        assertThat(instance.objective().applyAsDouble(result.get())).isCloseTo(OPTIMAL_COST, offset(1e-9));
     }
 
     @Test
     void optimalSolutionUsesExactlyTwoDistinctWarehouses() {
-        val result = Solver.Factory.INSTANCE.createSolver(CSP, Prob034WarehouseLocationTest::totalCost).getSolution().orElseThrow();
+        val instance = xcsp3Instance();
+        val result = Solver.Factory.INSTANCE.createSolver(instance.csp(), instance.objective()).getSolution().orElseThrow();
         Set<Integer> distinctWarehouses = new HashSet<>();
         for (Variable<Integer> w : W) distinctWarehouses.add(result.getValue(w).orElseThrow());
         assertThat(distinctWarehouses).hasSize(OPTIMAL_DISTINCT_WAREHOUSES);
@@ -108,7 +89,8 @@ public class Prob034WarehouseLocationTest {
 
     @Test
     void optimalSolutionRespectsWarehouseCapacities() {
-        val result = Solver.Factory.INSTANCE.createSolver(CSP, Prob034WarehouseLocationTest::totalCost).getSolution().orElseThrow();
+        val instance = xcsp3Instance();
+        val result = Solver.Factory.INSTANCE.createSolver(instance.csp(), instance.objective()).getSolution().orElseThrow();
         int[] load = new int[NUM_WAREHOUSES];
         for (Variable<Integer> w : W) load[result.getValue(w).orElseThrow()]++;
         for (int j = 0; j < NUM_WAREHOUSES; j++) {
@@ -118,11 +100,13 @@ public class Prob034WarehouseLocationTest {
 
     @Test
     void getSolutions_returnsImprovingAssignments() {
-        val improving = Solver.Factory.INSTANCE.createSolver(CSP, Prob034WarehouseLocationTest::totalCost).getSolutions().toList();
+        val instance = xcsp3Instance();
+        val improving = Solver.Factory.INSTANCE.createSolver(instance.csp(), instance.objective()).getSolutions().toList();
         assertThat(improving).isNotEmpty();
         for (int i = 1; i < improving.size(); i++) {
-            assertThat(totalCost(improving.get(i))).isLessThan(totalCost(improving.get(i - 1)));
+            assertThat(instance.objective().applyAsDouble(improving.get(i)))
+                    .isLessThan(instance.objective().applyAsDouble(improving.get(i - 1)));
         }
-        assertThat(totalCost(improving.getLast())).isCloseTo(OPTIMAL_COST, offset(1e-9));
+        assertThat(instance.objective().applyAsDouble(improving.getLast())).isCloseTo(OPTIMAL_COST, offset(1e-9));
     }
 }
