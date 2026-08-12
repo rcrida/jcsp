@@ -6,9 +6,12 @@ import io.github.rcrida.jcsp.ConstraintSatisfactionProblem;
 import io.github.rcrida.jcsp.assignments.Assignment;
 import io.github.rcrida.jcsp.constraints.Operator;
 import io.github.rcrida.jcsp.domains.IntRangeDomain;
+import io.github.rcrida.jcsp.parser.xcsp3.Xcsp3Parser;
 import io.github.rcrida.jcsp.variables.Variable;
 import org.junit.jupiter.api.Test;
 
+import java.io.IOException;
+import java.net.URISyntaxException;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -40,8 +43,18 @@ public class Prob019MagicSquareTest {
         return square(N);
     }
 
-    /** Order is a parameter, so larger squares can be built (e.g. for benchmarking); {@link #square()} pins it to {@link #N}. */
+    /**
+     * Order is a parameter, so larger squares can be built (e.g. for benchmarking); {@link
+     * #square()} pins it to {@link #N}. At order {@link #N} loads the real XCSP3 instance file
+     * (MagicSquare-03-sum.xml from the XCSP3 MagicSquare series, https://xcsp.org/instances/,
+     * unmodified -- see the instance file's own comment); every other order builds the CSP
+     * programmatically.
+     */
     static MagicSquareProblem square(int n) {
+        if (n == N) {
+            return xcsp3Square();
+        }
+
         int magic = n * (n * n + 1) / 2;
         String[] indices = new String[n];
         for (int i = 0; i < n; i++) indices[i] = String.valueOf(i + 1);
@@ -77,6 +90,22 @@ public class Prob019MagicSquareTest {
         builder.sumConstraint(antiDiagonal, Operator.EQ, magic);
 
         return new MagicSquareProblem(builder.build(), cells);
+    }
+
+    @SuppressWarnings("unchecked")
+    private static MagicSquareProblem xcsp3Square() {
+        try {
+            var instance = Xcsp3Parser.parse(Xcsp3CsplibResource.resource("magic-square-order3.xml"));
+            Variable<Integer>[][] cells = new Variable[N][N];
+            for (int r = 0; r < N; r++) {
+                for (int c = 0; c < N; c++) {
+                    cells[r][c] = Variable.Factory.INSTANCE.create("x[" + r + "][" + c + "]");
+                }
+            }
+            return new MagicSquareProblem(instance.csp(), cells);
+        } catch (IOException | URISyntaxException e) {
+            throw new RuntimeException("Failed to load XCSP3 instance: magic-square-order3.xml", e);
+        }
     }
 
     @Test

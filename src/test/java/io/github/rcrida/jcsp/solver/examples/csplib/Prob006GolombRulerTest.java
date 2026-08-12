@@ -7,22 +7,30 @@ import io.github.rcrida.jcsp.ConstraintSatisfactionProblem;
 import io.github.rcrida.jcsp.assignments.Assignment;
 import io.github.rcrida.jcsp.constraints.Operator;
 import io.github.rcrida.jcsp.domains.IntRangeDomain;
+import io.github.rcrida.jcsp.parser.xcsp3.Xcsp3Parser;
 import io.github.rcrida.jcsp.variables.Variable;
 import org.junit.jupiter.api.Test;
 
+import java.io.IOException;
+import java.net.URISyntaxException;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.stream.IntStream;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
  * Golomb ruler of order 5: place N marks on a ruler so that every pair of marks
  * yields a distinct distance. Each pairwise distance is materialised as an auxiliary
- * variable (defined via {@code linearConstraint}) so that {@code allDiffConstraint}
- * can enforce distinctness across all of them at once.
+ * variable so that {@code allDiffConstraint} can enforce distinctness across all of them at once.
+ *
+ * <p>The CSPLib-sized instance ({@link #N} marks, length {@link #OPTIMAL_LENGTH}) is sourced from
+ * a real XCSP3 instance file (see {@link #buildRuler}'s own comment for provenance) rather than
+ * built by hand; larger sizes used only for benchmarking ({@link CsplibBenchmarks}) fall back to
+ * the programmatic builder, since no instance file exists for them.
  *
  * <p>Rather than optimizing (which would need a hand-verified admissible lower bound
  * for branch-and-bound), optimality of the known length 11 (OEIS A003022) is proven
@@ -36,8 +44,22 @@ public class Prob006GolombRulerTest {
 
     record RulerProblem(ConstraintSatisfactionProblem csp, List<Variable<Integer>> marks) {}
 
-    /** Order and ruler length are both parameters, so larger instances can be built (e.g. for benchmarking). */
+    /**
+     * Order and ruler length are both parameters, so larger instances can be built (e.g. for
+     * benchmarking). At order {@link #N}, length {@link #OPTIMAL_LENGTH} or {@code
+     * OPTIMAL_LENGTH - 1} loads the matching real XCSP3 instance file (GolombRuler-05-a3.xml from
+     * the XCSP3 GolombRuler series, https://xcsp.org/instances/, domain-trimmed to the relevant
+     * length with one appended symmetry-breaking constraint -- see the instance files' own
+     * comments); every other size builds the CSP programmatically.
+     */
     static RulerProblem buildRuler(int n, int maxLength) {
+        if (n == N && maxLength == OPTIMAL_LENGTH) {
+            return xcsp3Ruler("golomb-ruler-order5-length11.xml", n);
+        }
+        if (n == N && maxLength == OPTIMAL_LENGTH - 1) {
+            return xcsp3Ruler("golomb-ruler-order5-length10.xml", n);
+        }
+
         List<Variable<Integer>> marks = new ArrayList<>();
         for (int i = 0; i < n; i++) marks.add(F.create("m" + i));
 
@@ -69,6 +91,16 @@ public class Prob006GolombRulerTest {
         builder.comparatorConstraint(firstGap, Operator.LT, lastGap);
 
         return new RulerProblem(builder.build(), marks);
+    }
+
+    private static RulerProblem xcsp3Ruler(String resourceName, int n) {
+        try {
+            var instance = Xcsp3Parser.parse(Xcsp3CsplibResource.resource(resourceName));
+            List<Variable<Integer>> marks = IntStream.range(0, n).mapToObj(i -> F.<Integer>create("x[" + i + "]")).toList();
+            return new RulerProblem(instance.csp(), marks);
+        } catch (IOException | URISyntaxException e) {
+            throw new RuntimeException("Failed to load XCSP3 instance: " + resourceName, e);
+        }
     }
 
     static void assertValidRuler(Assignment assignment, List<Variable<Integer>> marks) {

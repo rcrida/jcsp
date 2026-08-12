@@ -550,6 +550,15 @@ class Xcsp3ParserTest {
         assertThat(solutions(instance.csp())).isNotEmpty();
     }
 
+    @Test void intensionDist() throws IOException {
+        // dist(x,y) is |x - y|; appears in real-world instances (e.g. xcsp.org's n-Queens "m1"
+        // model uses ne(k,dist(q[i],q[j])) for the diagonal-attack rule).
+        Xcsp3Instance instance = parseXml(
+                "<var id=\"x\"> 0..5 </var><var id=\"y\"> 0..5 </var>",
+                "<intension> eq(dist(x,y),3) </intension>");
+        assertThat(solutions(instance.csp())).isNotEmpty();
+    }
+
     @Test void intensionNotEqual() throws IOException {
         // A relational root directly comparing two variables (ne/lt below) survives
         // xcsp3-tools' canonization unchanged; ge/gt do not (always rewritten to le/lt with

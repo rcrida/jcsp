@@ -7,15 +7,19 @@ import io.github.rcrida.jcsp.assignments.Assignment;
 import io.github.rcrida.jcsp.constraints.Operator;
 import io.github.rcrida.jcsp.domains.Domain;
 import io.github.rcrida.jcsp.domains.IntRangeDomain;
+import io.github.rcrida.jcsp.parser.xcsp3.Xcsp3Parser;
 import io.github.rcrida.jcsp.solver.assignmentfactory.GreedyAssignmentFactory;
 import io.github.rcrida.jcsp.solver.LocalSolver;
 import io.github.rcrida.jcsp.variables.Variable;
 import org.junit.jupiter.api.Test;
 
+import java.io.IOException;
 import java.math.BigInteger;
+import java.net.URISyntaxException;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Set;
+import java.util.stream.IntStream;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -32,9 +36,18 @@ public class Prob054NQueensTest {
         return problem.csp();
     }
 
-    /** Board size is a parameter, so a larger instance can be built (e.g. for benchmarking); unlike
-     * {@link #nQueens()}, this overload doesn't touch the shared static {@link #VARIABLES} field. */
+    /**
+     * Board size is a parameter, so a larger instance can be built (e.g. for benchmarking); unlike
+     * {@link #nQueens()}, this overload doesn't touch the shared static {@link #VARIABLES} field.
+     * At board size {@link #N} loads the real XCSP3 instance file (Queens-0008-m1.xml from the
+     * XCSP3 Queens series, https://xcsp.org/instances/, unmodified -- its diagonal-attack rule
+     * uses the {@code dist()} intension operator); every other size builds the CSP programmatically.
+     */
     public static NQueensProblem nQueens(int n) {
+        if (n == N) {
+            return xcsp3NQueens();
+        }
+
         val cspBuilder = ConstraintSatisfactionProblem.builder();
         val labels = new String[n];
         for (int i = 0; i < n; i++) {
@@ -57,6 +70,16 @@ public class Prob054NQueensTest {
             }
         }
         return new NQueensProblem(cspBuilder.build(), variables);
+    }
+
+    private static NQueensProblem xcsp3NQueens() {
+        try {
+            var instance = Xcsp3Parser.parse(Xcsp3CsplibResource.resource("nqueens-8.xml"));
+            Variable[] variables = IntStream.range(0, N).mapToObj(i -> Variable.Factory.INSTANCE.create("q[" + i + "]")).toArray(Variable[]::new);
+            return new NQueensProblem(instance.csp(), variables);
+        } catch (IOException | URISyntaxException e) {
+            throw new RuntimeException("Failed to load XCSP3 instance: nqueens-8.xml", e);
+        }
     }
 
     static void printAssignment(Assignment assignment) {

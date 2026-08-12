@@ -16,11 +16,11 @@ import java.util.stream.LongStream;
  * AST by {@code xcsp3-tools} -- into a {@link Predicate}{@code <Assignment>} suitable for {@link
  * io.github.rcrida.jcsp.ConstraintSatisfactionProblem.ConstraintSatisfactionProblemBuilder#predicateConstraint}.
  * Covers the arithmetic ({@code neg}/{@code abs}/{@code add}/{@code sub}/{@code mul}/{@code
- * div}/{@code mod}), relational ({@code eq}/{@code ne}/{@code lt}/{@code le}/{@code ge}/{@code
- * gt}), and boolean ({@code not}/{@code and}/{@code or}) operators that appear in this project's
- * XCSP3 test fixtures -- not the full XCSP3 expression language (e.g. {@code min}/{@code
- * max}/{@code dist}/{@code xor}/{@code iff}/set operators are not handled). An operator outside
- * this set throws {@link UnsupportedXcsp3ConstraintException} rather than silently mis-evaluating.
+ * div}/{@code mod}/{@code dist}), relational ({@code eq}/{@code ne}/{@code lt}/{@code le}/{@code
+ * ge}/{@code gt}), and boolean ({@code not}/{@code and}/{@code or}) operators that appear in this
+ * project's XCSP3 test fixtures -- not the full XCSP3 expression language (e.g. {@code min}/{@code
+ * max}/{@code xor}/{@code iff}/set operators are not handled). An operator outside this set throws
+ * {@link UnsupportedXcsp3ConstraintException} rather than silently mis-evaluating.
  */
 final class IntensionExpressionEvaluator {
 
@@ -56,6 +56,7 @@ final class IntensionExpressionEvaluator {
         return switch (type) {
             case NEG -> -operands[0];
             case ABS -> Math.abs(operands[0]);
+            case DIST -> Math.abs(operands[0] - operands[1]);
             case ADD -> LongStream.of(operands).sum();
             case SUB -> operands[0] - operands[1];
             case MUL -> LongStream.of(operands).reduce(1L, (a, b) -> a * b);
