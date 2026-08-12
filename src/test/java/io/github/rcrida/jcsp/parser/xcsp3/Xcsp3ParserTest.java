@@ -374,6 +374,21 @@ class Xcsp3ParserTest {
                 .isInstanceOf(UnsupportedXcsp3ConstraintException.class);
     }
 
+    // ---- slide ----------------------------------------------------------------------------------------------------------
+
+    @Test void slideOfSum_buildsOneSumConstraintPerWindow() throws IOException {
+        // Like group, xcsp3-tools' default loadSlide expands the sliding template (here a sum with
+        // a <=2 condition, arity 3 inferred from %0 %1 %2) into repeated ordinary buildCtrSum calls
+        // before Xcsp3CallbackHandler ever sees it -- one per window of 3 consecutive elements
+        // (offset 1 by default): [x0,x1,x2], [x1,x2,x3], [x2,x3,x4], [x3,x4,x5].
+        Xcsp3Instance instance = parseXml(
+                "<array id=\"x\" size=\"[6]\"> 0..1 </array>",
+                "<slide><list> x[] </list><sum><list> %0 %1 %2 </list>"
+                        + "<condition> (le,2) </condition></sum></slide>");
+        assertThat(instance.csp().getConstraints()).hasSize(4);
+        assertThat(solutions(instance.csp())).isNotEmpty();
+    }
+
     // ---- circuit --------------------------------------------------------------------------------------------------------
 
     @Test void circuit_buildsCircuitConstraint() throws IOException {
