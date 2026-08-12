@@ -67,3 +67,4 @@ section instead.
 | [0011](0011-cancellation-token-for-main-chain-search.md) | Cancellation token for main-chain search | Accepted |
 | [0012](0012-per-csp-propagator-filtering.md) | Per-CSP propagator filtering for the fixpoint loop | Accepted |
 | [0013](0013-in-tree-jmh-benchmarks.md) | In-tree JMH benchmarks, not a separate module | Accepted |
+| [0014](0014-xcsp3-parser-via-callback-library.md) | XCSP3 instance parsing via a callback-driven library, not a hand-rolled parser | Accepted |

@@ -103,19 +103,23 @@ public class RangeNogoodConstraint extends NaryConstraint implements NogoodConst
      * {@link io.github.rcrida.jcsp.domains.SetBoundedDomain}, which is neither {@link BoundedDomain}
      * nor {@link DiscreteDomain} — it isn't {@link Number}-based, so no {@link IntervalDomain} could
      * stand in for it at all).
+     * <p>
+     * Delegates min/max lookup to {@link NumericBounds#min}/{@link NumericBounds#max} (the same
+     * helpers {@link #fromCurrentBounds} already uses) rather than scanning every value by hand:
+     * for {@link io.github.rcrida.jcsp.domains.NumericDomain}-implementing discrete domains (e.g.
+     * {@link io.github.rcrida.jcsp.domains.IntRangeDomain}, {@link
+     * io.github.rcrida.jcsp.domains.NumericSetDomain}) that's an O(1) field read rather than an
+     * O(domain size) scan — a real cost on this method's call site, checked on every propagation
+     * failure during CDCL search.
      */
+    @SuppressWarnings({"unchecked", "rawtypes"})
     private static boolean isSafeToCiteAsRange(Domain<?> domain) {
         if (domain instanceof BoundedDomain<?>) return true;
         if (!(domain instanceof DiscreteDomain<?> discrete)) return false;
-        var values = discrete.toList();
-        if (values.isEmpty() || !(values.get(0) instanceof Integer)) return false;
-        int min = Integer.MAX_VALUE;
-        int max = Integer.MIN_VALUE;
-        for (Object value : values) {
-            int v = (Integer) value;
-            min = Math.min(min, v);
-            max = Math.max(max, v);
-        }
+        if (discrete.isEmpty()) return false;
+        if (!(discrete.stream().findFirst().orElseThrow() instanceof Integer)) return false;
+        int min = (int) NumericBounds.min((Domain) domain);
+        int max = (int) NumericBounds.max((Domain) domain);
         return discrete.size() == (max - min + 1);
     }
 

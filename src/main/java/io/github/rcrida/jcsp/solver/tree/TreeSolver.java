@@ -43,8 +43,21 @@ public class TreeSolver implements Solver {
         Domain<?> rootDomain = finalTcsp.getDomain(root);
         log.debug("Domain {}", rootDomain);
         val start = Assignment.empty();
+        // Pre-filtered once, outside the per-candidate-value loop below, so checking each candidate
+        // root value doesn't re-scan the tree's entire constraint list (Assignment#isConsistent's
+        // own filter) just to find the handful of constraints that touch root.
+        val rootConstraints = finalTcsp.getConstraints().stream()
+                .filter(constraint -> constraint.getVariables().contains(root))
+                .toList();
         return (rootDomain instanceof DiscreteDomain<?> dd ? dd.stream() : rootDomain.singleValue().stream())
                 .<Assignment>map(value -> start.withValue(root, value))
+                // populateAssignment only calls isConsistent for variables assigned *after* the root
+                // (each recursive step filters its own candidate); a constraint that touches only the
+                // root itself -- e.g. a single-variable PredicateConstraint, which NodeConsistency
+                // doesn't prune because it isn't a UnaryConstraint -- would otherwise never be checked
+                // at all when the tree is exactly one node, since populateAssignment then returns
+                // immediately via the isComplete(tcsp) branch below without ever filtering.
+                .filter(rootAssignment -> rootAssignment.isConsistentAmong(rootConstraints))
                 .flatMap(rootAssignment -> populateAssignment(finalTcsp, rootAssignment, unassignedVariableSelector));
     }
 

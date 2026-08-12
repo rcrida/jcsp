@@ -6,6 +6,7 @@ import io.github.rcrida.jcsp.assignments.Assignment;
 import io.github.rcrida.jcsp.domains.DiscreteDomain;
 import io.github.rcrida.jcsp.domains.Domain;
 import io.github.rcrida.jcsp.domains.EnumDomain;
+import io.github.rcrida.jcsp.domains.IntRangeDomain;
 import io.github.rcrida.jcsp.domains.IntervalDomain;
 import io.github.rcrida.jcsp.solver.backtrackingsearch.order.DefaultValueOrderer;
 import io.github.rcrida.jcsp.solver.tree.selector.TreeUnassignedVariableSelector;
@@ -16,6 +17,7 @@ import org.junit.jupiter.api.Test;
 import java.util.EnumSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -97,5 +99,21 @@ public class TreeSolverTest {
         val solutions = treeSolver.getSolutions(csp).toList();
         assertThat(solutions).hasSize(1);
         assertThat(solutions.get(0).getValue(x)).contains(5.0);
+    }
+
+    @Test
+    void getSolutions_singleVariableTree_checksNonUnaryConstraintOnRoot() {
+        // Regression test: a single-variable tree (root has no tree edges) used to skip
+        // isConsistent entirely for the root's candidate value, since populateAssignment's
+        // isComplete(tcsp) branch returns immediately without ever filtering. A genuine
+        // UnaryConstraint is masked by NodeConsistency pruning the domain before this solver ever
+        // runs, but a PredicateConstraint referencing only the root isn't a UnaryConstraint, so
+        // NodeConsistency leaves its domain untouched and this solver must check it itself.
+        Variable<Integer> x = Variable.Factory.INSTANCE.create("x_single");
+        var csp = ConstraintSatisfactionProblem.builder()
+                .variableDomain(x, IntRangeDomain.of(0, 3))
+                .predicateConstraint(Set.of(x), a -> a.getValue(x).orElseThrow() == 2)
+                .build();
+        assertThat(treeSolver.getSolutions(csp).toList()).containsExactly(Assignment.of(Map.of(x, 2)));
     }
 }

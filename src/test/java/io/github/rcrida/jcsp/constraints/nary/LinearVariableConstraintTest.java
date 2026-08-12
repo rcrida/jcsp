@@ -5,6 +5,7 @@ import io.github.rcrida.jcsp.constraints.Operator;
 import io.github.rcrida.jcsp.domains.Domain;
 import io.github.rcrida.jcsp.domains.IntRangeDomain;
 import io.github.rcrida.jcsp.domains.IntervalDomain;
+import io.github.rcrida.jcsp.domains.NumericDiscreteDomain;
 import io.github.rcrida.jcsp.variables.Variable;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -120,6 +121,23 @@ public class LinearVariableConstraintTest {
         assertThat(result.isInfeasible()).isTrue();
         assertThat(result.reason()).isEqualTo(RangeNogoodConstraint.of(Map.of(
                 v1, IntervalDomain.of(3, 3), v2, IntervalDomain.of(2, 10), t, IntervalDomain.of(1000, 1000))));
+    }
+
+    @Test
+    void explainInfeasible_nonIntegerType_fallsBackToGroundNogood() {
+        // RangeNogoodConstraint.fromCurrentBounds' isSafeToCiteAsRange requires every value be an
+        // Integer specifically -- a Long-typed domain fails that check even when singleton, so
+        // this exercises the GroundNogoodConstraint fallback rather than the range-citing path
+        // every other explainInfeasible test above takes.
+        Variable<Long> a = F.create("aLong"), b = F.create("bLong"), target = F.create("tLong");
+        var c = LinearVariableConstraint.of(Map.of(a, 2L, b, 3L), Operator.EQ, target);
+        var domains = Map.<Variable<?>, Domain<?>>of(
+                a, NumericDiscreteDomain.of(2L),
+                b, NumericDiscreteDomain.of(1L),
+                target, NumericDiscreteDomain.of(8L));
+        var result = c.propagateWithReasons(domains);
+        assertThat(result.isInfeasible()).isTrue();
+        assertThat(result.reason()).isEqualTo(GroundNogoodConstraint.of(Map.of(a, 2L, b, 1L, target, 8L)));
     }
 
     // --- toString() / of() ---

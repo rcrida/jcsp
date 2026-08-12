@@ -163,6 +163,18 @@ public class AssignmentTest {
     }
 
     @Test
+    void isConsistentAmong_checksOnlyTheGivenConstraints() {
+        val assignment = Assignment.of(Map.of(variable, value));
+        val csp = ConstraintSatisfactionProblem.builder()
+                .variableDomain(variable, domain)
+                .notEqualsConstraint(variable, value)
+                .build();
+        val theOnlyConstraint = csp.getConstraints().iterator().next();
+        assertThat(assignment.isConsistentAmong(Set.of(theOnlyConstraint))).isFalse();
+        assertThat(assignment.isConsistentAmong(Set.of())).isTrue();
+    }
+
+    @Test
     void isSolution_invalid() {
         when(domain.contains(value)).thenReturn(false);
         val assignment = Assignment.of(Map.of(variable, value));

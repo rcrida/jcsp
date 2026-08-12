@@ -1,0 +1,29 @@
+<instance format="XCSP3" type="CSP">
+  <!--
+    The classic SEND+MORE=MONEY cryptarithmetic puzzle, hand-authored for this test suite
+    (not transcribed from an external XCSP3 benchmark repository) to exercise allDifferent plus a
+    weighted sum with negative coefficients end to end through Xcsp3Parser. Unique solution:
+    S=9 EE=5 N=6 D=7 M=1 O=0 R=8 Y=2 (9567 + 1085 = 10652). The digit E is named "EE" here since
+    "E" is a reserved XCSP3 keyword (scientific-notation exponent marker).
+  -->
+  <variables>
+    <var id="S"> 1..9 </var>
+    <var id="EE"> 0..9 </var>
+    <var id="N"> 0..9 </var>
+    <var id="D"> 0..9 </var>
+    <var id="M"> 1..9 </var>
+    <var id="O"> 0..9 </var>
+    <var id="R"> 0..9 </var>
+    <var id="Y"> 0..9 </var>
+  </variables>
+  <constraints>
+    <allDifferent>
+      <list> S EE N D M O R Y </list>
+    </allDifferent>
+    <sum>
+      <list> S EE N D M O R Y </list>
+      <coeffs> 1000 91 -90 1 -9000 -900 10 -1 </coeffs>
+      <condition> (eq,0) </condition>
+    </sum>
+  </constraints>
+</instance>

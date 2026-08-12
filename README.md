@@ -45,6 +45,7 @@ Traditional Java constraint satisfaction problem (CSP) solvers were designed ove
 - **Real-valued variables**: `IntervalDomain` represents a continuous `[min, max]` range of `double`s. `SumBoundConstraint`, `SumVariableConstraint`, `LinearBoundConstraint`, `LinearVariableConstraint`, `UnaryComparatorConstraint`, `BinaryComparatorConstraint`, `BinaryOffsetConstraint`, `AbsoluteDifferenceConstraint`, `DivisionConstraint`, `ProductConstraint`, `LexConstraint`, `MaxConstraint`, `MinConstraint`, `CumulativeConstraint`, `DiffnConstraint` (origin variables), and `IncreasingConstraint`/`DecreasingConstraint` all propagate over interval bounds, so many continuous problems are solved entirely by propagation. `ReifiedConstraint`/`ImplicationConstraint` get the same interval narrowing indirectly, by delegating to a `Propagatable` body once their indicator is resolved. `UnaryPredicateConstraint`, `BinaryPredicateConstraint`, `PredicateConstraint`, and `NaryElementConstraint` also accept `IntervalDomain` variables (no dedicated interval propagation, but resolved correctly via search plus the final satisfaction check)
 - **Continuous optimization**: `createSolver(csp, objective)` auto-detects `IntervalDomain` variables and explores their feasible region via `BisectionConditioningSolver` — recursively bisecting intervals to within `DEFAULT_BISECTION_EPSILON (1e-3)`, repropagating bounds at each step, then filtering the resulting feasible points by the objective; `getSolution()` returns the global optimum and `getSolutions()` streams improving assignments
 - **Set variables**: `SetIntervalDomain` models a set-CP variable — a `[lowerBound, upperBound]` "set interval" under subset ordering plus an independent cardinality range, rather than enumerating every candidate subset. `SubsetConstraint`, `DisjointConstraint`, and `IntersectionCardinalityConstraint` propagate over it; `createSolver` auto-detects set variables and runs real backtracking search (`SetBranchingSolver`) in both the satisfaction and optimization chains for whatever a propagation-only pass can't fully resolve
+- **XCSP3 instance parsing**: `Xcsp3Parser.parse(Path)` reads an [XCSP3](https://xcsp.org) instance file directly into a `ConstraintSatisfactionProblem` (plus an optional objective for COP instances), covering `intension`, `extension`, `allDifferent`, `sum`, `count`/`among`, `element`, `ordered`, `lex`, `cumulative`, `circuit`, `binPacking`, and single-variable/sum-type objectives
 
 ## Usage
 
@@ -159,6 +160,20 @@ Solver.Factory.INSTANCE.createSolver(csp).getSolutions().forEach(System.out::pri
 ```
 
 `SubsetConstraint` (`left ⊆ right`), `DisjointConstraint` (`left ∩ right = ∅`), `IntersectionCardinalityConstraint` (`|left ∩ right| op bound` — e.g. "these two groups share at most one member across the whole schedule", `IntersectionCardinalityConstraint`'s only propagating operators are `LEQ`/`LT`), `PartitionConstraint` (`parts` jointly partition a fixed `universe` — every element in exactly one part), and `SetMembershipConstraint` (`element ∈ variable`, primarily useful reified — `reifyConstraint(indicator, setMembershipConstraint(...))` — to obtain a genuine boolean membership indicator for a set variable, e.g. to build an ordering constraint that breaks symmetry between otherwise-interchangeable set variables) are the supported constraint types; any other constraint referencing a `SetIntervalDomain` variable is rejected with `IllegalArgumentException` at build time. `createSolver` auto-detects set variables and runs real backtracking search (`SetBranchingSolver`) — unlike `IntervalDomain`, an arbitrary choice among a set variable's undetermined elements isn't safe to snap to a single value, since set constraints are inherently combinatorial rather than smooth — in both the satisfaction and optimization chains for whatever propagation alone can't fully resolve. See `Prob010SocialGolfersTest` for a complete worked example (CSPLib's Social Golfers problem, using `partitionConstraint` for each round's groups) and `Prob044SteinerTripleSystemTest` for a reified-`SetMembershipConstraint` example (CSPLib's Steiner Triple Systems problem, using a reified membership indicator plus `lexConstraint` to break slot symmetry between otherwise-interchangeable set variables).
+
+### XCSP3 parsing
+
+`Xcsp3Parser.parse(Path)` reads an [XCSP3](https://xcsp.org) instance file into an `Xcsp3Instance` — the parsed `ConstraintSatisfactionProblem` plus an optional `objective` (`null` for a plain CSP instance; already minimize-oriented, even for an XCSP3 `<maximize>`, so it can be handed straight to `createSolver`):
+
+```java
+Xcsp3Instance instance = Xcsp3Parser.parse(Path.of("instance.xml"));
+BoundSolver solver = instance.objective() == null
+    ? Solver.Factory.INSTANCE.createSolver(instance.csp())
+    : Solver.Factory.INSTANCE.createSolver(instance.csp(), instance.objective());
+solver.getSolution().ifPresent(System.out::println);
+```
+
+Coverage is a narrow MVP, not the full XCSP3-core specification: variable domains, `intension`, `extension` (positive/support tables only), `allDifferent`, `sum`, `count`/`among`, `element`, `ordered`, `lex`, `cumulative`, `circuit`, `binPacking`, and single-variable or sum-type `minimize`/`maximize` objectives. A construct outside this set — `regular`/`mdd`, `nValues`, `cardinality`, `channel`, `diffn`/`noOverlap`, conflict-mode `extension`, `group`/`slide`, general expression objectives, `instantiation` — fails parsing immediately with either `UnsupportedXcsp3ConstraintException` (recognized but unmappable) or the underlying `xcsp3-tools` library's own `RuntimeException` (not recognized at all), rather than silently returning an under-constrained model.
 
 ### Solver configuration
 
@@ -373,7 +388,7 @@ InitialAssignmentFactory factory = FallbackAssignmentFactory.builder()
 </dependency>
 ```
 
-jcsp pulls in [ojAlgo](https://www.ojalgo.org/) (MIT-licensed) as a transitive compile-scope dependency, used for the LP relaxation behind `LinearObjective`-driven optimization (see above).
+jcsp pulls in [ojAlgo](https://www.ojalgo.org/) (MIT-licensed) as a transitive compile-scope dependency, used for the LP relaxation behind `LinearObjective`-driven optimization (see above), and [xcsp3-tools](https://github.com/xcsp3team/XCSP3-Java-Tools) (MIT-licensed) as a transitive compile-scope dependency, used for `Xcsp3Parser` (see above).
 
 ## Building
 

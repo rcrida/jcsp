@@ -5,11 +5,13 @@ import lombok.Singular;
 import lombok.extern.slf4j.Slf4j;
 import lombok.val;
 import io.github.rcrida.jcsp.ConstraintSatisfactionProblem;
+import io.github.rcrida.jcsp.constraints.Constraint;
 import io.github.rcrida.jcsp.solver.Cancellation;
 import io.github.rcrida.jcsp.solver.listener.SolverListener;
 import io.github.rcrida.jcsp.variables.Variable;
 import org.jspecify.annotations.NonNull;
 
+import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
@@ -129,7 +131,20 @@ public record Assignment(@Singular Map<Variable<?>, Object> values, Statistics s
 
     public boolean isConsistent(ConstraintSatisfactionProblem csp) {
         validateAssignment(csp);
-        return csp.getConstraints().stream()
+        return isConsistentAmong(csp.getConstraints());
+    }
+
+    /**
+     * Sibling of {@link #isConsistent}, checked against a caller-supplied {@code candidateConstraints}
+     * rather than {@code csp.getConstraints()} -- for a caller that has already narrowed the full
+     * constraint set down to the ones that could possibly be affected (e.g. {@link
+     * io.github.rcrida.jcsp.solver.tree.TreeSolver} pre-filtering to just the constraints touching a
+     * single newly-assigned variable), so repeated calls don't re-scan the whole set every time.
+     * Skips {@link #validateAssignment}, since callers using this narrower form are typically
+     * re-checking the same {@link ConstraintSatisfactionProblem} they already validated against once.
+     */
+    public boolean isConsistentAmong(@NonNull Collection<? extends Constraint> candidateConstraints) {
+        return candidateConstraints.stream()
                 .filter(constraint -> constraint.getVariables().stream().anyMatch(values::containsKey))
                 .allMatch(constraint -> {
                     statistics.incrementConstraintChecks();
