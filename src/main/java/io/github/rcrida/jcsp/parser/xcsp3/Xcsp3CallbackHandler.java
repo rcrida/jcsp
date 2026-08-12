@@ -3,7 +3,12 @@ package io.github.rcrida.jcsp.parser.xcsp3;
 import io.github.rcrida.jcsp.ConstraintSatisfactionProblem;
 import io.github.rcrida.jcsp.ConstraintSatisfactionProblem.ConstraintSatisfactionProblemBuilder;
 import io.github.rcrida.jcsp.assignments.Assignment;
+import io.github.rcrida.jcsp.constraints.Constraint;
 import io.github.rcrida.jcsp.constraints.Operator;
+import io.github.rcrida.jcsp.constraints.nary.PredicateConstraint;
+import io.github.rcrida.jcsp.constraints.nary.SumBoundConstraint;
+import io.github.rcrida.jcsp.constraints.unary.UnaryValueConstraint;
+import io.github.rcrida.jcsp.domains.BooleanDomain;
 import io.github.rcrida.jcsp.domains.Domain;
 import io.github.rcrida.jcsp.domains.IntRangeDomain;
 import io.github.rcrida.jcsp.domains.NumericDiscreteDomain;
@@ -20,10 +25,13 @@ import org.xcsp.common.Types.TypeFlag;
 import org.xcsp.common.Types.TypeObjective;
 import org.xcsp.common.Types.TypeOperatorRel;
 import org.xcsp.common.Types.TypeRank;
+import org.xcsp.common.Types.TypeReification;
 import org.xcsp.common.predicates.XNode;
 import org.xcsp.common.predicates.XNodeParent;
 import org.xcsp.parser.callbacks.XCallbacks;
 import org.xcsp.parser.callbacks.XCallbacks2;
+import org.xcsp.parser.entries.XConstraints.XCtr;
+import org.xcsp.parser.entries.XConstraints.XReification;
 import org.xcsp.parser.entries.XVariables.XVarInteger;
 
 import java.util.Arrays;
@@ -70,8 +78,10 @@ final class Xcsp3CallbackHandler implements XCallbacks2 {
     private final Map<String, Variable<Integer>> variablesByName = new LinkedHashMap<>();
     private final Map<String, int[]> boundsByName = new LinkedHashMap<>();
     private final Map<String, Variable<Integer>> shiftedVariables = new LinkedHashMap<>();
+    private final Map<String, Variable<Boolean>> booleanIndicators = new LinkedHashMap<>();
     private @Nullable ToDoubleFunction<Assignment> objective;
     private boolean maximize;
+    private @Nullable XReification currentReification;
 
     Xcsp3CallbackHandler() {
         // By default xcsp3-tools "recognizes" simple intension/count/sum/etc. shapes and routes
@@ -89,6 +99,83 @@ final class Xcsp3CallbackHandler implements XCallbacks2 {
 
     Xcsp3Instance toInstance() {
         return new Xcsp3Instance(builder.build(), objective, maximize);
+    }
+
+    // ---- Reification ------------------------------------------------------------------------------------------
+
+    /**
+     * {@code buildCtrXxx} callbacks only ever receive a constraint's already-unpacked typed
+     * parameters (list, condition, ...), never the {@link XCtr} itself -- so this is the only
+     * place {@link XCtr#reification} is visible. Stashing it here for the duration of the
+     * (possibly deeply-nested, e.g. inside a {@code group}/{@code slide}) dispatch lets the
+     * handful of {@code buildCtrXxx} overrides that support reification (currently just {@link
+     * #buildCtrIntension} and the coefficient-less {@link #buildCtrSum(String, XVarInteger[],
+     * Condition)}) check {@link #currentReification} and route through {@link #addOrReify} instead
+     * of adding directly, without every other {@code buildCtrXxx} method needing to know
+     * reification exists at all.
+     */
+    @Override
+    public void loadCtr(XCtr c) {
+        XReification previous = currentReification;
+        currentReification = c.reification;
+        try {
+            XCallbacks2.super.loadCtr(c);
+        } finally {
+            currentReification = previous;
+        }
+    }
+
+    /**
+     * Adds {@code body} directly when the constraint currently being loaded isn't reified;
+     * otherwise wraps it per {@link #currentReification}'s {@link TypeReification}: {@code FULL}
+     * ({@code indicator <-> body}) maps onto {@code reifyConstraint}, {@code HALF_FROM} ({@code
+     * indicator -> body}) onto {@code impliesConstraint}. {@code HALF_TO} ({@code body ->
+     * indicator}) has no jcsp counterpart -- unlike the other two, it isn't a builder method jcsp
+     * already has, and encoding it generically would need a way to negate an arbitrary {@link
+     * Constraint}, which nothing in this codebase provides -- so it throws rather than silently
+     * mapping onto the wrong direction. The {@code TypeReification} switch is written as an
+     * expression (yielding which builder call to make) rather than a statement -- like {@link
+     * #mapOperator}'s switch, this lets the compiler prove it exhaustive over all three enum
+     * constants, so it emits no extra "no match" branch that would otherwise sit permanently
+     * uncovered (a bare {@code TypeReification} has no fourth constant to exercise it with).
+     */
+    private void addOrReify(Constraint body, String id) {
+        XReification reification = currentReification;
+        if (reification == null) {
+            builder.constraint(body);
+            return;
+        }
+        Variable<Boolean> indicator = booleanIndicatorFor((XVarInteger) reification.var);
+        boolean full = switch (reification.type) {
+            case FULL -> true;
+            case HALF_FROM -> false;
+            case HALF_TO -> throw new UnsupportedXcsp3ConstraintException(
+                    "hreifiedTo (constraint -> indicator) reification is not supported: " + id);
+        };
+        if (full) {
+            builder.reifyConstraint(indicator, body);
+        } else {
+            builder.impliesConstraint(indicator, body);
+        }
+    }
+
+    /**
+     * XCSP3-core is integer-only (see this class's own top-level Javadoc), so a reification
+     * target -- like every other variable -- was already registered as a plain 0/1 {@code
+     * Variable<Integer>} by {@link #buildVarInteger}. {@code reifyConstraint}/{@code
+     * impliesConstraint} both require a genuine {@code Variable<Boolean>} indicator, so this
+     * bridges the two: one fresh boolean variable per distinct integer variable (memoized, the
+     * same pattern {@link #shiftVariable} uses), tied to it via {@code intVar == 1} reified with
+     * {@code FULL} semantics -- built directly against the shared {@link #builder} rather than
+     * through {@link #addOrReify}, since this bridge is never itself the constraint being loaded.
+     */
+    private Variable<Boolean> booleanIndicatorFor(XVarInteger intVar) {
+        return booleanIndicators.computeIfAbsent(intVar.id(), name -> {
+            Variable<Boolean> boolVar = Variable.Factory.INSTANCE.create(name + "$bool");
+            builder.variableDomain(boolVar, BooleanDomain.INSTANCE);
+            builder.reifyConstraint(boolVar, UnaryValueConstraint.of(variablesByName.get(name), 1));
+            return boolVar;
+        });
     }
 
     // ---- Variables ----------------------------------------------------------------------------
@@ -181,7 +268,8 @@ final class Xcsp3CallbackHandler implements XCallbacks2 {
 
     @Override
     public void buildCtrIntension(String id, XVarInteger[] list, XNodeParent<XVarInteger> tree) {
-        builder.predicateConstraint(toVariableSet(list), IntensionExpressionEvaluator.toPredicate(tree, variablesByName));
+        addOrReify(PredicateConstraint.builder().variables(toVariableSet(list))
+                .predicate(IntensionExpressionEvaluator.toPredicate(tree, variablesByName)).build(), id);
     }
 
     // ---- extension (table) ------------------------------------------------------------------------
@@ -239,8 +327,11 @@ final class Xcsp3CallbackHandler implements XCallbacks2 {
 
     void applySumCondition(Set<Variable<Integer>> vars, Condition condition, String id) {
         if (condition instanceof ConditionVal val) {
-            builder.sumConstraint(vars, mapOperator(val.operator), (int) val.k);
+            addOrReify(SumBoundConstraint.of(vars, mapOperator(val.operator), (int) val.k), id);
         } else if (condition instanceof ConditionVar var) {
+            if (currentReification != null) {
+                throw new UnsupportedXcsp3ConstraintException("Reified sum with a variable target is not supported: " + id);
+            }
             builder.sumConstraint(vars, mapOperator(var.operator), variableFor(var.x));
         } else {
             throw new UnsupportedXcsp3ConstraintException("Unsupported sum condition: " + id);

@@ -46,6 +46,10 @@ class Xcsp3ParserTest {
         return Solver.Factory.INSTANCE.createSolver(csp).getSolutions().collect(Collectors.toSet());
     }
 
+    private static int digitOf(Assignment assignment, String name) {
+        return assignment.getValue(Variable.Factory.INSTANCE.<Integer>create(name)).orElseThrow();
+    }
+
     // ---- variable domains -------------------------------------------------------------------------
 
     @Test void rangeDomain_solvesWithinBounds() throws IOException {
@@ -85,6 +89,75 @@ class Xcsp3ParserTest {
             assertThat(total).isEqualTo(10);
         }
         assertThat(solutions(instance.csp())).isNotEmpty();
+    }
+
+    // ---- reification ------------------------------------------------------------------------------------------------
+
+    @Test void intensionFullyReified_indicatorTracksConstraintTruthValue() throws IOException {
+        Xcsp3Instance instance = parseXml(
+                "<var id=\"x\"> 0..3 </var><var id=\"b\"> 0..1 </var>",
+                "<intension reifiedBy=\"b\"> eq(x,2) </intension>");
+        for (Assignment a : solutions(instance.csp())) {
+            int x = digitOf(a, "x");
+            int b = digitOf(a, "b");
+            assertThat(b == 1).as("x=%d, b=%d", x, b).isEqualTo(x == 2);
+        }
+        assertThat(solutions(instance.csp())).hasSize(4);
+    }
+
+    @Test void intensionHalfReifiedFrom_indicatorImpliesConstraintOnly() throws IOException {
+        // hreifiedFrom="b" is b -> constraint, not the other direction: b=0 leaves x unconstrained
+        // (4 solutions), b=1 forces x=2 (1 solution) -- 5 total, not the 4 a full reification gives.
+        Xcsp3Instance instance = parseXml(
+                "<var id=\"x\"> 0..3 </var><var id=\"b\"> 0..1 </var>",
+                "<intension hreifiedFrom=\"b\"> eq(x,2) </intension>");
+        Set<Assignment> solutions = solutions(instance.csp());
+        assertThat(solutions).hasSize(5);
+        for (Assignment a : solutions) {
+            if (digitOf(a, "b") == 1) assertThat(digitOf(a, "x")).isEqualTo(2);
+        }
+    }
+
+    @Test void intensionHalfReifiedTo_throwsUnsupported() {
+        assertThatThrownBy(() -> parseXml(
+                "<var id=\"x\"> 0..3 </var><var id=\"b\"> 0..1 </var>",
+                "<intension hreifiedTo=\"b\"> eq(x,2) </intension>"))
+                .isInstanceOf(UnsupportedXcsp3ConstraintException.class);
+    }
+
+    @Test void sumFullyReified_indicatorTracksConstraintTruthValue() throws IOException {
+        Xcsp3Instance instance = parseXml(
+                "<var id=\"x\"> 0..2 </var><var id=\"y\"> 0..2 </var><var id=\"b\"> 0..1 </var>",
+                "<sum reifiedBy=\"b\"><list> x y </list><condition> (le,2) </condition></sum>");
+        for (Assignment a : solutions(instance.csp())) {
+            int x = digitOf(a, "x");
+            int y = digitOf(a, "y");
+            int b = digitOf(a, "b");
+            assertThat(b == 1).as("x=%d, y=%d, b=%d", x, y, b).isEqualTo(x + y <= 2);
+        }
+        assertThat(solutions(instance.csp())).hasSize(9);
+    }
+
+    @Test void sumWithVariableTargetReified_throwsUnsupported() {
+        assertThatThrownBy(() -> parseXml(
+                "<var id=\"x\"> 0..2 </var><var id=\"y\"> 0..2 </var><var id=\"k\"> 0..4 </var><var id=\"b\"> 0..1 </var>",
+                "<sum reifiedBy=\"b\"><list> x y </list><condition> (le,k) </condition></sum>"))
+                .isInstanceOf(UnsupportedXcsp3ConstraintException.class);
+    }
+
+    @Test void twoConstraintsReifiedBySameIndicator_shareOneBooleanBridgeVariable() throws IOException {
+        // Both constraints are reified by "b"; the boolean bridge variable created for "b" should
+        // be memoized and reused (not one auxiliary per occurrence), matching shiftVariable's
+        // memoization pattern for a shared index variable.
+        Xcsp3Instance instance = parseXml(
+                "<var id=\"x\"> 0..3 </var><var id=\"y\"> 0..3 </var><var id=\"b\"> 0..1 </var>",
+                "<intension reifiedBy=\"b\"> eq(x,2) </intension><intension reifiedBy=\"b\"> eq(y,2) </intension>");
+        for (Assignment a : solutions(instance.csp())) {
+            int x = digitOf(a, "x");
+            int y = digitOf(a, "y");
+            int b = digitOf(a, "b");
+            assertThat(b == 1).as("x=%d, y=%d, b=%d", x, y, b).isEqualTo(x == 2 && y == 2);
+        }
     }
 
     // ---- extension (table) --------------------------------------------------------------------------

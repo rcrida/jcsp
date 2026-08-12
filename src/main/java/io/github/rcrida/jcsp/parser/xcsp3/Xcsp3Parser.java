@@ -18,13 +18,17 @@ import java.nio.file.Path;
  * slide} wrapping any of these is also covered "for free": {@code xcsp3-tools} expands both back
  * into repeated ordinary constraints of whichever type they wrap (a {@code group} against each
  * {@code args} line, a {@code slide} against each precomputed window) before this class's
- * callbacks ever see them. Any other construct -- {@code regular}/{@code mdd}, the variable- or
+ * callbacks ever see them. {@code intension} and {@code sum} (fixed-bound form only) additionally
+ * support {@code FULL} ({@code reifiedBy}) and {@code HALF_FROM} ({@code hreifiedFrom}, {@code
+ * indicator -> body}) reification -- {@code HALF_TO} ({@code hreifiedTo}, {@code body ->
+ * indicator}) throws, since it has no jcsp builder counterpart. No other constraint type supports
+ * reification yet. Any other construct -- {@code regular}/{@code mdd}, the variable- or
  * range-occurrence forms of {@code cardinality}, {@code channel}, {@code diffn}/{@code
- * noOverlap}, conflict-mode {@code extension}, reification, multi-objective COP, {@code
- * instantiation} -- throws either {@link UnsupportedXcsp3ConstraintException} (a
- * recognised-but-unmappable variant) or a plain {@link RuntimeException} from the underlying
- * library (an entirely unrecognised construct); either way parsing fails immediately rather than
- * silently returning an under-constrained model.
+ * noOverlap}, conflict-mode {@code extension}, multi-objective COP, {@code instantiation} --
+ * throws either {@link UnsupportedXcsp3ConstraintException} (a recognised-but-unmappable variant)
+ * or a plain {@link RuntimeException} from the underlying library (an entirely unrecognised
+ * construct); either way parsing fails immediately rather than silently returning an
+ * under-constrained model.
  */
 public final class Xcsp3Parser {
 
