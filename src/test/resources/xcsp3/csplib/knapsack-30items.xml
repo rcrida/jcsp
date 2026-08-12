@@ -1,0 +1,28 @@
+<instance format="XCSP3" type="COP">
+  <!--
+    Binary knapsack (CSPLib prob133), 30 items, capacity 100. Sourced verbatim (no edits) from the
+    real XCSP3 Knapsack series (Knapsack-30-100-00.xml, "m1-s30" model,
+    https://www.cril.univ-artois.fr/~lecoutre/seriesSiteXCSP/Knapsack.tgz per
+    https://xcsp.org/instances/). Solves to optimality (verified total value 709) in well under a
+    second, so a plain unit test can afford to solve it to completion; the smaller item counts
+    this series offers (30+) don't support enumerating every feasible subset the way a toy 4-item
+    instance would, so Prob133KnapsackTest only checks the optimum here, not full feasibility
+    enumeration.
+  -->
+  <variables>
+    <array id="x" size="[30]"> 0 1 </array>
+  </variables>
+  <constraints>
+    <sum>
+      <list> x[] </list>
+      <coeffs> 11 24 5 23 16 4 17 12 20 5 3 3 24 13 21 20 10 1 17 21 19 14 25 23 3 11 4 8 18 24 </coeffs>
+      <condition> (le,100) </condition>
+    </sum>
+  </constraints>
+  <objectives>
+    <maximize type="sum">
+      <list> x[] </list>
+      <coeffs> 46 46 38 88 3 63 26 54 39 36 61 76 56 31 99 92 75 37 13 63 20 78 17 47 8 17 9 38 44 48 </coeffs>
+    </maximize>
+  </objectives>
+</instance>

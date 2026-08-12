@@ -7,15 +7,12 @@ import io.github.rcrida.jcsp.assignments.Assignment;
 import io.github.rcrida.jcsp.constraints.Operator;
 import io.github.rcrida.jcsp.domains.Domain;
 import io.github.rcrida.jcsp.domains.IntRangeDomain;
-import io.github.rcrida.jcsp.parser.xcsp3.Xcsp3Parser;
 import io.github.rcrida.jcsp.solver.assignmentfactory.GreedyAssignmentFactory;
 import io.github.rcrida.jcsp.solver.LocalSolver;
 import io.github.rcrida.jcsp.variables.Variable;
 import org.junit.jupiter.api.Test;
 
-import java.io.IOException;
 import java.math.BigInteger;
-import java.net.URISyntaxException;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Set;
@@ -73,13 +70,9 @@ public class Prob054NQueensTest {
     }
 
     private static NQueensProblem xcsp3NQueens() {
-        try {
-            var instance = Xcsp3Parser.parse(Xcsp3CsplibResource.resource("nqueens-8.xml"));
-            Variable[] variables = IntStream.range(0, N).mapToObj(i -> Variable.Factory.INSTANCE.create("q[" + i + "]")).toArray(Variable[]::new);
-            return new NQueensProblem(instance.csp(), variables);
-        } catch (IOException | URISyntaxException e) {
-            throw new RuntimeException("Failed to load XCSP3 instance: nqueens-8.xml", e);
-        }
+        var instance = Xcsp3CsplibResource.parse("nqueens-8.xml");
+        Variable[] variables = IntStream.range(0, N).mapToObj(i -> Variable.Factory.INSTANCE.create("q[" + i + "]")).toArray(Variable[]::new);
+        return new NQueensProblem(instance.csp(), variables);
     }
 
     static void printAssignment(Assignment assignment) {

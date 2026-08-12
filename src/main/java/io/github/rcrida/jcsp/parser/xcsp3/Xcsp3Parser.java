@@ -9,16 +9,19 @@ import java.nio.file.Path;
  * parser and {@link Xcsp3CallbackHandler}'s callback-driven mapping onto jcsp's constraint
  * builder API.
  * <p>
- * Covers variables/domains, {@code intension}, {@code extension} (support/positive tables only),
- * {@code allDifferent}, {@code sum}, {@code count}, {@code element}, {@code ordered}, {@code lex},
- * {@code cumulative}, {@code circuit}, {@code binPacking}, and single {@code minimize}/{@code
- * maximize} objectives. Any other construct -- {@code regular}/{@code mdd}, {@code nValues},
- * {@code cardinality}, {@code channel}, {@code diffn}/{@code noOverlap}, conflict-mode {@code
- * extension}, {@code group}/{@code slide}, multi-objective COP, {@code instantiation} -- throws
- * either {@link UnsupportedXcsp3ConstraintException} (a recognised-but-unmappable variant) or a
- * plain {@link RuntimeException} from the underlying library (an entirely unrecognised
- * construct); either way parsing fails immediately rather than silently returning an
- * under-constrained model.
+ * Covers variables/domains, {@code intension} (including the {@code dist} operator), {@code
+ * extension} (support/positive tables only), {@code allDifferent}, {@code sum}, {@code count},
+ * {@code element}, {@code ordered}, {@code lex}, {@code cumulative}, {@code circuit}, {@code
+ * binPacking}, and single {@code minimize}/{@code maximize} objectives. A {@code group} of any of
+ * these is also covered "for free": {@code xcsp3-tools} expands a {@code group}'s template against
+ * each {@code args} line before this class's callbacks ever see it, so a group is really just
+ * repeated ordinary constraints of whichever type it wraps. Any other construct -- {@code
+ * regular}/{@code mdd}, {@code nValues}, {@code cardinality}, {@code channel}, {@code
+ * diffn}/{@code noOverlap}, conflict-mode {@code extension}, {@code slide}, multi-objective COP,
+ * {@code instantiation} -- throws either {@link UnsupportedXcsp3ConstraintException} (a
+ * recognised-but-unmappable variant) or a plain {@link RuntimeException} from the underlying
+ * library (an entirely unrecognised construct); either way parsing fails immediately rather than
+ * silently returning an under-constrained model.
  */
 public final class Xcsp3Parser {
 

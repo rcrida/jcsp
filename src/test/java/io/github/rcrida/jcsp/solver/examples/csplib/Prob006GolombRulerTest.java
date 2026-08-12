@@ -7,12 +7,9 @@ import io.github.rcrida.jcsp.ConstraintSatisfactionProblem;
 import io.github.rcrida.jcsp.assignments.Assignment;
 import io.github.rcrida.jcsp.constraints.Operator;
 import io.github.rcrida.jcsp.domains.IntRangeDomain;
-import io.github.rcrida.jcsp.parser.xcsp3.Xcsp3Parser;
 import io.github.rcrida.jcsp.variables.Variable;
 import org.junit.jupiter.api.Test;
 
-import java.io.IOException;
-import java.net.URISyntaxException;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
@@ -94,13 +91,9 @@ public class Prob006GolombRulerTest {
     }
 
     private static RulerProblem xcsp3Ruler(String resourceName, int n) {
-        try {
-            var instance = Xcsp3Parser.parse(Xcsp3CsplibResource.resource(resourceName));
-            List<Variable<Integer>> marks = IntStream.range(0, n).mapToObj(i -> F.<Integer>create("x[" + i + "]")).toList();
-            return new RulerProblem(instance.csp(), marks);
-        } catch (IOException | URISyntaxException e) {
-            throw new RuntimeException("Failed to load XCSP3 instance: " + resourceName, e);
-        }
+        var instance = Xcsp3CsplibResource.parse(resourceName);
+        List<Variable<Integer>> marks = IntStream.range(0, n).mapToObj(i -> F.<Integer>create("x[" + i + "]")).toList();
+        return new RulerProblem(instance.csp(), marks);
     }
 
     static void assertValidRuler(Assignment assignment, List<Variable<Integer>> marks) {

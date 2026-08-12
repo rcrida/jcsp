@@ -6,12 +6,9 @@ import io.github.rcrida.jcsp.ConstraintSatisfactionProblem;
 import io.github.rcrida.jcsp.assignments.Assignment;
 import io.github.rcrida.jcsp.constraints.Operator;
 import io.github.rcrida.jcsp.domains.IntRangeDomain;
-import io.github.rcrida.jcsp.parser.xcsp3.Xcsp3Parser;
 import io.github.rcrida.jcsp.variables.Variable;
 import org.junit.jupiter.api.Test;
 
-import java.io.IOException;
-import java.net.URISyntaxException;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -34,8 +31,6 @@ import static org.assertj.core.api.Assertions.assertThat;
  */
 public class Prob019MagicSquareTest {
     static final int N = 3;
-    static final int MAGIC = N * (N * N + 1) / 2; // 15
-    static final String[] INDICES = {"1", "2", "3"};
 
     record MagicSquareProblem(ConstraintSatisfactionProblem csp, Variable<Integer>[][] cells) {}
 
@@ -94,18 +89,14 @@ public class Prob019MagicSquareTest {
 
     @SuppressWarnings("unchecked")
     private static MagicSquareProblem xcsp3Square() {
-        try {
-            var instance = Xcsp3Parser.parse(Xcsp3CsplibResource.resource("magic-square-order3.xml"));
-            Variable<Integer>[][] cells = new Variable[N][N];
-            for (int r = 0; r < N; r++) {
-                for (int c = 0; c < N; c++) {
-                    cells[r][c] = Variable.Factory.INSTANCE.create("x[" + r + "][" + c + "]");
-                }
+        var instance = Xcsp3CsplibResource.parse("magic-square-order3.xml");
+        Variable<Integer>[][] cells = new Variable[N][N];
+        for (int r = 0; r < N; r++) {
+            for (int c = 0; c < N; c++) {
+                cells[r][c] = Variable.Factory.INSTANCE.create("x[" + r + "][" + c + "]");
             }
-            return new MagicSquareProblem(instance.csp(), cells);
-        } catch (IOException | URISyntaxException e) {
-            throw new RuntimeException("Failed to load XCSP3 instance: magic-square-order3.xml", e);
         }
+        return new MagicSquareProblem(instance.csp(), cells);
     }
 
     @Test
