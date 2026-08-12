@@ -32,7 +32,6 @@ import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import java.util.Set;
 import java.util.function.ToDoubleFunction;
 import java.util.stream.Collectors;
@@ -377,21 +376,16 @@ final class Xcsp3CallbackHandler implements XCallbacks2 {
 
     @Override
     public void buildObjToMinimize(String id, XVarInteger x) {
-        Variable<Integer> variable = variableFor(x);
-        // BranchAndBoundSolver calls the objective on *partial* assignments for pruning, so it must
-        // return a lower bound on the cost of any completion, not throw when x isn't assigned yet
-        // -- the domain minimum is always such a bound.
-        double lowerBound = boundsByName.get(x.id())[0];
-        objective = assignment -> assignment.getValue(variable).map(Integer::doubleValue).orElse(lowerBound);
+        objective = LinearObjective.builder().coefficient(variableFor(x), 1.0).build();
         maximize = false;
     }
 
     @Override
     public void buildObjToMaximize(String id, XVarInteger x) {
-        Variable<Integer> variable = variableFor(x);
-        // Internally minimizes -x, so the fallback lower bound for an unassigned x is -max(x).
-        double lowerBound = -boundsByName.get(x.id())[1];
-        objective = assignment -> assignment.getValue(variable).map(v -> (double) -v).orElse(lowerBound);
+        // Minimizing -x is the same problem as maximizing x; see buildSumObjective's own Javadoc
+        // for why negating the coefficient at construction (keeping this a genuine LinearObjective)
+        // rather than wrapping it in a negating lambda is what makes this sound and LP-fast-path-eligible.
+        objective = LinearObjective.builder().coefficient(variableFor(x), -1.0).build();
         maximize = true;
     }
 
@@ -434,55 +428,31 @@ final class Xcsp3CallbackHandler implements XCallbacks2 {
     }
 
     /**
-     * Builds a {@link BranchAndBoundSolver}-safe objective from a {@code <minimize
-     * type="sum">}/{@code <maximize type="sum">} array. Requires every coefficient and every
-     * referenced variable's domain minimum to be non-negative.
-     * <p>
-     * For {@code minimize}, a {@link LinearObjective} is sound directly: its "unassigned
-     * contributes 0" convention is a valid lower bound on any completion's cost whenever every
-     * coefficient is non-negative (0 is always {@code <=} a non-negative variable's eventual
-     * contribution). Negating a {@link LinearObjective} to express {@code maximize} does
-     * <em>not</em> produce a sound lower bound even under that same precondition, though: the
-     * unassigned fill needed for {@code maximize} is each variable's domain <em>maximum</em> (the
-     * best case for what's left to assign), not zero, so the negated total stays {@code <=} every
-     * completion's negated cost. That fill isn't expressible as a {@link LinearObjective} (its own
-     * "contributes 0" convention is fixed), so {@code maximize} builds a plain {@link
-     * ToDoubleFunction} by hand instead, forgoing {@link io.github.rcrida.jcsp.solver.lp.LpModelBuilder}'s
-     * LP-relaxation fast path that {@code instanceof LinearObjective} would otherwise unlock.
+     * Builds a {@link LinearObjective} from a {@code <minimize type="sum">}/{@code <maximize
+     * type="sum">} array. For {@code maximize}, negates every coefficient at construction time
+     * (minimizing {@code -sum} is the same problem as maximizing {@code sum}) rather than wrapping
+     * a positively-signed {@link LinearObjective} in a lambda that negates its <em>result</em>: a
+     * lambda is never {@code instanceof LinearObjective}, so {@link BranchAndBoundSolver} would
+     * fall back to pruning directly off {@link LinearObjective#applyAsDouble}'s own "unassigned
+     * contributes 0" convention -- sound for {@code minimize} under non-negative
+     * coefficients/domains, but never sound once negated for {@code maximize} (the fill it would
+     * need there is each variable's domain <em>maximum</em>, not zero, to stay a valid bound).
+     * Negating the coefficients up front sidesteps that distinction entirely: {@link
+     * io.github.rcrida.jcsp.solver.lp.LpModelBuilder}'s LP relaxation (which {@code instanceof
+     * LinearObjective} unlocks in {@link BranchAndBoundSolver}) reads each variable's real domain
+     * bounds directly from the {@link io.github.rcrida.jcsp.ConstraintSatisfactionProblem} rather
+     * than going through {@code applyAsDouble}'s fill convention at all, so it's sound for any
+     * coefficient or domain sign -- no non-negativity precondition needed for either direction.
      */
-    private ToDoubleFunction<Assignment> buildSumObjective(TypeObjective type, XVarInteger[] list, int[] coeffs, boolean maximizing) {
+    private LinearObjective buildSumObjective(TypeObjective type, XVarInteger[] list, int[] coeffs, boolean maximizing) {
         if (type != TypeObjective.SUM) {
             throw new UnsupportedXcsp3ConstraintException("Only sum-type array objectives are supported, got: " + type);
         }
+        LinearObjective.LinearObjectiveBuilder linearObjectiveBuilder = LinearObjective.builder();
         for (int i = 0; i < list.length; i++) {
             double coefficient = coeffs == null ? 1.0 : coeffs[i];
-            if (coefficient < 0 || boundsByName.get(list[i].id())[0] < 0) {
-                throw new UnsupportedXcsp3ConstraintException(
-                        "Sum-type objectives require non-negative coefficients and domains for a sound partial-assignment bound: " + list[i].id());
-            }
+            linearObjectiveBuilder.coefficient(variableFor(list[i]), maximizing ? -coefficient : coefficient);
         }
-        if (!maximizing) {
-            LinearObjective.LinearObjectiveBuilder linearObjectiveBuilder = LinearObjective.builder();
-            for (int i = 0; i < list.length; i++) {
-                double coefficient = coeffs == null ? 1.0 : coeffs[i];
-                linearObjectiveBuilder.coefficient(variableFor(list[i]), coefficient);
-            }
-            return linearObjectiveBuilder.build();
-        }
-        Map<Variable<Integer>, Double> coefficients = new LinkedHashMap<>();
-        Map<Variable<Integer>, Integer> unassignedFill = new LinkedHashMap<>();
-        for (int i = 0; i < list.length; i++) {
-            Variable<Integer> variable = variableFor(list[i]);
-            coefficients.put(variable, coeffs == null ? 1.0 : (double) coeffs[i]);
-            unassignedFill.put(variable, boundsByName.get(list[i].id())[1]);
-        }
-        return assignment -> {
-            double total = 0;
-            for (var entry : coefficients.entrySet()) {
-                Optional<Integer> value = assignment.getValue(entry.getKey());
-                total += entry.getValue() * value.orElseGet(() -> unassignedFill.get(entry.getKey()));
-            }
-            return -total;
-        };
+        return linearObjectiveBuilder.build();
     }
 }

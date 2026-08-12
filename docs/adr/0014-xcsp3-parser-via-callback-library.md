@@ -70,11 +70,27 @@ silently returning an under-constrained model.
   `BranchAndBoundSolver` calls the objective function on *partial* assignments for pruning, which
   requires the objective to return a sound lower bound on any completion's cost — computing that
   for an arbitrary expression tree needs interval arithmetic over the remaining unassigned
-  variables' domains, well beyond this MVP's scope. The single-variable and sum-type-array
-  objective forms both have a well-defined partial-assignment lower bound (the variable's declared
-  domain bound, and `LinearObjective`'s own documented "absent variable contributes 0" convention
-  respectively) and so stayed in scope; the general-expression overloads now throw
-  `UnsupportedXcsp3ConstraintException` instead.
+  variables' domains, well beyond this MVP's scope. The single-variable and sum-type-array forms
+  both stayed in scope, expressed as genuine `LinearObjective`s (see the next bullet for why that
+  matters); the general-expression overloads now throw `UnsupportedXcsp3ConstraintException`
+  instead.
+- **Negating a `LinearObjective`'s `applyAsDouble` result to express `maximize`.** The first
+  attempt at `buildObjToMaximize`'s sum/array form built a positively-signed `LinearObjective` and
+  wrapped it in `assignment -> -raw.applyAsDouble(assignment)`. Caught in code review: a lambda is
+  never `instanceof LinearObjective`, so `BranchAndBoundSolver.search` falls through to pruning
+  directly off `applyAsDouble`'s own "unassigned contributes 0" convention — sound for `minimize`
+  under non-negative coefficients/domains, but never sound once negated for `maximize` (the fill
+  it would need there is each variable's domain *maximum*, not zero, to stay a valid bound). The
+  bug was invisible in tests because they only asserted `solution.isPresent()`, never the actual
+  optimum. Fixed by negating the *coefficients* at construction (`buildSumObjective`'s `maximizing`
+  flag) instead of the function's result, keeping the objective a genuine `LinearObjective` for
+  both directions. That turned out to make the non-negativity restriction unnecessary too, not
+  just the negation bug: `LpModelBuilder`'s LP relaxation (which `instanceof LinearObjective`
+  unlocks) reads each variable's real domain bounds directly from the `ConstraintSatisfactionProblem`
+  rather than going through `applyAsDouble`'s fill convention at all, so it was already sound for
+  any coefficient or domain sign — `applyAsDouble`'s "contributes 0" convention only matters for a
+  `ToDoubleFunction<Assignment>` that *isn't* recognized as a `LinearObjective`, which no longer
+  describes any objective this parser builds. `LinearObjective` itself needed no changes.
 
 ## Consequences
 

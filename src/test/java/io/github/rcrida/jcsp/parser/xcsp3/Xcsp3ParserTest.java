@@ -484,23 +484,30 @@ class Xcsp3ParserTest {
                 .isInstanceOf(UnsupportedXcsp3ConstraintException.class);
     }
 
-    @Test void objectiveSumWithNegativeCoefficient_throwsUnsupported() {
-        // A negative coefficient (or negative-domain variable) means neither LinearObjective's
-        // "unassigned contributes 0" convention nor buildSumObjective's own domain-max fill for
-        // maximize is a sound lower bound, so this is rejected rather than silently mis-pruning.
-        assertThatThrownBy(() -> parseXml(
+    @Test void objectiveMinimizeSumWithNegativeCoefficient_solvesToTrueOptimum() throws IOException {
+        // Minimizing -1*x + 2*y is minimized by taking x as large as possible (x=9) and y as small
+        // as possible (y=0): value=-9. A negative coefficient like this used to be rejected by a
+        // non-negativity restriction; LpModelBuilder's LP relaxation (unlocked by buildSumObjective
+        // negating coefficients into a genuine LinearObjective rather than negating a lambda's
+        // result) is directly sound for it, so no restriction is needed any more.
+        Xcsp3Instance instance = parseXml(
                 "<var id=\"x\"> 0..9 </var><var id=\"y\"> 0..9 </var>",
                 "<intension> ge(x,2) </intension>",
-                "<minimize type=\"sum\"><list> x y </list><coeffs> -1 2 </coeffs></minimize>"))
-                .isInstanceOf(UnsupportedXcsp3ConstraintException.class);
+                "<minimize type=\"sum\"><list> x y </list><coeffs> -1 2 </coeffs></minimize>");
+        Optional<Assignment> solution = Solver.Factory.INSTANCE.createSolver(instance.csp(), instance.objective()).getSolution();
+        assertThat(solution).isPresent();
+        assertThat(instance.objective().applyAsDouble(solution.get())).isEqualTo(-9.0);
     }
 
-    @Test void objectiveMaximizeSumWithNegativeDomain_throwsUnsupported() {
-        assertThatThrownBy(() -> parseXml(
+    @Test void objectiveMaximizeSumWithNegativeDomain_solvesToTrueOptimum() throws IOException {
+        // x's declared domain dips negative (-3..9); maximizing x+y picks x=9 (domain max), y=9.
+        Xcsp3Instance instance = parseXml(
                 "<var id=\"x\"> -3..9 </var><var id=\"y\"> 0..9 </var>",
-                "<intension> ge(x,2) </intension>",
-                "<maximize type=\"sum\"><list> x y </list></maximize>"))
-                .isInstanceOf(UnsupportedXcsp3ConstraintException.class);
+                "",
+                "<maximize type=\"sum\"><list> x y </list></maximize>");
+        Optional<Assignment> solution = Solver.Factory.INSTANCE.createSolver(instance.csp(), instance.objective()).getSolution();
+        assertThat(solution).isPresent();
+        assertThat(-instance.objective().applyAsDouble(solution.get())).isEqualTo(18.0);
     }
 
     // ---- more intension operators --------------------------------------------------------------------------------------------
