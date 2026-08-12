@@ -1,0 +1,92 @@
+<instance format="XCSP3" type="CSP">
+  <!--
+    Car Sequencing (CSPLib prob001): the Dincbas et al. ECAI88 example given in CSPLib's own
+    specification (10 cars, 5 options, 6 classes), transcribed from the same data as
+    Prob001CarSequencingTest itself (no matching real XCSP3 instance exists for this specific
+    example at xcsp.org). Class production counts via cardinality, each slot's per-option
+    requirement via element, and each option's sliding-window "at most k per block" rule via
+    slide wrapping sum; both cardinality and slide were added to Xcsp3CallbackHandler, proven
+    to auto-expand specifically to migrate this test.
+  -->
+  <variables>
+    <array id="slot" size="[10]"> 1..6 </array>
+    <array id="requires" size="[10][5]"> 0..1 </array>
+  </variables>
+  <constraints>
+    <cardinality>
+      <list> slot[0] slot[1] slot[2] slot[3] slot[4] slot[5] slot[6] slot[7] slot[8] slot[9] </list>
+      <values closed="true"> 1 2 3 4 5 6 </values>
+      <occurs> 1 1 2 2 2 2 </occurs>
+    </cardinality>
+    <element><list startIndex="1"> 1 0 0 0 1 1 </list><index> slot[0] </index><value> requires[0][0] </value></element>
+    <element><list startIndex="1"> 0 0 1 1 0 1 </list><index> slot[0] </index><value> requires[0][1] </value></element>
+    <element><list startIndex="1"> 1 0 0 0 1 0 </list><index> slot[0] </index><value> requires[0][2] </value></element>
+    <element><list startIndex="1"> 1 1 0 1 0 0 </list><index> slot[0] </index><value> requires[0][3] </value></element>
+    <element><list startIndex="1"> 0 0 1 0 0 0 </list><index> slot[0] </index><value> requires[0][4] </value></element>
+    <element><list startIndex="1"> 1 0 0 0 1 1 </list><index> slot[1] </index><value> requires[1][0] </value></element>
+    <element><list startIndex="1"> 0 0 1 1 0 1 </list><index> slot[1] </index><value> requires[1][1] </value></element>
+    <element><list startIndex="1"> 1 0 0 0 1 0 </list><index> slot[1] </index><value> requires[1][2] </value></element>
+    <element><list startIndex="1"> 1 1 0 1 0 0 </list><index> slot[1] </index><value> requires[1][3] </value></element>
+    <element><list startIndex="1"> 0 0 1 0 0 0 </list><index> slot[1] </index><value> requires[1][4] </value></element>
+    <element><list startIndex="1"> 1 0 0 0 1 1 </list><index> slot[2] </index><value> requires[2][0] </value></element>
+    <element><list startIndex="1"> 0 0 1 1 0 1 </list><index> slot[2] </index><value> requires[2][1] </value></element>
+    <element><list startIndex="1"> 1 0 0 0 1 0 </list><index> slot[2] </index><value> requires[2][2] </value></element>
+    <element><list startIndex="1"> 1 1 0 1 0 0 </list><index> slot[2] </index><value> requires[2][3] </value></element>
+    <element><list startIndex="1"> 0 0 1 0 0 0 </list><index> slot[2] </index><value> requires[2][4] </value></element>
+    <element><list startIndex="1"> 1 0 0 0 1 1 </list><index> slot[3] </index><value> requires[3][0] </value></element>
+    <element><list startIndex="1"> 0 0 1 1 0 1 </list><index> slot[3] </index><value> requires[3][1] </value></element>
+    <element><list startIndex="1"> 1 0 0 0 1 0 </list><index> slot[3] </index><value> requires[3][2] </value></element>
+    <element><list startIndex="1"> 1 1 0 1 0 0 </list><index> slot[3] </index><value> requires[3][3] </value></element>
+    <element><list startIndex="1"> 0 0 1 0 0 0 </list><index> slot[3] </index><value> requires[3][4] </value></element>
+    <element><list startIndex="1"> 1 0 0 0 1 1 </list><index> slot[4] </index><value> requires[4][0] </value></element>
+    <element><list startIndex="1"> 0 0 1 1 0 1 </list><index> slot[4] </index><value> requires[4][1] </value></element>
+    <element><list startIndex="1"> 1 0 0 0 1 0 </list><index> slot[4] </index><value> requires[4][2] </value></element>
+    <element><list startIndex="1"> 1 1 0 1 0 0 </list><index> slot[4] </index><value> requires[4][3] </value></element>
+    <element><list startIndex="1"> 0 0 1 0 0 0 </list><index> slot[4] </index><value> requires[4][4] </value></element>
+    <element><list startIndex="1"> 1 0 0 0 1 1 </list><index> slot[5] </index><value> requires[5][0] </value></element>
+    <element><list startIndex="1"> 0 0 1 1 0 1 </list><index> slot[5] </index><value> requires[5][1] </value></element>
+    <element><list startIndex="1"> 1 0 0 0 1 0 </list><index> slot[5] </index><value> requires[5][2] </value></element>
+    <element><list startIndex="1"> 1 1 0 1 0 0 </list><index> slot[5] </index><value> requires[5][3] </value></element>
+    <element><list startIndex="1"> 0 0 1 0 0 0 </list><index> slot[5] </index><value> requires[5][4] </value></element>
+    <element><list startIndex="1"> 1 0 0 0 1 1 </list><index> slot[6] </index><value> requires[6][0] </value></element>
+    <element><list startIndex="1"> 0 0 1 1 0 1 </list><index> slot[6] </index><value> requires[6][1] </value></element>
+    <element><list startIndex="1"> 1 0 0 0 1 0 </list><index> slot[6] </index><value> requires[6][2] </value></element>
+    <element><list startIndex="1"> 1 1 0 1 0 0 </list><index> slot[6] </index><value> requires[6][3] </value></element>
+    <element><list startIndex="1"> 0 0 1 0 0 0 </list><index> slot[6] </index><value> requires[6][4] </value></element>
+    <element><list startIndex="1"> 1 0 0 0 1 1 </list><index> slot[7] </index><value> requires[7][0] </value></element>
+    <element><list startIndex="1"> 0 0 1 1 0 1 </list><index> slot[7] </index><value> requires[7][1] </value></element>
+    <element><list startIndex="1"> 1 0 0 0 1 0 </list><index> slot[7] </index><value> requires[7][2] </value></element>
+    <element><list startIndex="1"> 1 1 0 1 0 0 </list><index> slot[7] </index><value> requires[7][3] </value></element>
+    <element><list startIndex="1"> 0 0 1 0 0 0 </list><index> slot[7] </index><value> requires[7][4] </value></element>
+    <element><list startIndex="1"> 1 0 0 0 1 1 </list><index> slot[8] </index><value> requires[8][0] </value></element>
+    <element><list startIndex="1"> 0 0 1 1 0 1 </list><index> slot[8] </index><value> requires[8][1] </value></element>
+    <element><list startIndex="1"> 1 0 0 0 1 0 </list><index> slot[8] </index><value> requires[8][2] </value></element>
+    <element><list startIndex="1"> 1 1 0 1 0 0 </list><index> slot[8] </index><value> requires[8][3] </value></element>
+    <element><list startIndex="1"> 0 0 1 0 0 0 </list><index> slot[8] </index><value> requires[8][4] </value></element>
+    <element><list startIndex="1"> 1 0 0 0 1 1 </list><index> slot[9] </index><value> requires[9][0] </value></element>
+    <element><list startIndex="1"> 0 0 1 1 0 1 </list><index> slot[9] </index><value> requires[9][1] </value></element>
+    <element><list startIndex="1"> 1 0 0 0 1 0 </list><index> slot[9] </index><value> requires[9][2] </value></element>
+    <element><list startIndex="1"> 1 1 0 1 0 0 </list><index> slot[9] </index><value> requires[9][3] </value></element>
+    <element><list startIndex="1"> 0 0 1 0 0 0 </list><index> slot[9] </index><value> requires[9][4] </value></element>
+    <slide>
+      <list> requires[0][0] requires[1][0] requires[2][0] requires[3][0] requires[4][0] requires[5][0] requires[6][0] requires[7][0] requires[8][0] requires[9][0] </list>
+      <sum><list> %0 %1 </list><condition> (le,1) </condition></sum>
+    </slide>
+    <slide>
+      <list> requires[0][1] requires[1][1] requires[2][1] requires[3][1] requires[4][1] requires[5][1] requires[6][1] requires[7][1] requires[8][1] requires[9][1] </list>
+      <sum><list> %0 %1 %2 </list><condition> (le,2) </condition></sum>
+    </slide>
+    <slide>
+      <list> requires[0][2] requires[1][2] requires[2][2] requires[3][2] requires[4][2] requires[5][2] requires[6][2] requires[7][2] requires[8][2] requires[9][2] </list>
+      <sum><list> %0 %1 %2 </list><condition> (le,1) </condition></sum>
+    </slide>
+    <slide>
+      <list> requires[0][3] requires[1][3] requires[2][3] requires[3][3] requires[4][3] requires[5][3] requires[6][3] requires[7][3] requires[8][3] requires[9][3] </list>
+      <sum><list> %0 %1 %2 %3 %4 </list><condition> (le,2) </condition></sum>
+    </slide>
+    <slide>
+      <list> requires[0][4] requires[1][4] requires[2][4] requires[3][4] requires[4][4] requires[5][4] requires[6][4] requires[7][4] requires[8][4] requires[9][4] </list>
+      <sum><list> %0 %1 %2 %3 %4 </list><condition> (le,1) </condition></sum>
+    </slide>
+  </constraints>
+</instance>
