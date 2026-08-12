@@ -283,6 +283,94 @@ final class Xcsp3CallbackHandler implements XCallbacks2 {
         }
     }
 
+    // ---- nValues --------------------------------------------------------------------------------------------
+
+    @Override
+    public void buildCtrNValues(String id, XVarInteger[] list, Condition condition) {
+        applyNValuesCondition(toVariableSet(list), condition, id);
+    }
+
+    /**
+     * {@code nValueConstraint}'s {@code count} parameter is always a genuine {@link
+     * Variable}, so a fresh auxiliary variable carries the distinct-value count regardless of
+     * whether {@code condition} names one itself; the condition is then applied to that auxiliary
+     * via {@link io.github.rcrida.jcsp.constraints.Operator}-based comparison, the same two-step
+     * shape {@link #shiftVariable} uses for an index shift.
+     */
+    void applyNValuesCondition(Set<Variable<Integer>> vars, Condition condition, String id) {
+        Variable<Integer> count = Variable.Factory.INSTANCE.create(id + "$nvalues");
+        builder.variableDomain(count, IntRangeDomain.of(1, vars.size()));
+        builder.nValueConstraint(vars, count);
+        if (condition instanceof ConditionVal val) {
+            builder.comparatorConstraint(count, mapOperator(val.operator), (int) val.k);
+        } else if (condition instanceof ConditionVar var) {
+            builder.comparatorConstraint(count, mapOperator(var.operator), variableFor(var.x));
+        } else {
+            throw new UnsupportedXcsp3ConstraintException("Unsupported nValues condition: " + id);
+        }
+    }
+
+    // ---- cardinality (global cardinality constraint) ---------------------------------------------------------
+
+    @Override
+    public void buildCtrCardinality(String id, XVarInteger[] list, boolean closed, int[] values, int[] occurs) {
+        if (closed && !closedCoveredByEveryDomain(list, values)) {
+            throw new UnsupportedXcsp3ConstraintException(
+                    "closed cardinality referencing a value outside some variable's domain is not supported: " + id);
+        }
+        Map<Integer, Integer> cardinalities = new LinkedHashMap<>();
+        for (int i = 0; i < values.length; i++) {
+            cardinalities.put(values[i], occurs[i]);
+        }
+        builder.globalCardinalityConstraint(toVariableSet(list), cardinalities);
+    }
+
+    @Override
+    public void buildCtrCardinality(String id, XVarInteger[] list, boolean closed, int[] values, XVarInteger[] occurs) {
+        throw new UnsupportedXcsp3ConstraintException("cardinality with variable occurrence counts is not supported: " + id);
+    }
+
+    @Override
+    public void buildCtrCardinality(String id, XVarInteger[] list, boolean closed, int[] values, int[] occursMin, int[] occursMax) {
+        throw new UnsupportedXcsp3ConstraintException("cardinality with a min/max occurrence range is not supported: " + id);
+    }
+
+    @Override
+    public void buildCtrCardinality(String id, XVarInteger[] list, boolean closed, XVarInteger[] values, XVarInteger[] occurs) {
+        throw new UnsupportedXcsp3ConstraintException("cardinality with variable-valued values/occurrences is not supported: " + id);
+    }
+
+    @Override
+    public void buildCtrCardinality(String id, XVarInteger[] list, boolean closed, XVarInteger[] values, int[] occurs) {
+        throw new UnsupportedXcsp3ConstraintException("cardinality with variable-valued values is not supported: " + id);
+    }
+
+    @Override
+    public void buildCtrCardinality(String id, XVarInteger[] list, boolean closed, XVarInteger[] values, int[] occursMin, int[] occursMax) {
+        throw new UnsupportedXcsp3ConstraintException("cardinality with variable-valued values is not supported: " + id);
+    }
+
+    /**
+     * {@code globalCardinalityConstraint} leaves values outside its map unconstrained (open GCC —
+     * see that class's own Javadoc), so a {@code closed="true"} cardinality (values outside the
+     * map forbidden) is only safe to accept when every {@code list} variable's declared domain is
+     * already a subset of {@code values} -- in which case no other value could ever appear anyway,
+     * and open vs. closed is moot. Conservative for a non-contiguous ({@link
+     * #buildVarInteger(XVarInteger, int[])}) domain: checks every integer in {@code [min, max]}
+     * rather than the domain's actual (possibly sparse) value set, so a sparse domain can be
+     * rejected even when every value it actually contains is covered.
+     */
+    private boolean closedCoveredByEveryDomain(XVarInteger[] list, int[] values) {
+        Set<Integer> valueSet = Arrays.stream(values).boxed().collect(Collectors.toSet());
+        for (XVarInteger v : list) {
+            int[] bounds = boundsByName.get(v.id());
+            for (int value = bounds[0]; value <= bounds[1]; value++) {
+                if (!valueSet.contains(value)) return false;
+            }
+        }
+        return true;
+    }
+
     // ---- element ------------------------------------------------------------------------------------------
 
     @Override

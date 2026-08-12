@@ -169,6 +169,101 @@ class Xcsp3ParserTest {
                 .isInstanceOf(UnsupportedXcsp3ConstraintException.class);
     }
 
+    // ---- nValues --------------------------------------------------------------------------------------------
+
+    @Test void nValuesWithConstantCondition_buildsNValueConstraint() throws IOException {
+        Xcsp3Instance instance = parseXml(
+                "<var id=\"x1\"> 1..3 </var><var id=\"x2\"> 1..3 </var><var id=\"x3\"> 1..3 </var><var id=\"x4\"> 1..3 </var>",
+                "<nValues><list> x1 x2 x3 x4 </list><condition> (eq,3) </condition></nValues>");
+        assertThat(solutions(instance.csp())).isNotEmpty();
+    }
+
+    @Test void nValuesWithVariableCondition_buildsNValueConstraint() throws IOException {
+        Xcsp3Instance instance = parseXml(
+                "<var id=\"x1\"> 1..3 </var><var id=\"x2\"> 1..3 </var><var id=\"x3\"> 1..3 </var><var id=\"k\"> 1..4 </var>",
+                "<nValues><list> x1 x2 x3 </list><condition> (eq,k) </condition></nValues>");
+        assertThat(solutions(instance.csp())).isNotEmpty();
+    }
+
+    @Test void nValuesWithSetCondition_throwsUnsupported() {
+        assertThatThrownBy(() -> parseXml(
+                "<var id=\"x1\"> 1..3 </var><var id=\"x2\"> 1..3 </var><var id=\"x3\"> 1..3 </var>",
+                "<nValues><list> x1 x2 x3 </list><condition> (in,1..3) </condition></nValues>"))
+                .isInstanceOf(UnsupportedXcsp3ConstraintException.class);
+    }
+
+    // ---- cardinality (global cardinality constraint) ---------------------------------------------------------
+
+    @Test void cardinalityFixedOccurs_buildsGlobalCardinalityConstraint() throws IOException {
+        Xcsp3Instance instance = parseXml(
+                "<var id=\"x1\"> 1..3 </var><var id=\"x2\"> 1..3 </var><var id=\"x3\"> 1..3 </var>",
+                "<cardinality><list> x1 x2 x3 </list><values closed=\"false\"> 1 2 3 </values>"
+                        + "<occurs> 1 1 1 </occurs></cardinality>");
+        assertThat(solutions(instance.csp())).isNotEmpty();
+    }
+
+    @Test void cardinalityClosedCoveringEveryDomain_buildsGlobalCardinalityConstraint() throws IOException {
+        Xcsp3Instance instance = parseXml(
+                "<var id=\"x1\"> 1..3 </var><var id=\"x2\"> 1..3 </var><var id=\"x3\"> 1..3 </var>",
+                "<cardinality><list> x1 x2 x3 </list><values closed=\"true\"> 1 2 3 </values>"
+                        + "<occurs> 1 1 1 </occurs></cardinality>");
+        assertThat(solutions(instance.csp())).isNotEmpty();
+    }
+
+    @Test void cardinalityClosedNotCoveringEveryDomain_throwsUnsupported() {
+        // x1's domain (1..4) isn't fully covered by values {1,2,3}.
+        assertThatThrownBy(() -> parseXml(
+                "<var id=\"x1\"> 1..4 </var><var id=\"x2\"> 1..3 </var><var id=\"x3\"> 1..3 </var>",
+                "<cardinality><list> x1 x2 x3 </list><values closed=\"true\"> 1 2 3 </values>"
+                        + "<occurs> 1 1 1 </occurs></cardinality>"))
+                .isInstanceOf(UnsupportedXcsp3ConstraintException.class);
+    }
+
+    @Test void cardinalityWithVariableOccurs_throwsUnsupported() {
+        assertThatThrownBy(() -> parseXml(
+                "<var id=\"x1\"> 1..3 </var><var id=\"x2\"> 1..3 </var><var id=\"x3\"> 1..3 </var>"
+                        + "<var id=\"o1\"> 0..3 </var><var id=\"o2\"> 0..3 </var><var id=\"o3\"> 0..3 </var>",
+                "<cardinality><list> x1 x2 x3 </list><values closed=\"false\"> 1 2 3 </values>"
+                        + "<occurs> o1 o2 o3 </occurs></cardinality>"))
+                .isInstanceOf(UnsupportedXcsp3ConstraintException.class);
+    }
+
+    @Test void cardinalityWithOccursRange_throwsUnsupported() {
+        assertThatThrownBy(() -> parseXml(
+                "<var id=\"x1\"> 1..3 </var><var id=\"x2\"> 1..3 </var><var id=\"x3\"> 1..3 </var>",
+                "<cardinality><list> x1 x2 x3 </list><values closed=\"false\"> 1 2 3 </values>"
+                        + "<occurs> 0..1 1..3 2..3 </occurs></cardinality>"))
+                .isInstanceOf(UnsupportedXcsp3ConstraintException.class);
+    }
+
+    @Test void cardinalityWithVariableValuesAndOccurs_throwsUnsupported() {
+        assertThatThrownBy(() -> parseXml(
+                "<var id=\"x1\"> 1..3 </var><var id=\"x2\"> 1..3 </var><var id=\"x3\"> 1..3 </var>"
+                        + "<var id=\"v1\"> 1..3 </var><var id=\"v2\"> 1..3 </var><var id=\"v3\"> 1..3 </var>"
+                        + "<var id=\"o1\"> 0..3 </var><var id=\"o2\"> 0..3 </var><var id=\"o3\"> 0..3 </var>",
+                "<cardinality><list> x1 x2 x3 </list><values closed=\"false\"> v1 v2 v3 </values>"
+                        + "<occurs> o1 o2 o3 </occurs></cardinality>"))
+                .isInstanceOf(UnsupportedXcsp3ConstraintException.class);
+    }
+
+    @Test void cardinalityWithVariableValuesAndFixedOccurs_throwsUnsupported() {
+        assertThatThrownBy(() -> parseXml(
+                "<var id=\"x1\"> 1..3 </var><var id=\"x2\"> 1..3 </var><var id=\"x3\"> 1..3 </var>"
+                        + "<var id=\"v1\"> 1..3 </var><var id=\"v2\"> 1..3 </var><var id=\"v3\"> 1..3 </var>",
+                "<cardinality><list> x1 x2 x3 </list><values closed=\"false\"> v1 v2 v3 </values>"
+                        + "<occurs> 1 1 1 </occurs></cardinality>"))
+                .isInstanceOf(UnsupportedXcsp3ConstraintException.class);
+    }
+
+    @Test void cardinalityWithVariableValuesAndOccursRange_throwsUnsupported() {
+        assertThatThrownBy(() -> parseXml(
+                "<var id=\"x1\"> 1..3 </var><var id=\"x2\"> 1..3 </var><var id=\"x3\"> 1..3 </var>"
+                        + "<var id=\"v1\"> 1..3 </var><var id=\"v2\"> 1..3 </var><var id=\"v3\"> 1..3 </var>",
+                "<cardinality><list> x1 x2 x3 </list><values closed=\"false\"> v1 v2 v3 </values>"
+                        + "<occurs> 0..1 1..3 2..3 </occurs></cardinality>"))
+                .isInstanceOf(UnsupportedXcsp3ConstraintException.class);
+    }
+
     // ---- element --------------------------------------------------------------------------------------------------
 
     @Test void elementVariableArray_buildsElementVariableConstraint() throws IOException {
