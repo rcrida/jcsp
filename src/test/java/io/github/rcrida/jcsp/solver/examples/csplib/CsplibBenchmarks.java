@@ -1,7 +1,6 @@
 package io.github.rcrida.jcsp.solver.examples.csplib;
 
 import io.github.rcrida.jcsp.ConstraintSatisfactionProblem;
-import io.github.rcrida.jcsp.assignments.Assignment;
 import io.github.rcrida.jcsp.solver.Solver;
 import org.openjdk.jmh.annotations.Benchmark;
 import org.openjdk.jmh.annotations.BenchmarkMode;
@@ -18,7 +17,6 @@ import org.openjdk.jmh.infra.Blackhole;
 
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
-import java.util.function.ToDoubleFunction;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
@@ -89,13 +87,11 @@ public class CsplibBenchmarks {
     private ConstraintSatisfactionProblem carSequencing;
     private ConstraintSatisfactionProblem bibd;
     private ConstraintSatisfactionProblem warehouseLocation;
-    private ToDoubleFunction<Assignment> warehouseLocationObjective;
     private ConstraintSatisfactionProblem steelMillSlabDesign;
     private ConstraintSatisfactionProblem killerSudoku;
     private ConstraintSatisfactionProblem jobShopScheduling;
     private ConstraintSatisfactionProblem productMatrixTsp;
     private ConstraintSatisfactionProblem knapsack;
-    private ToDoubleFunction<Assignment> knapsackObjective;
 
     // Parametric families at their fixed/test size.
     private ConstraintSatisfactionProblem golombRuler;
@@ -116,16 +112,12 @@ public class CsplibBenchmarks {
     public void setup() {
         carSequencing = Prob001CarSequencingTest.CSP;
         bibd = Prob028BalancedIncompleteBlockDesignTest.PROBLEM.csp();
-        var warehouseLocationInstance = Prob034WarehouseLocationTest.xcsp3Instance();
-        warehouseLocation = warehouseLocationInstance.csp();
-        warehouseLocationObjective = warehouseLocationInstance.objective();
+        warehouseLocation = Prob034WarehouseLocationTest.CSP;
         steelMillSlabDesign = Prob038SteelMillSlabDesignTest.CSP;
         killerSudoku = Prob057KillerSudokuTest.killerSudoku();
         jobShopScheduling = Prob061JobShopSchedulingTest.CSP;
         productMatrixTsp = Prob075ProductMatrixTspTest.TSP;
-        var knapsackInstance = Prob133KnapsackTest.xcsp3Instance();
-        knapsack = knapsackInstance.csp();
-        knapsackObjective = knapsackInstance.objective();
+        knapsack = Prob133KnapsackTest.problem();
 
         golombRuler = Prob006GolombRulerTest.buildRuler(Prob006GolombRulerTest.N, Prob006GolombRulerTest.OPTIMAL_LENGTH).csp();
         socialGolfers = Prob010SocialGolfersTest.CSP;
@@ -162,7 +154,7 @@ public class CsplibBenchmarks {
 
     @Benchmark
     public void warehouseLocation(Blackhole bh) {
-        bh.consume(Solver.Factory.INSTANCE.createSolver(warehouseLocation, warehouseLocationObjective).getSolution());
+        bh.consume(Solver.Factory.INSTANCE.createSolver(warehouseLocation, Prob034WarehouseLocationTest::totalCost).getSolution());
     }
 
     @Benchmark
@@ -187,7 +179,7 @@ public class CsplibBenchmarks {
 
     @Benchmark
     public void knapsack(Blackhole bh) {
-        bh.consume(Solver.Factory.INSTANCE.createSolver(knapsack, knapsackObjective).getSolution());
+        bh.consume(Solver.Factory.INSTANCE.createSolver(knapsack, Prob133KnapsackTest::negatedValue).getSolution());
     }
 
     // --- Parametric families at their fixed/test size: first solution and full enumeration ---

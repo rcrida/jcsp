@@ -3,47 +3,76 @@ import io.github.rcrida.jcsp.solver.Solver;
 
 import lombok.val;
 import io.github.rcrida.jcsp.ConstraintSatisfactionProblem;
-import io.github.rcrida.jcsp.parser.xcsp3.Xcsp3Instance;
+import io.github.rcrida.jcsp.assignments.Assignment;
+import io.github.rcrida.jcsp.constraints.Operator;
+import io.github.rcrida.jcsp.domains.IntRangeDomain;
+import io.github.rcrida.jcsp.variables.Variable;
 import org.junit.jupiter.api.Test;
+
+import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * Binary knapsack (CSPLib prob133): choose which items to pack to maximise value without
- * exceeding the weight capacity. Each item is a 0/1 variable.
+ * Binary knapsack: choose which items to pack to maximise value without exceeding
+ * the weight capacity. Each item is a 0/1 variable; the weight constraint is a
+ * {@code linearConstraint}.
  *
- * <p>{@link #problem()} and {@link #xcsp3Instance()} parse the CSP and objective from a real
- * XCSP3 instance file (30 items, capacity 100 — see the file's own comment for provenance)
- * rather than building it via jcsp's constraint builder API; {@link CsplibBenchmarks} uses the
- * same {@link #xcsp3Instance()} for its own objective rather than a separate hand-rolled
- * function. At this size, enumerating every feasible subset the way a small hand-picked instance
- * would allow isn't practical, so only the proven optimum (709) is checked here.
+ * <pre>
+ *   Item | Weight | Value
+ *   -----|--------|------
+ *    x1  |   3    |   4
+ *    x2  |   4    |   5
+ *    x3  |   5    |   6
+ *    x4  |   6    |   7
+ *   Capacity: 10
+ * </pre>
+ *
+ * Feasible subsets (total weight ≤ 10): {}, {x1}, {x2}, {x3}, {x4},
+ * {x1,x2}, {x1,x3}, {x1,x4}, {x2,x3}, {x2,x4} — 10 in total.
+ * Optimal selection: {x2, x4} with weight 10 and value 12.
  */
 public class Prob133KnapsackTest {
-
-    static Xcsp3Instance xcsp3Instance() {
-        return Xcsp3CsplibResource.parse("knapsack-30items.xml");
-    }
+    static final Variable.Factory F = Variable.Factory.INSTANCE;
+    static final Variable<Integer> X1 = F.create("x1");
+    static final Variable<Integer> X2 = F.create("x2");
+    static final Variable<Integer> X3 = F.create("x3");
+    static final Variable<Integer> X4 = F.create("x4");
+    static final IntRangeDomain BINARY = IntRangeDomain.of(0, 1);
 
     static ConstraintSatisfactionProblem problem() {
-        return xcsp3Instance().csp();
+        return ConstraintSatisfactionProblem.builder()
+                .variableDomain(X1, BINARY).variableDomain(X2, BINARY)
+                .variableDomain(X3, BINARY).variableDomain(X4, BINARY)
+                .linearConstraint(Map.of(X1, 3, X2, 4, X3, 5, X4, 6), Operator.LEQ, 10)
+                .build();
     }
 
     @Test
-    void feasibility_hasASolutionWithinCapacity() {
-        val csp = problem();
-        val result = Solver.Factory.INSTANCE.createSolver(csp).getSolution();
-        assertThat(result).hasValueSatisfying(a -> assertThat(a.isSolution(csp)).isTrue());
+    void feasibility_allValidSelections() {
+        assertThat(Solver.Factory.INSTANCE.createSolver(problem()).getSolutions()).hasSize(10);
+    }
+
+    // Negated total value (4*x1 + 5*x2 + 6*x3 + 7*x4), so minimising this maximises value.
+    // orElse(1) gives the optimistic lower bound for the negated objective: assume every
+    // unassigned variable takes its maximum value (1), so the true value can only be lower.
+    static double negatedValue(Assignment a) {
+        return -(4 * a.getValue(X1).orElse(1)
+                + 5 * a.getValue(X2).orElse(1)
+                + 6 * a.getValue(X3).orElse(1)
+                + 7 * a.getValue(X4).orElse(1));
     }
 
     @Test
     void optimization_maxValue() {
-        val instance = xcsp3Instance();
-        val result = Solver.Factory.INSTANCE.createSolver(instance.csp(), instance.objective()).getSolution();
-        assertThat(result).isPresent();
-        assertThat(result.get().isSolution(instance.csp())).isTrue();
-        // instance.objective() is minimize-oriented (maximize negates coefficients internally),
-        // so the true maximised value is the negation of the minimized objective.
-        assertThat(-instance.objective().applyAsDouble(result.get())).isEqualTo(709.0);
+        // Optimal: x2=1, x4=1 → weight=10, value=12.
+        val result = Solver.Factory.INSTANCE.createSolver(problem(),
+                Prob133KnapsackTest::negatedValue).getSolution();
+        assertThat(result).hasValueSatisfying(a -> {
+            assertThat(a.getValue(X1)).hasValue(0);
+            assertThat(a.getValue(X2)).hasValue(1);
+            assertThat(a.getValue(X3)).hasValue(0);
+            assertThat(a.getValue(X4)).hasValue(1);
+        });
     }
 }

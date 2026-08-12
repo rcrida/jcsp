@@ -16,7 +16,6 @@ import java.math.BigInteger;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Set;
-import java.util.stream.IntStream;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -33,18 +32,9 @@ public class Prob054NQueensTest {
         return problem.csp();
     }
 
-    /**
-     * Board size is a parameter, so a larger instance can be built (e.g. for benchmarking); unlike
-     * {@link #nQueens()}, this overload doesn't touch the shared static {@link #VARIABLES} field.
-     * At board size {@link #N} loads the real XCSP3 instance file (Queens-0008-m1.xml from the
-     * XCSP3 Queens series, https://xcsp.org/instances/, unmodified -- its diagonal-attack rule
-     * uses the {@code dist()} intension operator); every other size builds the CSP programmatically.
-     */
+    /** Board size is a parameter, so a larger instance can be built (e.g. for benchmarking); unlike
+     * {@link #nQueens()}, this overload doesn't touch the shared static {@link #VARIABLES} field. */
     public static NQueensProblem nQueens(int n) {
-        if (n == N) {
-            return xcsp3NQueens();
-        }
-
         val cspBuilder = ConstraintSatisfactionProblem.builder();
         val labels = new String[n];
         for (int i = 0; i < n; i++) {
@@ -67,12 +57,6 @@ public class Prob054NQueensTest {
             }
         }
         return new NQueensProblem(cspBuilder.build(), variables);
-    }
-
-    private static NQueensProblem xcsp3NQueens() {
-        var instance = Xcsp3CsplibResource.parse("nqueens-8.xml");
-        Variable[] variables = IntStream.range(0, N).mapToObj(i -> Variable.Factory.INSTANCE.create("q[" + i + "]")).toArray(Variable[]::new);
-        return new NQueensProblem(instance.csp(), variables);
     }
 
     static void printAssignment(Assignment assignment) {

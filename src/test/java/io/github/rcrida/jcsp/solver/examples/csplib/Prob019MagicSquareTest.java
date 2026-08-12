@@ -31,6 +31,8 @@ import static org.assertj.core.api.Assertions.assertThat;
  */
 public class Prob019MagicSquareTest {
     static final int N = 3;
+    static final int MAGIC = N * (N * N + 1) / 2; // 15
+    static final String[] INDICES = {"1", "2", "3"};
 
     record MagicSquareProblem(ConstraintSatisfactionProblem csp, Variable<Integer>[][] cells) {}
 
@@ -38,18 +40,8 @@ public class Prob019MagicSquareTest {
         return square(N);
     }
 
-    /**
-     * Order is a parameter, so larger squares can be built (e.g. for benchmarking); {@link
-     * #square()} pins it to {@link #N}. At order {@link #N} loads the real XCSP3 instance file
-     * (MagicSquare-03-sum.xml from the XCSP3 MagicSquare series, https://xcsp.org/instances/,
-     * unmodified -- see the instance file's own comment); every other order builds the CSP
-     * programmatically.
-     */
+    /** Order is a parameter, so larger squares can be built (e.g. for benchmarking); {@link #square()} pins it to {@link #N}. */
     static MagicSquareProblem square(int n) {
-        if (n == N) {
-            return xcsp3Square();
-        }
-
         int magic = n * (n * n + 1) / 2;
         String[] indices = new String[n];
         for (int i = 0; i < n; i++) indices[i] = String.valueOf(i + 1);
@@ -85,18 +77,6 @@ public class Prob019MagicSquareTest {
         builder.sumConstraint(antiDiagonal, Operator.EQ, magic);
 
         return new MagicSquareProblem(builder.build(), cells);
-    }
-
-    @SuppressWarnings("unchecked")
-    private static MagicSquareProblem xcsp3Square() {
-        var instance = Xcsp3CsplibResource.parse("magic-square-order3.xml");
-        Variable<Integer>[][] cells = new Variable[N][N];
-        for (int r = 0; r < N; r++) {
-            for (int c = 0; c < N; c++) {
-                cells[r][c] = Variable.Factory.INSTANCE.create("x[" + r + "][" + c + "]");
-            }
-        }
-        return new MagicSquareProblem(instance.csp(), cells);
     }
 
     @Test

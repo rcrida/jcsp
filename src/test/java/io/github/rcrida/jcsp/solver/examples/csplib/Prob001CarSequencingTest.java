@@ -2,14 +2,18 @@ package io.github.rcrida.jcsp.solver.examples.csplib;
 
 import io.github.rcrida.jcsp.ConstraintSatisfactionProblem;
 import io.github.rcrida.jcsp.assignments.Assignment;
+import io.github.rcrida.jcsp.domains.BooleanDomain;
+import io.github.rcrida.jcsp.domains.IntRangeDomain;
 import io.github.rcrida.jcsp.solver.Solver;
 import io.github.rcrida.jcsp.variables.Variable;
 import lombok.val;
 import org.junit.jupiter.api.Test;
 
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.stream.IntStream;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -23,23 +27,17 @@ import static org.assertj.core.api.Assertions.assertThat;
  * fixed in advance. The task is to find a sequencing (permutation with repetition) of classes
  * across the slots that respects both.
  * <p>
+ * Modelled with {@code slot[i] ∈ 1..NUM_CLASSES} (the class built in slot {@code i}),
+ * {@code globalCardinalityConstraint} pinning each class's exact production count, a boolean
+ * {@code requires[i][o]} per slot/option linked to {@code slot[i]} via {@code elementConstraint}
+ * (a fixed per-option column of which classes need it), and one {@code atMostNConstraint} per
+ * option per sliding window of {@code BLOCK_SIZE[o]} consecutive slots.
+ * <p>
  * Instance data is the example given in CSPLib prob001's own specification
  * ({@code Problems/prob001/specification.md} on GitHub), originally from Dincbas et al., ECAI88 —
  * 10 cars, 5 options, 6 classes. The specification also gives one known-valid sequence, which
  * {@link #dincbasEtAlReferenceSequence_isASolutionOfThisModel()} checks directly against this
  * model via {@link Assignment#isSolution}, confirming the transcription is faithful.
- * <p>
- * {@link #CSP} is parsed from a hand-authored XCSP3 instance file (see its own comment for
- * provenance) rather than built via jcsp's constraint builder API: {@code cardinality} pins each
- * class's exact production count, {@code element} links each slot's per-option 0/1 requirement to
- * its class (a fixed per-option column of which classes need it), and a {@code slide} of {@code
- * sum} per option expresses "at most {@code MAX_PER_BLOCK[o]} requiring cars per {@code
- * BLOCK_SIZE[o]}-wide window" -- both {@code cardinality} and {@code slide} were added to {@code
- * Xcsp3CallbackHandler} specifically to make this migration possible (the latter needed no new
- * code at all, since {@code xcsp3-tools} auto-expands a slide's template the same way it does a
- * group's). {@code requires[i][o]} is therefore a plain 0/1 {@code Variable<Integer>} here, not
- * the {@code Variable<Boolean>} the previous hand-built model used -- XCSP3-core has no boolean
- * variable type of its own.
  */
 public class Prob001CarSequencingTest {
     static final Variable.Factory F = Variable.Factory.INSTANCE;
@@ -66,15 +64,49 @@ public class Prob001CarSequencingTest {
     static final int[] REFERENCE_SEQUENCE = {1, 2, 6, 3, 5, 4, 4, 5, 3, 6};
 
     static final List<Variable<Integer>> SLOT = IntStream.range(0, NUM_CARS)
-            .mapToObj(i -> F.<Integer>create("slot[" + i + "]"))
+            .mapToObj(i -> F.<Integer>create("slot" + i))
             .toList();
-    static final List<List<Variable<Integer>>> REQUIRES = IntStream.range(0, NUM_CARS)
+    static final List<List<Variable<Boolean>>> REQUIRES = IntStream.range(0, NUM_CARS)
             .mapToObj(i -> IntStream.range(0, NUM_OPTIONS)
-                    .mapToObj(o -> F.<Integer>create("requires[" + i + "][" + o + "]"))
+                    .mapToObj(o -> F.<Boolean>create("requires" + i + "_" + o))
                     .toList())
             .toList();
 
-    static final ConstraintSatisfactionProblem CSP = Xcsp3CsplibResource.parse("car-sequencing-10x5x6.xml").csp();
+    static final ConstraintSatisfactionProblem CSP = buildCsp();
+
+    static ConstraintSatisfactionProblem buildCsp() {
+        var builder = ConstraintSatisfactionProblem.builder();
+        var classDomain = IntRangeDomain.of(1, NUM_CLASSES);
+        SLOT.forEach(s -> builder.variableDomain(s, classDomain));
+        REQUIRES.forEach(row -> row.forEach(r -> builder.variableDomain(r, BooleanDomain.INSTANCE)));
+
+        Map<Integer, Integer> demand = new HashMap<>();
+        for (int c = 1; c <= NUM_CLASSES; c++) demand.put(c, CLASS_DEMAND[c - 1]);
+        builder.globalCardinalityConstraint(new HashSet<>(SLOT), demand);
+
+        for (int i = 0; i < NUM_CARS; i++) {
+            for (int o = 0; o < NUM_OPTIONS; o++) {
+                builder.elementConstraint(SLOT.get(i), REQUIRES.get(i).get(o), optionColumn(o));
+            }
+        }
+
+        for (int o = 0; o < NUM_OPTIONS; o++) {
+            int block = BLOCK_SIZE[o];
+            for (int p = 0; p + block <= NUM_CARS; p++) {
+                Set<Variable<Boolean>> window = new HashSet<>();
+                for (int i = p; i < p + block; i++) window.add(REQUIRES.get(i).get(o));
+                builder.atMostNConstraint(window, MAX_PER_BLOCK[o]);
+            }
+        }
+
+        return builder.build();
+    }
+
+    static List<Boolean> optionColumn(int option) {
+        return IntStream.range(0, NUM_CLASSES)
+                .mapToObj(c -> CLASS_OPTIONS[c][option])
+                .toList();
+    }
 
     @Test
     void solutionExists_andRespectsClassDemand() {
@@ -111,7 +143,7 @@ public class Prob001CarSequencingTest {
         for (int i = 0; i < NUM_CARS; i++) {
             values.put(SLOT.get(i), REFERENCE_SEQUENCE[i]);
             for (int o = 0; o < NUM_OPTIONS; o++) {
-                values.put(REQUIRES.get(i).get(o), CLASS_OPTIONS[REFERENCE_SEQUENCE[i] - 1][o] ? 1 : 0);
+                values.put(REQUIRES.get(i).get(o), CLASS_OPTIONS[REFERENCE_SEQUENCE[i] - 1][o]);
             }
         }
 
