@@ -5,8 +5,22 @@ import io.github.rcrida.jcsp.ConstraintSatisfactionProblem.ConstraintSatisfactio
 import io.github.rcrida.jcsp.assignments.Assignment;
 import io.github.rcrida.jcsp.constraints.Constraint;
 import io.github.rcrida.jcsp.constraints.Operator;
+import io.github.rcrida.jcsp.constraints.binary.BinaryComparatorConstraint;
+import io.github.rcrida.jcsp.constraints.binary.BinaryElementConstraint;
+import io.github.rcrida.jcsp.constraints.nary.AllDiffConstraint;
+import io.github.rcrida.jcsp.constraints.nary.AmongConstraint;
+import io.github.rcrida.jcsp.constraints.nary.BinPackingConstraint;
+import io.github.rcrida.jcsp.constraints.nary.CircuitConstraint;
+import io.github.rcrida.jcsp.constraints.nary.CountConstraint;
+import io.github.rcrida.jcsp.constraints.nary.CumulativeConstraint;
+import io.github.rcrida.jcsp.constraints.nary.GlobalCardinalityConstraint;
+import io.github.rcrida.jcsp.constraints.nary.LexConstraint;
+import io.github.rcrida.jcsp.constraints.nary.NaryElementConstraint;
+import io.github.rcrida.jcsp.constraints.nary.NaryTuplesConstraint;
+import io.github.rcrida.jcsp.constraints.nary.OrderedConstraint;
 import io.github.rcrida.jcsp.constraints.nary.PredicateConstraint;
 import io.github.rcrida.jcsp.constraints.nary.SumBoundConstraint;
+import io.github.rcrida.jcsp.constraints.unary.UnaryComparatorConstraint;
 import io.github.rcrida.jcsp.constraints.unary.UnaryValueConstraint;
 import io.github.rcrida.jcsp.domains.BooleanDomain;
 import io.github.rcrida.jcsp.domains.Domain;
@@ -291,14 +305,14 @@ final class Xcsp3CallbackHandler implements XCallbacks2 {
             }
             assignments.add(Assignment.of(tupleValues));
         }
-        builder.tuplesConstraint(assignments);
+        addOrReify(NaryTuplesConstraint.of(assignments), id);
     }
 
     // ---- allDifferent -----------------------------------------------------------------------------
 
     @Override
     public void buildCtrAllDifferent(String id, XVarInteger[] list) {
-        builder.allDiffConstraint(toVariableSet(list));
+        addOrReify(AllDiffConstraint.builder().variables(toVariableSet(list)).build(), id);
     }
 
     // ---- sum ----------------------------------------------------------------------------------------
@@ -367,10 +381,10 @@ final class Xcsp3CallbackHandler implements XCallbacks2 {
         Operator operator = mapOperator(val.operator);
         int n = (int) val.k;
         if (values.length == 1) {
-            builder.countConstraint(vars, values[0], operator, n);
+            addOrReify(CountConstraint.of(vars, values[0], operator, n), id);
         } else {
             Set<Integer> valueSet = Arrays.stream(values).boxed().collect(Collectors.toCollection(LinkedHashSet::new));
-            builder.amongConstraint(vars, valueSet, operator, n);
+            addOrReify(AmongConstraint.of(vars, valueSet, operator, n), id);
         }
     }
 
@@ -386,16 +400,19 @@ final class Xcsp3CallbackHandler implements XCallbacks2 {
      * Variable}, so a fresh auxiliary variable carries the distinct-value count regardless of
      * whether {@code condition} names one itself; the condition is then applied to that auxiliary
      * via {@link io.github.rcrida.jcsp.constraints.Operator}-based comparison, the same two-step
-     * shape {@link #shiftVariable} uses for an index shift.
+     * shape {@link #shiftVariable} uses for an index shift. {@code nValueConstraint} itself (the
+     * {@code count}-to-distinct-values link) is always added directly, never reified -- only the
+     * condition <em>comparing</em> {@code count} is a meaningful thing to reify ({@code b <-> count
+     * <op> k}); the link itself is a definition, not a proposition with a truth value of its own.
      */
     void applyNValuesCondition(Set<Variable<Integer>> vars, Condition condition, String id) {
         Variable<Integer> count = Variable.Factory.INSTANCE.create(id + "$nvalues");
         builder.variableDomain(count, IntRangeDomain.of(1, vars.size()));
         builder.nValueConstraint(vars, count);
         if (condition instanceof ConditionVal val) {
-            builder.comparatorConstraint(count, mapOperator(val.operator), (int) val.k);
+            addOrReify(UnaryComparatorConstraint.of(count, mapOperator(val.operator), (int) val.k), id);
         } else if (condition instanceof ConditionVar var) {
-            builder.comparatorConstraint(count, mapOperator(var.operator), variableFor(var.x));
+            addOrReify(BinaryComparatorConstraint.of(count, mapOperator(var.operator), variableFor(var.x)), id);
         } else {
             throw new UnsupportedXcsp3ConstraintException("Unsupported nValues condition: " + id);
         }
@@ -413,7 +430,7 @@ final class Xcsp3CallbackHandler implements XCallbacks2 {
         for (int i = 0; i < values.length; i++) {
             cardinalities.put(values[i], occurs[i]);
         }
-        builder.globalCardinalityConstraint(toVariableSet(list), cardinalities);
+        addOrReify(GlobalCardinalityConstraint.of(toVariableSet(list), cardinalities), id);
     }
 
     @Override
@@ -466,9 +483,9 @@ final class Xcsp3CallbackHandler implements XCallbacks2 {
 
     @Override
     public void buildCtrElement(String id, XVarInteger[] list, int startIndex, XVarInteger index, TypeRank rank, Condition condition) {
-        Variable<Integer> result = elementResult(condition, id);
-        builder.elementVariableConstraint(oneBasedIndex(index, startIndex), result, toVariableList(list));
         requireAnyRank(rank, id);
+        Variable<Integer> result = elementResult(condition, id);
+        addOrReify(NaryElementConstraint.of(oneBasedIndex(index, startIndex), result, toVariableList(list)), id);
     }
 
     @Override
@@ -476,7 +493,7 @@ final class Xcsp3CallbackHandler implements XCallbacks2 {
         requireAnyRank(rank, id);
         Variable<Integer> result = elementResult(condition, id);
         List<Integer> values = Arrays.stream(list).boxed().toList();
-        builder.elementConstraint(oneBasedIndex(index, startIndex), result, values);
+        addOrReify(BinaryElementConstraint.of(oneBasedIndex(index, startIndex), result, values), id);
     }
 
     private static void requireAnyRank(TypeRank rank, String id) {
@@ -496,11 +513,7 @@ final class Xcsp3CallbackHandler implements XCallbacks2 {
 
     @Override
     public void buildCtrOrdered(String id, XVarInteger[] list, TypeOperatorRel operator) {
-        List<Variable<Integer>> vars = toVariableList(list);
-        Operator jcspOperator = mapOrderingOperator(operator);
-        for (int i = 0; i + 1 < vars.size(); i++) {
-            builder.comparatorConstraint(vars.get(i), jcspOperator, vars.get(i + 1));
-        }
+        addOrReify(OrderedConstraint.of(toVariableList(list), mapOrderingOperator(operator)), id);
     }
 
     @Override
@@ -508,7 +521,7 @@ final class Xcsp3CallbackHandler implements XCallbacks2 {
         if (lists.length != 2) {
             throw new UnsupportedXcsp3ConstraintException("lex with more than two lists is not supported: " + id);
         }
-        builder.lexConstraint(toVariableList(lists[0]), mapOrderingOperator(operator), toVariableList(lists[1]));
+        addOrReify(LexConstraint.of(toVariableList(lists[0]), mapOrderingOperator(operator), toVariableList(lists[1])), id);
     }
 
     // ---- cumulative -------------------------------------------------------------------------------------------
@@ -521,7 +534,7 @@ final class Xcsp3CallbackHandler implements XCallbacks2 {
         List<Variable<Integer>> starts = toVariableList(origins);
         List<Integer> durations = Arrays.stream(lengths).boxed().toList();
         List<Integer> resources = Arrays.stream(heights).boxed().toList();
-        builder.cumulativeConstraint(starts, durations, resources, (int) val.k);
+        addOrReify(CumulativeConstraint.of(starts, durations, resources, (int) val.k), id);
     }
 
     // ---- circuit ----------------------------------------------------------------------------------------------
@@ -530,7 +543,7 @@ final class Xcsp3CallbackHandler implements XCallbacks2 {
     public void buildCtrCircuit(String id, XVarInteger[] list, int startIndex) {
         int offset = 1 - startIndex;
         List<Variable<Integer>> successors = Arrays.stream(list).map(v -> shiftVariable(v, offset)).toList();
-        builder.circuitConstraint(successors);
+        addOrReify(CircuitConstraint.of(successors), id);
     }
 
     // ---- binPacking -------------------------------------------------------------------------------------------
@@ -548,7 +561,7 @@ final class Xcsp3CallbackHandler implements XCallbacks2 {
         List<Variable<Integer>> bins = toVariableList(list);
         List<Integer> weights = Arrays.stream(sizes).boxed().toList();
         List<Integer> capacities = Collections.nCopies(maxBin + 1, (int) val.k);
-        builder.binPackingConstraint(bins, weights, capacities);
+        addOrReify(BinPackingConstraint.of(bins, weights, capacities), id);
     }
 
     // ---- objectives -----------------------------------------------------------------------------------------------

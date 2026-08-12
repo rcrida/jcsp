@@ -160,6 +160,49 @@ class Xcsp3ParserTest {
         }
     }
 
+    @Test void allDifferentFullyReified_indicatorTracksConstraintTruthValue() throws IOException {
+        Xcsp3Instance instance = parseXml(
+                "<var id=\"x\"> 0..2 </var><var id=\"y\"> 0..2 </var><var id=\"z\"> 0..2 </var><var id=\"b\"> 0..1 </var>",
+                "<allDifferent reifiedBy=\"b\"><list> x y z </list></allDifferent>");
+        int trueCount = 0;
+        for (Assignment a : solutions(instance.csp())) {
+            int x = digitOf(a, "x");
+            int y = digitOf(a, "y");
+            int z = digitOf(a, "z");
+            int b = digitOf(a, "b");
+            boolean allDiff = x != y && y != z && x != z;
+            assertThat(b == 1).as("x=%d, y=%d, z=%d, b=%d", x, y, z, b).isEqualTo(allDiff);
+            if (allDiff) trueCount++;
+        }
+        assertThat(trueCount).isEqualTo(6); // 3! permutations of {0,1,2}
+    }
+
+    @Test void cardinalityFullyReified_indicatorTracksConstraintTruthValue() throws IOException {
+        Xcsp3Instance instance = parseXml(
+                "<var id=\"x\"> 0..1 </var><var id=\"y\"> 0..1 </var><var id=\"b\"> 0..1 </var>",
+                "<cardinality reifiedBy=\"b\"><list> x y </list><values closed=\"false\"> 0 1 </values>"
+                        + "<occurs> 1 1 </occurs></cardinality>");
+        for (Assignment a : solutions(instance.csp())) {
+            int x = digitOf(a, "x");
+            int y = digitOf(a, "y");
+            int b = digitOf(a, "b");
+            assertThat(b == 1).as("x=%d, y=%d, b=%d", x, y, b).isEqualTo(x != y);
+        }
+    }
+
+    @Test void orderedFullyReified_indicatorTracksWholeChainTruthValue() throws IOException {
+        Xcsp3Instance instance = parseXml(
+                "<var id=\"x\"> 0..2 </var><var id=\"y\"> 0..2 </var><var id=\"z\"> 0..2 </var><var id=\"b\"> 0..1 </var>",
+                "<ordered reifiedBy=\"b\"><list> x y z </list><operator> lt </operator></ordered>");
+        for (Assignment a : solutions(instance.csp())) {
+            int x = digitOf(a, "x");
+            int y = digitOf(a, "y");
+            int z = digitOf(a, "z");
+            int b = digitOf(a, "b");
+            assertThat(b == 1).as("x=%d, y=%d, z=%d, b=%d", x, y, z, b).isEqualTo(x < y && y < z);
+        }
+    }
+
     // ---- extension (table) --------------------------------------------------------------------------
 
     @Test void extensionSupport_buildsTuplesConstraint() throws IOException {

@@ -18,11 +18,20 @@ import java.nio.file.Path;
  * slide} wrapping any of these is also covered "for free": {@code xcsp3-tools} expands both back
  * into repeated ordinary constraints of whichever type they wrap (a {@code group} against each
  * {@code args} line, a {@code slide} against each precomputed window) before this class's
- * callbacks ever see them. {@code intension} and {@code sum} (fixed-bound form only) additionally
- * support {@code FULL} ({@code reifiedBy}) and {@code HALF_FROM} ({@code hreifiedFrom}, {@code
- * indicator -> body}) reification -- {@code HALF_TO} ({@code hreifiedTo}, {@code body ->
- * indicator}) throws, since it has no jcsp builder counterpart. No other constraint type supports
- * reification yet. Any other construct -- {@code regular}/{@code mdd}, the variable- or
+ * callbacks ever see them.
+ * <p>
+ * Every constraint type above except the variable-target form of {@code sum} supports {@code
+ * FULL} ({@code reifiedBy}) and {@code HALF_FROM} ({@code hreifiedFrom}, {@code indicator ->
+ * body}) reification -- {@code HALF_TO} ({@code hreifiedTo}, {@code body -> indicator}) always
+ * throws, since it has no jcsp builder counterpart. {@code ordered} routes through a new {@link
+ * io.github.rcrida.jcsp.constraints.nary.OrderedConstraint} (generalising {@link
+ * io.github.rcrida.jcsp.constraints.nary.IncreasingConstraint}/{@link
+ * io.github.rcrida.jcsp.constraints.nary.DecreasingConstraint} to a runtime-chosen operator)
+ * rather than jcsp's own pairwise decomposition, since reifying a chain needs one {@link
+ * io.github.rcrida.jcsp.constraints.Constraint} object for the whole thing, not {@code N-1}
+ * separate ones. {@code nValues}' reification applies to its condition comparison only, not the
+ * underlying {@code count}-to-distinct-values definition (never itself a proposition with a
+ * truth value). Any other construct -- {@code regular}/{@code mdd}, the variable- or
  * range-occurrence forms of {@code cardinality}, {@code channel}, {@code diffn}/{@code
  * noOverlap}, conflict-mode {@code extension}, multi-objective COP, {@code instantiation} --
  * throws either {@link UnsupportedXcsp3ConstraintException} (a recognised-but-unmappable variant)

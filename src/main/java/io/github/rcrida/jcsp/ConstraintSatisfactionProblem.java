@@ -45,6 +45,7 @@ import io.github.rcrida.jcsp.constraints.nary.MaxConstraint;
 import io.github.rcrida.jcsp.constraints.nary.MinConstraint;
 import io.github.rcrida.jcsp.constraints.nary.DecreasingConstraint;
 import io.github.rcrida.jcsp.constraints.nary.IncreasingConstraint;
+import io.github.rcrida.jcsp.constraints.nary.OrderedConstraint;
 import io.github.rcrida.jcsp.constraints.nary.LinearBooleanBoundConstraint;
 import io.github.rcrida.jcsp.constraints.nary.LinearBooleanVariableConstraint;
 import io.github.rcrida.jcsp.constraints.nary.LinearBoundConstraint;
@@ -1026,6 +1027,21 @@ public class ConstraintSatisfactionProblem {
          */
         public <T extends Comparable<T>> ConstraintSatisfactionProblemBuilder decreasingConstraint(@NonNull List<Variable<T>> variables) {
             return this.constraint(DecreasingConstraint.of(variables));
+        }
+
+        /**
+         * Constrain a sequence of variables by a single ordering operator applied between every
+         * consecutive pair: {@code vars[0] <op> vars[1] <op> ... <op> vars[n-1]}. Prefer {@link
+         * #increasingConstraint}/{@link #decreasingConstraint} directly for the common {@code
+         * LEQ}/{@code GEQ} cases; this overload is for an operator chosen at runtime, or a strict
+         * ({@link Operator#LT}/{@link Operator#GT}) chain.
+         *
+         * @param variables ordered list of variables to constrain
+         * @param operator  one of {@link Operator#LT}, {@link Operator#LEQ}, {@link Operator#GEQ}, {@link Operator#GT}
+         * @return the builder
+         */
+        public <T extends Comparable<T>> ConstraintSatisfactionProblemBuilder orderedConstraint(@NonNull List<Variable<T>> variables, @NonNull Operator operator) {
+            return this.constraint(OrderedConstraint.of(variables, operator));
         }
 
         /**
