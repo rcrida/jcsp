@@ -1,7 +1,11 @@
 package io.github.rcrida.jcsp.solver.examples.csplib;
 
 import io.github.rcrida.jcsp.ConstraintSatisfactionProblem;
+import io.github.rcrida.jcsp.assignments.SolverLimits;
+import io.github.rcrida.jcsp.parser.xcsp3.Xcsp3Parser;
+import io.github.rcrida.jcsp.solver.LimitExceededException;
 import io.github.rcrida.jcsp.solver.Solver;
+import io.github.rcrida.jcsp.solver.SolverConfig;
 import org.openjdk.jmh.annotations.Benchmark;
 import org.openjdk.jmh.annotations.BenchmarkMode;
 import org.openjdk.jmh.annotations.Fork;
@@ -15,6 +19,11 @@ import org.openjdk.jmh.annotations.State;
 import org.openjdk.jmh.annotations.Warmup;
 import org.openjdk.jmh.infra.Blackhole;
 
+import java.io.IOException;
+import java.net.URISyntaxException;
+import java.net.URL;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
@@ -53,6 +62,23 @@ import java.util.stream.IntStream;
  * intersectionCardinalityConstraint}s plus lexicographic symmetry breaking apparently don't scale
  * from 7 to 9 triples the way the other five families' scaled sizes do), so it's excluded here
  * rather than risking a benchmark run that hangs for minutes on one method.
+ *
+ * <p>{@link #magicSquareXcsp3LargeNodeBudget} is a deliberately different shape from every other
+ * method here: sourced from the real, unmodified {@code MagicSquare-6-sum.xml.lzma} competition
+ * instance bundled at {@code src/test/resources/xcsp3/competition/} (the same corpus {@link
+ * io.github.rcrida.jcsp.parser.xcsp3.Xcsp3CompetitionRunner} drives) rather than a {@code ProbNNN}
+ * test class's own builder, and bounded by {@link SolverLimits#ofNodes} rather than solved to
+ * completion, since this specific instance doesn't finish within any benchmark-reasonable time (a
+ * 60-second budget still reports {@code UNKNOWN} — see {@code Xcsp3CompetitionRunner}'s own bundled
+ * run). A node budget rather than a time budget keeps the amount of search work measured constant
+ * across JMH iterations regardless of a run's own speed, which is the property a benchmark
+ * comparing two code versions actually needs: a time budget would silently do <em>less</em> search
+ * on a slower version and call that a fair comparison. Added specifically to give profiling-driven
+ * propagation/search changes (e.g. the {@code AC3.revise} materialisation fix motivated by JFR
+ * profiling of this exact instance) a disciplined, reusable harness: JMH's warmup/measurement
+ * iterations and reported error margins are what actually distinguish a genuine improvement from
+ * this kind of long-running sandboxed environment's own run-to-run timing noise, which a single
+ * before/after timing comparison cannot.
  */
 @State(Scope.Benchmark)
 @BenchmarkMode(Mode.AverageTime)
@@ -83,6 +109,12 @@ public class CsplibBenchmarks {
 
     private static final int SCALED_NQUEENS_N = 16;
 
+    // Node budget for magicSquareXcsp3LargeNodeBudget -- see that benchmark's own Javadoc for why
+    // a node budget rather than a time budget. 5000 was the value used, and validated as giving a
+    // good signal-to-noise ratio in this sandboxed environment, during the manual investigation
+    // that motivated adding this benchmark in the first place.
+    private static final long MAGIC_SQUARE_XCSP3_NODE_BUDGET = 5000;
+
     // Fixed real-world instances, unscaled.
     private ConstraintSatisfactionProblem carSequencing;
     private ConstraintSatisfactionProblem bibd;
@@ -108,8 +140,11 @@ public class CsplibBenchmarks {
     private ConstraintSatisfactionProblem numberPartitioningScaled;
     private ConstraintSatisfactionProblem nQueensScaled;
 
+    // See magicSquareXcsp3LargeNodeBudget's own Javadoc.
+    private ConstraintSatisfactionProblem magicSquareXcsp3Large;
+
     @Setup(Level.Trial)
-    public void setup() {
+    public void setup() throws IOException, URISyntaxException {
         carSequencing = Prob001CarSequencingTest.CSP;
         bibd = Prob028BalancedIncompleteBlockDesignTest.PROBLEM.csp();
         warehouseLocation = Prob034WarehouseLocationTest.CSP;
@@ -132,6 +167,19 @@ public class CsplibBenchmarks {
         magicSquareScaled = Prob019MagicSquareTest.square(SCALED_MAGIC_SQUARE_ORDER).csp();
         numberPartitioningScaled = Prob049NumberPartitioningTest.buildCsp(SCALED_PARTITION_N).csp();
         nQueensScaled = Prob054NQueensTest.nQueens(SCALED_NQUEENS_N).csp();
+
+        magicSquareXcsp3Large = loadMagicSquareXcsp3Large();
+    }
+
+    private static ConstraintSatisfactionProblem loadMagicSquareXcsp3Large() throws IOException, URISyntaxException {
+        URL resource = CsplibBenchmarks.class.getResource("/xcsp3/competition/MagicSquare-6-sum.xml.lzma");
+        if (resource == null) {
+            throw new IllegalStateException(
+                    "Bundled instance /xcsp3/competition/MagicSquare-6-sum.xml.lzma is missing from the classpath "
+                            + "(expected src/test/resources/xcsp3/competition on target/test-classes)");
+        }
+        Path instancePath = Paths.get(resource.toURI());
+        return Xcsp3Parser.parse(instancePath).csp();
     }
 
     private static Set<String> scaledGolfers() {
@@ -269,5 +317,27 @@ public class CsplibBenchmarks {
     @Benchmark
     public void nQueensScaled(Blackhole bh) {
         bh.consume(Solver.Factory.INSTANCE.createSolver(nQueensScaled).getSolution());
+    }
+
+    // --- Real XCSP3 competition instance, bounded by node budget rather than solved to completion ---
+
+    /**
+     * See this class's own Javadoc for why this benchmark is bounded by a node budget rather than
+     * solved to completion, and why it's sourced from a bundled XCSP3 competition instance rather
+     * than a {@code ProbNNN} test class. A fresh {@link SolverLimits} is built per invocation
+     * (rather than once in {@link #setup}) since it carries mutable runtime state ({@code
+     * limitHitStats}) that must not leak between JMH iterations. {@link LimitExceededException} is
+     * the expected, common-case outcome here (the whole point of the node budget is to stop search
+     * before it would otherwise finish) and is consumed by the {@link Blackhole} like any other
+     * result, not treated as a benchmark failure.
+     */
+    @Benchmark
+    public void magicSquareXcsp3LargeNodeBudget(Blackhole bh) {
+        SolverConfig config = SolverConfig.builder().limits(SolverLimits.ofNodes(MAGIC_SQUARE_XCSP3_NODE_BUDGET)).build();
+        try {
+            bh.consume(Solver.Factory.INSTANCE.createSolver(magicSquareXcsp3Large, config).getSolution());
+        } catch (LimitExceededException e) {
+            bh.consume(e);
+        }
     }
 }
