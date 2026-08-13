@@ -293,9 +293,7 @@ final class Xcsp3CallbackHandler implements XCallbacks2 {
         if (!positive) {
             throw new UnsupportedXcsp3ConstraintException("Negative (conflict) extension tables are not supported: " + id);
         }
-        if (!flags.isEmpty()) {
-            throw new UnsupportedXcsp3ConstraintException("Starred/smart extension tuples are not supported: " + id);
-        }
+        requireNoUnsupportedFlags(flags, id);
         List<Variable<Integer>> vars = toVariableList(list);
         Set<Assignment> assignments = new LinkedHashSet<>();
         for (int[] tuple : tuples) {
@@ -308,11 +306,71 @@ final class Xcsp3CallbackHandler implements XCallbacks2 {
         addOrReify(NaryTuplesConstraint.of(assignments), id);
     }
 
+    /**
+     * The unary form of {@code extension}: a single variable restricted to (or, when {@code
+     * !positive}, excluded from) a fixed list of integer values -- functionally a value-membership
+     * predicate rather than a tuple table, so it maps onto the same {@link PredicateConstraint}
+     * {@link #buildCtrIntension} already uses rather than {@link NaryTuplesConstraint}.
+     */
+    @Override
+    public void buildCtrExtension(String id, XVarInteger x, int[] values, boolean positive, Set<TypeFlag> flags) {
+        requireNoUnsupportedFlags(flags, id);
+        Variable<Integer> variable = variableFor(x);
+        Set<Integer> valueSet = Arrays.stream(values).boxed().collect(Collectors.toCollection(LinkedHashSet::new));
+        addOrReify(PredicateConstraint.builder().variables(Set.of(variable))
+                .predicate(a -> valueSet.contains(a.getValue(variable).orElseThrow()) == positive)
+                .build(), id);
+    }
+
+    /**
+     * Rejects {@link TypeFlag#STARRED_TUPLES} (wildcard "don't care" entries) and {@link
+     * TypeFlag#SMART_TUPLES} (arbitrary expressions in place of literal values) -- neither is
+     * representable by the plain {@code int[]}/{@code int[][]} this class works with. {@link
+     * TypeFlag#UNCLEAN_TUPLES} is deliberately allowed through unchecked: it only records that the
+     * original XML used compact notation (e.g. a {@code 0..4} range) for the value/tuple list --
+     * {@code xcsp3-tools} has already expanded that into a plain, fully-materialized array by the
+     * time it reaches {@code buildCtrExtension}, so there is nothing left here to reject.
+     * Package-private (not private) so {@code Xcsp3CallbackHandlerTest} can exercise the {@link
+     * TypeFlag#SMART_TUPLES} branch directly -- real "smart" tuple syntax is obscure enough that no
+     * hand-authored XCSP3 fixture in {@code Xcsp3ParserTest} exercises it, the same reasoning
+     * {@link #applySumCondition}'s own comment gives for its package-private visibility.
+     */
+    static void requireNoUnsupportedFlags(Set<TypeFlag> flags, String id) {
+        if (flags.contains(TypeFlag.STARRED_TUPLES) || flags.contains(TypeFlag.SMART_TUPLES)) {
+            throw new UnsupportedXcsp3ConstraintException("Starred/smart extension tuples are not supported: " + id);
+        }
+    }
+
     // ---- allDifferent -----------------------------------------------------------------------------
 
     @Override
     public void buildCtrAllDifferent(String id, XVarInteger[] list) {
         addOrReify(AllDiffConstraint.builder().variables(toVariableSet(list)).build(), id);
+    }
+
+    /**
+     * Every row and every column of {@code matrix} is all-different (the standard Latin-square
+     * encoding) -- decomposes into one {@link AllDiffConstraint} per row plus one per column, added
+     * directly rather than through {@link #addOrReify}: reifying "the whole matrix is all-different"
+     * would need a single {@link Constraint} object standing for the conjunction of all of them, and
+     * this codebase has no generic AND-of-constraints wrapper (see {@link #addOrReify}'s own Javadoc
+     * on why {@code HALF_TO} reification is similarly out of scope for the same reason).
+     */
+    @Override
+    public void buildCtrAllDifferentMatrix(String id, XVarInteger[][] matrix) {
+        if (currentReification != null) {
+            throw new UnsupportedXcsp3ConstraintException("Reified allDifferentMatrix is not supported: " + id);
+        }
+        for (XVarInteger[] row : matrix) {
+            builder.allDiffConstraint(toVariableSet(row));
+        }
+        for (int col = 0; col < matrix[0].length; col++) {
+            Set<Variable<Integer>> column = new LinkedHashSet<>();
+            for (XVarInteger[] row : matrix) {
+                column.add(variableFor(row[col]));
+            }
+            builder.allDiffConstraint(column);
+        }
     }
 
     // ---- sum ----------------------------------------------------------------------------------------

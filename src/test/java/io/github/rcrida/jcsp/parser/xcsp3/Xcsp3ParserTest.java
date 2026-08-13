@@ -226,6 +226,46 @@ class Xcsp3ParserTest {
                 .isInstanceOf(UnsupportedXcsp3ConstraintException.class);
     }
 
+    @Test void unaryExtensionPositive_restrictsVariableToListedValues() throws IOException {
+        Xcsp3Instance instance = parseXml(
+                "<var id=\"x\"> 0..5 </var>",
+                "<extension><list> x </list><supports> 2 4 </supports></extension>");
+        Set<Assignment> solutions = solutions(instance.csp());
+        assertThat(solutions).hasSize(2);
+        for (Assignment a : solutions) {
+            assertThat(digitOf(a, "x")).isIn(2, 4);
+        }
+    }
+
+    @Test void unaryExtensionNegative_excludesListedValues() throws IOException {
+        // Unlike the n-ary conflict-table form (rejected -- see extensionConflict_throwsUnsupported
+        // -- since materializing its complement over several variables could blow up
+        // combinatorially), a unary restriction is just a predicate over one variable's own domain,
+        // so negation is cheap and safe to support directly.
+        Xcsp3Instance instance = parseXml(
+                "<var id=\"x\"> 0..3 </var>",
+                "<extension><list> x </list><conflicts> 1 2 </conflicts></extension>");
+        Set<Assignment> solutions = solutions(instance.csp());
+        assertThat(solutions).hasSize(2);
+        for (Assignment a : solutions) {
+            assertThat(digitOf(a, "x")).isIn(0, 3);
+        }
+    }
+
+    @Test void unaryExtensionWithRangeNotation_expandsBeforeReachingCallback() throws IOException {
+        // "0..2" is TypeFlag.UNCLEAN_TUPLES, not STARRED_TUPLES/SMART_TUPLES -- xcsp3-tools has
+        // already expanded it into a plain int[] by the time buildCtrExtension is called, so this
+        // must not be rejected the way a genuine starred/smart tuple is.
+        Xcsp3Instance instance = parseXml(
+                "<var id=\"x\"> 0..5 </var>",
+                "<extension><list> x </list><supports> 0..2 </supports></extension>");
+        Set<Assignment> solutions = solutions(instance.csp());
+        assertThat(solutions).hasSize(3);
+        for (Assignment a : solutions) {
+            assertThat(digitOf(a, "x")).isBetween(0, 2);
+        }
+    }
+
     // ---- allDifferent ---------------------------------------------------------------------------------
 
     @Test void allDifferent_buildsAllDiffConstraint() throws IOException {
@@ -233,6 +273,22 @@ class Xcsp3ParserTest {
                 "<var id=\"x\"> 0..1 </var><var id=\"y\"> 0..1 </var>",
                 "<allDifferent> x y </allDifferent>");
         assertThat(solutions(instance.csp())).hasSize(2);
+    }
+
+    @Test void allDifferentMatrix_buildsRowAndColumnAllDiffConstraints() throws IOException {
+        // 2x2 Latin square over {0,1}: only 2 arrangements keep every row and every column
+        // all-different -- [[0,1],[1,0]] and [[1,0],[0,1]].
+        Xcsp3Instance instance = parseXml(
+                "<array id=\"x\" size=\"[2][2]\"> 0..1 </array>",
+                "<allDifferent><matrix> x[][] </matrix></allDifferent>");
+        assertThat(solutions(instance.csp())).hasSize(2);
+    }
+
+    @Test void allDifferentMatrixReified_throwsUnsupported() {
+        assertThatThrownBy(() -> parseXml(
+                "<array id=\"x\" size=\"[2][2]\"> 0..1 </array><var id=\"b\"> 0..1 </var>",
+                "<allDifferent reifiedBy=\"b\"><matrix> x[][] </matrix></allDifferent>"))
+                .isInstanceOf(UnsupportedXcsp3ConstraintException.class);
     }
 
     // ---- sum ------------------------------------------------------------------------------------------------

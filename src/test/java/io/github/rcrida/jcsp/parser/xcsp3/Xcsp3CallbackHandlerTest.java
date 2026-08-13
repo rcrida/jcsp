@@ -4,6 +4,7 @@ import io.github.rcrida.jcsp.variables.Variable;
 import org.junit.jupiter.api.Test;
 import org.xcsp.common.Condition;
 import org.xcsp.common.Types.TypeExpr;
+import org.xcsp.common.Types.TypeFlag;
 
 import java.util.Map;
 import java.util.Set;
@@ -35,6 +36,18 @@ class Xcsp3CallbackHandlerTest {
         Variable<Integer> x = Variable.Factory.INSTANCE.create("x");
         Xcsp3CallbackHandler handler = new Xcsp3CallbackHandler();
         assertThatThrownBy(() -> handler.applyLinearCondition(Map.of(x, 2), NEITHER_VAL_NOR_VAR, "c0"))
+                .isInstanceOf(UnsupportedXcsp3ConstraintException.class);
+    }
+
+    /**
+     * Real "smart" tuple syntax (expressions in place of literal values, e.g. {@code ge(3)}) is
+     * obscure enough that no hand-authored XCSP3 fixture exercises {@link TypeFlag#SMART_TUPLES}
+     * specifically -- {@code extensionStarredTuples_throwsUnsupported} in {@code Xcsp3ParserTest}
+     * only ever produces {@link TypeFlag#STARRED_TUPLES}, which short-circuits the {@code ||} before
+     * {@code SMART_TUPLES} is ever checked.
+     */
+    @Test void requireNoUnsupportedFlags_smartTuples_throws() {
+        assertThatThrownBy(() -> Xcsp3CallbackHandler.requireNoUnsupportedFlags(Set.of(TypeFlag.SMART_TUPLES), "c0"))
                 .isInstanceOf(UnsupportedXcsp3ConstraintException.class);
     }
 }
