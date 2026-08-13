@@ -299,6 +299,55 @@ public class ConstraintSatisfactionProblemTest {
     }
 
     @Test
+    void builder_countConstraintWithVariableTarget() {
+        Variable<Integer> a = VARIABLE_FACTORY.create("A");
+        Variable<Integer> b = VARIABLE_FACTORY.create("B");
+        Variable<Integer> target = VARIABLE_FACTORY.create("target");
+        val csp = ConstraintSatisfactionProblem.builder()
+                .variableDomain(a, IntRangeDomain.of(0, 5))
+                .variableDomain(b, IntRangeDomain.of(0, 5))
+                .variableDomain(target, IntRangeDomain.of(0, 2))
+                .countConstraint(Set.of(a, b), 3, Operator.EQ, target)
+                .build();
+        assertThat(csp.getConstraints()).hasSize(1);
+    }
+
+    @Test
+    void builder_amongConstraintWithVariableTarget() {
+        Variable<Integer> a = VARIABLE_FACTORY.create("A");
+        Variable<Integer> b = VARIABLE_FACTORY.create("B");
+        Variable<Integer> target = VARIABLE_FACTORY.create("target");
+        val csp = ConstraintSatisfactionProblem.builder()
+                .variableDomain(a, IntRangeDomain.of(0, 5))
+                .variableDomain(b, IntRangeDomain.of(0, 5))
+                .variableDomain(target, IntRangeDomain.of(0, 2))
+                .amongConstraint(Set.of(a, b), Set.of(3, 4), Operator.EQ, target)
+                .build();
+        assertThat(csp.getConstraints()).hasSize(1);
+    }
+
+    @Test
+    void countConstraintWithVariableTarget_solutionsMatchRealCount() {
+        Variable<Integer> a = VARIABLE_FACTORY.create("A");
+        Variable<Integer> b = VARIABLE_FACTORY.create("B");
+        Variable<Integer> target = VARIABLE_FACTORY.create("target");
+        val csp = ConstraintSatisfactionProblem.builder()
+                .variableDomain(a, IntRangeDomain.of(0, 3))
+                .variableDomain(b, IntRangeDomain.of(0, 3))
+                .variableDomain(target, IntRangeDomain.of(0, 2))
+                .countConstraint(Set.of(a, b), 3, Operator.EQ, target)
+                .build();
+        val solutions = Solver.Factory.INSTANCE.createSolver(csp).getSolutions().toList();
+        assertThat(solutions).isNotEmpty();
+        for (Assignment solution : solutions) {
+            int count = 0;
+            if (solution.getValue(a).orElseThrow() == 3) count++;
+            if (solution.getValue(b).orElseThrow() == 3) count++;
+            assertThat(count).isEqualTo(solution.getValue(target).orElseThrow());
+        }
+    }
+
+    @Test
     void sumConstraintWithVariableTarget_propagatesBidirectionally() {
         // a in [0,3], b in [0,3], target pre-narrowed to [0,4] -> forces a+b<=4, and since a,b are
         // otherwise free, the solver must only return solutions respecting the (pre-narrowed)

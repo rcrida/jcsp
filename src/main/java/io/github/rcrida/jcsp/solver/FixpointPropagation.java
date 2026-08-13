@@ -21,11 +21,13 @@ import io.github.rcrida.jcsp.constraints.binary.DisjointConstraint;
 import io.github.rcrida.jcsp.constraints.binary.IntersectionCardinalityConstraint;
 import io.github.rcrida.jcsp.constraints.nary.AllDiffConstraint;
 import io.github.rcrida.jcsp.constraints.nary.AmongConstraint;
+import io.github.rcrida.jcsp.constraints.nary.AmongVariableConstraint;
 import io.github.rcrida.jcsp.constraints.nary.AtLeastNConstraint;
 import io.github.rcrida.jcsp.constraints.nary.AtMostNConstraint;
 import io.github.rcrida.jcsp.constraints.nary.AtMostOneConstraint;
 import io.github.rcrida.jcsp.constraints.nary.BinPackingConstraint;
 import io.github.rcrida.jcsp.constraints.nary.CountConstraint;
+import io.github.rcrida.jcsp.constraints.nary.CountVariableConstraint;
 import io.github.rcrida.jcsp.constraints.nary.CircuitConstraint;
 import io.github.rcrida.jcsp.constraints.nary.CumulativeConstraint;
 import io.github.rcrida.jcsp.constraints.nary.DecreasingConstraint;
@@ -134,8 +136,10 @@ public class FixpointPropagation {
             FixpointConsistency.of(LinearBooleanBoundConstraint.class),
             FixpointConsistency.of(LinearBooleanVariableConstraint.class),
             FixpointConsistency.of(CountConstraint.class),
+            FixpointConsistency.of(CountVariableConstraint.class),
             FixpointConsistency.of(InverseConstraint.class),
             FixpointConsistency.of(AmongConstraint.class),
+            FixpointConsistency.of(AmongVariableConstraint.class),
             FixpointConsistency.of(AtLeastNConstraint.class),
             FixpointConsistency.of(AtMostNConstraint.class),
             FixpointConsistency.of(AtMostOneConstraint.class),

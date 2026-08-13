@@ -9,9 +9,11 @@ import io.github.rcrida.jcsp.constraints.binary.BinaryComparatorConstraint;
 import io.github.rcrida.jcsp.constraints.binary.BinaryElementConstraint;
 import io.github.rcrida.jcsp.constraints.nary.AllDiffConstraint;
 import io.github.rcrida.jcsp.constraints.nary.AmongConstraint;
+import io.github.rcrida.jcsp.constraints.nary.AmongVariableConstraint;
 import io.github.rcrida.jcsp.constraints.nary.BinPackingConstraint;
 import io.github.rcrida.jcsp.constraints.nary.CircuitConstraint;
 import io.github.rcrida.jcsp.constraints.nary.CountConstraint;
+import io.github.rcrida.jcsp.constraints.nary.CountVariableConstraint;
 import io.github.rcrida.jcsp.constraints.nary.CumulativeConstraint;
 import io.github.rcrida.jcsp.constraints.nary.GlobalCardinalityConstraint;
 import io.github.rcrida.jcsp.constraints.nary.LexConstraint;
@@ -433,17 +435,27 @@ final class Xcsp3CallbackHandler implements XCallbacks2 {
 
     @Override
     public void buildCtrCount(String id, XVarInteger[] list, int[] values, Condition condition) {
-        if (!(condition instanceof ConditionVal val)) {
-            throw new UnsupportedXcsp3ConstraintException("count with a variable target is not supported: " + id);
-        }
         Set<Variable<Integer>> vars = toVariableSet(list);
-        Operator operator = mapOperator(val.operator);
-        int n = (int) val.k;
-        if (values.length == 1) {
-            addOrReify(CountConstraint.of(vars, values[0], operator, n), id);
+        if (condition instanceof ConditionVal val) {
+            Operator operator = mapOperator(val.operator);
+            int n = (int) val.k;
+            if (values.length == 1) {
+                addOrReify(CountConstraint.of(vars, values[0], operator, n), id);
+            } else {
+                Set<Integer> valueSet = Arrays.stream(values).boxed().collect(Collectors.toCollection(LinkedHashSet::new));
+                addOrReify(AmongConstraint.of(vars, valueSet, operator, n), id);
+            }
+        } else if (condition instanceof ConditionVar var) {
+            Operator operator = mapOperator(var.operator);
+            Variable<Integer> target = variableFor(var.x);
+            if (values.length == 1) {
+                addOrReify(CountVariableConstraint.of(vars, values[0], operator, target), id);
+            } else {
+                Set<Integer> valueSet = Arrays.stream(values).boxed().collect(Collectors.toCollection(LinkedHashSet::new));
+                addOrReify(AmongVariableConstraint.of(vars, valueSet, operator, target), id);
+            }
         } else {
-            Set<Integer> valueSet = Arrays.stream(values).boxed().collect(Collectors.toCollection(LinkedHashSet::new));
-            addOrReify(AmongConstraint.of(vars, valueSet, operator, n), id);
+            throw new UnsupportedXcsp3ConstraintException("Unsupported count condition: " + id);
         }
     }
 

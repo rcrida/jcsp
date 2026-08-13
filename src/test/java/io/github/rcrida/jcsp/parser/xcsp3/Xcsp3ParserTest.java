@@ -15,6 +15,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -334,10 +335,45 @@ class Xcsp3ParserTest {
         assertThat(solutions(instance.csp())).isNotEmpty();
     }
 
-    @Test void countWithVariableTarget_throwsUnsupported() {
-        assertThatThrownBy(() -> parseXml(
+    @Test void countWithVariableTarget_linksAuxiliaryToRealTarget() throws IOException {
+        Xcsp3Instance instance = parseXml(
                 "<var id=\"x\"> 0..2 </var><var id=\"y\"> 0..2 </var><var id=\"z\"> 0..2 </var><var id=\"k\"> 0..3 </var>",
-                "<count><list> x y z </list><values> 1 </values><condition> (eq,k) </condition></count>"))
+                "<count><list> x y z </list><values> 1 </values><condition> (eq,k) </condition></count>");
+        for (Assignment a : solutions(instance.csp())) {
+            long actual = Stream.of(digitOf(a, "x"), digitOf(a, "y"), digitOf(a, "z")).filter(v -> v == 1).count();
+            assertThat(digitOf(a, "k")).isEqualTo((int) actual);
+        }
+        assertThat(solutions(instance.csp())).isNotEmpty();
+    }
+
+    @Test void countWithVariableTargetMultipleValues_buildsAmongVariableConstraint() throws IOException {
+        Xcsp3Instance instance = parseXml(
+                "<var id=\"x\"> 0..2 </var><var id=\"y\"> 0..2 </var><var id=\"z\"> 0..2 </var><var id=\"k\"> 0..3 </var>",
+                "<count><list> x y z </list><values> 1 2 </values><condition> (eq,k) </condition></count>");
+        for (Assignment a : solutions(instance.csp())) {
+            long actual = Stream.of(digitOf(a, "x"), digitOf(a, "y"), digitOf(a, "z")).filter(v -> v == 1 || v == 2).count();
+            assertThat(digitOf(a, "k")).isEqualTo((int) actual);
+        }
+        assertThat(solutions(instance.csp())).isNotEmpty();
+    }
+
+    @Test void countWithVariableTargetReified_indicatorTracksConditionTruthValue() throws IOException {
+        Xcsp3Instance instance = parseXml(
+                "<var id=\"x\"> 0..1 </var><var id=\"y\"> 0..1 </var><var id=\"k\"> 0..2 </var><var id=\"b\"> 0..1 </var>",
+                "<count reifiedBy=\"b\"><list> x y </list><values> 1 </values><condition> (eq,k) </condition></count>");
+        for (Assignment a : solutions(instance.csp())) {
+            long actual = Stream.of(digitOf(a, "x"), digitOf(a, "y")).filter(v -> v == 1).count();
+            int k = digitOf(a, "k");
+            int b = digitOf(a, "b");
+            assertThat(b == 1).as("count=%d, k=%d, b=%d", actual, k, b).isEqualTo(actual == k);
+        }
+        assertThat(solutions(instance.csp())).isNotEmpty();
+    }
+
+    @Test void countWithSetCondition_throwsUnsupported() {
+        assertThatThrownBy(() -> parseXml(
+                "<var id=\"x\"> 0..2 </var><var id=\"y\"> 0..2 </var><var id=\"z\"> 0..2 </var>",
+                "<count><list> x y z </list><values> 1 </values><condition> (in,1..3) </condition></count>"))
                 .isInstanceOf(UnsupportedXcsp3ConstraintException.class);
     }
 

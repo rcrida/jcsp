@@ -30,6 +30,7 @@ import io.github.rcrida.jcsp.constraints.binary.IntersectionCardinalityConstrain
 import io.github.rcrida.jcsp.constraints.Operator;
 import io.github.rcrida.jcsp.constraints.nary.AllDiffConstraint;
 import io.github.rcrida.jcsp.constraints.nary.AmongConstraint;
+import io.github.rcrida.jcsp.constraints.nary.AmongVariableConstraint;
 import io.github.rcrida.jcsp.constraints.nary.Automaton;
 import io.github.rcrida.jcsp.constraints.nary.BinPackingConstraint;
 import io.github.rcrida.jcsp.constraints.nary.CircuitConstraint;
@@ -39,6 +40,7 @@ import io.github.rcrida.jcsp.constraints.nary.AtLeastNConstraint;
 import io.github.rcrida.jcsp.constraints.nary.AtMostNConstraint;
 import io.github.rcrida.jcsp.constraints.nary.CumulativeConstraint;
 import io.github.rcrida.jcsp.constraints.nary.CountConstraint;
+import io.github.rcrida.jcsp.constraints.nary.CountVariableConstraint;
 import io.github.rcrida.jcsp.constraints.nary.GlobalCardinalityConstraint;
 import io.github.rcrida.jcsp.constraints.nary.LexConstraint;
 import io.github.rcrida.jcsp.constraints.nary.MaxConstraint;
@@ -1312,6 +1314,24 @@ public class ConstraintSatisfactionProblem {
         }
 
         /**
+         * Create a constraint that compares the number of variables in a set taking a specific
+         * value to a variable target, rather than a fixed bound: {@code count(variables, value)
+         * <op> target}. The variable-target sibling of {@link #countConstraint(Set, Object,
+         * Operator, int)} — carries the same {@link Operator} field that method does, mirroring
+         * {@link #sumConstraint(Set, Operator, Variable)}/{@link #maxConstraint(Set, Operator,
+         * Variable)}'s own shape.
+         *
+         * @param variables the variables to count over
+         * @param value     the value whose occurrences are counted
+         * @param operator  the comparison operator (e.g. {@link Operator#EQ}, {@link Operator#LEQ})
+         * @param target    the variable to compare the count against
+         * @return the builder
+         */
+        public <T> ConstraintSatisfactionProblemBuilder countConstraint(@NonNull Set<Variable<T>> variables, @NonNull T value, @NonNull Operator operator, @NonNull Variable<Integer> target) {
+            return this.constraint(CountVariableConstraint.of(variables, value, operator, target));
+        }
+
+        /**
          * Create an among constraint: count how many variables take a value from the set {@code S},
          * and compare that count to a bound: {@code among(vars, S) <op> n}.
          * Equivalent to MiniZinc's {@code among(n, vars, S)}.
@@ -1324,6 +1344,23 @@ public class ConstraintSatisfactionProblem {
          */
         public <T> ConstraintSatisfactionProblemBuilder amongConstraint(@NonNull Set<Variable<T>> variables, @NonNull Set<T> values, @NonNull Operator operator, int n) {
             return this.constraint(AmongConstraint.of(variables, values, operator, n));
+        }
+
+        /**
+         * Create a constraint that compares the number of variables in a set taking a value from
+         * {@code values} to a variable target, rather than a fixed bound: {@code
+         * among(variables, values) <op> target}. The variable-target sibling of {@link
+         * #amongConstraint(Set, Set, Operator, int)} — see {@link #countConstraint(Set, Object,
+         * Operator, Variable)}'s own Javadoc for why this carries a real {@link Operator} field.
+         *
+         * @param variables the variables to count over
+         * @param values    the set of target values
+         * @param operator  the comparison operator
+         * @param target    the variable to compare the count against
+         * @return the builder
+         */
+        public <T> ConstraintSatisfactionProblemBuilder amongConstraint(@NonNull Set<Variable<T>> variables, @NonNull Set<T> values, @NonNull Operator operator, @NonNull Variable<Integer> target) {
+            return this.constraint(AmongVariableConstraint.of(variables, values, operator, target));
         }
 
         /**
