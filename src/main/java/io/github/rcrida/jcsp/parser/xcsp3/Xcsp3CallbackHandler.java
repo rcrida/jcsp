@@ -11,6 +11,7 @@ import io.github.rcrida.jcsp.constraints.binary.BinaryOffsetConstraint;
 import io.github.rcrida.jcsp.constraints.nary.AllDiffConstraint;
 import io.github.rcrida.jcsp.constraints.nary.AmongConstraint;
 import io.github.rcrida.jcsp.constraints.nary.AmongVariableConstraint;
+import io.github.rcrida.jcsp.constraints.nary.AndConstraint;
 import io.github.rcrida.jcsp.constraints.nary.BinPackingConstraint;
 import io.github.rcrida.jcsp.constraints.nary.CircuitConstraint;
 import io.github.rcrida.jcsp.constraints.nary.CountConstraint;
@@ -465,27 +466,48 @@ final class Xcsp3CallbackHandler implements XCallbacks2 {
 
     /**
      * Every row and every column of {@code matrix} is all-different (the standard Latin-square
-     * encoding) -- decomposes into one {@link AllDiffConstraint} per row plus one per column, added
-     * directly rather than through {@link #addOrReify}: reifying "the whole matrix is all-different"
-     * would need a single {@link Constraint} object standing for the conjunction of all of them, and
-     * this codebase has no generic AND-of-constraints wrapper (see {@link #addOrReify}'s own Javadoc
-     * on why {@code HALF_TO} reification is similarly out of scope for the same reason).
+     * encoding) -- {@code matrix.length + matrix[0].length} separate {@link AllDiffConstraint}s, one
+     * per row plus one per column. Unreified, these are added directly as top-level constraints
+     * rather than through {@link #addOrReify}: each stays its own entry the shared per-CSP
+     * propagation fixpoint (see {@link io.github.rcrida.jcsp.solver.FixpointPropagation#PROPAGATORS})
+     * can re-run independently, rather than all being nested inside one {@link AndConstraint} whose
+     * own internal fixpoint (see that class's Javadoc) would re-propagate every row/column together
+     * on every visit instead of just the ones actually affected. Reified, "the whole matrix is
+     * all-different" genuinely needs one {@link Constraint} object standing for the conjunction of
+     * all of them, so that case builds each {@link AllDiffConstraint} standalone (via {@link
+     * AllDiffConstraint#builder}, not {@link #builder}'s {@code allDiffConstraint} convenience method,
+     * since none of them are added directly) and wraps the set in an {@link AndConstraint} before
+     * routing through {@link #addOrReify}. {@code HALF_TO} reification remains unsupported regardless
+     * (see {@link #addOrReify}'s own Javadoc): that needs negating the whole conjunction, which {@link
+     * AndConstraint} deliberately doesn't provide.
      */
     @Override
     public void buildCtrAllDifferentMatrix(String id, XVarInteger[][] matrix) {
-        if (currentReification != null) {
-            throw new UnsupportedXcsp3ConstraintException("Reified allDifferentMatrix is not supported: " + id);
+        if (currentReification == null) {
+            for (XVarInteger[] row : matrix) {
+                builder.allDiffConstraint(toVariableSet(row));
+            }
+            for (int col = 0; col < matrix[0].length; col++) {
+                builder.allDiffConstraint(allDifferentMatrixColumn(matrix, col));
+            }
+            return;
         }
+        Set<Constraint> conjuncts = new LinkedHashSet<>();
         for (XVarInteger[] row : matrix) {
-            builder.allDiffConstraint(toVariableSet(row));
+            conjuncts.add(AllDiffConstraint.builder().variables(toVariableSet(row)).build());
         }
         for (int col = 0; col < matrix[0].length; col++) {
-            Set<Variable<Integer>> column = new LinkedHashSet<>();
-            for (XVarInteger[] row : matrix) {
-                column.add(variableFor(row[col]));
-            }
-            builder.allDiffConstraint(column);
+            conjuncts.add(AllDiffConstraint.builder().variables(allDifferentMatrixColumn(matrix, col)).build());
         }
+        addOrReify(AndConstraint.of(conjuncts), id);
+    }
+
+    private Set<Variable<Integer>> allDifferentMatrixColumn(XVarInteger[][] matrix, int col) {
+        Set<Variable<Integer>> column = new LinkedHashSet<>();
+        for (XVarInteger[] row : matrix) {
+            column.add(variableFor(row[col]));
+        }
+        return column;
     }
 
     // ---- sum ----------------------------------------------------------------------------------------
@@ -701,12 +723,15 @@ final class Xcsp3CallbackHandler implements XCallbacks2 {
 
     /**
      * For exactly two lists, a single {@link LexConstraint} covers it (and can be reified through
-     * {@link #addOrReify} like any other single-object constraint). For more than two, XCSP3
-     * applies {@code operator} to every consecutive pair -- {@code lists[0] <op> lists[1] <op> ...
-     * <op> lists[n-1]} -- which decomposes cleanly into {@code lists.length - 1} pairwise {@link
-     * LexConstraint}s, added directly rather than through {@link #addOrReify}: like {@link
-     * #buildCtrAllDifferentMatrix} and {@code instantiation}, reifying "the whole chain holds" as
-     * one proposition would need a generic AND-of-constraints wrapper this codebase doesn't have.
+     * {@link #addOrReify} like any other single-object constraint). For more than two, XCSP3 applies
+     * {@code operator} to every consecutive pair -- {@code lists[0] <op> lists[1] <op> ... <op>
+     * lists[n-1]} -- which decomposes cleanly into {@code lists.length - 1} pairwise {@link
+     * LexConstraint}s. Unreified, these are added directly as top-level constraints rather than
+     * through {@link #addOrReify} (same reasoning as {@link #buildCtrAllDifferentMatrix}'s unreified
+     * case: each stays its own entry in the shared per-CSP propagation fixpoint). Reified, "the whole
+     * chain holds" genuinely needs one {@link Constraint} object standing for the conjunction of every
+     * pairwise {@link LexConstraint}, so that case wraps the set in an {@link AndConstraint} before
+     * routing through {@link #addOrReify}.
      */
     @Override
     public void buildCtrLex(String id, XVarInteger[][] lists, TypeOperatorRel operator) {
@@ -715,12 +740,17 @@ final class Xcsp3CallbackHandler implements XCallbacks2 {
             addOrReify(LexConstraint.of(toVariableList(lists[0]), op, toVariableList(lists[1])), id);
             return;
         }
-        if (currentReification != null) {
-            throw new UnsupportedXcsp3ConstraintException("Reified lex with more than two lists is not supported: " + id);
+        if (currentReification == null) {
+            for (int i = 0; i + 1 < lists.length; i++) {
+                builder.constraint(LexConstraint.of(toVariableList(lists[i]), op, toVariableList(lists[i + 1])));
+            }
+            return;
         }
+        Set<Constraint> conjuncts = new LinkedHashSet<>();
         for (int i = 0; i + 1 < lists.length; i++) {
-            builder.constraint(LexConstraint.of(toVariableList(lists[i]), op, toVariableList(lists[i + 1])));
+            conjuncts.add(LexConstraint.of(toVariableList(lists[i]), op, toVariableList(lists[i + 1])));
         }
+        addOrReify(AndConstraint.of(conjuncts), id);
     }
 
     // ---- cumulative -------------------------------------------------------------------------------------------
@@ -767,22 +797,29 @@ final class Xcsp3CallbackHandler implements XCallbacks2 {
 
     /**
      * Pins {@code list[i] == values[i]} for every {@code i} -- a fixed (possibly partial) assignment,
-     * typically used for a puzzle's "givens". Decomposes into one {@code equalsConstraint} per pair
-     * rather than narrowing each variable's domain directly, since {@link #builder} has already
-     * accepted that variable's original declared domain by the time this callback runs. Added
-     * directly rather than through {@link #addOrReify} -- like {@link
-     * #buildCtrAllDifferentMatrix}, reifying "the whole fixed assignment holds" as one proposition
-     * would need a generic AND-of-constraints wrapper this codebase doesn't have.
+     * typically used for a puzzle's "givens". Unreified, decomposes into one {@code equalsConstraint}
+     * per pair added directly (rather than through {@link #addOrReify}) -- narrowing each variable's
+     * domain directly instead isn't an option, since {@link #builder} has already accepted that
+     * variable's original declared domain by the time this callback runs. Reified, "the whole fixed
+     * assignment holds" genuinely needs one {@link Constraint} object standing for the conjunction of
+     * every pin, so that case builds each pin as a standalone {@link UnaryValueConstraint} (the same
+     * constraint {@code equalsConstraint} builds internally, just not added directly) and wraps the
+     * set in an {@link AndConstraint} before routing through {@link #addOrReify}.
      */
     @Override
     public void buildCtrInstantiation(String id, XVarInteger[] list, int[] values) {
-        if (currentReification != null) {
-            throw new UnsupportedXcsp3ConstraintException("Reified instantiation is not supported: " + id);
-        }
         List<Variable<Integer>> vars = toVariableList(list);
-        for (int i = 0; i < vars.size(); i++) {
-            builder.equalsConstraint(vars.get(i), values[i]);
+        if (currentReification == null) {
+            for (int i = 0; i < vars.size(); i++) {
+                builder.equalsConstraint(vars.get(i), values[i]);
+            }
+            return;
         }
+        Set<Constraint> conjuncts = new LinkedHashSet<>();
+        for (int i = 0; i < vars.size(); i++) {
+            conjuncts.add(UnaryValueConstraint.of(vars.get(i), values[i]));
+        }
+        addOrReify(AndConstraint.of(conjuncts), id);
     }
 
     // ---- objectives -----------------------------------------------------------------------------------------------

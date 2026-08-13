@@ -288,11 +288,23 @@ class Xcsp3ParserTest {
         assertThat(solutions(instance.csp())).hasSize(2);
     }
 
-    @Test void allDifferentMatrixReified_throwsUnsupported() {
-        assertThatThrownBy(() -> parseXml(
+    @Test void allDifferentMatrixReified_indicatorTracksConstraintTruthValue() throws IOException {
+        // Reified via AndConstraint: one AllDiffConstraint per row plus one per column, conjoined.
+        Xcsp3Instance instance = parseXml(
                 "<array id=\"x\" size=\"[2][2]\"> 0..1 </array><var id=\"b\"> 0..1 </var>",
-                "<allDifferent reifiedBy=\"b\"><matrix> x[][] </matrix></allDifferent>"))
-                .isInstanceOf(UnsupportedXcsp3ConstraintException.class);
+                "<allDifferent reifiedBy=\"b\"><matrix> x[][] </matrix></allDifferent>");
+        int trueCount = 0;
+        for (Assignment a : solutions(instance.csp())) {
+            int x00 = digitOf(a, "x[0][0]");
+            int x01 = digitOf(a, "x[0][1]");
+            int x10 = digitOf(a, "x[1][0]");
+            int x11 = digitOf(a, "x[1][1]");
+            boolean latinSquare = x00 != x01 && x10 != x11 && x00 != x10 && x01 != x11;
+            int b = digitOf(a, "b");
+            assertThat(b == 1).as("matrix=[[%d,%d],[%d,%d]], b=%d", x00, x01, x10, x11, b).isEqualTo(latinSquare);
+            if (latinSquare) trueCount++;
+        }
+        assertThat(trueCount).isEqualTo(2); // [[0,1],[1,0]] and [[1,0],[0,1]]
     }
 
     // ---- sum ------------------------------------------------------------------------------------------------
@@ -557,11 +569,22 @@ class Xcsp3ParserTest {
         assertThat(solutions(instance.csp())).hasSize(4);
     }
 
-    @Test void lexWithMoreThanTwoListsReified_throwsUnsupported() {
-        assertThatThrownBy(() -> parseXml(
+    @Test void lexWithMoreThanTwoListsReified_indicatorTracksWholeChainTruthValue() throws IOException {
+        // Reified via AndConstraint: two pairwise LexConstraints (x1<=y1, y1<=z1), conjoined.
+        Xcsp3Instance instance = parseXml(
                 "<var id=\"x1\"> 0..1 </var><var id=\"y1\"> 0..1 </var><var id=\"z1\"> 0..1 </var><var id=\"b\"> 0..1 </var>",
-                "<lex reifiedBy=\"b\"><list> x1 </list><list> y1 </list><list> z1 </list><operator> le </operator></lex>"))
-                .isInstanceOf(UnsupportedXcsp3ConstraintException.class);
+                "<lex reifiedBy=\"b\"><list> x1 </list><list> y1 </list><list> z1 </list><operator> le </operator></lex>");
+        int trueCount = 0;
+        for (Assignment a : solutions(instance.csp())) {
+            int x1 = digitOf(a, "x1");
+            int y1 = digitOf(a, "y1");
+            int z1 = digitOf(a, "z1");
+            int b = digitOf(a, "b");
+            boolean chainHolds = x1 <= y1 && y1 <= z1;
+            assertThat(b == 1).as("x1=%d, y1=%d, z1=%d, b=%d", x1, y1, z1, b).isEqualTo(chainHolds);
+            if (chainHolds) trueCount++;
+        }
+        assertThat(trueCount).isEqualTo(4); // 000, 001, 011, 111
     }
 
     // ---- cumulative -----------------------------------------------------------------------------------------------------
@@ -678,11 +701,21 @@ class Xcsp3ParserTest {
         assertThat(solutions(instance.csp())).isEmpty();
     }
 
-    @Test void instantiationReified_throwsUnsupported() {
-        assertThatThrownBy(() -> parseXml(
+    @Test void instantiationReified_indicatorTracksConstraintTruthValue() throws IOException {
+        // Reified via AndConstraint: one UnaryValueConstraint per pinned variable, conjoined.
+        Xcsp3Instance instance = parseXml(
                 "<var id=\"x\"> 0..5 </var><var id=\"b\"> 0..1 </var>",
-                "<instantiation reifiedBy=\"b\"><list> x </list><values> 2 </values></instantiation>"))
-                .isInstanceOf(UnsupportedXcsp3ConstraintException.class);
+                "<instantiation reifiedBy=\"b\"><list> x </list><values> 2 </values></instantiation>");
+        Set<Assignment> solutions = solutions(instance.csp());
+        int trueCount = 0;
+        for (Assignment a : solutions) {
+            int x = digitOf(a, "x");
+            int b = digitOf(a, "b");
+            assertThat(b == 1).as("x=%d, b=%d", x, b).isEqualTo(x == 2);
+            if (x == 2) trueCount++;
+        }
+        assertThat(trueCount).isEqualTo(1);
+        assertThat(solutions).hasSize(6); // x in {0..5}, b determined each time
     }
 
     // ---- objectives -----------------------------------------------------------------------------------------------------
