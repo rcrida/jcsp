@@ -7,7 +7,9 @@ import org.xcsp.common.predicates.XNode;
 import org.xcsp.common.predicates.XNodeLeaf;
 import org.xcsp.parser.entries.XVariables.XVarInteger;
 
+import java.util.LinkedHashSet;
 import java.util.Map;
+import java.util.Set;
 import java.util.function.Predicate;
 import java.util.stream.LongStream;
 
@@ -17,10 +19,12 @@ import java.util.stream.LongStream;
  * io.github.rcrida.jcsp.ConstraintSatisfactionProblem.ConstraintSatisfactionProblemBuilder#predicateConstraint}.
  * Covers the arithmetic ({@code neg}/{@code abs}/{@code add}/{@code sub}/{@code mul}/{@code
  * div}/{@code mod}/{@code dist}), relational ({@code eq}/{@code ne}/{@code lt}/{@code le}/{@code
- * ge}/{@code gt}), and boolean ({@code not}/{@code and}/{@code or}) operators that appear in this
+ * ge}/{@code gt}), boolean ({@code not}/{@code and}/{@code or}), and set-membership ({@code
+ * in}/{@code notin} against a literal {@code set(...)} of constants) operators that appear in this
  * project's XCSP3 test fixtures -- not the full XCSP3 expression language (e.g. {@code min}/{@code
- * max}/{@code xor}/{@code iff}/set operators are not handled). An operator outside this set throws
- * {@link UnsupportedXcsp3ConstraintException} rather than silently mis-evaluating.
+ * max}/{@code xor}/{@code iff}, or a {@code set(...)} containing anything other than constants, are
+ * not handled). An operator outside this set throws {@link UnsupportedXcsp3ConstraintException}
+ * rather than silently mis-evaluating.
  */
 final class IntensionExpressionEvaluator {
 
@@ -45,11 +49,39 @@ final class IntensionExpressionEvaluator {
             }
             throw new UnsupportedXcsp3ConstraintException("Unsupported intension leaf type: " + leaf.getType());
         }
+        // in/notin's second operand is a set(...) literal, not a scalar expression -- evaluating it
+        // through the generic operand loop below (which expects every son to reduce to one long via
+        // applyOperator) would fail on the SET node itself, so it's intercepted here instead.
+        if (node.getType() == TypeExpr.IN || node.getType() == TypeExpr.NOTIN) {
+            long value = evaluate(node.sons[0], assignment, variablesByName);
+            boolean contains = evaluateSetLiteral(node.sons[1]).contains(value);
+            return (node.getType() == TypeExpr.IN ? contains : !contains) ? 1 : 0;
+        }
         long[] operands = new long[node.sons.length];
         for (int i = 0; i < operands.length; i++) {
             operands[i] = evaluate(node.sons[i], assignment, variablesByName);
         }
         return applyOperator(node.getType(), operands);
+    }
+
+    /**
+     * Evaluates a {@code set(...)} literal into its constant members. Only constant ({@link
+     * TypeExpr#LONG}) elements are supported -- a set containing a variable reference (legal XCSP3
+     * syntax in general, just not encountered in this project's fixtures) throws rather than
+     * silently misreading it as a constant.
+     */
+    private static Set<Long> evaluateSetLiteral(XNode<XVarInteger> node) {
+        if (node.getType() != TypeExpr.SET) {
+            throw new UnsupportedXcsp3ConstraintException("in/notin requires a literal set(...) operand, got: " + node.getType());
+        }
+        Set<Long> values = new LinkedHashSet<>();
+        for (XNode<XVarInteger> son : node.sons) {
+            if (!(son instanceof XNodeLeaf<XVarInteger> leaf) || leaf.getType() != TypeExpr.LONG) {
+                throw new UnsupportedXcsp3ConstraintException("set(...) with a non-constant member is not supported");
+            }
+            values.add((Long) leaf.value);
+        }
+        return values;
     }
 
     private static long applyOperator(TypeExpr type, long[] operands) {

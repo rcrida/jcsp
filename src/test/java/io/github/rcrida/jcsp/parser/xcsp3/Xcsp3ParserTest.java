@@ -986,6 +986,20 @@ class Xcsp3ParserTest {
         assertThat(solutions(instance.csp())).isNotEmpty();
     }
 
+    @Test void intensionSetMembership_evaluatesInAndNotin() throws IOException {
+        // The Hanoi-05 CSPLib instance uses in(x[0],set(1,2)) directly; notin is folded in here too
+        // for the same coverage in one XML fixture.
+        Xcsp3Instance instance = parseXml(
+                "<var id=\"x\"> 0..5 </var><var id=\"y\"> 0..5 </var>",
+                "<intension> and(in(x,set(1,2)),notin(y,set(1,2))) </intension>");
+        Set<Assignment> solutions = solutions(instance.csp());
+        assertThat(solutions).isNotEmpty();
+        for (Assignment a : solutions) {
+            assertThat(digitOf(a, "x")).isIn(1, 2);
+            assertThat(digitOf(a, "y")).isNotIn(1, 2);
+        }
+    }
+
     @Test void intensionUnsupportedOperator_throwsWhenEvaluated() throws IOException {
         // buildCtrIntension only builds a lazy Predicate<Assignment> -- the unsupported operator
         // isn't detected until the predicate is actually evaluated against a candidate assignment
