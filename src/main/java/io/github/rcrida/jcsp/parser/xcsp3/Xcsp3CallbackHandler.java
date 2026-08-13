@@ -7,6 +7,7 @@ import io.github.rcrida.jcsp.constraints.Constraint;
 import io.github.rcrida.jcsp.constraints.Operator;
 import io.github.rcrida.jcsp.constraints.binary.BinaryComparatorConstraint;
 import io.github.rcrida.jcsp.constraints.binary.BinaryElementConstraint;
+import io.github.rcrida.jcsp.constraints.binary.BinaryOffsetConstraint;
 import io.github.rcrida.jcsp.constraints.nary.AllDiffConstraint;
 import io.github.rcrida.jcsp.constraints.nary.AmongConstraint;
 import io.github.rcrida.jcsp.constraints.nary.AmongVariableConstraint;
@@ -38,12 +39,14 @@ import org.xcsp.common.Condition.ConditionVal;
 import org.xcsp.common.Condition.ConditionVar;
 import org.xcsp.common.IVar;
 import org.xcsp.common.Types.TypeConditionOperatorRel;
+import org.xcsp.common.Types.TypeExpr;
 import org.xcsp.common.Types.TypeFlag;
 import org.xcsp.common.Types.TypeObjective;
 import org.xcsp.common.Types.TypeOperatorRel;
 import org.xcsp.common.Types.TypeRank;
 import org.xcsp.common.Types.TypeReification;
 import org.xcsp.common.predicates.XNode;
+import org.xcsp.common.predicates.XNodeLeaf;
 import org.xcsp.common.predicates.XNodeParent;
 import org.xcsp.parser.callbacks.XCallbacks;
 import org.xcsp.parser.callbacks.XCallbacks2;
@@ -57,6 +60,7 @@ import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.function.ToDoubleFunction;
 import java.util.stream.Collectors;
@@ -283,10 +287,118 @@ final class Xcsp3CallbackHandler implements XCallbacks2 {
 
     // ---- intension ------------------------------------------------------------------------------
 
+    /**
+     * Recognizes two common shapes -- a bare binary comparison ({@code eq}/{@code ne}/{@code
+     * lt}/{@code le}/{@code ge}/{@code gt} between two plain variables) and a binary offset
+     * relation (the same operators between a variable and a two-term {@code add(var, constant)})
+     * -- and routes them onto {@link BinaryComparatorConstraint}/{@link BinaryOffsetConstraint}
+     * instead of the generic {@link PredicateConstraint}, since those already have real
+     * bounds-consistency propagation where {@link PredicateConstraint} has none (only checked once
+     * every variable is assigned). Everything else -- deeper nesting, more than two operands, a
+     * non-relational root -- falls back to {@link PredicateConstraint} unchanged; recognition
+     * failure is always safe, just less propagated, never incorrect.
+     */
     @Override
     public void buildCtrIntension(String id, XVarInteger[] list, XNodeParent<XVarInteger> tree) {
-        addOrReify(PredicateConstraint.builder().variables(toVariableSet(list))
-                .predicate(IntensionExpressionEvaluator.toPredicate(tree, variablesByName)).build(), id);
+        addOrReify(recognizeBinaryRelation(tree).orElseGet(() ->
+                PredicateConstraint.builder().variables(toVariableSet(list))
+                        .predicate(IntensionExpressionEvaluator.toPredicate(tree, variablesByName)).build()), id);
+    }
+
+    private Optional<Constraint> recognizeBinaryRelation(XNode<XVarInteger> node) {
+        Operator operator = intensionRelationalOperator(node.getType());
+        if (operator == null || node.sons.length != 2) return Optional.empty();
+        XNode<XVarInteger> left = node.sons[0];
+        XNode<XVarInteger> right = node.sons[1];
+
+        Optional<Variable<Integer>> leftVar = asVariable(left);
+        Optional<Variable<Integer>> rightVar = asVariable(right);
+        if (leftVar.isPresent() && rightVar.isPresent()) {
+            return Optional.of(BinaryComparatorConstraint.of(leftVar.get(), operator, rightVar.get()));
+        }
+        // "var <op> var+k" rearranges to "var+k <flip(op)> var" to match BinaryOffsetConstraint's
+        // fixed "left + offset <op> right" shape, which only ever applies the offset to the left side.
+        if (leftVar.isPresent()) {
+            return asVariablePlusConstant(right)
+                    .<Constraint>map(vk -> BinaryOffsetConstraint.of(vk.variable(), vk.offset(), flip(operator), leftVar.get()));
+        }
+        if (rightVar.isPresent()) {
+            return asVariablePlusConstant(left)
+                    .<Constraint>map(vk -> BinaryOffsetConstraint.of(vk.variable(), vk.offset(), operator, rightVar.get()));
+        }
+        return Optional.empty();
+    }
+
+    // Package-private (not private): TypeExpr.GE/GT never reach here through any real XCSP3
+    // intension tree -- xcsp3-tools' own canonizer always rewrites a top-level ge/gt into le/lt
+    // with swapped operands first (same reason IntensionExpressionEvaluator's own GE/GT
+    // applyOperator cases need direct construction in IntensionExpressionEvaluatorTest) -- so
+    // Xcsp3CallbackHandlerTest exercises those two arms (and flip's GEQ arm below, which depends
+    // on GE reaching intensionRelationalOperator in the first place) directly.
+    static @Nullable Operator intensionRelationalOperator(TypeExpr type) {
+        return switch (type) {
+            case EQ -> Operator.EQ;
+            case NE -> Operator.NEQ;
+            case LT -> Operator.LT;
+            case LE -> Operator.LEQ;
+            case GE -> Operator.GEQ;
+            case GT -> Operator.GT;
+            default -> null;
+        };
+    }
+
+    // The EQ/NEQ arm is also unreachable through real parsing, for a different reason than GE/GT
+    // above: xcsp3-tools' canonizer reorders eq/ne's own two operands into a fixed canonical
+    // order -- confirmed empirically to always place a compound sub-expression (e.g. add(x,3))
+    // before a bare variable, regardless of which order the original XML used -- so recognizeBinaryRelation's
+    // leftVar-present branch (the only branch that calls flip) never fires when operator is EQ/NEQ;
+    // the rightVar-present branch handles that shape directly with no flip needed. Xcsp3CallbackHandlerTest
+    // exercises this arm directly for the same reason it exercises the GEQ/GT arms above.
+    static Operator flip(Operator operator) {
+        return switch (operator) {
+            case LT -> Operator.GT;
+            case GT -> Operator.LT;
+            case LEQ -> Operator.GEQ;
+            case GEQ -> Operator.LEQ;
+            case EQ, NEQ -> operator;
+        };
+    }
+
+    private record VariablePlusConstant(Variable<Integer> variable, int offset) {}
+
+    /**
+     * Matches a two-term {@code add(var, constant)}. Only this operand order needs checking --
+     * confirmed empirically, not just assumed, that {@code xcsp3-tools}' own canonizer always
+     * normalizes a two-term {@code add} to put any constant operand last, universally, regardless
+     * of how the original XML wrote it (e.g. {@code add(3,x)}) or what the non-constant operand is
+     * (a plain variable or a deeper expression like {@code mul(x,2)}); a hand-authored {@code
+     * add(constant, var)} never survives to reach this method as written. An earlier version of
+     * this method also checked the reverse order defensively -- removed once real XCSP3 fixtures
+     * proved it permanently unreachable, per this codebase's general preference for trusting a
+     * confirmed framework guarantee over defending against a case that can't occur.
+     */
+    private Optional<VariablePlusConstant> asVariablePlusConstant(XNode<XVarInteger> node) {
+        if (node.getType() != TypeExpr.ADD || node.sons.length != 2) return Optional.empty();
+        Optional<Variable<Integer>> variable = asVariable(node.sons[0]);
+        Optional<Integer> constant = asConstant(node.sons[1]);
+        if (variable.isPresent() && constant.isPresent()) {
+            return Optional.of(new VariablePlusConstant(variable.get(), constant.get()));
+        }
+        return Optional.empty();
+    }
+
+    private Optional<Variable<Integer>> asVariable(XNode<XVarInteger> node) {
+        if (node instanceof XNodeLeaf<XVarInteger> leaf && leaf.getType() == TypeExpr.VAR) {
+            return Optional.of(variablesByName.get(((XVarInteger) leaf.value).id()));
+        }
+        return Optional.empty();
+    }
+
+    private static Optional<Integer> asConstant(XNode<XVarInteger> node) {
+        if (node instanceof XNodeLeaf<XVarInteger> leaf && leaf.getType() == TypeExpr.LONG) {
+            return Optional.of(((Long) leaf.value).intValue());
+        }
+        return Optional.empty();
     }
 
     // ---- extension (table) ------------------------------------------------------------------------

@@ -174,3 +174,33 @@ boundary and the decisions that moved it, not a live inventory that would drift 
   `UnaryConstraint`s (already pruned out of the domain by `NodeConsistency` before `TreeSolver` ever
   runs) but surfaced immediately for a single-variable `intension` constraint, whose
   `PredicateConstraint` isn't a `UnaryConstraint` and so isn't touched by `NodeConsistency` at all.
+- `buildCtrIntension` recognizes two common shapes before falling back to the generic
+  `PredicateConstraint`/`IntensionExpressionEvaluator` path: a bare binary comparison (`eq`/`ne`/
+  `lt`/`le`/`ge`/`gt` between two plain variables) routes to `BinaryComparatorConstraint`, and the
+  same operators between a variable and a two-term `add(var, constant)` route to
+  `BinaryOffsetConstraint` (`recognizeBinaryRelation`, `asVariable`/`asVariablePlusConstant`
+  helpers) — both already have real bounds-consistency propagation where `PredicateConstraint` has
+  none (checked only once every variable is assigned), found via the same batch-instance
+  methodology above once the bundled corpus's larger search-space instances (e.g. `Langford-3-10`)
+  motivated asking which propagation gaps were slowing them down. Recognition failure is always
+  safe, just less propagated, never incorrect — anything not matching one of the two shapes falls
+  straight through to the existing generic path unchanged.
+  - Getting this right required actually confirming, rather than assuming, how `xcsp3-tools`' own
+    canonizer normalizes an already-parsed tree, since guessing wrongly here would silently misfile
+    tests (and by extension the intended edge cases) rather than fail loudly. Confirmed empirically
+    (temporary debug instrumentation, since removed): a two-term `add(...)`'s constant operand
+    always canonicalizes to the second position regardless of source order; commutative relations
+    (`eq`/`ne`) reorder their own two operands by a complexity-based canonical order (a compound
+    sub-expression sorts before a plain variable, which in turn sorts before nothing simpler — a
+    bare variable is itself demoted behind a compound expression the same way `add`'s own two
+    operands are), which also explains why `add`'s own two operands get the same reordering when
+    neither is a constant (e.g. `add(x, mul(y,2))` canonicalizes to `add(mul(y,2), x)`); but
+    order-sensitive relations (`lt`/`le`/`ge`/`gt`) never reorder their own operands, since doing so
+    would also require flipping the operator, which the canonizer doesn't do at this level. `ge`/`gt`
+    additionally never reach `buildCtrIntension` at all — the canonizer always rewrites a top-level
+    `ge`/`gt` into `le`/`lt` with swapped operands first, mirroring the pre-existing GE/GT-unreachable
+    finding already noted for `IntensionExpressionEvaluator`'s own operator switch. `flip`'s `EQ`/
+    `NEQ` arm and `intensionRelationalOperator`'s `GE`/`GT` arms are unreachable through any real
+    XCSP3 file for these reasons and are exercised by direct construction in
+    `Xcsp3CallbackHandlerTest` instead, the same pattern already established for
+    `IntensionExpressionEvaluatorTest`'s own `GE`/`GT` cases.

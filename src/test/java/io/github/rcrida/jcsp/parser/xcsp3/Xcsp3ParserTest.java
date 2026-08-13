@@ -2,6 +2,9 @@ package io.github.rcrida.jcsp.parser.xcsp3;
 
 import io.github.rcrida.jcsp.ConstraintSatisfactionProblem;
 import io.github.rcrida.jcsp.assignments.Assignment;
+import io.github.rcrida.jcsp.constraints.binary.BinaryComparatorConstraint;
+import io.github.rcrida.jcsp.constraints.binary.BinaryOffsetConstraint;
+import io.github.rcrida.jcsp.constraints.nary.PredicateConstraint;
 import io.github.rcrida.jcsp.solver.Solver;
 import io.github.rcrida.jcsp.variables.Variable;
 import org.junit.jupiter.api.Test;
@@ -998,6 +1001,231 @@ class Xcsp3ParserTest {
             assertThat(digitOf(a, "x")).isIn(1, 2);
             assertThat(digitOf(a, "y")).isNotIn(1, 2);
         }
+    }
+
+    // ---- intension binary-relation recognition (BinaryComparatorConstraint / BinaryOffsetConstraint) ------------------
+
+    @Test void intensionBareBinaryComparison_recognizedAsBinaryComparatorConstraint() throws IOException {
+        Xcsp3Instance instance = parseXml(
+                "<var id=\"x\"> 0..9 </var><var id=\"y\"> 0..9 </var>",
+                "<intension> lt(x,y) </intension>");
+        assertThat(instance.csp().getConstraints()).hasSize(1);
+        assertThat(instance.csp().getConstraints().iterator().next()).isInstanceOf(BinaryComparatorConstraint.class);
+        Set<Assignment> solutions = solutions(instance.csp());
+        assertThat(solutions).isNotEmpty();
+        for (Assignment a : solutions) {
+            assertThat(digitOf(a, "x")).isLessThan(digitOf(a, "y"));
+        }
+    }
+
+    @Test void intensionBinaryOffsetWithEquals_recognizedAsBinaryOffsetConstraint() throws IOException {
+        // eq is commutative, and xcsp3-tools' own canonizer normalizes it (and add(...)'s own
+        // operand order) into one consistent shape regardless of how the XML is written --
+        // eq(y,add(x,3)), eq(add(x,3),y), and eq(y,add(3,x)) all reach buildCtrIntension as the
+        // exact same tree (confirmed empirically: the compound add(...) node canonicalizes to the
+        // left, the bare variable to the right), so one test covers all three source forms; a
+        // previous version of this test file had three near-identical tests for them before that
+        // was confirmed empirically.
+        Xcsp3Instance instance = parseXml(
+                "<var id=\"x\"> 0..5 </var><var id=\"y\"> 0..9 </var>",
+                "<intension> eq(y,add(x,3)) </intension>");
+        assertThat(instance.csp().getConstraints().iterator().next()).isInstanceOf(BinaryOffsetConstraint.class);
+        Set<Assignment> solutions = solutions(instance.csp());
+        assertThat(solutions).isNotEmpty();
+        for (Assignment a : solutions) {
+            assertThat(digitOf(a, "y")).isEqualTo(digitOf(a, "x") + 3);
+        }
+    }
+
+    @Test void intensionBinaryOffsetWithLessThan_flipsOperatorCorrectly() throws IOException {
+        // x < y+2 -- unlike eq/ne (see intensionBinaryOffsetWithEquals's own comment), the
+        // canonizer never reorders an order-sensitive operator's own operands (doing so would also
+        // require flipping the operator, which it doesn't do at this level), so the bare variable
+        // genuinely stays on the left here -- BinaryOffsetConstraint's fixed "left + offset <op>
+        // right" shape needs LT flipped to GT to rearrange onto y as left.
+        Xcsp3Instance instance = parseXml(
+                "<var id=\"x\"> 0..9 </var><var id=\"y\"> 0..9 </var>",
+                "<intension> lt(x,add(y,2)) </intension>");
+        assertThat(instance.csp().getConstraints().iterator().next()).isInstanceOf(BinaryOffsetConstraint.class);
+        Set<Assignment> solutions = solutions(instance.csp());
+        assertThat(solutions).isNotEmpty();
+        for (Assignment a : solutions) {
+            assertThat(digitOf(a, "x")).isLessThan(digitOf(a, "y") + 2);
+        }
+    }
+
+    @Test void intensionBinaryOffsetWithLessOrEqual_flipsOperatorCorrectly() throws IOException {
+        // x <= y+2 -- the bare variable is on the left, so LEQ flips to GEQ when rearranged.
+        Xcsp3Instance instance = parseXml(
+                "<var id=\"x\"> 0..9 </var><var id=\"y\"> 0..9 </var>",
+                "<intension> le(x,add(y,2)) </intension>");
+        assertThat(instance.csp().getConstraints().iterator().next()).isInstanceOf(BinaryOffsetConstraint.class);
+        Set<Assignment> solutions = solutions(instance.csp());
+        assertThat(solutions).isNotEmpty();
+        for (Assignment a : solutions) {
+            assertThat(digitOf(a, "x")).isLessThanOrEqualTo(digitOf(a, "y") + 2);
+        }
+    }
+
+    @Test void intensionBinaryOffsetWithNotEqual_recognizedAsBinaryOffsetConstraint() throws IOException {
+        // ne canonicalizes the same way eq does (see intensionBinaryOffsetWithEquals's own
+        // comment): the compound add(...) node ends up on the left, the bare variable on the
+        // right, so this hits recognizeBinaryRelation's rightVar-present branch directly with no
+        // flip involved.
+        Xcsp3Instance instance = parseXml(
+                "<var id=\"x\"> 0..9 </var><var id=\"y\"> 0..9 </var>",
+                "<intension> ne(x,add(y,2)) </intension>");
+        assertThat(instance.csp().getConstraints().iterator().next()).isInstanceOf(BinaryOffsetConstraint.class);
+        Set<Assignment> solutions = solutions(instance.csp());
+        assertThat(solutions).isNotEmpty();
+        for (Assignment a : solutions) {
+            assertThat(digitOf(a, "x")).isNotEqualTo(digitOf(a, "y") + 2);
+        }
+    }
+
+    @Test void intensionAddOfNonVariableExpressionThenConstant_fallsBackToPredicateConstraint() throws IOException {
+        // add(mul(x,2), 5): the second operand is a constant, but the first isn't a plain variable,
+        // so the offset shape can't match even though a constant is present. (add(5,mul(x,2)),
+        // constant written first, reaches buildCtrIntension as this exact same canonicalized tree --
+        // see intensionBinaryOffsetWithEquals's own comment -- so it needs no separate test.)
+        Xcsp3Instance instance = parseXml(
+                "<var id=\"x\"> 1..3 </var><var id=\"z\"> 0..15 </var>",
+                "<intension> eq(z,add(mul(x,2),5)) </intension>");
+        assertThat(instance.csp().getConstraints().iterator().next()).isInstanceOf(PredicateConstraint.class);
+        Set<Assignment> solutions = solutions(instance.csp());
+        assertThat(solutions).isNotEmpty();
+        for (Assignment a : solutions) {
+            assertThat(digitOf(a, "z")).isEqualTo(digitOf(a, "x") * 2 + 5);
+        }
+    }
+
+    @Test void intensionBinaryComparisonReified_indicatorTracksConstraintTruthValue() throws IOException {
+        Xcsp3Instance instance = parseXml(
+                "<var id=\"x\"> 0..3 </var><var id=\"y\"> 0..3 </var><var id=\"b\"> 0..1 </var>",
+                "<intension reifiedBy=\"b\"> lt(x,y) </intension>");
+        Set<Assignment> solutions = solutions(instance.csp());
+        assertThat(solutions).isNotEmpty();
+        for (Assignment a : solutions) {
+            int x = digitOf(a, "x");
+            int y = digitOf(a, "y");
+            int b = digitOf(a, "b");
+            assertThat(b == 1).as("x=%d, y=%d, b=%d", x, y, b).isEqualTo(x < y);
+        }
+    }
+
+    @Test void intensionConjunctionOfNotEqualAndLessThan_fallsBackToPredicateConstraint() throws IOException {
+        // and(ne(x,y), lt(y,z)): the root operator is AND, not a relational one, so
+        // recognizeBinaryRelation never matches and this falls all the way through to
+        // IntensionExpressionEvaluator -- unlike a bare top-level ne/lt (recognized directly as a
+        // BinaryComparatorConstraint/BinaryOffsetConstraint), NE/LT nested inside a larger boolean
+        // expression is the real, reachable shape that exercises applyOperator's own NE/LT cases.
+        Xcsp3Instance instance = parseXml(
+                "<var id=\"x\"> 1..3 </var><var id=\"y\"> 1..3 </var><var id=\"z\"> 1..3 </var>",
+                "<intension> and(ne(x,y),lt(y,z)) </intension>");
+        assertThat(instance.csp().getConstraints().iterator().next()).isInstanceOf(PredicateConstraint.class);
+        Set<Assignment> solutions = solutions(instance.csp());
+        assertThat(solutions).isNotEmpty();
+        for (Assignment a : solutions) {
+            assertThat(digitOf(a, "x")).isNotEqualTo(digitOf(a, "y"));
+            assertThat(digitOf(a, "y")).isLessThan(digitOf(a, "z"));
+        }
+    }
+
+    @Test void intensionEqualsWithMultiplication_neitherSideMatchesAddShape_fallsBackToPredicateConstraint() throws IOException {
+        // Right side (y) is a plain var, left side is mul(x,2) -- not add(...), so the offset
+        // pattern can't match even though one side is a bare variable.
+        Xcsp3Instance instance = parseXml(
+                "<var id=\"x\"> 1..3 </var><var id=\"y\"> 1..9 </var>",
+                "<intension> eq(mul(x,2),y) </intension>");
+        assertThat(instance.csp().getConstraints().iterator().next()).isInstanceOf(PredicateConstraint.class);
+        Set<Assignment> solutions = solutions(instance.csp());
+        assertThat(solutions).isNotEmpty();
+        for (Assignment a : solutions) {
+            assertThat(digitOf(a, "y")).isEqualTo(digitOf(a, "x") * 2);
+        }
+    }
+
+    @Test void intensionAddOfVariableAndNestedExpression_fallsBackToPredicateConstraint() throws IOException {
+        // add(x,mul(y,2)): xcsp3-tools' canonizer reorders add's own two operands by complexity,
+        // same as it does for eq/ne's operands (see intensionBinaryOffsetWithEquals's own comment) --
+        // the compound mul(y,2) canonicalizes to the front, the bare variable x to the back, so
+        // asVariable(sons[0]) is absent (mul(...) isn't a plain variable) even though
+        // asConstant(sons[1]) does find a leaf (just not a LONG one).
+        Xcsp3Instance instance = parseXml(
+                "<var id=\"x\"> 0..3 </var><var id=\"y\"> 0..3 </var><var id=\"z\"> 0..9 </var>",
+                "<intension> eq(z,add(x,mul(y,2))) </intension>");
+        assertThat(instance.csp().getConstraints().iterator().next()).isInstanceOf(PredicateConstraint.class);
+        Set<Assignment> solutions = solutions(instance.csp());
+        assertThat(solutions).isNotEmpty();
+        for (Assignment a : solutions) {
+            assertThat(digitOf(a, "z")).isEqualTo(digitOf(a, "x") + digitOf(a, "y") * 2);
+        }
+    }
+
+    @Test void intensionAddOfTwoVariablesNoConstant_fallsBackToPredicateConstraint() throws IOException {
+        // add(x,y) has two sons but neither is a constant, so it doesn't match the
+        // "var + constant" offset shape even though the add itself is binary.
+        Xcsp3Instance instance = parseXml(
+                "<var id=\"x\"> 0..3 </var><var id=\"y\"> 0..3 </var><var id=\"z\"> 0..9 </var>",
+                "<intension> eq(z,add(x,y)) </intension>");
+        assertThat(instance.csp().getConstraints().iterator().next()).isInstanceOf(PredicateConstraint.class);
+        Set<Assignment> solutions = solutions(instance.csp());
+        assertThat(solutions).isNotEmpty();
+        for (Assignment a : solutions) {
+            assertThat(digitOf(a, "z")).isEqualTo(digitOf(a, "x") + digitOf(a, "y"));
+        }
+    }
+
+    @Test void intensionAddOfTwoNestedExpressions_neitherOperandIsALeaf_fallsBackToPredicateConstraint() throws IOException {
+        // add(mul(x,2),mul(y,3)): both operands are compound expressions, so the canonizer's
+        // complexity-based reordering has no simpler leaf to demote to the back -- sons[1] stays a
+        // non-leaf MUL node, which is what exercises asConstant's own "not a leaf at all" branch
+        // (distinct from intensionAddOfVariableAndNestedExpression's "leaf, but not LONG" case above).
+        Xcsp3Instance instance = parseXml(
+                "<var id=\"x\"> 0..3 </var><var id=\"y\"> 0..3 </var><var id=\"z\"> 0..20 </var>",
+                "<intension> eq(z,add(mul(x,2),mul(y,3))) </intension>");
+        assertThat(instance.csp().getConstraints().iterator().next()).isInstanceOf(PredicateConstraint.class);
+        Set<Assignment> solutions = solutions(instance.csp());
+        assertThat(solutions).isNotEmpty();
+        for (Assignment a : solutions) {
+            assertThat(digitOf(a, "z")).isEqualTo(digitOf(a, "x") * 2 + digitOf(a, "y") * 3);
+        }
+    }
+
+    @Test void intensionAddWithThreeOperands_fallsBackToPredicateConstraint() throws IOException {
+        Xcsp3Instance instance = parseXml(
+                "<var id=\"x\"> 0..3 </var><var id=\"y\"> 0..3 </var><var id=\"z\"> 0..9 </var>",
+                "<intension> eq(z,add(x,y,2)) </intension>");
+        assertThat(instance.csp().getConstraints().iterator().next()).isInstanceOf(PredicateConstraint.class);
+        Set<Assignment> solutions = solutions(instance.csp());
+        assertThat(solutions).isNotEmpty();
+        for (Assignment a : solutions) {
+            assertThat(digitOf(a, "z")).isEqualTo(digitOf(a, "x") + digitOf(a, "y") + 2);
+        }
+    }
+
+    @Test void intensionNeitherSideIsBareVariable_fallsBackToPredicateConstraint() throws IOException {
+        // Both sides are mul(...) expressions -- neither is a plain variable, and unlike
+        // eq(add(x,1),add(y,2)) (which xcsp3-tools' own canonizer simplifies into an equivalent
+        // add-based form BinaryOffsetConstraint would still recognize), multiplication has no
+        // linear rewrite into that shape.
+        Xcsp3Instance instance = parseXml(
+                "<var id=\"x\"> 1..3 </var><var id=\"y\"> 1..3 </var>",
+                "<intension> eq(mul(x,2),mul(y,3)) </intension>");
+        assertThat(instance.csp().getConstraints().iterator().next()).isInstanceOf(PredicateConstraint.class);
+        Set<Assignment> solutions = solutions(instance.csp());
+        assertThat(solutions).isNotEmpty();
+        for (Assignment a : solutions) {
+            assertThat(digitOf(a, "x") * 2).isEqualTo(digitOf(a, "y") * 3);
+        }
+    }
+
+    @Test void intensionChainedEquality_fallsBackToPredicateConstraint() throws IOException {
+        Xcsp3Instance instance = parseXml(
+                "<var id=\"x\"> 0..3 </var><var id=\"y\"> 0..3 </var><var id=\"z\"> 0..3 </var>",
+                "<intension> eq(x,y,z) </intension>");
+        assertThat(instance.csp().getConstraints().iterator().next()).isInstanceOf(PredicateConstraint.class);
+        assertThat(solutions(instance.csp())).hasSize(4);
     }
 
     @Test void intensionUnsupportedOperator_throwsWhenEvaluated() throws IOException {
