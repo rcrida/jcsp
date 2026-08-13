@@ -2,6 +2,7 @@ package io.github.rcrida.jcsp.domains;
 
 import org.jspecify.annotations.Nullable;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
@@ -40,6 +41,12 @@ public interface DiscreteSetDomain<T> extends DiscreteDomain<T> {
     @Override
     default List<T> toList() {
         return List.copyOf(values());
+    }
+
+    /** Zero-copy override: {@link #values()} already is a {@link Collection}, so no copy is needed. */
+    @Override
+    default Collection<T> asCollection() {
+        return values();
     }
 
     @Override

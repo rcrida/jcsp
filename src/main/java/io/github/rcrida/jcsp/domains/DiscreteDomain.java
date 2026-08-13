@@ -25,6 +25,19 @@ public interface DiscreteDomain<T> extends Domain<T> {
     default Optional<T> singleValue() { return isSingleton() ? stream().findFirst() : Optional.empty(); }
 
     /**
+     * A read-only view of this domain's values for plain iteration, without {@link #toList()}'s
+     * copy -- default implementation is just {@link #toList()} itself (already cheap for {@link
+     * ObjectSingletonDomain}/{@link ObjectEmptyDomain}, the only implementors that aren't a {@link
+     * DiscreteSetDomain}); {@link DiscreteSetDomain} overrides this to return {@link
+     * DiscreteSetDomain#values()} directly. Added for {@link io.github.rcrida.jcsp.consistency.arc.AC3#revise},
+     * whose two per-call {@link #toList()} calls -- one materialised up front, one re-materialised
+     * on every arc revision -- were found via JFR profiling to be a dominant cost on large CSPs
+     * (each call is {@code O(domain size)} even though neither result is ever indexed, only
+     * iterated once).
+     */
+    default Collection<T> asCollection() { return toList(); }
+
+    /**
      * Builds a discrete domain from explicit values, collapsing to an {@link ObjectSingletonDomain}
      * for exactly one value or an {@link ObjectSetDomain} otherwise -- see {@link
      * DiscreteDomainBuilder#build}. The numeric analogue is {@link NumericDiscreteDomain#of}.

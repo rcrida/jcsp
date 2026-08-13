@@ -211,15 +211,18 @@ public class AC3 implements ConstraintConsistency {
     private static Optional<DiscreteDomain<?>> revise(Map<Variable<?>, Domain<?>> domains, Arc arc, BinaryConstraint<?, ?> constraint) {
         if (!(domains.get(arc.getFrom()) instanceof DiscreteDomain<?> D_i)) return Optional.empty();
         if (!(domains.get(arc.getTo()) instanceof DiscreteDomain<?> D_j)) return Optional.empty();
-        // Both D_i and D_j are materialised once via toList() (every concrete DiscreteDomain is
-        // also a DiscreteSetDomain, whose toList() is List.copyOf(values()) -- no Stream pipeline at all)
-        // and iterated with plain loops, not .stream().filter(...): profiling found the Stream/
-        // Spliterator/SpinedNodeBuilder machinery of a per-revise() (never mind per-x) pipeline to
-        // be the single largest allocation source in the whole solver, this being O(nodes * arcs)
-        // in call count even though each individual D_i/D_j is typically tiny.
-        val jValues = D_j.toList();
+        // D_i/D_j are read via asCollection(), not toList() or a Stream pipeline: profiling found
+        // both to be dominant costs on large CSPs. Streams (.stream().filter(...)) were rejected
+        // first -- their Spliterator/SpinedNodeBuilder machinery was the single largest allocation
+        // source in the whole solver, this being O(nodes * arcs) in call count even though each
+        // individual D_i/D_j is typically tiny. toList() (List.copyOf(values()) for every concrete
+        // DiscreteDomain except the singleton/empty ones) was the next attempt, avoiding Streams but
+        // still paying a full array-copy of the domain's backing Set on every single revise() call
+        // for a result that's only ever iterated once, never indexed -- asCollection() returns that
+        // backing Set directly with no copy at all (see its own Javadoc).
+        val jValues = D_j.asCollection();
         List<Object> valuesToDelete = null;
-        for (Object x : D_i.toList()) {
+        for (Object x : D_i.asCollection()) {
             if (!hasSupport(constraint, arc, x, jValues)) {
                 if (valuesToDelete == null) valuesToDelete = new ArrayList<>();
                 valuesToDelete.add(x);
@@ -231,7 +234,7 @@ public class AC3 implements ConstraintConsistency {
         return Optional.of(revisedBuilder.build());
     }
 
-    private static boolean hasSupport(BinaryConstraint<?, ?> constraint, Arc arc, Object x, List<?> jValues) {
+    private static boolean hasSupport(BinaryConstraint<?, ?> constraint, Arc arc, Object x, Collection<?> jValues) {
         for (Object y : jValues) {
             if (constraint.isSatisfiedByArcValues(arc, x, y)) return true;
         }
