@@ -21,13 +21,17 @@ import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
 /**
- * Minimal XCSP3-competition-style CLI: parses an instance, solves it under a wall-clock time
- * budget enforced via {@link Cancellation}, and prints {@code s}/{@code o}/{@code v} status lines
- * in the convention used by the XCSP3 Competition and related SAT/CP competitions.
+ * Minimal XCSP3-competition-style CLI for a single instance: parses it, solves it under a
+ * wall-clock time budget enforced via {@link Cancellation}, and prints {@code s}/{@code o}/{@code
+ * v} status lines in the convention used by the XCSP3 Competition and related SAT/CP competitions.
+ * A real competition invokes exactly this shape once per instance, in a fresh process each time —
+ * {@code Xcsp3CompetitionRunner} (test sources, not part of the published library) drives a whole
+ * batch of instances by {@code exec}-ing this class's {@link #main} once per file, mirroring that
+ * same per-instance process isolation rather than reusing one JVM across the batch.
  */
-public final class Xcsp3CompetitionRunner {
+public final class Xcsp3ProblemRunner {
 
-    private Xcsp3CompetitionRunner() {
+    private Xcsp3ProblemRunner() {
     }
 
     public static void main(String[] args) throws IOException {

@@ -152,11 +152,16 @@ boundary and the decisions that moved it, not a live inventory that would drift 
   class itself needed a variable-target sibling (`count`/`among`, following `sum`/`max`'s existing
   precedent) or a genuinely new capability (`max` against a variable target, needed to express
   `<minimize type="maximum">`), that stayed scoped to one new constraint class plus its `CSP.Builder`
-  overload — never a parser rewrite. `Xcsp3CompetitionRunner` (`parser.xcsp3` package, not part of
-  this decision but built to exercise it) running against real, unmodified `.xml.lzma` instances from
-  `xcsp3team/XCSP3-Java-Tools`'s own test corpus was what actually found these gaps, one crash at a
-  time — each fix let the *next* instance parse further into its own file before hitting the next
-  boundary, rather than surfacing everything a static read of the XCSP3 spec would have.
+  overload — never a parser rewrite. `Xcsp3ProblemRunner` (single instance) and
+  `Xcsp3CompetitionRunner` (a whole batch, one `exec`-ed `Xcsp3ProblemRunner` process per instance
+  — `parser.xcsp3` package, test sources; not part of this decision but built to exercise it)
+  running against real, unmodified `.xml.lzma` instances bundled from `xcsp3team/XCSP3-Java-Tools`'s
+  own test corpus (`src/test/resources/xcsp3/competition/`) was what actually found these gaps, one
+  crash at a time — each fix let the *next* instance parse further into its own file before hitting
+  the next boundary, rather than surfacing everything a static read of the XCSP3 spec would have.
+  Bundling the instances (rather than fetching them ad hoc) is what makes the batch repeatable: the
+  same corpus can be re-run after any future parser change to check whether it regresses or moves
+  the frontier further.
 - `MaxVariableConstraint`/`CountVariableConstraint`/`AmongVariableConstraint` — added specifically
   to unlock XCSP3 coverage (a `<minimize type="maximum">` objective, a variable-target `count`/
   `among` condition) — are genuine, general-purpose additions to jcsp's own constraint library, not

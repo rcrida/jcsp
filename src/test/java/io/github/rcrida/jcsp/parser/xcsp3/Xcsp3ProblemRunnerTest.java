@@ -20,7 +20,7 @@ import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-class Xcsp3CompetitionRunnerTest {
+class Xcsp3ProblemRunnerTest {
 
     @TempDir
     Path tempDir;
@@ -44,7 +44,7 @@ class Xcsp3CompetitionRunnerTest {
         ByteArrayOutputStream buffer = new ByteArrayOutputStream();
         System.setOut(printStreamInto(buffer));
         try {
-            Xcsp3CompetitionRunner.main(new String[]{instanceFile.toString(), "60"});
+            Xcsp3ProblemRunner.main(new String[]{instanceFile.toString(), "60"});
         } finally {
             System.setOut(new PrintStream(new java.io.FileOutputStream(java.io.FileDescriptor.out), true, StandardCharsets.UTF_8));
         }
@@ -61,7 +61,7 @@ class Xcsp3CompetitionRunnerTest {
         Xcsp3Instance instance = new Xcsp3Instance(csp, null, false);
 
         ByteArrayOutputStream buffer = new ByteArrayOutputStream();
-        Xcsp3CompetitionRunner.solve(instance, Cancellation.NEVER, SolverListener.NONE, printStreamInto(buffer));
+        Xcsp3ProblemRunner.solve(instance, Cancellation.NEVER, SolverListener.NONE, printStreamInto(buffer));
 
         String output = buffer.toString(StandardCharsets.UTF_8);
         assertThat(output).contains("s SATISFIABLE").contains("v x=");
@@ -77,7 +77,7 @@ class Xcsp3CompetitionRunnerTest {
         Xcsp3Instance instance = new Xcsp3Instance(csp, null, false);
 
         ByteArrayOutputStream buffer = new ByteArrayOutputStream();
-        Xcsp3CompetitionRunner.solve(instance, Cancellation.NEVER, SolverListener.NONE, printStreamInto(buffer));
+        Xcsp3ProblemRunner.solve(instance, Cancellation.NEVER, SolverListener.NONE, printStreamInto(buffer));
 
         assertThat(buffer.toString(StandardCharsets.UTF_8).strip()).isEqualTo("s UNSATISFIABLE");
     }
@@ -108,7 +108,7 @@ class Xcsp3CompetitionRunnerTest {
         };
 
         ByteArrayOutputStream buffer = new ByteArrayOutputStream();
-        Xcsp3CompetitionRunner.solve(instance, cancellation, cancelOnFirstNode, printStreamInto(buffer));
+        Xcsp3ProblemRunner.solve(instance, cancellation, cancelOnFirstNode, printStreamInto(buffer));
 
         assertThat(buffer.toString(StandardCharsets.UTF_8).strip()).isEqualTo("s UNKNOWN");
     }
@@ -124,7 +124,7 @@ class Xcsp3CompetitionRunnerTest {
         Xcsp3Instance instance = new Xcsp3Instance(csp, objective, false);
 
         ByteArrayOutputStream buffer = new ByteArrayOutputStream();
-        Xcsp3CompetitionRunner.solve(instance, Cancellation.NEVER, SolverListener.NONE, printStreamInto(buffer));
+        Xcsp3ProblemRunner.solve(instance, Cancellation.NEVER, SolverListener.NONE, printStreamInto(buffer));
 
         String output = buffer.toString(StandardCharsets.UTF_8);
         assertThat(output).contains("o 1").contains("s OPTIMUM FOUND").contains("v x=1");
@@ -141,7 +141,7 @@ class Xcsp3CompetitionRunnerTest {
         Xcsp3Instance instance = new Xcsp3Instance(csp, objective, false);
 
         ByteArrayOutputStream buffer = new ByteArrayOutputStream();
-        Xcsp3CompetitionRunner.solve(instance, Cancellation.NEVER, SolverListener.NONE, printStreamInto(buffer));
+        Xcsp3ProblemRunner.solve(instance, Cancellation.NEVER, SolverListener.NONE, printStreamInto(buffer));
 
         assertThat(buffer.toString(StandardCharsets.UTF_8).strip()).isEqualTo("s UNSATISFIABLE");
     }
@@ -157,7 +157,7 @@ class Xcsp3CompetitionRunnerTest {
         cancellation.cancel();
 
         ByteArrayOutputStream buffer = new ByteArrayOutputStream();
-        Xcsp3CompetitionRunner.solve(instance, cancellation, SolverListener.NONE, printStreamInto(buffer));
+        Xcsp3ProblemRunner.solve(instance, cancellation, SolverListener.NONE, printStreamInto(buffer));
 
         assertThat(buffer.toString(StandardCharsets.UTF_8).strip()).isEqualTo("s UNKNOWN");
     }
@@ -180,7 +180,7 @@ class Xcsp3CompetitionRunnerTest {
         };
 
         ByteArrayOutputStream buffer = new ByteArrayOutputStream();
-        Xcsp3CompetitionRunner.solve(instance, cancellation, cancelOnFirstIncumbent, printStreamInto(buffer));
+        Xcsp3ProblemRunner.solve(instance, cancellation, cancelOnFirstIncumbent, printStreamInto(buffer));
 
         String output = buffer.toString(StandardCharsets.UTF_8);
         assertThat(output).contains("s SATISFIABLE").doesNotContain("OPTIMUM");
@@ -197,7 +197,7 @@ class Xcsp3CompetitionRunnerTest {
         Xcsp3Instance instance = new Xcsp3Instance(csp, objective, true);
 
         ByteArrayOutputStream buffer = new ByteArrayOutputStream();
-        Xcsp3CompetitionRunner.solve(instance, Cancellation.NEVER, SolverListener.NONE, printStreamInto(buffer));
+        Xcsp3ProblemRunner.solve(instance, Cancellation.NEVER, SolverListener.NONE, printStreamInto(buffer));
 
         assertThat(buffer.toString(StandardCharsets.UTF_8)).contains("o 3").contains("v x=3");
     }
