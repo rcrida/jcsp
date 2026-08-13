@@ -66,6 +66,34 @@ public class ConstraintSatisfactionProblemTest {
     }
 
     @Test
+    void validateConstraints_boundedDomainWithUnsupportedConstraintInsideAndConstraint_recursivelyRejected() {
+        Variable<Double> a = VARIABLE_FACTORY.create("A");
+        Variable<Double> b = VARIABLE_FACTORY.create("B");
+        var and = io.github.rcrida.jcsp.constraints.nary.AndConstraint.of(
+                Set.of(BinaryNotEqualsConstraint.of(a, b)));
+        assertThatThrownBy(() -> ConstraintSatisfactionProblem.builder()
+                .variableDomain(a, io.github.rcrida.jcsp.domains.IntervalDomain.of(0.0, 10.0))
+                .variableDomain(b, io.github.rcrida.jcsp.domains.IntervalDomain.of(0.0, 10.0))
+                .constraint(and)
+                .build())
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("BoundedDomain")
+                .hasMessageContaining("BinaryNotEqualsConstraint");
+    }
+
+    @Test
+    void validateConstraints_andConstraintWrappingCompatibleConstraint_allowed() {
+        Variable<Double> a = VARIABLE_FACTORY.create("A");
+        var and = io.github.rcrida.jcsp.constraints.nary.AndConstraint.of(
+                Set.of(io.github.rcrida.jcsp.constraints.unary.UnaryComparatorConstraint.of(a, Operator.GEQ, 1.0)));
+        var csp = ConstraintSatisfactionProblem.builder()
+                .variableDomain(a, io.github.rcrida.jcsp.domains.IntervalDomain.of(0.0, 10.0))
+                .constraint(and)
+                .build();
+        assertThat(csp.getVariableDomains()).containsKey(a);
+    }
+
+    @Test
     void validateConstraints_unsupportedConstraintNotReferencingBoundedDomain_allowed() {
         Variable<Double> a = VARIABLE_FACTORY.create("A");
         Variable<Integer> x = VARIABLE_FACTORY.create("X");

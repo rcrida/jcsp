@@ -30,6 +30,7 @@ import io.github.rcrida.jcsp.constraints.binary.IntersectionCardinalityConstrain
 import io.github.rcrida.jcsp.constraints.Operator;
 import io.github.rcrida.jcsp.constraints.nary.AllDiffConstraint;
 import io.github.rcrida.jcsp.constraints.nary.AmongConstraint;
+import io.github.rcrida.jcsp.constraints.nary.AndConstraint;
 import io.github.rcrida.jcsp.constraints.nary.AmongVariableConstraint;
 import io.github.rcrida.jcsp.constraints.nary.Automaton;
 import io.github.rcrida.jcsp.constraints.nary.BinPackingConstraint;
@@ -162,7 +163,7 @@ public class ConstraintSatisfactionProblem {
      * {@link NogoodConstraint} implementation needs its own entry here too.
      */
     private static final Set<Class<? extends Constraint>> CONTINUOUS_COMPATIBLE_CONSTRAINTS =
-            Set.of(SumBoundConstraint.class, SumVariableConstraint.class, LinearBoundConstraint.class, LinearVariableConstraint.class, UnaryComparatorConstraint.class, BinaryComparatorConstraint.class, BinaryOffsetConstraint.class, AbsoluteDifferenceConstraint.class, DivisionConstraint.class, LexConstraint.class, CumulativeConstraint.class, MaxConstraint.class, MaxVariableConstraint.class, MinConstraint.class, ProductConstraint.class, DiffnConstraint.class, GroundNogoodConstraint.class, RangeNogoodConstraint.class, IncreasingConstraint.class, DecreasingConstraint.class, UnaryPredicateConstraint.class, BinaryPredicateConstraint.class, PredicateConstraint.class, ReifiedConstraint.class, ImplicationConstraint.class, NaryElementConstraint.class);
+            Set.of(SumBoundConstraint.class, SumVariableConstraint.class, LinearBoundConstraint.class, LinearVariableConstraint.class, UnaryComparatorConstraint.class, BinaryComparatorConstraint.class, BinaryOffsetConstraint.class, AbsoluteDifferenceConstraint.class, DivisionConstraint.class, LexConstraint.class, CumulativeConstraint.class, MaxConstraint.class, MaxVariableConstraint.class, MinConstraint.class, ProductConstraint.class, DiffnConstraint.class, GroundNogoodConstraint.class, RangeNogoodConstraint.class, IncreasingConstraint.class, DecreasingConstraint.class, UnaryPredicateConstraint.class, BinaryPredicateConstraint.class, PredicateConstraint.class, ReifiedConstraint.class, ImplicationConstraint.class, AndConstraint.class, NaryElementConstraint.class);
 
     /**
      * Constraint types that support {@link io.github.rcrida.jcsp.domains.SetBoundedDomain} (e.g.
@@ -365,13 +366,15 @@ public class ConstraintSatisfactionProblem {
 
     /**
      * {@link ReifiedConstraint}/{@link ImplicationConstraint} wrap an arbitrary {@code body}
-     * constraint that is never registered as a top-level member of {@code constraints} (see
-     * {@link ReifiedConstraint#of}) — only the wrapper itself is. Both wrapper types are
-     * themselves whitelisted in {@link #CONTINUOUS_COMPATIBLE_CONSTRAINTS} unconditionally (they
-     * do no propagation of their own over the body), so without this recursion an incompatible
-     * body constraint (e.g. {@code allDiffConstraint}/{@code circuitConstraint} over a
-     * {@link BoundedDomain} variable, both explicitly rejected when used directly) would silently
-     * bypass the whitelist check entirely by being wrapped in a reification.
+     * constraint, and {@link AndConstraint} wraps a whole set of {@code conjuncts}, none of which are
+     * ever registered as a top-level member of {@code constraints} (see {@link ReifiedConstraint#of}/
+     * {@link AndConstraint#of}) — only the wrapper itself is. All three wrapper types are themselves
+     * whitelisted in {@link #CONTINUOUS_COMPATIBLE_CONSTRAINTS} unconditionally (none of them perform
+     * domain-kind-specific propagation of their own; they only orchestrate/delegate to the
+     * body/conjuncts), so without this recursion an incompatible body/conjunct constraint (e.g.
+     * {@code allDiffConstraint}/{@code circuitConstraint} over a {@link BoundedDomain} variable, both
+     * explicitly rejected when used directly) would silently bypass the whitelist check entirely by
+     * being wrapped in a reification or conjunction.
      */
     private static void validateCompatibility(Constraint constraint, Set<Variable<?>> restrictedVariables,
                                                 Set<Class<? extends Constraint>> compatibleConstraints, String domainKindDescription) {
@@ -381,6 +384,12 @@ public class ConstraintSatisfactionProblem {
         }
         if (constraint instanceof ImplicationConstraint implication) {
             validateCompatibility(implication.getBody(), restrictedVariables, compatibleConstraints, domainKindDescription);
+            return;
+        }
+        if (constraint instanceof AndConstraint and) {
+            for (Constraint conjunct : and.getConjuncts()) {
+                validateCompatibility(conjunct, restrictedVariables, compatibleConstraints, domainKindDescription);
+            }
             return;
         }
         if (compatibleConstraints.contains(constraint.getClass())) {
