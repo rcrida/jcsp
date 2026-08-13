@@ -610,6 +610,34 @@ class Xcsp3ParserTest {
                 .isInstanceOf(UnsupportedXcsp3ConstraintException.class);
     }
 
+    // ---- instantiation ----------------------------------------------------------------------------------------
+
+    @Test void instantiation_pinsListedVariablesToListedValues() throws IOException {
+        Xcsp3Instance instance = parseXml(
+                "<var id=\"x\"> 0..5 </var><var id=\"y\"> 0..5 </var>",
+                "<instantiation><list> x y </list><values> 2 3 </values></instantiation>");
+        Set<Assignment> solutions = solutions(instance.csp());
+        assertThat(solutions).hasSize(1);
+        Assignment only = solutions.iterator().next();
+        assertThat(digitOf(only, "x")).isEqualTo(2);
+        assertThat(digitOf(only, "y")).isEqualTo(3);
+    }
+
+    @Test void instantiationInconsistentWithOtherConstraints_isUnsatisfiable() throws IOException {
+        Xcsp3Instance instance = parseXml(
+                "<var id=\"x\"> 0..5 </var><var id=\"y\"> 0..5 </var>",
+                "<instantiation><list> x y </list><values> 2 2 </values></instantiation>"
+                        + "<intension> ne(x,y) </intension>");
+        assertThat(solutions(instance.csp())).isEmpty();
+    }
+
+    @Test void instantiationReified_throwsUnsupported() {
+        assertThatThrownBy(() -> parseXml(
+                "<var id=\"x\"> 0..5 </var><var id=\"b\"> 0..1 </var>",
+                "<instantiation reifiedBy=\"b\"><list> x </list><values> 2 </values></instantiation>"))
+                .isInstanceOf(UnsupportedXcsp3ConstraintException.class);
+    }
+
     // ---- objectives -----------------------------------------------------------------------------------------------------
 
     @Test void objectiveMinimizeVariable_solvesToLowerBound() throws IOException {
@@ -896,8 +924,8 @@ class Xcsp3ParserTest {
 
     @Test void completelyUnrecognisedConstruct_throwsRuntimeException() {
         assertThatThrownBy(() -> parseXml(
-                "<var id=\"x\"> 0..3 </var>",
-                "<instantiation><list> x </list><values> 2 </values></instantiation>"))
+                "<var id=\"x\"> 0..2 </var><var id=\"y\"> 0..2 </var>",
+                "<channel><list> x y </list></channel>"))
                 .isInstanceOf(RuntimeException.class);
     }
 

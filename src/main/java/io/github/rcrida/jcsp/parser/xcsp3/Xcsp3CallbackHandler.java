@@ -622,6 +622,28 @@ final class Xcsp3CallbackHandler implements XCallbacks2 {
         addOrReify(BinPackingConstraint.of(bins, weights, capacities), id);
     }
 
+    // ---- instantiation ----------------------------------------------------------------------------------------
+
+    /**
+     * Pins {@code list[i] == values[i]} for every {@code i} -- a fixed (possibly partial) assignment,
+     * typically used for a puzzle's "givens". Decomposes into one {@code equalsConstraint} per pair
+     * rather than narrowing each variable's domain directly, since {@link #builder} has already
+     * accepted that variable's original declared domain by the time this callback runs. Added
+     * directly rather than through {@link #addOrReify} -- like {@link
+     * #buildCtrAllDifferentMatrix}, reifying "the whole fixed assignment holds" as one proposition
+     * would need a generic AND-of-constraints wrapper this codebase doesn't have.
+     */
+    @Override
+    public void buildCtrInstantiation(String id, XVarInteger[] list, int[] values) {
+        if (currentReification != null) {
+            throw new UnsupportedXcsp3ConstraintException("Reified instantiation is not supported: " + id);
+        }
+        List<Variable<Integer>> vars = toVariableList(list);
+        for (int i = 0; i < vars.size(); i++) {
+            builder.equalsConstraint(vars.get(i), values[i]);
+        }
+    }
+
     // ---- objectives -----------------------------------------------------------------------------------------------
 
     @Override
