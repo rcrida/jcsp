@@ -575,12 +575,28 @@ final class Xcsp3CallbackHandler implements XCallbacks2 {
         addOrReify(OrderedConstraint.of(toVariableList(list), mapOrderingOperator(operator)), id);
     }
 
+    /**
+     * For exactly two lists, a single {@link LexConstraint} covers it (and can be reified through
+     * {@link #addOrReify} like any other single-object constraint). For more than two, XCSP3
+     * applies {@code operator} to every consecutive pair -- {@code lists[0] <op> lists[1] <op> ...
+     * <op> lists[n-1]} -- which decomposes cleanly into {@code lists.length - 1} pairwise {@link
+     * LexConstraint}s, added directly rather than through {@link #addOrReify}: like {@link
+     * #buildCtrAllDifferentMatrix} and {@code instantiation}, reifying "the whole chain holds" as
+     * one proposition would need a generic AND-of-constraints wrapper this codebase doesn't have.
+     */
     @Override
     public void buildCtrLex(String id, XVarInteger[][] lists, TypeOperatorRel operator) {
-        if (lists.length != 2) {
-            throw new UnsupportedXcsp3ConstraintException("lex with more than two lists is not supported: " + id);
+        Operator op = mapOrderingOperator(operator);
+        if (lists.length == 2) {
+            addOrReify(LexConstraint.of(toVariableList(lists[0]), op, toVariableList(lists[1])), id);
+            return;
         }
-        addOrReify(LexConstraint.of(toVariableList(lists[0]), mapOrderingOperator(operator), toVariableList(lists[1])), id);
+        if (currentReification != null) {
+            throw new UnsupportedXcsp3ConstraintException("Reified lex with more than two lists is not supported: " + id);
+        }
+        for (int i = 0; i + 1 < lists.length; i++) {
+            builder.constraint(LexConstraint.of(toVariableList(lists[i]), op, toVariableList(lists[i + 1])));
+        }
     }
 
     // ---- cumulative -------------------------------------------------------------------------------------------

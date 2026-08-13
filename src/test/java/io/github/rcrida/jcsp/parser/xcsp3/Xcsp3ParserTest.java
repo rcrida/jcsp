@@ -510,10 +510,18 @@ class Xcsp3ParserTest {
         assertThat(solutions(instance.csp())).isNotEmpty();
     }
 
-    @Test void lexWithMoreThanTwoLists_throwsUnsupported() {
-        assertThatThrownBy(() -> parseXml(
+    @Test void lexWithMoreThanTwoLists_decomposesIntoConsecutivePairwiseChain() throws IOException {
+        // x1<=y1<=z1 over {0,1}: exactly the 4 non-decreasing chains (000, 001, 011, 111).
+        Xcsp3Instance instance = parseXml(
                 "<var id=\"x1\"> 0..1 </var><var id=\"y1\"> 0..1 </var><var id=\"z1\"> 0..1 </var>",
-                "<lex><list> x1 </list><list> y1 </list><list> z1 </list><operator> le </operator></lex>"))
+                "<lex><list> x1 </list><list> y1 </list><list> z1 </list><operator> le </operator></lex>");
+        assertThat(solutions(instance.csp())).hasSize(4);
+    }
+
+    @Test void lexWithMoreThanTwoListsReified_throwsUnsupported() {
+        assertThatThrownBy(() -> parseXml(
+                "<var id=\"x1\"> 0..1 </var><var id=\"y1\"> 0..1 </var><var id=\"z1\"> 0..1 </var><var id=\"b\"> 0..1 </var>",
+                "<lex reifiedBy=\"b\"><list> x1 </list><list> y1 </list><list> z1 </list><operator> le </operator></lex>"))
                 .isInstanceOf(UnsupportedXcsp3ConstraintException.class);
     }
 
