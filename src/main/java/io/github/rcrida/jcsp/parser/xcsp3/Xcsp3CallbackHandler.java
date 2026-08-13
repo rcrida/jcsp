@@ -15,6 +15,7 @@ import io.github.rcrida.jcsp.constraints.nary.CountConstraint;
 import io.github.rcrida.jcsp.constraints.nary.CumulativeConstraint;
 import io.github.rcrida.jcsp.constraints.nary.GlobalCardinalityConstraint;
 import io.github.rcrida.jcsp.constraints.nary.LexConstraint;
+import io.github.rcrida.jcsp.constraints.nary.MaxVariableConstraint;
 import io.github.rcrida.jcsp.constraints.nary.NaryElementConstraint;
 import io.github.rcrida.jcsp.constraints.nary.NaryTuplesConstraint;
 import io.github.rcrida.jcsp.constraints.nary.OrderedConstraint;
@@ -677,26 +678,42 @@ final class Xcsp3CallbackHandler implements XCallbacks2 {
 
     @Override
     public void buildObjToMinimize(String id, TypeObjective type, XVarInteger[] list) {
-        objective = buildSumObjective(type, list, null, false);
+        objective = buildArrayObjective(id, type, list, null, false);
         maximize = false;
     }
 
     @Override
     public void buildObjToMaximize(String id, TypeObjective type, XVarInteger[] list) {
-        objective = buildSumObjective(type, list, null, true);
+        objective = buildArrayObjective(id, type, list, null, true);
         maximize = true;
     }
 
     @Override
     public void buildObjToMinimize(String id, TypeObjective type, XVarInteger[] list, int[] coeffs) {
-        objective = buildSumObjective(type, list, coeffs, false);
+        objective = buildArrayObjective(id, type, list, coeffs, false);
         maximize = false;
     }
 
     @Override
     public void buildObjToMaximize(String id, TypeObjective type, XVarInteger[] list, int[] coeffs) {
-        objective = buildSumObjective(type, list, coeffs, true);
+        objective = buildArrayObjective(id, type, list, coeffs, true);
         maximize = true;
+    }
+
+    /**
+     * Dispatches a {@code <minimize>}/{@code <maximize>} array objective by its {@link
+     * TypeObjective} aggregation kind: {@link TypeObjective#SUM} via {@link #buildSumObjective},
+     * {@link TypeObjective#MAXIMUM} via {@link #buildMaxObjective}. Every other kind ({@code
+     * PRODUCT}, {@code MINIMUM}, {@code NVALUES}, {@code LEX}, {@code EXPRESSION}) is out of MVP
+     * scope.
+     */
+    private LinearObjective buildArrayObjective(String id, TypeObjective type, XVarInteger[] list, int[] coeffs, boolean maximizing) {
+        return switch (type) {
+            case SUM -> buildSumObjective(list, coeffs, maximizing);
+            case MAXIMUM -> buildMaxObjective(list, coeffs, maximizing);
+            default -> throw new UnsupportedXcsp3ConstraintException(
+                    "Only sum/maximum-type array objectives are supported, got: " + type);
+        };
     }
 
     /**
@@ -716,15 +733,41 @@ final class Xcsp3CallbackHandler implements XCallbacks2 {
      * than going through {@code applyAsDouble}'s fill convention at all, so it's sound for any
      * coefficient or domain sign -- no non-negativity precondition needed for either direction.
      */
-    private LinearObjective buildSumObjective(TypeObjective type, XVarInteger[] list, int[] coeffs, boolean maximizing) {
-        if (type != TypeObjective.SUM) {
-            throw new UnsupportedXcsp3ConstraintException("Only sum-type array objectives are supported, got: " + type);
-        }
+    private LinearObjective buildSumObjective(XVarInteger[] list, int[] coeffs, boolean maximizing) {
         LinearObjective.LinearObjectiveBuilder linearObjectiveBuilder = LinearObjective.builder();
         for (int i = 0; i < list.length; i++) {
             double coefficient = coeffs == null ? 1.0 : coeffs[i];
             linearObjectiveBuilder.coefficient(variableFor(list[i]), maximizing ? -coefficient : coefficient);
         }
         return linearObjectiveBuilder.build();
+    }
+
+    /**
+     * Builds a {@link LinearObjective} from a {@code <minimize type="maximum">}/{@code <maximize
+     * type="maximum">} array: a fresh auxiliary variable {@code max}, linked to {@code list} via
+     * {@code maxConstraint(list, EQ, max)} (added directly to {@link #builder}, the same
+     * "definition, not a proposition" pattern {@link #applyNValuesCondition} uses for its own
+     * {@code count} auxiliary -- never reified), then minimized/maximized the same way a
+     * single-variable objective would be. {@code max}'s own domain bounds are the tightest
+     * a-priori range {@code max(list)} can actually take -- {@code [max_i(min_i), max_i(max_i)]},
+     * i.e. the largest of every listed variable's own minimum through the largest of every listed
+     * variable's own maximum; see {@link MaxVariableConstraint#propagate}'s own Javadoc for why
+     * that's the exact achievable range rather than just a loose over-approximation. The auxiliary
+     * variable's name is a fixed {@code "$max"} rather than {@code id + "$max"} the way {@link
+     * #applyNValuesCondition}'s own auxiliary is derived from its constraint's {@code id} --
+     * unlike a constraint, an XCSP3 objective doesn't reliably carry one ({@code id} is {@code
+     * null} for an objective with no explicit {@code id} attribute), and a fixed name is safe
+     * regardless since XCSP3 permits at most one objective per instance.
+     */
+    private LinearObjective buildMaxObjective(XVarInteger[] list, int[] coeffs, boolean maximizing) {
+        if (coeffs != null) {
+            throw new UnsupportedXcsp3ConstraintException("Weighted maximum-type array objectives are not supported");
+        }
+        int maxLo = Arrays.stream(list).mapToInt(v -> boundsByName.get(v.id())[0]).max().orElseThrow();
+        int maxHi = Arrays.stream(list).mapToInt(v -> boundsByName.get(v.id())[1]).max().orElseThrow();
+        Variable<Integer> max = Variable.Factory.INSTANCE.create("$max");
+        builder.variableDomain(max, IntRangeDomain.of(maxLo, maxHi));
+        builder.maxConstraint(toVariableSet(list), Operator.EQ, max);
+        return LinearObjective.builder().coefficient(max, maximizing ? -1.0 : 1.0).build();
     }
 }

@@ -786,11 +786,44 @@ class Xcsp3ParserTest {
         assertThat(-instance.objective().applyAsDouble(solution.get())).isEqualTo(37.0);
     }
 
-    @Test void objectiveNonSumType_throwsUnsupported() {
+    @Test void objectiveMinimizeMaximumArray_solvesToTrueMinimizedMax() throws IOException {
+        // x in [2,9] (via ge(x,2)), y in [0,9] unconstrained: max(x,y) can be pushed no lower than
+        // x's own lower bound of 2 (achieved at x=2, y<=2), regardless of y.
+        Xcsp3Instance instance = parseXml(
+                "<var id=\"x\"> 0..9 </var><var id=\"y\"> 0..9 </var>",
+                "<intension> ge(x,2) </intension>",
+                "<minimize type=\"maximum\"><list> x y </list></minimize>");
+        Optional<Assignment> solution = Solver.Factory.INSTANCE.createSolver(instance.csp(), instance.objective()).getSolution();
+        assertThat(solution).isPresent();
+        assertThat(instance.objective().applyAsDouble(solution.get())).isEqualTo(2.0);
+    }
+
+    @Test void objectiveMaximizeMaximumArray_solvesToTrueMaximizedMax() throws IOException {
+        // x in [0,6] (via le(x,6)), y in [0,9] unconstrained: max(x,y) can reach y's own upper
+        // bound of 9 regardless of x.
+        Xcsp3Instance instance = parseXml(
+                "<var id=\"x\"> 0..9 </var><var id=\"y\"> 0..9 </var>",
+                "<intension> le(x,6) </intension>",
+                "<maximize type=\"maximum\"><list> x y </list></maximize>");
+        Optional<Assignment> solution = Solver.Factory.INSTANCE.createSolver(instance.csp(), instance.objective()).getSolution();
+        assertThat(solution).isPresent();
+        // objective() is already negated for minimization (maximize()==true); negate back to XCSP3's own sense.
+        assertThat(-instance.objective().applyAsDouble(solution.get())).isEqualTo(9.0);
+    }
+
+    @Test void objectiveMaximumArrayWeighted_throwsUnsupported() {
         assertThatThrownBy(() -> parseXml(
                 "<var id=\"x\"> 0..9 </var><var id=\"y\"> 0..9 </var>",
                 "<intension> ge(x,2) </intension>",
-                "<minimize type=\"maximum\"><list> x y </list></minimize>"))
+                "<minimize type=\"maximum\"><list> x y </list><coeffs> 2 3 </coeffs></minimize>"))
+                .isInstanceOf(UnsupportedXcsp3ConstraintException.class);
+    }
+
+    @Test void objectiveNonSumNonMaximumType_throwsUnsupported() {
+        assertThatThrownBy(() -> parseXml(
+                "<var id=\"x\"> 0..9 </var><var id=\"y\"> 0..9 </var>",
+                "<intension> ge(x,2) </intension>",
+                "<minimize type=\"minimum\"><list> x y </list></minimize>"))
                 .isInstanceOf(UnsupportedXcsp3ConstraintException.class);
     }
 
