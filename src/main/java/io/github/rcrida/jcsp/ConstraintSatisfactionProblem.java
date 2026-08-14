@@ -11,6 +11,7 @@ import lombok.Value;
 import lombok.experimental.NonFinal;
 import lombok.val;
 import io.github.rcrida.jcsp.assignments.Assignment;
+import io.github.rcrida.jcsp.assignments.LightweightSets;
 import io.github.rcrida.jcsp.assignments.NogoodStore;
 import io.github.rcrida.jcsp.constraints.Constraint;
 import io.github.rcrida.jcsp.constraints.binary.BinaryComparatorConstraint;
@@ -247,21 +248,24 @@ public class ConstraintSatisfactionProblem {
     /**
      * Returns {@code constraintGraph.getConstraints()} unioned with {@link #nogoods}, reusing the
      * last computed merge from {@link #nogoodMergeCache} when {@link #nogoods} is the exact same
-     * {@link Set} reference as last time (a cheap identity check) instead of rebuilding a fresh
-     * {@link HashSet} of every structural constraint plus every nogood on every call. Correct
-     * regardless of hit rate: a reference match can only ever return a result actually computed for
-     * that exact object, so a miss (different nogoods reference) always falls back to a fresh,
-     * correct merge. Relies on {@link NogoodStore#apply} handing back the same cached snapshot
-     * reference across calls where nothing has changed for this cache to have a good hit rate.
+     * {@link Set} reference as last time (a cheap identity check) instead of building a fresh {@link
+     * LightweightSets#unionView} on every call. Correct regardless of hit rate: a reference match can
+     * only ever return a result actually computed for that exact object, so a miss (different
+     * nogoods reference) always falls back to a fresh, correct merge. On a miss, this now builds a
+     * {@link LightweightSets#unionView} rather than copying both sets into a fresh {@link HashSet} --
+     * a miss happens on essentially every node in a search that's actively learning nogoods (see
+     * {@link NogoodStore#apply}'s own javadoc for why), so the merge itself needs to be cheap even
+     * when the cache can't help; a real copy would call every {@link NogoodConstraint}'s {@code
+     * hashCode}/{@code equals} (recursively walking its {@code Set<Variable<?>>}) once per element on
+     * every one of those misses, which JFR profiling of a hard XCSP3 BinPacking instance found to
+     * dominate search wall-clock time.
      */
     private Set<Constraint> mergedWithNogoods(Set<NogoodConstraint> nogoods) {
         NogoodMergeCache cached = nogoodMergeCache.get();
         if (cached != null && cached.nogoods() == nogoods) {
             return cached.merged();
         }
-        val merged = new HashSet<Constraint>(constraintGraph.getConstraints());
-        merged.addAll(nogoods);
-        Set<Constraint> result = Set.copyOf(merged);
+        Set<Constraint> result = LightweightSets.unionView(constraintGraph.getConstraints(), nogoods);
         nogoodMergeCache.set(new NogoodMergeCache(nogoods, result));
         return result;
     }

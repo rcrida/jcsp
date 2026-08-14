@@ -140,16 +140,23 @@ public class NogoodStore {
      * Returns {@code csp} augmented with every nogood constraint recorded so far, via
      * {@link ConstraintSatisfactionProblem#withNogoods}, or {@code csp} unchanged if none have been
      * recorded yet. {@code withNogoods} never rebuilds {@code csp}'s constraint graph — nogoods are
-     * layered on top of it. Reuses the cached {@link #snapshot} instead of copying {@link #nogoods}
-     * again when nothing has been recorded/evicted since the last call (see {@link #snapshot}'s
-     * javadoc) — the common case across most of a search tree, where many nodes are visited between
-     * nogood-learning events.
+     * layered on top of it. Reuses the cached {@link #snapshot} instead of re-snapshotting {@link
+     * #nogoods} again when nothing has been recorded/evicted since the last call (see {@link
+     * #snapshot}'s javadoc) — the common case across most of a search tree, where many nodes are
+     * visited between nogood-learning events. In a search that's actively learning, though, a miss
+     * here happens on essentially every node (one nogood learned per failing node is typical), so the
+     * snapshot itself needs to be cheap to build even on a miss: {@link LightweightSets#snapshot}
+     * copies {@link #nogoods}' element references into a plain array rather than {@link
+     * Set#copyOf}'s hash-table construction, since {@link #nogoods} (a real {@link Set}) is already
+     * known duplicate-free and re-verifying that via every element's {@code hashCode}/{@code equals}
+     * on every miss was found, via JFR profiling of a hard XCSP3 BinPacking instance, to dominate
+     * search wall-clock time.
      */
     public ConstraintSatisfactionProblem apply(ConstraintSatisfactionProblem csp) {
         if (nogoods.isEmpty()) return csp;
         Set<NogoodConstraint> current = snapshot.get();
         if (current == null) {
-            current = Set.copyOf(nogoods);
+            current = LightweightSets.snapshot(nogoods);
             snapshot.set(current);
         }
         return csp.withNogoods(current);
