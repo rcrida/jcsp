@@ -12,7 +12,11 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -89,7 +93,7 @@ public class GlobalCardinalityConstraintTest {
                 .isEqualTo(constraint);
     }
 
-    // --- propagate() ---
+    // --- propagate(): flow-based GAC (Régin 1996) ---
 
     static final Domain<Color> RED_ONLY    = EnumDomain.of(Color.RED);
     static final Domain<Color> GREEN_ONLY  = EnumDomain.of(Color.GREEN);
@@ -98,8 +102,9 @@ public class GlobalCardinalityConstraintTest {
     static final Domain<Color> GREEN_BLUE  = EnumDomain.of(Color.GREEN, Color.BLUE);
 
     @Test
-    void propagate_definiteQuotaReached_removesValueFromPossibles() {
-        // RED==2: v1, v2 definite RED → definiteCount==2==n → remove RED from v3's domain
+    void propagate_quotaAlreadyMetBySingletons_removesValueFromOthers() {
+        // RED==2: v1, v2 already pinned to RED exhausts the quota, so no feasible completion can
+        // give v3 RED either — GAC removes it, leaving only v3's untracked candidates.
         var c = GlobalCardinalityConstraint.of(Set.of(v1, v2, v3), Map.of(Color.RED, 2));
         var domains = Map.<Variable<?>, Domain<?>>of(v1, RED_ONLY, v2, RED_ONLY, v3, ALL);
         var result = c.propagate(domains);
@@ -108,35 +113,66 @@ public class GlobalCardinalityConstraintTest {
     }
 
     @Test
-    void propagate_maxCountEqualsN_forcesPossiblesToValue() {
-        // RED==2: v1 definite RED, v2 possible (RED,GREEN), v3 impossible (GREEN,BLUE)
-        // definiteCount=1, maxCount=1+1=2==n → force v2 to {RED}
+    void propagate_onlyEnoughCandidatesToMeetQuota_forcesThemAll() {
+        // RED==2: v1 is already RED; v2 is the only other variable with RED in domain at all
+        // (v3 can't take RED). Both v1 and v2 are therefore required to supply the quota, so v2's
+        // untracked GREEN candidate is not part of any feasible completion — GAC forces v2 to
+        // {RED}. This is the untracked-node pruning case: a variable's edge to the merged
+        // untracked sink can be GAC-unsafe even though untracked values are never individually
+        // quota-limited, because *this* variable is needed elsewhere.
         var c = GlobalCardinalityConstraint.of(Set.of(v1, v2, v3), Map.of(Color.RED, 2));
         var domains = Map.<Variable<?>, Domain<?>>of(v1, RED_ONLY, v2, RED_GREEN, v3, GREEN_BLUE);
         var result = c.propagate(domains);
         assertThat(result).isPresent();
         assertThat(result.get().get(v2)).isEqualTo(RED_ONLY);
+        assertThat(result.get()).doesNotContainKey(v3); // v3 never had RED available; unaffected
     }
 
     @Test
-    void propagate_infeasible_tooManyDefinites() {
-        // RED==1: v1, v2 both definite RED → definiteCount=2 > n=1 → infeasible
+    void propagate_infeasible_quotaAlreadyExceeded() {
+        // RED==1: v1, v2 both pinned to RED — 2 singleton RED assignments already exceed quota 1.
         var c = GlobalCardinalityConstraint.of(Set.of(v1, v2), Map.of(Color.RED, 1));
         var domains = Map.<Variable<?>, Domain<?>>of(v1, RED_ONLY, v2, RED_ONLY);
         assertThat(c.propagate(domains)).isEmpty();
     }
 
     @Test
-    void propagate_infeasible_tooFewPossible() {
-        // RED==2: v1, v2 both impossible (no RED in domain) → maxCount=0 < n=2 → infeasible
+    void propagate_infeasible_noCandidatesCanReachQuota() {
+        // RED==2: neither v1 nor v2 has RED in its domain at all — the quota is categorically
+        // unreachable regardless of any other variable.
         var c = GlobalCardinalityConstraint.of(Set.of(v1, v2), Map.of(Color.RED, 2));
         var domains = Map.<Variable<?>, Domain<?>>of(v1, GREEN_BLUE, v2, GREEN_BLUE);
         assertThat(c.propagate(domains)).isEmpty();
     }
 
     @Test
+    void propagate_infeasible_pigeonhole_overSubscription() {
+        // RED==1, GREEN==1: v1, v2, v3 all have domain {RED, GREEN} only (no untracked escape).
+        // 3 variables can only ever be split across 2 total quota slots — infeasible by pigeonhole,
+        // even though no *single* tracked value's own quota is individually violated in isolation.
+        // This is exactly the joint (Hall-set) reasoning a per-value decomposition misses: the
+        // predecessor algorithm classified each value independently and never caught this case.
+        var c = GlobalCardinalityConstraint.of(Set.of(v1, v2, v3), Map.of(Color.RED, 1, Color.GREEN, 1));
+        var domains = Map.<Variable<?>, Domain<?>>of(v1, RED_GREEN, v2, RED_GREEN, v3, RED_GREEN);
+        assertThat(c.propagate(domains)).isEmpty();
+    }
+
+    @Test
+    void propagate_infeasible_deficiency_tooFewCandidatesForHighQuota() {
+        // RED==3, but only v1 and v2 have RED in domain at all (v3, v4, v5 don't) — the quota
+        // needs 3 suppliers, only 2 exist. The dual Hall condition to the pigeonhole case above:
+        // here the *value* side is under-suppliable, not the variable side over-subscribed.
+        var v5 = org.mockito.Mockito.mock(Variable.class);
+        var c = GlobalCardinalityConstraint.of(Set.of(v1, v2, v3, v4, v5), Map.of(Color.RED, 3));
+        var domains = Map.<Variable<?>, Domain<?>>of(
+                v1, RED_GREEN, v2, RED_GREEN, v3, GREEN_BLUE, v4, GREEN_BLUE, v5, GREEN_BLUE);
+        assertThat(c.propagate(domains)).isEmpty();
+    }
+
+    @Test
     void propagate_noChange_returnsEmptyMap() {
-        // RED==1: v1 definite RED (quota met), v2 impossible → no possibles to update
+        // RED==1: v1 is already pinned to RED (quota met); v2 has no RED available at all.
+        // Nothing is prunable — v2's non-RED candidates were never affected by RED's quota.
         var c = GlobalCardinalityConstraint.of(Set.of(v1, v2), Map.of(Color.RED, 1));
         var domains = Map.<Variable<?>, Domain<?>>of(v1, RED_ONLY, v2, GREEN_BLUE);
         var result = c.propagate(domains);
@@ -146,7 +182,7 @@ public class GlobalCardinalityConstraintTest {
 
     @Test
     void propagate_neitherQuotaMet_noChange() {
-        // RED==1: v1, v2 both possible (no definites) → definiteCount=0, maxCount=2 — neither equals n=1
+        // RED==1: v1, v2 both have every color available — plenty of slack either way, no forcing.
         var c = GlobalCardinalityConstraint.of(Set.of(v1, v2), Map.of(Color.RED, 1));
         var domains = Map.<Variable<?>, Domain<?>>of(v1, ALL, v2, ALL);
         var result = c.propagate(domains);
@@ -156,8 +192,8 @@ public class GlobalCardinalityConstraintTest {
 
     @Test
     void propagate_multipleValues_bothProcessed() {
-        // RED==2, GREEN==1: v1, v2 definite RED (quota met) → remove RED from v3, v4;
-        // GREEN possibles v3, v4 unaffected (maxCount=2 != n=1)
+        // RED==2, GREEN==1: v1, v2 pinned to RED exhausts that quota → RED removed from v3, v4;
+        // GREEN's quota (1) has slack against 2 open candidates, so no forcing there.
         var c = GlobalCardinalityConstraint.of(Set.of(v1, v2, v3, v4), Map.of(Color.RED, 2, Color.GREEN, 1));
         var domains = Map.<Variable<?>, Domain<?>>of(v1, RED_ONLY, v2, RED_ONLY, v3, ALL, v4, ALL);
         var result = c.propagate(domains);
@@ -178,9 +214,9 @@ public class GlobalCardinalityConstraintTest {
     }
 
     @Test
-    void propagateWithReasons_tooManyDefinites_attributesDefiniteVars() {
-        // RED==1: v1, v2 both definite RED → definiteCount=2 > n=1. Every definite variable is
-        // trivially singleton by construction, so both are attributed directly.
+    void propagateWithReasons_quotaExceeded_attributesTheOverSubscribedSingletons() {
+        // RED==1: v1, v2 both pinned to RED. The violating subset the flow's min-cut finds is
+        // exactly {v1, v2} here, and both are singleton, so a ground reason is directly available.
         var c = GlobalCardinalityConstraint.of(Set.of(v1, v2), Map.of(Color.RED, 1));
         var domains = Map.<Variable<?>, Domain<?>>of(v1, RED_ONLY, v2, RED_ONLY);
         var result = c.propagateWithReasons(domains);
@@ -189,9 +225,9 @@ public class GlobalCardinalityConstraintTest {
     }
 
     @Test
-    void propagateWithReasons_tooFewPossible_allImpossibleSingleton_attributesThem() {
-        // RED==2: v1={GREEN}, v2={BLUE} → maxCount=0 < n=2; both impossible variables are
-        // singleton, so both are attributed.
+    void propagateWithReasons_noCandidatesReachQuota_attributesTheSingletonImpossibleVars() {
+        // RED==2: v1={GREEN}, v2={BLUE} — neither can ever supply RED, and both are singleton,
+        // so the violating subset (both variables) has a direct ground reason.
         var c = GlobalCardinalityConstraint.of(Set.of(v1, v2), Map.of(Color.RED, 2));
         var domains = Map.<Variable<?>, Domain<?>>of(v1, GREEN_ONLY, v2, EnumDomain.of(Color.BLUE));
         var result = c.propagateWithReasons(domains);
@@ -200,67 +236,54 @@ public class GlobalCardinalityConstraintTest {
     }
 
     @Test
-    void propagateWithReasons_tooFewPossible_notAllSingleton_returnsEmptyReason() {
-        // RED==2: v1, v2 both {GREEN,BLUE} → maxCount=0 < n=2, but neither impossible variable
-        // is pinned to a specific value, so no sound reason can be formed.
+    void propagateWithReasons_feasibleGivenDomains_returnsNoReasonEvenIfOtherwiseTight() {
         var c = GlobalCardinalityConstraint.of(Set.of(v1, v2), Map.of(Color.RED, 2));
-        var domains = Map.<Variable<?>, Domain<?>>of(v1, GREEN_BLUE, v2, GREEN_BLUE);
+        var domains = Map.<Variable<?>, Domain<?>>of(v1, ALL, v2, ALL);
         var result = c.propagateWithReasons(domains);
-        assertThat(result.isInfeasible()).isTrue();
-        assertThat(result.reason()).isNull();
+        assertThat(result.isInfeasible()).isFalse();
     }
 
     @Test
-    void explainInfeasible_maxCountEqualsNButNotDefiniteCount_narrowsThenReturnsEmpty() {
-        // RED==2: v1 definite RED (definiteCount=1), v2 possible {RED,GREEN}, v3 impossible
-        // {GREEN,BLUE} → maxCount=1+1=2==n, but definiteCount=1!=n=2, so this exercises the
-        // "else if (maxCount == n)" narrowing branch (forcing v2 to {RED}) rather than the
-        // "if (definiteCount == n)" branch exercised by the other explainInfeasible tests. No
-        // infeasibility is ever found for this single tracked value, so the terminal fallback
-        // returns an empty reason.
+    void explainInfeasible_feasible_returnsEmpty() {
         var c = GlobalCardinalityConstraint.of(Set.of(v1, v2, v3), Map.of(Color.RED, 2));
         var domains = Map.<Variable<?>, Domain<?>>of(v1, RED_ONLY, v2, RED_GREEN, v3, GREEN_BLUE);
         assertThat(c.explainInfeasible(domains)).isEmpty();
     }
 
     @Test
-    void explainInfeasible_neitherNarrowingConditionMet_fallsThroughUnchanged() {
-        // RED==2: v1 definite RED (definiteCount=1), v2 and v3 both possible {RED,GREEN}
-        // (maxCount=1+2=3). Neither definiteCount==n(2) nor maxCount==n(2) holds — 1!=2 and
-        // 3!=2 — so this value falls through without narrowing anything, exercising the case
-        // where neither of propagate()'s two narrowing conditions fires.
-        var c = GlobalCardinalityConstraint.of(Set.of(v1, v2, v3), Map.of(Color.RED, 2));
-        var domains = Map.<Variable<?>, Domain<?>>of(v1, RED_ONLY, v2, RED_GREEN, v3, RED_GREEN);
-        assertThat(c.explainInfeasible(domains)).isEmpty();
-    }
-
-    @Test
-    void explainInfeasible_neitherConditionHolds_returnsEmptyReason() {
-        // Direct unit test of the terminal fallback: propagate() would never actually call this
-        // with domains satisfying neither infeasibility condition (definiteCount=1 is not > n=1;
-        // maxCount=2 is not < n=1), but explainInfeasible's own contract must still fall back to
-        // an empty reason rather than assume one of the two conditions always holds.
-        var c = GlobalCardinalityConstraint.of(Set.of(v1, v2), Map.of(Color.RED, 1));
-        var domains = Map.<Variable<?>, Domain<?>>of(v1, RED_ONLY, v2, RED_GREEN);
-        assertThat(c.explainInfeasible(domains)).isEmpty();
-    }
-
-    @Test
-    void explainInfeasible_multipleValues_narrowingFromEarlierValueFeedsIntoLater_attributesBoth() {
-        // RED==1, GREEN==1 (LinkedHashMap fixes iteration order: RED before GREEN).
-        // v1={RED} (definite RED), v2={RED,GREEN} (possible for RED), v3={GREEN} (definite GREEN).
-        // Processing RED first: definiteCount(RED)=1==n → v2 is narrowed to {GREEN}, becoming
-        // definite for GREEN. Only then does GREEN's definiteCount reach 2 > n=1 — the explanation
-        // must replay RED's narrowing rather than judging GREEN against the original domains,
-        // where v2 was still merely possible (and so wouldn't have been attributed).
+    void explainInfeasible_hallViolation_nonSingletonEnumViolator_noSoundCitationAvailable() {
+        // RED==1, GREEN==1. v1={RED} (definite), v2={RED,GREEN} (open), v3={GREEN} (definite).
+        // Genuinely infeasible: v1 and v3 already exhaust both quotas, leaving v2 no legal value.
+        // The flow-based GAC propagator's violating subset is the full {v1,v2,v3} (combined
+        // candidate-value capacity RED+GREEN=2 < 3 variables — a real Hall violation, just not
+        // the minimal {v2,v3} a per-value algorithm might cite). Since v2 isn't singleton, no
+        // ground reason can be formed; since Color isn't numeric, RangeNogoodConstraint declines
+        // too — the same two-tier-fallback limitation AllDiffConstraint already has for a
+        // non-singleton, non-numeric Hall-violating subset, not a new regression.
         var cardinalities = new java.util.LinkedHashMap<Color, Integer>();
         cardinalities.put(Color.RED, 1);
         cardinalities.put(Color.GREEN, 1);
         var c = GlobalCardinalityConstraint.of(Set.of(v1, v2, v3), cardinalities);
         var domains = Map.<Variable<?>, Domain<?>>of(v1, RED_ONLY, v2, RED_GREEN, v3, GREEN_ONLY);
         assertThat(c.propagate(domains)).isEmpty();
-        assertThat(c.explainInfeasible(domains)).contains(
-                GroundNogoodConstraint.of(Map.of(v2, Color.GREEN, v3, Color.GREEN)));
+        assertThat(c.explainInfeasible(domains)).isEmpty();
+    }
+
+    @Test
+    void explainInfeasible_structuralOverCommitment_violatingSetIsEmpty_returnsEmptyReason() {
+        // RED==3, GREEN==3 but only 4 variables total (Σ quotas = 6 > n = 4): a pure aggregate
+        // over-commitment, not attributable to any specific variable's own routing failure — every
+        // individual variable could, in isolation, still route successfully. The min-cut's
+        // violating subset is genuinely empty here (confirmed empirically, not assumed): the
+        // shortfall lands entirely on the value/bookkeeping side of the flow network, so
+        // findViolatingSubset's defensive empty check is real, reachable code, not dead
+        // defensiveness.
+        var w1 = v1; var w2 = v2; var w3 = v3; var w4 = v4;
+        var c = GlobalCardinalityConstraint.of(Set.of(w1, w2, w3, w4), Map.of(Color.RED, 3, Color.GREEN, 3));
+        var domains = Map.<Variable<?>, Domain<?>>of(
+                w1, RED_ONLY, w2, RED_GREEN, w3, GREEN_ONLY, w4, GREEN_ONLY);
+        assertThat(c.propagate(domains)).isEmpty();
+        assertThat(c.explainInfeasible(domains)).isEmpty();
     }
 
     @Test
@@ -280,5 +303,96 @@ public class GlobalCardinalityConstraintTest {
                         Map.of(Color.RED, 2, Color.GREEN, 1, Color.BLUE, 1))
                 .build();
         assertThat(Solver.Factory.INSTANCE.createSolver(csp).getSolutions()).hasSize(12);
+    }
+
+    // --- randomized cross-check against brute-force GAC ---
+
+    /**
+     * {@link #propagate}'s flow-based algorithm is intricate enough (a real max-flow-with-lower-
+     * bounds computation, not a small patch) to warrant checking it against an independent,
+     * trivially-correct oracle rather than trusting hand-picked cases alone: exhaustive search over
+     * every possible completion, for many random small instances. For every (variable, value) pair
+     * still in the original domain, a value is <em>GAC-consistent</em> iff some full assignment
+     * exists agreeing with it that satisfies every tracked cardinality exactly. Sound and complete
+     * propagation must retain exactly the GAC-consistent values — no more, no fewer.
+     */
+    @Test
+    void propagate_randomizedCrossCheckAgainstBruteForceGac() {
+        var random = new java.util.Random(42);
+        List<Color> palette = List.of(Color.RED, Color.GREEN, Color.BLUE);
+
+        for (int trial = 0; trial < 300; trial++) {
+            int n = 2 + random.nextInt(3); // 2..4 variables
+            List<Variable<Color>> vars = new ArrayList<>();
+            for (int i = 0; i < n; i++) vars.add(Variable.Factory.INSTANCE.create("x" + trial + "_" + i));
+
+            List<List<Color>> domLists = new ArrayList<>();
+            Map<Variable<?>, Domain<?>> domains = new HashMap<>();
+            for (Variable<Color> v : vars) {
+                java.util.Set<Color> dom = new java.util.HashSet<>();
+                while (dom.isEmpty()) {
+                    for (Color c : palette) if (random.nextBoolean()) dom.add(c);
+                }
+                List<Color> domList = new ArrayList<>(dom);
+                domLists.add(domList);
+                domains.put(v, EnumDomain.of(domList.get(0), domList.subList(1, domList.size()).toArray(new Color[0])));
+            }
+
+            Map<Color, Integer> cardinalities = new HashMap<>();
+            for (Color c : palette) {
+                if (random.nextBoolean()) cardinalities.put(c, random.nextInt(n + 1));
+            }
+            if (cardinalities.isEmpty()) continue; // degenerate no-op GCC, nothing to check
+
+            var constraint = GlobalCardinalityConstraint.of(new java.util.HashSet<>(vars), cardinalities);
+            boolean bruteForceFeasible = anyCompletionSatisfies(domLists, cardinalities, new Color[n], -1, null, 0);
+            var result = constraint.propagate(domains);
+
+            if (!bruteForceFeasible) {
+                assertThat(result).as("trial %d: expected infeasible, domains=%s, cardinalities=%s",
+                        trial, domLists, cardinalities).isEmpty();
+                continue;
+            }
+            assertThat(result).as("trial %d: expected feasible, domains=%s, cardinalities=%s",
+                    trial, domLists, cardinalities).isPresent();
+
+            for (int i = 0; i < n; i++) {
+                java.util.Set<Color> expected = new java.util.HashSet<>();
+                for (Color v : domLists.get(i)) {
+                    if (anyCompletionSatisfies(domLists, cardinalities, new Color[n], i, v, 0)) expected.add(v);
+                }
+                Domain<?> actualDomain = result.get().getOrDefault(vars.get(i), domains.get(vars.get(i)));
+                java.util.Set<Color> actual = ((io.github.rcrida.jcsp.domains.DiscreteDomain<Color>) actualDomain)
+                        .toList().stream().collect(java.util.stream.Collectors.toSet());
+                assertThat(actual).as("trial %d, variable %d: domains=%s, cardinalities=%s",
+                        trial, i, domLists, cardinalities).isEqualTo(expected);
+            }
+        }
+    }
+
+    /**
+     * Exhaustive search: does some assignment exist, drawn from each variable's own domain (with
+     * variable {@code fixedIdx}, if {@code fixedIdx >= 0}, forced to {@code fixedVal} instead),
+     * satisfying every tracked cardinality exactly?
+     */
+    private static boolean anyCompletionSatisfies(List<List<Color>> domLists, Map<Color, Integer> cardinalities,
+                                                    Color[] current, int fixedIdx, Color fixedVal, int idx) {
+        if (idx == current.length) {
+            Map<Color, Integer> counts = new HashMap<>();
+            for (Color c : current) counts.merge(c, 1, Integer::sum);
+            for (var e : cardinalities.entrySet()) {
+                if (!Objects.equals(counts.getOrDefault(e.getKey(), 0), e.getValue())) return false;
+            }
+            return true;
+        }
+        if (idx == fixedIdx) {
+            current[idx] = fixedVal;
+            return anyCompletionSatisfies(domLists, cardinalities, current, fixedIdx, fixedVal, idx + 1);
+        }
+        for (Color c : domLists.get(idx)) {
+            current[idx] = c;
+            if (anyCompletionSatisfies(domLists, cardinalities, current, fixedIdx, fixedVal, idx + 1)) return true;
+        }
+        return false;
     }
 }
