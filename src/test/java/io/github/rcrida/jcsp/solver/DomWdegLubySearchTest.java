@@ -668,6 +668,60 @@ class DomWdegLubySearchTest {
                 .isNotNull();
     }
 
+    // ── Restart randomization ───────────────────────────────────────────────
+
+    @Test
+    void seededRestartRandomizationIsReproducibleAcrossRuns() {
+        // lubyUnit=1 forces many restarts over fourQueensCsp (see nodeLimitAccumulatesAcrossLubyRestarts's
+        // own comment), so tie-break draws actually get exercised across a genuinely multi-restart search.
+        // Same seed, two entirely separate solver instances -> identical node count.
+        DomWdegLubySearch solverA = DomWdegLubySearch.builder()
+                .lubyUnit(1)
+                .maxRestarts(512)
+                .domainValuesOrderer(LeastConstrainingValueOrderer.INSTANCE)
+                .inference(Solver.Factory.FULL_PROPAGATION_INFERENCE)
+                .restartRandomization(RestartRandomization.seeded(42L))
+                .build();
+        DomWdegLubySearch solverB = DomWdegLubySearch.builder()
+                .lubyUnit(1)
+                .maxRestarts(512)
+                .domainValuesOrderer(LeastConstrainingValueOrderer.INSTANCE)
+                .inference(Solver.Factory.FULL_PROPAGATION_INFERENCE)
+                .restartRandomization(RestartRandomization.seeded(42L))
+                .build();
+
+        Optional<Assignment> solutionA = solverA.getSolution(fourQueensCsp());
+        Optional<Assignment> solutionB = solverB.getSolution(fourQueensCsp());
+
+        assertThat(solutionA).isPresent();
+        assertThat(solutionB).isPresent();
+        assertThat(solutionA.get().getStatistics().getNodesExplored().get())
+                .isEqualTo(solutionB.get().getStatistics().getNodesExplored().get());
+    }
+
+    @Test
+    void restartRandomizationDefaultsToNoneAndReseedsSelectorEachRestartAttempt() {
+        // A RestartRandomization that counts invocations, still returning null (RestartRandomization.NONE's
+        // own behaviour) -- confirms getSolution() calls it once per restart attempted, independent of
+        // whether DomWdegLubySearchBuilder's own default (NONE, unlike SolverConfig's) is left in place.
+        AtomicInteger calls = new AtomicInteger();
+        RestartRandomization counting = restartIndex -> {
+            calls.incrementAndGet();
+            return null;
+        };
+
+        DomWdegLubySearch solver = DomWdegLubySearch.builder()
+                .lubyUnit(1)
+                .maxRestarts(512)
+                .domainValuesOrderer(LeastConstrainingValueOrderer.INSTANCE)
+                .inference(Solver.Factory.FULL_PROPAGATION_INFERENCE)
+                .restartRandomization(counting)
+                .build();
+
+        assertThat(solver.getSolution(fourQueensCsp())).isPresent();
+        assertThat(calls.get()).isGreaterThan(0);
+    }
+
     // ── SolverListener ───────────────────────────────────────────────────────
 
     @Test

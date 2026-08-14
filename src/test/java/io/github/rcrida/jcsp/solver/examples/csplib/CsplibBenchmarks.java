@@ -4,6 +4,7 @@ import io.github.rcrida.jcsp.ConstraintSatisfactionProblem;
 import io.github.rcrida.jcsp.assignments.SolverLimits;
 import io.github.rcrida.jcsp.parser.xcsp3.Xcsp3Parser;
 import io.github.rcrida.jcsp.solver.LimitExceededException;
+import io.github.rcrida.jcsp.solver.RestartRandomization;
 import io.github.rcrida.jcsp.solver.Solver;
 import io.github.rcrida.jcsp.solver.SolverConfig;
 import org.openjdk.jmh.annotations.Benchmark;
@@ -36,6 +37,25 @@ import java.util.stream.IntStream;
  * reusing each {@code ProbNNN} test class's own builder method/static field (and, for optimization
  * problems, its objective method reference) rather than duplicating construction logic — see each
  * builder's own javadoc for how the fixed-instance and parameterized forms relate.
+ *
+ * <p>Every {@code @Benchmark} method passes {@link #deterministicConfig()} rather than a bare
+ * {@code createSolver(csp)}/{@code createSolver(csp, objective)} call: {@code SolverConfig}
+ * defaults to {@link RestartRandomization#seeded} with a fresh random base seed per construction
+ * (see {@link io.github.rcrida.jcsp.solver.DomWdegLubySearch}'s own Javadoc), which would otherwise
+ * make each JMH iteration search a genuinely different workload (different node counts, not just
+ * timing noise around the same one) — exactly the kind of variance this benchmark's own
+ * warmup/measurement iterations exist to filter *out* of a before/after comparison, not reintroduce
+ * as a second, uncontrolled source alongside it. {@link #deterministicConfig()} pins a fixed literal
+ * seed ({@link #RESTART_RANDOMIZATION_SEED}) via {@link RestartRandomization#seeded} rather than
+ * {@link RestartRandomization#NONE} — same code plus the same seed always reproduces the same
+ * restart-tie-break sequence, exercising the real production default path (seeded randomization),
+ * not a special-cased "feature disabled" path most real callers won't run. A fixed seed does
+ * <em>not</em> by itself make a before/after comparison across two separate JMH invocations (two
+ * different {@code java} process launches, e.g. one per code version being compared) fully
+ * reproducible -- {@code AC3}'s own arc-processing order is independently salted once per JVM
+ * process (see {@link io.github.rcrida.jcsp.solver.RestartRandomization}'s own Javadoc) and
+ * untouched by this pin -- but it does eliminate {@code RestartRandomization} specifically as a
+ * source of noise both within one run and across separate runs of this class.
  *
  * <p>Not run by surefire (this class name doesn't match {@code *Test.java}, the same mechanism
  * that already excludes {@code NogoodPropagationBenchmark}). Run via:
@@ -115,6 +135,9 @@ public class CsplibBenchmarks {
     // that motivated adding this benchmark in the first place.
     private static final long MAGIC_SQUARE_XCSP3_NODE_BUDGET = 5000;
 
+    // See deterministicConfig()'s own comment for why a fixed literal seed, not RestartRandomization.NONE.
+    private static final long RESTART_RANDOMIZATION_SEED = 42L;
+
     // Fixed real-world instances, unscaled.
     private ConstraintSatisfactionProblem carSequencing;
     private ConstraintSatisfactionProblem bibd;
@@ -188,135 +211,150 @@ public class CsplibBenchmarks {
                 .collect(Collectors.toSet());
     }
 
+    /**
+     * Fresh per call (not a shared constant) so each benchmark invocation still gets its own
+     * {@code Statistics} token, per {@link SolverConfig}'s own construction contract -- only
+     * {@code restartRandomization} is pinned away from its own fresh-random-per-construction
+     * default, to {@link RestartRandomization#seeded} with the fixed {@link
+     * #RESTART_RANDOMIZATION_SEED} rather than {@link RestartRandomization#NONE}: a fixed seed
+     * reproduces the same restart-tie-break sequence every call (same as {@code NONE} would for
+     * its own, different, always-deterministic behaviour), but does so via the real production
+     * code path -- {@code NONE} would instead measure a special-cased "diversification disabled"
+     * path most real callers never take.
+     */
+    private static SolverConfig deterministicConfig() {
+        return SolverConfig.builder().restartRandomization(RestartRandomization.seeded(RESTART_RANDOMIZATION_SEED)).build();
+    }
+
     // --- Fixed real-world instances, unscaled full-chain regression baselines ---
 
     @Benchmark
     public void carSequencing(Blackhole bh) {
-        bh.consume(Solver.Factory.INSTANCE.createSolver(carSequencing).getSolution());
+        bh.consume(Solver.Factory.INSTANCE.createSolver(carSequencing, deterministicConfig()).getSolution());
     }
 
     @Benchmark
     public void balancedIncompleteBlockDesign(Blackhole bh) {
-        bh.consume(Solver.Factory.INSTANCE.createSolver(bibd).getSolution());
+        bh.consume(Solver.Factory.INSTANCE.createSolver(bibd, deterministicConfig()).getSolution());
     }
 
     @Benchmark
     public void warehouseLocation(Blackhole bh) {
-        bh.consume(Solver.Factory.INSTANCE.createSolver(warehouseLocation, Prob034WarehouseLocationTest::totalCost).getSolution());
+        bh.consume(Solver.Factory.INSTANCE.createSolver(warehouseLocation, Prob034WarehouseLocationTest::totalCost, deterministicConfig()).getSolution());
     }
 
     @Benchmark
     public void steelMillSlabDesign(Blackhole bh) {
-        bh.consume(Solver.Factory.INSTANCE.createSolver(steelMillSlabDesign, Prob038SteelMillSlabDesignTest::totalLoss).getSolution());
+        bh.consume(Solver.Factory.INSTANCE.createSolver(steelMillSlabDesign, Prob038SteelMillSlabDesignTest::totalLoss, deterministicConfig()).getSolution());
     }
 
     @Benchmark
     public void killerSudoku(Blackhole bh) {
-        bh.consume(Solver.Factory.INSTANCE.createSolver(killerSudoku).getSolution());
+        bh.consume(Solver.Factory.INSTANCE.createSolver(killerSudoku, deterministicConfig()).getSolution());
     }
 
     @Benchmark
     public void jobShopScheduling(Blackhole bh) {
-        bh.consume(Solver.Factory.INSTANCE.createSolver(jobShopScheduling, Prob061JobShopSchedulingTest::makespan).getSolution());
+        bh.consume(Solver.Factory.INSTANCE.createSolver(jobShopScheduling, Prob061JobShopSchedulingTest::makespan, deterministicConfig()).getSolution());
     }
 
     @Benchmark
     public void productMatrixTsp(Blackhole bh) {
-        bh.consume(Solver.Factory.INSTANCE.createSolver(productMatrixTsp, Prob075ProductMatrixTspTest::tourCost).getSolution());
+        bh.consume(Solver.Factory.INSTANCE.createSolver(productMatrixTsp, Prob075ProductMatrixTspTest::tourCost, deterministicConfig()).getSolution());
     }
 
     @Benchmark
     public void knapsack(Blackhole bh) {
-        bh.consume(Solver.Factory.INSTANCE.createSolver(knapsack, Prob133KnapsackTest::negatedValue).getSolution());
+        bh.consume(Solver.Factory.INSTANCE.createSolver(knapsack, Prob133KnapsackTest::negatedValue, deterministicConfig()).getSolution());
     }
 
     // --- Parametric families at their fixed/test size: first solution and full enumeration ---
 
     @Benchmark
     public void golombRuler(Blackhole bh) {
-        bh.consume(Solver.Factory.INSTANCE.createSolver(golombRuler).getSolution());
+        bh.consume(Solver.Factory.INSTANCE.createSolver(golombRuler, deterministicConfig()).getSolution());
     }
 
     @Benchmark
     public void golombRulerAllSolutions(Blackhole bh) {
-        bh.consume(Solver.Factory.INSTANCE.createSolver(golombRuler).getSolutions().count());
+        bh.consume(Solver.Factory.INSTANCE.createSolver(golombRuler, deterministicConfig()).getSolutions().count());
     }
 
     @Benchmark
     public void socialGolfers(Blackhole bh) {
-        bh.consume(Solver.Factory.INSTANCE.createSolver(socialGolfers).getSolution());
+        bh.consume(Solver.Factory.INSTANCE.createSolver(socialGolfers, deterministicConfig()).getSolution());
     }
 
     @Benchmark
     public void socialGolfersAllSolutions(Blackhole bh) {
-        bh.consume(Solver.Factory.INSTANCE.createSolver(socialGolfers).getSolutions().count());
+        bh.consume(Solver.Factory.INSTANCE.createSolver(socialGolfers, deterministicConfig()).getSolutions().count());
     }
 
     @Benchmark
     public void magicSquare(Blackhole bh) {
-        bh.consume(Solver.Factory.INSTANCE.createSolver(magicSquare).getSolution());
+        bh.consume(Solver.Factory.INSTANCE.createSolver(magicSquare, deterministicConfig()).getSolution());
     }
 
     @Benchmark
     public void magicSquareAllSolutions(Blackhole bh) {
-        bh.consume(Solver.Factory.INSTANCE.createSolver(magicSquare).getSolutions().count());
+        bh.consume(Solver.Factory.INSTANCE.createSolver(magicSquare, deterministicConfig()).getSolutions().count());
     }
 
     @Benchmark
     public void steinerTripleSystem(Blackhole bh) {
-        bh.consume(Solver.Factory.INSTANCE.createSolver(steinerTripleSystem).getSolution());
+        bh.consume(Solver.Factory.INSTANCE.createSolver(steinerTripleSystem, deterministicConfig()).getSolution());
     }
 
     @Benchmark
     public void steinerTripleSystemAllSolutions(Blackhole bh) {
-        bh.consume(Solver.Factory.INSTANCE.createSolver(steinerTripleSystem).getSolutions().count());
+        bh.consume(Solver.Factory.INSTANCE.createSolver(steinerTripleSystem, deterministicConfig()).getSolutions().count());
     }
 
     @Benchmark
     public void numberPartitioning(Blackhole bh) {
-        bh.consume(Solver.Factory.INSTANCE.createSolver(numberPartitioning).getSolution());
+        bh.consume(Solver.Factory.INSTANCE.createSolver(numberPartitioning, deterministicConfig()).getSolution());
     }
 
     @Benchmark
     public void numberPartitioningAllSolutions(Blackhole bh) {
-        bh.consume(Solver.Factory.INSTANCE.createSolver(numberPartitioning).getSolutions().count());
+        bh.consume(Solver.Factory.INSTANCE.createSolver(numberPartitioning, deterministicConfig()).getSolutions().count());
     }
 
     @Benchmark
     public void nQueens(Blackhole bh) {
-        bh.consume(Solver.Factory.INSTANCE.createSolver(nQueens).getSolution());
+        bh.consume(Solver.Factory.INSTANCE.createSolver(nQueens, deterministicConfig()).getSolution());
     }
 
     @Benchmark
     public void nQueensAllSolutions(Blackhole bh) {
-        bh.consume(Solver.Factory.INSTANCE.createSolver(nQueens).getSolutions().count());
+        bh.consume(Solver.Factory.INSTANCE.createSolver(nQueens, deterministicConfig()).getSolutions().count());
     }
 
     // --- Parametric families, scaled up: first solution only (full enumeration would be unbounded) ---
 
     @Benchmark
     public void golombRulerScaled(Blackhole bh) {
-        bh.consume(Solver.Factory.INSTANCE.createSolver(golombRulerScaled).getSolution());
+        bh.consume(Solver.Factory.INSTANCE.createSolver(golombRulerScaled, deterministicConfig()).getSolution());
     }
 
     @Benchmark
     public void socialGolfersScaled(Blackhole bh) {
-        bh.consume(Solver.Factory.INSTANCE.createSolver(socialGolfersScaled).getSolution());
+        bh.consume(Solver.Factory.INSTANCE.createSolver(socialGolfersScaled, deterministicConfig()).getSolution());
     }
 
     @Benchmark
     public void magicSquareScaled(Blackhole bh) {
-        bh.consume(Solver.Factory.INSTANCE.createSolver(magicSquareScaled).getSolution());
+        bh.consume(Solver.Factory.INSTANCE.createSolver(magicSquareScaled, deterministicConfig()).getSolution());
     }
 
     @Benchmark
     public void numberPartitioningScaled(Blackhole bh) {
-        bh.consume(Solver.Factory.INSTANCE.createSolver(numberPartitioningScaled).getSolution());
+        bh.consume(Solver.Factory.INSTANCE.createSolver(numberPartitioningScaled, deterministicConfig()).getSolution());
     }
 
     @Benchmark
     public void nQueensScaled(Blackhole bh) {
-        bh.consume(Solver.Factory.INSTANCE.createSolver(nQueensScaled).getSolution());
+        bh.consume(Solver.Factory.INSTANCE.createSolver(nQueensScaled, deterministicConfig()).getSolution());
     }
 
     // --- Real XCSP3 competition instance, bounded by node budget rather than solved to completion ---
@@ -333,7 +371,10 @@ public class CsplibBenchmarks {
      */
     @Benchmark
     public void magicSquareXcsp3LargeNodeBudget(Blackhole bh) {
-        SolverConfig config = SolverConfig.builder().limits(SolverLimits.ofNodes(MAGIC_SQUARE_XCSP3_NODE_BUDGET)).build();
+        SolverConfig config = SolverConfig.builder()
+                .limits(SolverLimits.ofNodes(MAGIC_SQUARE_XCSP3_NODE_BUDGET))
+                .restartRandomization(RestartRandomization.seeded(RESTART_RANDOMIZATION_SEED))
+                .build();
         try {
             bh.consume(Solver.Factory.INSTANCE.createSolver(magicSquareXcsp3Large, config).getSolution());
         } catch (LimitExceededException e) {

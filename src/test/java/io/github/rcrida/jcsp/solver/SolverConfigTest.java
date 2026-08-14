@@ -44,4 +44,22 @@ class SolverConfigTest {
     void listener_defaultsToNone() {
         assertThat(SolverConfig.builder().build().getListener()).isSameAs(SolverListener.NONE);
     }
+
+    @Test
+    void restartRandomization_defaultsToRandomAndVariesPerConfig() {
+        RestartRandomization first = SolverConfig.builder().build().getRestartRandomization();
+        RestartRandomization second = SolverConfig.builder().build().getRestartRandomization();
+
+        assertThat(first).isNotSameAs(RestartRandomization.NONE);
+        assertThat(first.randomFor(1)).isNotNull();
+        // Two separately-built default configs get independent base seeds, so their restart-1
+        // draws are (with overwhelming probability) different -- confirms this isn't a shared sentinel.
+        assertThat(first.randomFor(1).nextLong()).isNotEqualTo(second.randomFor(1).nextLong());
+    }
+
+    @Test
+    void restartRandomization_canBeOverriddenToNone() {
+        assertThat(SolverConfig.builder().restartRandomization(RestartRandomization.NONE).build().getRestartRandomization())
+                .isSameAs(RestartRandomization.NONE);
+    }
 }

@@ -68,3 +68,4 @@ section instead.
 | [0012](0012-per-csp-propagator-filtering.md) | Per-CSP propagator filtering for the fixpoint loop | Accepted |
 | [0013](0013-in-tree-jmh-benchmarks.md) | In-tree JMH benchmarks, not a separate module | Accepted |
 | [0014](0014-xcsp3-parser-via-callback-library.md) | XCSP3 instance parsing via a callback-driven library, not a hand-rolled parser | Accepted |
+| [0015](0015-seeded-restart-tie-breaking-random-by-default.md) | Seeded per-restart tie-breaking, random by default | Accepted |

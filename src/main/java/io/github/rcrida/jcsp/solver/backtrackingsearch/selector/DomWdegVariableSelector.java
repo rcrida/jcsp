@@ -4,14 +4,17 @@ import io.github.rcrida.jcsp.ConstraintSatisfactionProblem;
 import io.github.rcrida.jcsp.assignments.Assignment;
 import io.github.rcrida.jcsp.constraints.Constraint;
 import io.github.rcrida.jcsp.constraints.nary.NogoodConstraint;
+import io.github.rcrida.jcsp.domains.Domain;
+import io.github.rcrida.jcsp.solver.RestartRandomization;
 import io.github.rcrida.jcsp.variables.Variable;
 import org.jspecify.annotations.NonNull;
+import org.jspecify.annotations.Nullable;
 
 import java.util.ArrayList;
-import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Random;
 import java.util.Set;
 
 /**
@@ -35,11 +38,19 @@ import java.util.Set;
  * <p>
  * Instances are stateful and not thread-safe. Create one per solve call; weights accumulate
  * across Luby restarts within the same call.
+ * <p>
+ * {@link #reseedTieBreak} lets a caller (namely {@link
+ * io.github.rcrida.jcsp.solver.DomWdegLubySearch#getSolution}, once per Luby restart, via a
+ * configured {@link RestartRandomization}) control how ties in {@link #select}'s minimum ratio are
+ * broken. Left unseeded ({@code null}, the default), ties are broken by {@code
+ * csp.getVariableDomains()}'s iteration order (a {@code LinkedHashMap}, so this is the
+ * first-declared tied variable, deterministically) -- today's exact behaviour, unchanged.
  */
 public class DomWdegVariableSelector implements UnassignedVariableSelector {
 
     private final Map<Constraint, Long> weights;
     private final Map<Variable<?>, List<Constraint>> constraintsByVariable;
+    private @Nullable Random tieBreakRandom;
 
     /**
      * {@link NogoodConstraint}s in {@code constraints} are dropped entirely rather than indexed:
@@ -74,13 +85,36 @@ public class DomWdegVariableSelector implements UnassignedVariableSelector {
         }
     }
 
+    /**
+     * Sets (or clears, via {@code null}) the {@link Random} used to break ties in {@link #select}'s
+     * minimum ratio. Called once per Luby restart by {@link
+     * io.github.rcrida.jcsp.solver.DomWdegLubySearch#getSolution}, with whatever the configured
+     * {@link RestartRandomization} returns for that restart -- {@code null} for {@link
+     * RestartRandomization#NONE}, restoring today's deterministic first-tied-candidate behaviour.
+     */
+    public void reseedTieBreak(@Nullable Random random) {
+        this.tieBreakRandom = random;
+    }
+
     @Override
     public Variable<?> select(@NonNull ConstraintSatisfactionProblem csp, @NonNull Assignment assignment) {
-        return csp.getVariableDomains().entrySet().stream()
-                .filter(e -> assignment.getValue(e.getKey()).isEmpty())
-                .min(Comparator.comparingDouble(e -> ratio(e.getKey(), e.getValue().size(), assignment)))
-                .map(Map.Entry::getKey)
-                .orElseThrow(() -> new IllegalStateException("No unassigned variable found"));
+        double bestRatio = Double.MAX_VALUE;
+        List<Variable<?>> tied = new ArrayList<>();
+        for (Map.Entry<Variable<?>, Domain<?>> e : csp.getVariableDomains().entrySet()) {
+            if (assignment.getValue(e.getKey()).isPresent()) continue;
+            double ratio = ratio(e.getKey(), e.getValue().size(), assignment);
+            if (ratio < bestRatio) {
+                bestRatio = ratio;
+                tied.clear();
+                tied.add(e.getKey());
+            } else if (ratio == bestRatio) {
+                tied.add(e.getKey());
+            }
+        }
+        if (tied.isEmpty()) throw new IllegalStateException("No unassigned variable found");
+        return tieBreakRandom == null || tied.size() == 1
+                ? tied.get(0)
+                : tied.get(tieBreakRandom.nextInt(tied.size()));
     }
 
     private double ratio(@NonNull Variable<?> variable, long domainSize, @NonNull Assignment assignment) {

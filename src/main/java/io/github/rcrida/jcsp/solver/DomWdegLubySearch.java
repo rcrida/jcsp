@@ -52,6 +52,13 @@ import java.util.stream.Stream;
  * SolverCancelledException} (or {@link LimitExceededException}) to an external caller, since it's
  * the only {@code getSolution()} implementation with an algorithm of its own rather than one
  * defined purely as consuming {@link #getSolutions}'s stream.
+ * <p>
+ * {@link #restartRandomization} controls per-restart tie-breaking diversification: at the start of
+ * each restart in {@link #getSolution}'s loop, {@code selector}'s tie-break {@link
+ * java.util.Random} is reseeded via {@link RestartRandomization#randomFor}. Defaults to {@link
+ * RestartRandomization#NONE}, which reseeds with {@code null} every time -- today's exact
+ * behaviour (deterministic first-tied-candidate selection), unchanged. Not used by {@link
+ * #getSolutions}, which never restarts.
  */
 @Slf4j
 @Value
@@ -78,6 +85,7 @@ public class DomWdegLubySearch implements Solver {
     @NonNull Statistics statistics;
     @NonNull SolverListener listener;
     @NonNull Cancellation cancellation;
+    @NonNull RestartRandomization restartRandomization;
 
     /** Partial builder: sets defaults and validates preconditions in {@link #build}. */
     public static class DomWdegLubySearchBuilder {
@@ -88,11 +96,12 @@ public class DomWdegLubySearch implements Solver {
         private Statistics statistics = new Statistics();
         private SolverListener listener = SolverListener.NONE;
         private Cancellation cancellation = Cancellation.NEVER;
+        private RestartRandomization restartRandomization = RestartRandomization.NONE;
 
         public DomWdegLubySearch build() {
             if (lubyUnit <= 0) throw new IllegalArgumentException("lubyUnit must be positive, got: " + lubyUnit);
             if (maxRestarts <= 0) throw new IllegalArgumentException("maxRestarts must be positive, got: " + maxRestarts);
-            return new DomWdegLubySearch(lubyUnit, maxRestarts, domainValuesOrderer, inference, limits, nogoodStore, statistics, listener, cancellation);
+            return new DomWdegLubySearch(lubyUnit, maxRestarts, domainValuesOrderer, inference, limits, nogoodStore, statistics, listener, cancellation, restartRandomization);
         }
     }
 
@@ -118,6 +127,7 @@ public class DomWdegLubySearch implements Solver {
         var selector = new DomWdegVariableSelector(csp.getConstraints());
         long deadline = limits.deadlineNanos();
         for (int k = 1; k <= maxRestarts; k++) {
+            selector.reseedTieBreak(restartRandomization.randomFor(k));
             long budget = (long) lubyUnit * luby(k);
             int[] failures = {0};
             try {

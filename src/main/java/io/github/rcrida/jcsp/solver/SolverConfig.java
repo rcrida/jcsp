@@ -7,6 +7,8 @@ import lombok.Builder;
 import lombok.Value;
 import org.jspecify.annotations.NonNull;
 
+import java.util.concurrent.ThreadLocalRandom;
+
 /**
  * Bundles the configuration knobs {@link Solver.Factory#createSolver} accepts, so that adding a
  * new one doesn't mean adding another overload -- {@code limits} and {@link #nogoodLearningEnabled}
@@ -55,6 +57,18 @@ import org.jspecify.annotations.NonNull;
  * It mirrors {@code limits}' own asymmetry: {@link BoundSolver#getSolution()} throws {@link
  * SolverCancelledException} only in the satisfaction chain; every other path (both chains'
  * {@code getSolutions()}, the optimization chain's {@code getSolution()}) stops silently instead.
+ * <p>
+ * {@code restartRandomization} is threaded the same way {@code cancellation}/{@code listener} are
+ * -- read once at construction time and passed by reference -- into {@link DomWdegLubySearch},
+ * whose {@code getSolution()} reseeds its variable selector's tie-breaking from it once per Luby
+ * restart. Unlike {@code cancellation}/{@code listener}, it does <em>not</em> default to a no-op:
+ * each {@link SolverConfig} gets its own fresh random base seed (via {@link ThreadLocalRandom}),
+ * so restart diversification is on by default -- search
+ * behaviour (node counts, and potentially which solution comes back for a problem with multiple
+ * solutions) is therefore not reproducible run-to-run unless a caller explicitly pins one via
+ * {@link RestartRandomization#seeded}, matching the fact that it was never reproducible
+ * launch-to-launch anyway (see {@link RestartRandomization}'s own Javadoc). Pass {@link
+ * RestartRandomization#NONE} to restore today's pre-2026-08-14 deterministic tie-breaking exactly.
  */
 @Value
 @Builder
@@ -64,4 +78,6 @@ public class SolverConfig {
     @Builder.Default @NonNull Statistics statistics = new Statistics();
     @Builder.Default @NonNull SolverListener listener = SolverListener.NONE;
     @Builder.Default @NonNull Cancellation cancellation = Cancellation.NEVER;
+    @Builder.Default @NonNull RestartRandomization restartRandomization =
+            RestartRandomization.seeded(ThreadLocalRandom.current().nextLong());
 }

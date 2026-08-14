@@ -14,10 +14,13 @@ import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.util.Map;
 import java.util.Optional;
+import java.util.Random;
 import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -69,8 +72,10 @@ class DomWdegVariableSelectorTest {
         when(nextAssignment.getValue(v2)).thenReturn(Optional.empty());
         selector.incrementWeights(v1, nextAssignment); // c12 weight → 2
 
-        // Now select: v2 unassigned, v3 unassigned; v1 is assigned so excluded.
+        // Now select: v2 unassigned, v3 unassigned; v1 is excluded from csp.getVariableDomains()
+        // (not a live decision variable here) but still globally unassigned, so c12 stays active.
         when(csp.getVariableDomains()).thenReturn(Map.of(v2, d2, v3, d3));
+        when(assignment.getValue(v1)).thenReturn(Optional.empty()); // c12's other endpoint, queried by isActive(c12, v2, ...)
         when(assignment.getValue(v2)).thenReturn(Optional.empty());
         when(assignment.getValue(v3)).thenReturn(Optional.empty());
         when(d2.size()).thenReturn(4); // v2: wdeg = c12(2)+c23(1)=3 (both active) → ratio=4/3≈1.33
@@ -97,9 +102,12 @@ class DomWdegVariableSelectorTest {
         // c12 connects v1+v2; v1 is unassigned → c12 weight becomes 2
         // c23 connects v2+v3; v3 IS assigned → c23 weight stays 1
 
-        // Verify via selection: both v1 and v3 unassigned, but c12 weight=2 makes v1 more attractive
+        // Verify via selection: both v1 and v3 unassigned, but c12 weight=2 makes v1 more attractive.
+        // v2 is excluded from csp.getVariableDomains() (not a live decision variable here) but still
+        // globally unassigned, so c12/c23 both stay active -- matching the wdeg comments below.
         when(csp.getVariableDomains()).thenReturn(Map.of(v1, d1, v3, d3));
         when(assignment.getValue(v1)).thenReturn(Optional.empty());
+        when(assignment.getValue(v2)).thenReturn(Optional.empty()); // c12/c23's other endpoint, queried by isActive
         when(assignment.getValue(v3)).thenReturn(Optional.empty());
         when(d1.size()).thenReturn(2); // v1: wdeg = c12(2) (v2 not in variableDomains here) → ratio=1.0
         when(d3.size()).thenReturn(2); // v3: wdeg = c23(1) → ratio=2.0  (v2 not in variableDomains)
@@ -143,6 +151,87 @@ class DomWdegVariableSelectorTest {
         when(d3.size()).thenReturn(1); // v3: wdeg = 0 (nogood ignored, not just unweighted) → ratio = MAX_VALUE
 
         assertThat(selector.select(csp, assignment)).isEqualTo(v2);
+    }
+
+    @Test
+    void tiedVariablesAreBrokenDeterministicallyWithoutReseeding() {
+        // v1 and v3 are both unconstrained → both ratio=MAX_VALUE, a genuine tie. No reseedTieBreak
+        // call at all: tieBreakRandom stays null, so repeated calls must deterministically return
+        // the same tied candidate every time (today's exact behaviour, unchanged) -- which candidate
+        // that is depends on csp.getVariableDomains()'s iteration order, not asserted here.
+        var selector = new DomWdegVariableSelector(Set.of());
+
+        when(csp.getVariableDomains()).thenReturn(Map.of(v1, d1, v3, d3));
+        when(assignment.getValue(v1)).thenReturn(Optional.empty());
+        when(assignment.getValue(v3)).thenReturn(Optional.empty());
+        when(d1.size()).thenReturn(1);
+        when(d3.size()).thenReturn(1);
+
+        Variable<?> first = selector.select(csp, assignment);
+        assertThat(first).isIn(v1, v3);
+        assertThat(selector.select(csp, assignment)).isEqualTo(first);
+        assertThat(selector.select(csp, assignment)).isEqualTo(first);
+    }
+
+    @Test
+    void reseedTieBreakNullRestoresDeterministicChoice() {
+        var selector = new DomWdegVariableSelector(Set.of());
+
+        when(csp.getVariableDomains()).thenReturn(Map.of(v1, d1, v3, d3));
+        when(assignment.getValue(v1)).thenReturn(Optional.empty());
+        when(assignment.getValue(v3)).thenReturn(Optional.empty());
+        when(d1.size()).thenReturn(1);
+        when(d3.size()).thenReturn(1);
+
+        Variable<?> deterministicChoice = selector.select(csp, assignment); // tieBreakRandom == null
+
+        Random random = mock(Random.class);
+        when(random.nextInt(2)).thenReturn(1); // pick whichever candidate is second in iteration order
+        selector.reseedTieBreak(random);
+        assertThat(selector.select(csp, assignment)).isNotEqualTo(deterministicChoice);
+
+        selector.reseedTieBreak(null);
+        assertThat(selector.select(csp, assignment)).isEqualTo(deterministicChoice); // back to deterministic
+    }
+
+    @Test
+    void reseedTieBreakPicksAmongTiedCandidatesByRandomIndex() {
+        var selector = new DomWdegVariableSelector(Set.of());
+        Random random = mock(Random.class);
+        when(random.nextInt(2)).thenReturn(0, 1);
+
+        when(csp.getVariableDomains()).thenReturn(Map.of(v1, d1, v3, d3));
+        when(assignment.getValue(v1)).thenReturn(Optional.empty());
+        when(assignment.getValue(v3)).thenReturn(Optional.empty());
+        when(d1.size()).thenReturn(1);
+        when(d3.size()).thenReturn(1);
+
+        selector.reseedTieBreak(random);
+        Variable<?> first = selector.select(csp, assignment);  // nextInt(2) -> 0
+        Variable<?> second = selector.select(csp, assignment); // nextInt(2) -> 1
+
+        assertThat(first).isIn(v1, v3);
+        assertThat(second).isIn(v1, v3);
+        assertThat(first).isNotEqualTo(second);
+    }
+
+    @Test
+    void reseedTieBreakSkipsRandomDrawWhenOnlyOneCandidate() {
+        // c12 weight=1 (initial): v1: domain=1, wdeg=1 -> ratio=1.0 (unique winner)
+        // v2: domain=4, wdeg=1 -> ratio=4.0
+        when(c12.getVariables()).thenReturn(Set.of(v1, v2));
+        var selector = new DomWdegVariableSelector(Set.of(c12));
+        Random random = mock(Random.class);
+
+        when(csp.getVariableDomains()).thenReturn(Map.of(v1, d1, v2, d2));
+        when(assignment.getValue(v1)).thenReturn(Optional.empty());
+        when(assignment.getValue(v2)).thenReturn(Optional.empty());
+        when(d1.size()).thenReturn(1);
+        when(d2.size()).thenReturn(4);
+
+        selector.reseedTieBreak(random);
+        assertThat(selector.select(csp, assignment)).isEqualTo(v1);
+        verifyNoInteractions(random); // no tie -> the shared Random is never drawn from
     }
 
     @Test

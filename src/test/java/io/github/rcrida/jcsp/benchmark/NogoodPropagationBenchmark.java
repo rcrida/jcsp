@@ -11,16 +11,21 @@ import io.github.rcrida.jcsp.solver.DomWdegLubySearch;
 import io.github.rcrida.jcsp.solver.LimitExceededException;
 import io.github.rcrida.jcsp.solver.NodeConsistentSolver;
 import io.github.rcrida.jcsp.solver.PropagationFixpointSolver;
+import io.github.rcrida.jcsp.solver.RestartRandomization;
 import io.github.rcrida.jcsp.solver.Solver;
 import io.github.rcrida.jcsp.solver.backtrackingsearch.order.LeastConstrainingValueOrderer;
 import io.github.rcrida.jcsp.variables.Variable;
 
+import java.io.File;
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Random;
 import java.util.Set;
+import java.util.concurrent.TimeUnit;
 
 /**
  * Standalone (non-JUnit, not run by surefire/jacoco) harness measuring how much of a hard search's
@@ -113,6 +118,32 @@ import java.util.Set;
  * 2452ms) exactly as the other UNSAT scenarios do. See {@code project_jcsp_isconsistent_learning_gap}
  * in project memory for the full trail, including why the two reverted attempts made things worse.
  *
+ * <p><b>{@link #compareRestartRandomization}</b> is a second, independent comparison appended after
+ * the three-variant sections above: it measures whether {@link RestartRandomization} (added to give
+ * {@link DomWdegLubySearch}'s per-restart tie-breaking a controlled, seedable source of
+ * diversification, replacing an accidental one -- see {@link RestartRandomization}'s own Javadoc)
+ * is actually <em>statistically better</em> than the accidental variance it replaces, not just
+ * differently-sourced. For each of two scenarios (one UNSAT, one SAT -- restart randomization's
+ * classic literature win, per Gomes/Selman, is specifically on the heavy-tailed satisfiable case) it
+ * gathers two spreads of {@code nodesExplored} over {@link #RESTART_COMPARISON_SAMPLES} samples each:
+ * <ul>
+ *   <li><b>launch-to-launch</b>: {@link RestartRandomization#NONE} (deterministic tie-breaking, no
+ *       new randomization at all), run once per sample as a genuinely separate {@code java} process
+ *       via {@link #runInSubprocess} -- isolating exactly the accidental salted-collection variance
+ *       this feature was motivated by (see {@link RestartRandomization}'s own Javadoc), since that
+ *       variance is seeded once per JVM launch, not reproducible any other way.</li>
+ *   <li><b>seeded</b>: {@link RestartRandomization#seeded} with a different seed per sample, all
+ *       {@link #RESTART_COMPARISON_SAMPLES} samples run within this one JVM process via {@link
+ *       #singleRunNodes} -- the mechanism this whole feature added.</li>
+ * </ul>
+ * Both use the exact same {@link #buildChain}-built chain and node budget per scenario, differing
+ * only in which {@link RestartRandomization} is threaded through -- so any difference in the printed
+ * mean/stddev/min/max between the two spreads is attributable to the randomization source itself,
+ * not to a different search configuration. {@link #scenarioByKey} keys the two scenarios by a short
+ * string (not the full {@code Scenario} records above) since {@link #runInSubprocess} needs to name
+ * one on a subprocess command line; that subprocess re-enters this same {@code main} with {@code
+ * --single-run <key> <nodeLimit>}, which is checked first, before any of the sections above run.
+ *
  * <p>Run via {@code mvn test-compile} then
  * {@code java -cp target/classes:target/test-classes:$(mvn -q dependency:build-classpath -Dmdep.outputFile=/dev/stdout) io.github.rcrida.jcsp.benchmark.NogoodPropagationBenchmark}.
  */
@@ -121,11 +152,28 @@ public final class NogoodPropagationBenchmark {
     private static final long NODE_LIMIT = 300_000L;
     private static final long FORCED_NODE_LIMIT = 500L;
     private static final int TRIALS = 3;
+    private static final int RESTART_COMPARISON_SAMPLES = 15;
+    private static final long RESTART_COMPARISON_NODE_LIMIT = 50_000L;
+    // Fixed, not RestartRandomization.NONE: same reasoning as CsplibBenchmarks#deterministicConfig
+    // -- a fixed seed reproduces the same restart-tie-break sequence across all TRIALS runs (so
+    // default/capped/disabled differences stay attributable to NogoodStore behaviour alone) while
+    // still exercising the real production code path, not a special-cased "disabled" one.
+    private static final long NOGOOD_BENCHMARK_RESTART_SEED = 42L;
 
     private NogoodPropagationBenchmark() {
     }
 
     public static void main(String[] args) {
+        if (args.length == 3 && "--single-run".equals(args[0])) {
+            // Re-entered by runInSubprocess as a genuinely separate JVM process: run exactly one
+            // trial with RestartRandomization.NONE and report just the node count, so the parent
+            // process can measure the accidental launch-to-launch variance in isolation.
+            ConstraintSatisfactionProblem csp = scenarioByKey(args[1]);
+            long nodeLimit = Long.parseLong(args[2]);
+            System.out.println("NODES=" + singleRunNodes(csp, nodeLimit, RestartRandomization.NONE));
+            return;
+        }
+
         record Scenario(String name, ConstraintSatisfactionProblem csp) {
         }
         List<Scenario> scenarios = List.of(
@@ -163,6 +211,8 @@ public final class NogoodPropagationBenchmark {
         System.out.println();
         System.out.println("=== Pigeonhole n=7 pigeons, 6 holes, forced truncation at " + FORCED_NODE_LIMIT + " nodes ===");
         runAllVariants(pigeonhole7, FORCED_NODE_LIMIT);
+
+        compareRestartRandomization();
     }
 
     private static void runAllVariants(ConstraintSatisfactionProblem csp, long nodeLimit) {
@@ -185,7 +235,8 @@ public final class NogoodPropagationBenchmark {
             // rather than something only reachable via a returned Assignment -- so it's readable
             // here regardless of how the search below terminates: SAT, genuine UNSAT, or a limit hit.
             Statistics statistics = new Statistics();
-            Solver chain = buildChain(storeFactory.get(), limits, nogoodLearningEnabled, statistics);
+            Solver chain = buildChain(storeFactory.get(), limits, nogoodLearningEnabled, statistics,
+                    RestartRandomization.seeded(NOGOOD_BENCHMARK_RESTART_SEED));
             long start = System.nanoTime();
             try {
                 var result = chain.getSolution(csp);
@@ -213,7 +264,7 @@ public final class NogoodPropagationBenchmark {
      * (not needed here: these Golomb ruler instances are a single dense connected component with
      * treewidth above the tree-decomposition threshold, so those decorators would be pure passthrough). */
     private static Solver buildChain(NogoodStore nogoodStore, SolverLimits limits, boolean nogoodLearningEnabled,
-                                     Statistics statistics) {
+                                     Statistics statistics, RestartRandomization restartRandomization) {
         io.github.rcrida.jcsp.consistency.Inference inference = nogoodLearningEnabled
                 ? Solver.Factory.FULL_PROPAGATION_INFERENCE
                 : io.github.rcrida.jcsp.consistency.Inference.withoutReasonTracking(Solver.Factory.FULL_PROPAGATION_INFERENCE);
@@ -224,12 +275,106 @@ public final class NogoodPropagationBenchmark {
                 .nogoodStore(nogoodStore)
                 .statistics(statistics)
                 .maxRestarts(Integer.MAX_VALUE)
+                .restartRandomization(restartRandomization)
                 .build();
         Solver propagationFixpointSolver = PropagationFixpointSolver.builder()
                 .inner(domWdegLubySearch)
                 .snap(true)
                 .build();
         return NodeConsistentSolver.builder().inner(propagationFixpointSolver).build();
+    }
+
+    // ── Restart randomization: accidental vs controlled variance ──────────────
+
+    private static ConstraintSatisfactionProblem scenarioByKey(String key) {
+        return switch (key) {
+            case "golomb7" -> golombRuler(7, 24);
+            case "qcp20" -> quasigroupCompletion(20, 0.5, 42L);
+            default -> throw new IllegalArgumentException("Unknown scenario key: " + key);
+        };
+    }
+
+    /** Runs one trial to completion (or until {@code nodeLimit} truncates it) and returns the real,
+     * cumulative {@code nodesExplored} count either way -- {@link Statistics} is a shared token
+     * seeded into the search (see {@link #run}'s own comment), so it's readable from the {@link
+     * LimitExceededException} catch branch exactly like a normal completion. */
+    private static long singleRunNodes(ConstraintSatisfactionProblem csp, long nodeLimit, RestartRandomization restartRandomization) {
+        SolverLimits limits = SolverLimits.ofNodes(nodeLimit);
+        Statistics statistics = new Statistics();
+        Solver chain = buildChain(NogoodStore.forProblem(csp), limits, true, statistics, restartRandomization);
+        try {
+            chain.getSolution(csp);
+        } catch (LimitExceededException ignored) {
+            // statistics still holds the true cumulative count up to the point the limit fired.
+        }
+        return statistics.getNodesExplored().get();
+    }
+
+    private static void compareRestartRandomization() {
+        System.out.println();
+        System.out.println("=== Restart-tie-break randomization: accidental (launch-to-launch) vs controlled (seeded) spread ===");
+        compareOneScenario("golomb7", "Golomb ruler order=7 length=24 (UNSAT)");
+        compareOneScenario("qcp20", "Quasigroup completion n=20 holes=0.5 seed=42 (SAT)");
+    }
+
+    private static void compareOneScenario(String key, String label) {
+        ConstraintSatisfactionProblem csp = scenarioByKey(key);
+        System.out.println();
+        System.out.println("--- " + label + " ---");
+
+        List<Long> launchSpread = new ArrayList<>();
+        for (int i = 0; i < RESTART_COMPARISON_SAMPLES; i++) {
+            launchSpread.add(runInSubprocess(key, RESTART_COMPARISON_NODE_LIMIT));
+        }
+        System.out.println("launch-to-launch (RestartRandomization.NONE, " + RESTART_COMPARISON_SAMPLES
+                + " separate JVM launches): " + summarize(launchSpread));
+
+        List<Long> seededSpread = new ArrayList<>();
+        for (int i = 0; i < RESTART_COMPARISON_SAMPLES; i++) {
+            seededSpread.add(singleRunNodes(csp, RESTART_COMPARISON_NODE_LIMIT, RestartRandomization.seeded(i)));
+        }
+        System.out.println("seeded tie-break         (" + RESTART_COMPARISON_SAMPLES
+                + " seeds, one JVM launch):          " + summarize(seededSpread));
+    }
+
+    private static String summarize(List<Long> values) {
+        double mean = values.stream().mapToLong(Long::longValue).average().orElse(0);
+        double variance = values.stream().mapToDouble(v -> (v - mean) * (v - mean)).average().orElse(0);
+        double stddev = Math.sqrt(variance);
+        long min = values.stream().mapToLong(Long::longValue).min().orElse(0);
+        long max = values.stream().mapToLong(Long::longValue).max().orElse(0);
+        return String.format("mean=%.1f stddev=%.1f min=%d max=%d values=%s", mean, stddev, min, max, values);
+    }
+
+    /**
+     * Spawns {@code java -cp <this JVM's own classpath> NogoodPropagationBenchmark --single-run
+     * <key> <nodeLimit>} and parses its {@code NODES=<n>} line -- mirrors {@code
+     * Xcsp3CompetitionRunner#runOne}'s subprocess-isolation pattern (same project, same rationale:
+     * real per-launch process isolation, not an in-process simulation of one).
+     */
+    private static long runInSubprocess(String key, long nodeLimit) {
+        try {
+            String javaBin = System.getProperty("java.home") + File.separator + "bin" + File.separator + "java";
+            String classpath = System.getProperty("java.class.path");
+            ProcessBuilder builder = new ProcessBuilder(
+                    javaBin, "-cp", classpath, NogoodPropagationBenchmark.class.getName(),
+                    "--single-run", key, String.valueOf(nodeLimit));
+            builder.redirectErrorStream(true);
+            Process process = builder.start();
+            boolean finished = process.waitFor(30, TimeUnit.SECONDS);
+            if (!finished) {
+                process.destroyForcibly();
+                throw new IllegalStateException("subprocess for " + key + " did not finish within 30s");
+            }
+            String output = new String(process.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
+            return output.lines()
+                    .filter(line -> line.startsWith("NODES="))
+                    .map(line -> Long.parseLong(line.substring("NODES=".length())))
+                    .findFirst()
+                    .orElseThrow(() -> new IllegalStateException("subprocess for " + key + " produced no NODES= line:\n" + output));
+        } catch (IOException | InterruptedException e) {
+            throw new RuntimeException(e);
+        }
     }
 
     /** Same construction as {@code Prob006GolombRulerTest}, parameterized so different orders can be compared. */
