@@ -20,6 +20,7 @@ import java.util.Objects;
 import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 @ExtendWith(MockitoExtension.class)
 public class GlobalCardinalityConstraintTest {
@@ -91,6 +92,16 @@ public class GlobalCardinalityConstraintTest {
                 Set.of(v1, v2, v3, v4),
                 Map.of(Color.RED, 2, Color.GREEN, 1, Color.BLUE, 1)))
                 .isEqualTo(constraint);
+    }
+
+    @Test
+    void of_sumOfQuotasExceedsVariableCount_throws() {
+        // RED=2, GREEN=2, BLUE=2 sums to 6, but only 4 variables exist -- no assignment could ever
+        // satisfy this GCC regardless of domains, so of() rejects it up front.
+        assertThatThrownBy(() -> GlobalCardinalityConstraint.of(
+                Set.of(v1, v2, v3, v4),
+                Map.of(Color.RED, 2, Color.GREEN, 2, Color.BLUE, 2)))
+                .isInstanceOf(AssertionError.class);
     }
 
     // --- propagate(): flow-based GAC (Régin 1996) ---
@@ -276,10 +287,17 @@ public class GlobalCardinalityConstraintTest {
         // individual variable could, in isolation, still route successfully. The min-cut's
         // violating subset is genuinely empty here (confirmed empirically, not assumed): the
         // shortfall lands entirely on the value/bookkeeping side of the flow network, so
-        // findViolatingSubset's defensive empty check is real, reachable code, not dead
-        // defensiveness.
+        // findViolatingSubset's defensive empty check is real, reachable code — but only when
+        // assertions are disabled (the normal production default; Maven Surefire enables them for
+        // tests). GlobalCardinalityConstraint.of()'s own assert now rejects this shape at
+        // construction, so this test bypasses it via the builder directly to still exercise the
+        // underlying flow algorithm's defensive handling, same as the assert being compiled out
+        // (`-da`) would let a real caller reach it at runtime.
         var w1 = v1; var w2 = v2; var w3 = v3; var w4 = v4;
-        var c = GlobalCardinalityConstraint.of(Set.of(w1, w2, w3, w4), Map.of(Color.RED, 3, Color.GREEN, 3));
+        var c = GlobalCardinalityConstraint.<Color>builder()
+                .variables(Set.of(w1, w2, w3, w4))
+                .cardinalities(Map.of(Color.RED, 3, Color.GREEN, 3))
+                .build();
         var domains = Map.<Variable<?>, Domain<?>>of(
                 w1, RED_ONLY, w2, RED_GREEN, w3, GREEN_ONLY, w4, GREEN_ONLY);
         assertThat(c.propagate(domains)).isEmpty();
@@ -343,6 +361,8 @@ public class GlobalCardinalityConstraintTest {
                 if (random.nextBoolean()) cardinalities.put(c, random.nextInt(n + 1));
             }
             if (cardinalities.isEmpty()) continue; // degenerate no-op GCC, nothing to check
+            int sumQuotas = cardinalities.values().stream().mapToInt(Integer::intValue).sum();
+            if (sumQuotas > n) continue; // structurally over-committed; GlobalCardinalityConstraint.of() now rejects this
 
             var constraint = GlobalCardinalityConstraint.of(new java.util.HashSet<>(vars), cardinalities);
             boolean bruteForceFeasible = anyCompletionSatisfies(domLists, cardinalities, new Color[n], -1, null, 0);

@@ -51,6 +51,13 @@ public class GlobalCardinalityConstraint<T> extends UniformNaryConstraint<T> imp
 
     public static <T> GlobalCardinalityConstraint<T> of(@NonNull Set<Variable<T>> variables,
                                                         @NonNull Map<T, Integer> cardinalities) {
+        // A structural (domain-independent) infeasibility: no assignment of `variables` can ever
+        // supply more total quota than there are variables to supply it. Failing fast here beats
+        // discovering it only as an unexplained UNSAT deep in search -- and for exactly this shape
+        // (Σ quotas > n), the flow-based propagator's own violating-subset extraction can return
+        // empty (see findViolatingSubset's Javadoc), so search wouldn't even get a useful nogood.
+        assert cardinalities.values().stream().mapToInt(Integer::intValue).sum() <= variables.size()
+                : "sum of cardinalities exceeds variable count: no assignment can satisfy this GCC";
         return GlobalCardinalityConstraint.<T>builder()
                 .variables(variables)
                 .cardinalities(cardinalities)
@@ -217,7 +224,10 @@ public class GlobalCardinalityConstraint<T> extends UniformNaryConstraint<T> imp
      * flow without recomputing the network.
      */
     private record FlowResult<T>(FlowNetwork<T> network, MaxFlow flow, boolean feasible,
-                                  List<int[]> varEdgeIndex, int superSource) {}
+                                  List<List<CandidateEdge>> varEdgeIndex, int superSource) {}
+
+    /** One variable's candidate: which node it would route to, and that edge's forward index into {@link MaxFlow}. */
+    private record CandidateEdge(int candidate, int forwardEdge) {}
 
     /**
      * Builds the reduced flow-with-lower-bounds network (the standard supersource/supersink
@@ -254,17 +264,14 @@ public class GlobalCardinalityConstraint<T> extends UniformNaryConstraint<T> imp
         for (int i = 0; i < n; i++) flow.addEdge(superSource, i, 1);
         flow.addEdge(superSource, sinkOriginal, sumQuotas);
 
-        List<int[]> varEdgeIndex = new ArrayList<>(n);
+        List<List<CandidateEdge>> varEdgeIndex = new ArrayList<>(n);
         for (int i = 0; i < n; i++) {
             List<Integer> adj = network.varAdj().get(i);
-            int[] pairs = new int[adj.size() * 2]; // (candidateNode, forwardEdgeIndex) pairs
-            for (int c = 0; c < adj.size(); c++) {
-                int candidate = adj.get(c);
-                int fwd = flow.addEdge(i, candidate, 1);
-                pairs[2 * c] = candidate;
-                pairs[2 * c + 1] = fwd;
+            List<CandidateEdge> candidates = new ArrayList<>(adj.size());
+            for (int candidate : adj) {
+                candidates.add(new CandidateEdge(candidate, flow.addEdge(i, candidate, 1)));
             }
-            varEdgeIndex.add(pairs);
+            varEdgeIndex.add(candidates);
         }
 
         flow.addEdge(untrackedNode, sinkOriginal, n);
@@ -284,6 +291,18 @@ public class GlobalCardinalityConstraint<T> extends UniformNaryConstraint<T> imp
      * reversed edge {@code (candidate, var)} — the same construction {@link
      * AllDiffConstraint#propagate} uses for 0/1 matching (only reachable via {@link #computeFlow}
      * having already confirmed feasibility, so exactly one candidate per variable carries flow).
+     * <p>
+     * Deliberately omits the untracked sink's own {@code (untrackedNode, sinkOriginal)} edge and
+     * its residual capacity from this graph — unlike a tracked value (exactly saturated whenever
+     * feasible, {@code lo == hi}), the untracked sink has real slack, so it might look like that
+     * slack needs its own residual representation for completeness. It doesn't: the sink's
+     * capacity is fixed at the total variable count, a strict upper bound that can never actually
+     * bind (at most that many variables exist to compete for it in the first place), so its
+     * aggregate capacity never constrains anything beyond what each variable's own edge to it
+     * already determines — a variable with the untracked sink among its candidates can always
+     * reach it via that one edge, independent of how many other variables currently also do.
+     * Modelling the sink's own slack explicitly would therefore only ever confirm "yes, room
+     * available", never add discriminating information the per-variable edges don't already give.
      */
     private List<List<Integer>> buildResidualGraph(FlowResult<T> result) {
         int bipartiteNodes = result.network().bipartiteNodeCount();
@@ -291,14 +310,11 @@ public class GlobalCardinalityConstraint<T> extends UniformNaryConstraint<T> imp
         for (int i = 0; i < bipartiteNodes; i++) graph.add(new ArrayList<>());
 
         for (int i = 0; i < result.network().vars().size(); i++) {
-            int[] pairs = result.varEdgeIndex().get(i);
-            for (int c = 0; c < pairs.length; c += 2) {
-                int candidate = pairs[c];
-                int fwdEdge = pairs[c + 1];
-                if (result.flow().hasFlow(fwdEdge)) {
-                    graph.get(candidate).add(i);
+            for (CandidateEdge edge : result.varEdgeIndex().get(i)) {
+                if (result.flow().hasFlow(edge.forwardEdge())) {
+                    graph.get(edge.candidate()).add(i);
                 } else {
-                    graph.get(i).add(candidate);
+                    graph.get(i).add(edge.candidate());
                 }
             }
         }
@@ -370,21 +386,18 @@ public class GlobalCardinalityConstraint<T> extends UniformNaryConstraint<T> imp
 
         Map<Variable<?>, Domain<?>> updates = new HashMap<>();
         for (int i = 0; i < result.network().vars().size(); i++) {
-            int[] pairs = result.varEdgeIndex().get(i);
             Variable<T> var = result.network().vars().get(i);
             DiscreteDomain<T> dom = (DiscreteDomain<T>) domains.get(var);
             DiscreteDomain.Builder<T> builder = null;
-            for (int c = 0; c < pairs.length; c += 2) {
-                int candidate = pairs[c];
-                int fwdEdge = pairs[c + 1];
-                if (result.flow().hasFlow(fwdEdge) || scc[i] == scc[candidate]) continue;
+            for (CandidateEdge edge : result.varEdgeIndex().get(i)) {
+                int candidate = edge.candidate();
+                if (result.flow().hasFlow(edge.forwardEdge()) || scc[i] == scc[candidate]) continue;
+                if (builder == null) builder = dom.toBuilder();
                 if (candidate == untrackedNode) {
-                    if (builder == null) builder = dom.toBuilder();
                     for (T val : dom.toList()) {
                         if (!cardinalities.containsKey(val)) builder.delete(val);
                     }
                 } else {
-                    if (builder == null) builder = dom.toBuilder();
                     builder.delete(result.network().trackedValues().get(candidate - result.network().vars().size()));
                 }
             }
