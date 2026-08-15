@@ -152,7 +152,7 @@ public class AllDiffConstraint<T> extends UniformNaryConstraint<T> implements Pr
             for (int j = 0; j < m; j++) graph.get(freeNode).add(n + j);
         }
 
-        int[] scc = tarjanSCC(graph, totalNodes);
+        int[] scc = TarjanSCC.compute(graph, totalNodes);
 
         Map<Variable<?>, Domain<?>> updates = new HashMap<>();
         for (int i = 0; i < n; i++) {
@@ -261,44 +261,4 @@ public class AllDiffConstraint<T> extends UniformNaryConstraint<T> implements Pr
         return false;
     }
 
-    private int[] tarjanSCC(List<List<Integer>> graph, int n) {
-        int[] disc = new int[n];
-        int[] low = new int[n];
-        int[] scc = new int[n];
-        boolean[] onStack = new boolean[n];
-        Arrays.fill(disc, -1);
-        Deque<Integer> stack = new ArrayDeque<>();
-        int[] counter = {0};
-        int[] sccCount = {0};
-        for (int i = 0; i < n; i++) {
-            if (disc[i] == -1) strongconnect(i, graph, disc, low, scc, onStack, stack, counter, sccCount);
-        }
-        return scc;
-    }
-
-    private void strongconnect(int v, List<List<Integer>> graph,
-                                int[] disc, int[] low, int[] scc,
-                                boolean[] onStack, Deque<Integer> stack,
-                                int[] counter, int[] sccCount) {
-        disc[v] = low[v] = counter[0]++;
-        stack.push(v);
-        onStack[v] = true;
-        for (int w : graph.get(v)) {
-            if (disc[w] == -1) {
-                strongconnect(w, graph, disc, low, scc, onStack, stack, counter, sccCount);
-                low[v] = Math.min(low[v], low[w]);
-            } else if (onStack[w]) {
-                low[v] = Math.min(low[v], disc[w]);
-            }
-        }
-        if (low[v] == disc[v]) {
-            int component = sccCount[0]++;
-            int w;
-            do {
-                w = stack.pop();
-                onStack[w] = false;
-                scc[w] = component;
-            } while (w != v);
-        }
-    }
 }
