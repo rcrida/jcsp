@@ -82,18 +82,6 @@ public class CircuitConstraint extends NaryConstraint implements Propagatable, B
         return false;
     }
 
-    /**
-     * Outcome of one propagation pass, shared by {@link #propagate} and {@link #explainInfeasible}
-     * so each pass's narrowing/failure-detection logic lives in exactly one place. {@code updated}
-     * (passed into every pass method) is mutated in place with any narrowed domains regardless of
-     * outcome; {@link #FEASIBLE} means the pass found no infeasibility, {@code infeasible(reason)}
-     * means it did, carrying the sound explanation for {@link #explainInfeasible} to return
-     * (ignored by {@link #propagate}, which only needs to know a pass failed).
-     */
-    private record PassOutcome(boolean infeasible, Map<Variable<?>, Object> reason) {
-        static final PassOutcome FEASIBLE = new PassOutcome(false, Map.of());
-        static PassOutcome infeasible(Map<Variable<?>, Object> reason) { return new PassOutcome(true, reason); }
-    }
 
     /** Step 1: self-loop removal — node i+1 cannot point to itself. */
     private PassOutcome selfLoopPass(Map<Variable<?>, Domain<?>> domains, Map<Variable<?>, Domain<?>> updated) {

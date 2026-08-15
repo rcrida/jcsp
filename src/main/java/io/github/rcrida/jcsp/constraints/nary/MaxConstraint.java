@@ -76,11 +76,9 @@ public class MaxConstraint<N extends Number> extends UniformNaryConstraint<N> im
     }
 
     /**
-     * Bounds propagation for {@code max(vars) op bound}.
-     * <p>
-     * Upper-bound pass (EQ/LEQ/LT): clips every variable's maximum to {@link #bound}.
-     * Lower-bound pass (EQ/GEQ/GT): when only one variable can still reach {@link #bound},
-     * raises its minimum to {@link #bound}. Returns {@link Optional#empty()} on infeasibility.
+     * Bounds propagation for {@code max(vars) op bound}, delegating the shared narrowing math to
+     * {@link ExtremumPropagation#narrowMax} — this is the "maximize" direction directly, no
+     * coordinate transform needed (that's {@link MinConstraint}'s job).
      */
     @Override
     @SuppressWarnings("unchecked")
@@ -99,50 +97,18 @@ public class MaxConstraint<N extends Number> extends UniformNaryConstraint<N> im
             maxs[i] = NumericBounds.max(dom);
         }
 
-        double k = bound.doubleValue();
+        Optional<double[][]> narrowed = ExtremumPropagation.narrowMax(mins, maxs, bound.doubleValue(), operator);
+        if (narrowed.isEmpty()) return Optional.empty();
+        double[] newMins = narrowed.get()[0];
+        double[] newMaxs = narrowed.get()[1];
+
         Map<Variable<?>, Domain<?>> updated = new HashMap<>();
-
-        // Upper-bound pass: max(vars) ≤ k — every variable must be ≤ k
-        if (upperPassApplies()) {
-            double globalMin = Double.NEGATIVE_INFINITY;
-            for (double m : mins) globalMin = Math.max(globalMin, m);
-            boolean strict = operator == Operator.LT;
-            if (strict ? globalMin >= k : globalMin > k) return Optional.empty();
-
-            for (int i = 0; i < n; i++) {
-                if (maxs[i] > k) {
-                    Domain<N> dom = (Domain<N>) domains.get(vars.get(i));
-                    // maxs[i] > k guarantees narrow produces a change; globalMin ≤ k guarantees non-empty
-                    updated.put(vars.get(i), NumericBounds.narrow(dom, mins[i], k).orElseThrow());
-                    maxs[i] = k;
-                }
-            }
-        }
-
-        // Lower-bound pass: max(vars) ≥ k — at least one variable must reach k
-        if (lowerPassApplies()) {
-            double globalMax = Double.NEGATIVE_INFINITY;
-            for (double m : maxs) globalMax = Math.max(globalMax, m);
-            boolean strict = operator == Operator.GT;
-            if (strict ? globalMax <= k : globalMax < k) return Optional.empty();
-
-            // If exactly one variable can reach k, force its minimum up to k
-            int reachCount = 0, reachIdx = -1;
-            for (int i = 0; i < n; i++) {
-                if (strict ? maxs[i] > k : maxs[i] >= k) {
-                    reachCount++;
-                    reachIdx = i;
-                }
-            }
-            if (reachCount == 1 && mins[reachIdx] < k) {
-                Domain<N> dom = updated.containsKey(vars.get(reachIdx))
-                        ? (Domain<N>) updated.get(vars.get(reachIdx))
-                        : (Domain<N>) domains.get(vars.get(reachIdx));
-                // mins[reachIdx] < k guarantees narrow produces a change; may be empty for discrete with gaps
-                Domain<N> raised = NumericBounds.narrow(dom, k, maxs[reachIdx]).orElseThrow();
-                if (raised.isEmpty()) return Optional.empty();
-                updated.put(vars.get(reachIdx), raised);
-            }
+        for (int i = 0; i < n; i++) {
+            Domain<N> dom = (Domain<N>) domains.get(vars.get(i));
+            Optional<Domain<N>> result = NumericBounds.narrow(dom, newMins[i], newMaxs[i]);
+            if (result.isEmpty()) continue;
+            if (result.get().isEmpty()) return Optional.empty();
+            updated.put(vars.get(i), result.get());
         }
 
         return Optional.of(updated);
@@ -179,30 +145,8 @@ public class MaxConstraint<N extends Number> extends UniformNaryConstraint<N> im
      * </ul>
      */
     @Override
-    @SuppressWarnings("unchecked")
     public Optional<NogoodConstraint> explainInfeasible(@NonNull Map<Variable<?>, Domain<?>> domains) {
-        double k = bound.doubleValue();
-        boolean upperStrict = operator == Operator.LT;
-
-        if (upperPassApplies()) {
-            for (Variable<?> var : getVariables()) {
-                Domain<N> dom = (Domain<N>) domains.get(var);
-                if (!dom.isSingleton()) continue;
-                N value = dom.singleValue().orElseThrow();
-                boolean exceeds = upperStrict ? value.doubleValue() >= k : value.doubleValue() > k;
-                if (exceeds) {
-                    Map<Variable<?>, Object> reason = new HashMap<>();
-                    reason.put(var, value);
-                    return GroundNogoodConstraint.fromReason(reason);
-                }
-            }
-        }
-
-        if (lowerPassApplies()) {
-            Map<Variable<?>, Object> reason = Propagatable.allSingletonReason(getVariables(), domains);
-            if (!reason.isEmpty()) return GroundNogoodConstraint.fromReason(reason);
-        }
-
-        return Optional.empty();
+        return ExtremumPropagation.<N>explainInfeasible(getVariables(), domains, bound.doubleValue(),
+                operator == Operator.LT, true, upperPassApplies(), lowerPassApplies());
     }
 }

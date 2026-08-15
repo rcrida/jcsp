@@ -9,11 +9,9 @@ import lombok.EqualsAndHashCode;
 import lombok.experimental.SuperBuilder;
 import org.jspecify.annotations.NonNull;
 
-import java.util.ArrayList;
 import java.util.Collection;
 import java.util.EnumSet;
 import java.util.HashMap;
-import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
@@ -57,33 +55,6 @@ public class AmongConstraint<T> extends UniformNaryConstraint<T> implements Prop
     }
 
     /**
-     * Classification of every constrained variable, shared by {@link #propagate} and
-     * {@link #explainInfeasible} so the classification logic lives in exactly one place:
-     * <ul>
-     *   <li><em>definite</em>: entire domain is within {@code S} (always contributes to count)</li>
-     *   <li><em>possible</em>: domain intersects {@code S} but also has values outside it</li>
-     *   <li><em>impossible</em>: domain is disjoint from {@code S} (never contributes)</li>
-     * </ul>
-     */
-    private record Classification<T>(List<Variable<T>> definite, List<Variable<T>> possible,
-                                      List<Variable<?>> impossible) {}
-
-    @SuppressWarnings("unchecked")
-    private Classification<T> classify(Map<Variable<?>, Domain<?>> domains) {
-        List<Variable<T>> definite = new ArrayList<>();
-        List<Variable<T>> possible = new ArrayList<>();
-        List<Variable<?>> impossible = new ArrayList<>();
-        for (Variable<?> var : getVariables()) {
-            DiscreteDomain<T> dom = (DiscreteDomain<T>) domains.get(var);
-            boolean hasInS = dom.stream().anyMatch(values::contains);
-            if (!hasInS) { impossible.add(var); continue; }
-            if (dom.stream().allMatch(values::contains)) definite.add((Variable<T>) var);
-            else possible.add((Variable<T>) var);
-        }
-        return new Classification<>(definite, possible, impossible);
-    }
-
-    /**
      * When the definite count reaches {@code n} (EQ/LEQ), removes all {@code S} values from
      * possible domains. When the max reachable count equals {@code n} (EQ/GEQ), removes all
      * non-{@code S} values from possible domains.
@@ -94,7 +65,7 @@ public class AmongConstraint<T> extends UniformNaryConstraint<T> implements Prop
             return Optional.of(Map.of());
         }
 
-        Classification<T> c = classify(domains);
+        ClassificationSupport.Classification<T> c = ClassificationSupport.classify(getVariables(), values::contains, domains);
         int definiteCount = c.definite().size();
         int maxCount = definiteCount + c.possible().size();
 
@@ -135,7 +106,7 @@ public class AmongConstraint<T> extends UniformNaryConstraint<T> implements Prop
 
     /**
      * On infeasibility, tries two independent, always-sound explanations built from the same
-     * {@link #classify} used by {@link #propagate} — mirrors
+     * {@link ClassificationSupport#classify} used by {@link #propagate} — mirrors
      * {@link CountConstraint#explainInfeasible} generalised from a single value to a set:
      * <ul>
      *   <li><b>Definite-count violation</b> (EQ/LEQ): {@code definiteCount > n}. Unlike
@@ -155,7 +126,7 @@ public class AmongConstraint<T> extends UniformNaryConstraint<T> implements Prop
         boolean applyUpper = operator == Operator.EQ || operator == Operator.LEQ;
         boolean applyLower = operator == Operator.EQ || operator == Operator.GEQ;
 
-        Classification<T> c = classify(domains);
+        ClassificationSupport.Classification<T> c = ClassificationSupport.classify(getVariables(), values::contains, domains);
 
         if (applyUpper && c.definite().size() > n) {
             Map<Variable<?>, Object> reason = Propagatable.allSingletonReason(c.definite(), domains);

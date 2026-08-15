@@ -66,31 +66,6 @@ public class CountVariableConstraint<T> extends NaryConstraint implements Propag
     }
 
     /**
-     * Classification of every counted variable, shared by {@link #propagate} and {@link
-     * #explainInfeasible} — the same three-way split {@link CountConstraint}'s own {@code
-     * classify} uses: <em>definite</em> (singleton domain equal to {@link #value}), <em>possible</em>
-     * ({@link #value} in the domain alongside other values), <em>impossible</em> ({@link #value}
-     * absent from the domain).
-     */
-    private record Classification<T>(List<Variable<T>> definite, List<Variable<T>> possible, List<Variable<?>> impossible) {}
-
-    @SuppressWarnings("unchecked")
-    private Classification<T> classify(Map<Variable<?>, Domain<?>> domains) {
-        List<Variable<T>> definite = new ArrayList<>();
-        List<Variable<T>> possible = new ArrayList<>();
-        List<Variable<?>> impossible = new ArrayList<>();
-        for (Variable<T> v : countedVariables) {
-            DiscreteDomain<T> dom = (DiscreteDomain<T>) domains.get(v);
-            if (dom.stream().anyMatch(value::equals)) {
-                if (dom.isSingleton()) definite.add(v); else possible.add(v);
-            } else {
-                impossible.add(v);
-            }
-        }
-        return new Classification<>(definite, possible, impossible);
-    }
-
-    /**
      * Bounds-consistency propagation for {@code count(countedVariables, value) <op> target}. Only
      * {@link Operator#EQ}, {@link Operator#LEQ}, and {@link Operator#GEQ} propagate (matching
      * {@link MaxVariableConstraint#propagate}'s own operator set); {@link Operator#LT}/{@link
@@ -119,7 +94,7 @@ public class CountVariableConstraint<T> extends NaryConstraint implements Propag
      * surrounding fixpoint loop calls this again until nothing changes. Target narrowing is
      * provably never empty given the earlier feasibility checks pass (same cross-bound argument as
      * {@link MaxVariableConstraint#propagate}); the possible-variable passes are provably never
-     * empty too, since a "possible" variable's domain (by {@link #classify}'s own definition)
+     * empty too, since a "possible" variable's domain (by {@link ClassificationSupport#classify}'s own definition)
      * always has at least one value other than {@link #value} (so removing {@link #value} can't
      * empty it) and always contains {@link #value} itself (so forcing down to just {@link #value}
      * can't either) — matching why {@link CountConstraint#propagate}'s analogous branches need no
@@ -134,7 +109,7 @@ public class CountVariableConstraint<T> extends NaryConstraint implements Propag
         boolean leqLike = operator == Operator.EQ || operator == Operator.LEQ;
         boolean geqLike = operator == Operator.EQ || operator == Operator.GEQ;
 
-        Classification<T> c = classify(domains);
+        ClassificationSupport.Classification<T> c = ClassificationSupport.classify(countedVariables, value::equals, domains);
         int definiteCount = c.definite().size();
         int maxCount = definiteCount + c.possible().size();
 
@@ -186,7 +161,7 @@ public class CountVariableConstraint<T> extends NaryConstraint implements Propag
         boolean leqLike = operator == Operator.EQ || operator == Operator.LEQ;
         boolean geqLike = operator == Operator.EQ || operator == Operator.GEQ;
 
-        Classification<T> c = classify(domains);
+        ClassificationSupport.Classification<T> c = ClassificationSupport.classify(countedVariables, value::equals, domains);
         int definiteCount = c.definite().size();
         int maxCount = definiteCount + c.possible().size();
 

@@ -67,34 +67,11 @@ public class AmongVariableConstraint<T> extends NaryConstraint implements Propag
     }
 
     /**
-     * Classification of every counted variable, shared by {@link #propagate} and {@link
-     * #explainInfeasible} — the same three-way split {@link AmongConstraint}'s own {@code
-     * classify} uses: <em>definite</em> (whole domain inside {@link #values}), <em>possible</em>
-     * (domain intersects {@link #values} but also has values outside it), <em>impossible</em>
-     * (domain disjoint from {@link #values}).
-     */
-    private record Classification<T>(List<Variable<T>> definite, List<Variable<T>> possible, List<Variable<?>> impossible) {}
-
-    @SuppressWarnings("unchecked")
-    private Classification<T> classify(Map<Variable<?>, Domain<?>> domains) {
-        List<Variable<T>> definite = new ArrayList<>();
-        List<Variable<T>> possible = new ArrayList<>();
-        List<Variable<?>> impossible = new ArrayList<>();
-        for (Variable<T> v : countedVariables) {
-            DiscreteDomain<T> dom = (DiscreteDomain<T>) domains.get(v);
-            boolean hasInS = dom.stream().anyMatch(values::contains);
-            if (!hasInS) { impossible.add(v); continue; }
-            if (dom.stream().allMatch(values::contains)) definite.add(v); else possible.add(v);
-        }
-        return new Classification<>(definite, possible, impossible);
-    }
-
-    /**
      * Mirrors {@link CountVariableConstraint#propagate} generalised from a single value to a set
      * — see that class's own Javadoc for the full derivation and non-emptiness argument (which
      * transfers directly: a "possible" variable here always has at least one value inside {@link
-     * #values} and at least one outside it, by {@link #classify}'s own definition, so neither
-     * narrowing direction below can empty it).
+     * #values} and at least one outside it, by {@link ClassificationSupport#classify}'s own
+     * definition, so neither narrowing direction below can empty it).
      */
     @Override
     @SuppressWarnings("unchecked")
@@ -105,7 +82,7 @@ public class AmongVariableConstraint<T> extends NaryConstraint implements Propag
         boolean leqLike = operator == Operator.EQ || operator == Operator.LEQ;
         boolean geqLike = operator == Operator.EQ || operator == Operator.GEQ;
 
-        Classification<T> c = classify(domains);
+        ClassificationSupport.Classification<T> c = ClassificationSupport.classify(countedVariables, values::contains, domains);
         int definiteCount = c.definite().size();
         int maxCount = definiteCount + c.possible().size();
 
@@ -156,7 +133,7 @@ public class AmongVariableConstraint<T> extends NaryConstraint implements Propag
         boolean leqLike = operator == Operator.EQ || operator == Operator.LEQ;
         boolean geqLike = operator == Operator.EQ || operator == Operator.GEQ;
 
-        Classification<T> c = classify(domains);
+        ClassificationSupport.Classification<T> c = ClassificationSupport.classify(countedVariables, values::contains, domains);
         int definiteCount = c.definite().size();
         int maxCount = definiteCount + c.possible().size();
 
