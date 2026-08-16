@@ -20,6 +20,7 @@ import io.github.rcrida.jcsp.constraints.binary.SubsetConstraint;
 import io.github.rcrida.jcsp.constraints.binary.DisjointConstraint;
 import io.github.rcrida.jcsp.constraints.binary.IntersectionCardinalityConstraint;
 import io.github.rcrida.jcsp.constraints.nary.AllDiffConstraint;
+import io.github.rcrida.jcsp.constraints.nary.AllEqualConstraint;
 import io.github.rcrida.jcsp.constraints.nary.AmongConstraint;
 import io.github.rcrida.jcsp.constraints.nary.AmongVariableConstraint;
 import io.github.rcrida.jcsp.constraints.nary.AtLeastNConstraint;
@@ -130,6 +131,7 @@ public class FixpointPropagation {
             AC3.INSTANCE,
             NogoodFixpointConsistency.INSTANCE,
             FixpointConsistency.of(AllDiffConstraint.class),
+            FixpointConsistency.of(AllEqualConstraint.class),
             FixpointConsistency.of(SumBoundConstraint.class),
             FixpointConsistency.of(SumVariableConstraint.class),
             FixpointConsistency.of(LinearBoundConstraint.class),

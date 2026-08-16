@@ -30,6 +30,7 @@ import io.github.rcrida.jcsp.constraints.binary.DisjointConstraint;
 import io.github.rcrida.jcsp.constraints.binary.IntersectionCardinalityConstraint;
 import io.github.rcrida.jcsp.constraints.Operator;
 import io.github.rcrida.jcsp.constraints.nary.AllDiffConstraint;
+import io.github.rcrida.jcsp.constraints.nary.AllEqualConstraint;
 import io.github.rcrida.jcsp.constraints.nary.AmongConstraint;
 import io.github.rcrida.jcsp.constraints.nary.AndConstraint;
 import io.github.rcrida.jcsp.constraints.nary.AmongVariableConstraint;
@@ -772,6 +773,16 @@ public class ConstraintSatisfactionProblem {
          */
         public <T> ConstraintSatisfactionProblemBuilder allDiffConstraint(@NonNull Set<Variable<T>> variables) {
             return this.constraint(AllDiffConstraint.<T>builder().variables(variables).build());
+        }
+
+        /**
+         * Create an AllEqual constraint on the specified set of variables, all sharing the same value type.
+         *
+         * @param variables to be constrained
+         * @return the builder
+         */
+        public <T> ConstraintSatisfactionProblemBuilder allEqualConstraint(@NonNull Set<Variable<T>> variables) {
+            return this.constraint(AllEqualConstraint.<T>builder().variables(variables).build());
         }
 
         /**

@@ -9,6 +9,7 @@ import io.github.rcrida.jcsp.constraints.binary.BinaryComparatorConstraint;
 import io.github.rcrida.jcsp.constraints.binary.BinaryElementConstraint;
 import io.github.rcrida.jcsp.constraints.binary.BinaryOffsetConstraint;
 import io.github.rcrida.jcsp.constraints.nary.AllDiffConstraint;
+import io.github.rcrida.jcsp.constraints.nary.AllEqualConstraint;
 import io.github.rcrida.jcsp.constraints.nary.AmongConstraint;
 import io.github.rcrida.jcsp.constraints.nary.AmongVariableConstraint;
 import io.github.rcrida.jcsp.constraints.nary.AndConstraint;
@@ -508,6 +509,13 @@ final class Xcsp3CallbackHandler implements XCallbacks2 {
             column.add(variableFor(row[col]));
         }
         return column;
+    }
+
+    // ---- allEqual -------------------------------------------------------------------------------------
+
+    @Override
+    public void buildCtrAllEqual(String id, XVarInteger[] list) {
+        addOrReify(AllEqualConstraint.builder().variables(toVariableSet(list)).build(), id);
     }
 
     // ---- sum ----------------------------------------------------------------------------------------

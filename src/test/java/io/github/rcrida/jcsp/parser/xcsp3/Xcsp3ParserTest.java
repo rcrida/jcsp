@@ -307,6 +307,26 @@ class Xcsp3ParserTest {
         assertThat(trueCount).isEqualTo(2); // [[0,1],[1,0]] and [[1,0],[0,1]]
     }
 
+    // ---- allEqual -----------------------------------------------------------------------------------
+
+    @Test void allEqual_buildsAllEqualConstraint() throws IOException {
+        Xcsp3Instance instance = parseXml(
+                "<var id=\"x\"> 0..2 </var><var id=\"y\"> 0..2 </var><var id=\"z\"> 0..2 </var>",
+                "<allEqual> x y z </allEqual>");
+        assertThat(solutions(instance.csp())).hasSize(3); // (0,0,0), (1,1,1), (2,2,2)
+    }
+
+    @Test void allEqualReified_indicatorTracksConstraintTruthValue() throws IOException {
+        Xcsp3Instance instance = parseXml(
+                "<var id=\"x\"> 0..1 </var><var id=\"y\"> 0..1 </var><var id=\"b\"> 0..1 </var>",
+                "<allEqual reifiedBy=\"b\"> x y </allEqual>");
+        for (Assignment a : solutions(instance.csp())) {
+            boolean equal = digitOf(a, "x") == digitOf(a, "y");
+            assertThat(digitOf(a, "b") == 1).as("x=%d, y=%d", digitOf(a, "x"), digitOf(a, "y")).isEqualTo(equal);
+        }
+        assertThat(solutions(instance.csp())).hasSize(4); // all 2x2 combinations, just with b tracking equality
+    }
+
     // ---- sum ------------------------------------------------------------------------------------------------
 
     @Test void sumUnweighted_buildsSumConstraint() throws IOException {
