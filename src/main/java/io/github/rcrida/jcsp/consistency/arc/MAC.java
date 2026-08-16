@@ -43,7 +43,7 @@ public class MAC implements Inference {
                 .collect(Collectors.toSet());
         val queue = new ArrayDeque<>(variableConstraints);
         return AC3.INSTANCE.applyQueue(
-                problem.toBuilder().variableDomain((Variable<Object>) variable, new ObjectSingletonDomain<>(value)).build(),
+                problem.withDomain((Variable<Object>) variable, new ObjectSingletonDomain<>(value)),
                 queue);
     }
 
@@ -64,7 +64,7 @@ public class MAC implements Inference {
                 .collect(Collectors.toSet());
         val queue = new ArrayDeque<>(variableConstraints);
         return AC3.INSTANCE.applyQueueWithReason(
-                problem.toBuilder().variableDomain((Variable<Object>) variable, new ObjectSingletonDomain<>(value)).build(),
+                problem.withDomain((Variable<Object>) variable, new ObjectSingletonDomain<>(value)),
                 queue);
     }
 

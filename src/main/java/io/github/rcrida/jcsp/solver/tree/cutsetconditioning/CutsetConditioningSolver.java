@@ -69,7 +69,7 @@ public class CutsetConditioningSolver extends SolverDecorator {
                     variableDomains.put(X_i, revisedDomain);
                 }
             }
-            val constrainedTree = tree.toBuilder().variableDomains(variableDomains).build();
+            val constrainedTree = tree.withDomains(variableDomains);
             log.debug("Constrained tree {}", constrainedTree);
             return Optional.of(constrainedTree);
         }
