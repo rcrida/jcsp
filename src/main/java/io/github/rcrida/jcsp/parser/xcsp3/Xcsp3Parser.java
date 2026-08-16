@@ -10,15 +10,17 @@ import java.nio.file.Path;
  * builder API.
  * <p>
  * Covers variables/domains, {@code intension} (including the {@code dist} operator), {@code
- * extension} (support/positive tables only), {@code allDifferent}, {@code sum}, {@code count},
- * {@code nValues}, {@code cardinality} (fixed-value/fixed-occurrence form only -- see {@link
+ * extension} (support/positive tables only), {@code allDifferent}, {@code allEqual}, {@code sum},
+ * {@code count}, {@code nValues}, {@code cardinality} (fixed-value/fixed-occurrence form only --
+ * see {@link
  * Xcsp3CallbackHandler#buildCtrCardinality(String, org.xcsp.parser.entries.XVariables.XVarInteger[], boolean, int[], int[])}),
- * {@code element}, {@code ordered}, {@code lex}, {@code cumulative}, {@code circuit}, {@code
- * binPacking}, and single {@code minimize}/{@code maximize} objectives. A {@code group} or {@code
- * slide} wrapping any of these is also covered "for free": {@code xcsp3-tools} expands both back
- * into repeated ordinary constraints of whichever type they wrap (a {@code group} against each
- * {@code args} line, a {@code slide} against each precomputed window) before this class's
- * callbacks ever see them.
+ * {@code element}, {@code minimum}/{@code maximum}, {@code ordered}, {@code lex}, {@code
+ * cumulative}, {@code circuit}, {@code binPacking}, {@code regular}, {@code instantiation}, and
+ * single, sum-type, or unweighted maximum-type {@code minimize}/{@code maximize} objectives. A
+ * {@code group} or {@code slide} wrapping any of these is also covered "for free": {@code
+ * xcsp3-tools} expands both back into repeated ordinary constraints of whichever type they wrap (a
+ * {@code group} against each {@code args} line, a {@code slide} against each precomputed window)
+ * before this class's callbacks ever see them.
  * <p>
  * Every constraint type above except the variable-target form of {@code sum} supports {@code
  * FULL} ({@code reifiedBy}) and {@code HALF_FROM} ({@code hreifiedFrom}, {@code indicator ->
@@ -31,13 +33,13 @@ import java.nio.file.Path;
  * io.github.rcrida.jcsp.constraints.Constraint} object for the whole thing, not {@code N-1}
  * separate ones. {@code nValues}' reification applies to its condition comparison only, not the
  * underlying {@code count}-to-distinct-values definition (never itself a proposition with a
- * truth value). Any other construct -- {@code regular}/{@code mdd}, the variable- or
- * range-occurrence forms of {@code cardinality}, {@code channel}, {@code diffn}/{@code
- * noOverlap}, conflict-mode {@code extension}, multi-objective COP, {@code instantiation} --
- * throws either {@link UnsupportedXcsp3ConstraintException} (a recognised-but-unmappable variant)
- * or a plain {@link RuntimeException} from the underlying library (an entirely unrecognised
- * construct); either way parsing fails immediately rather than silently returning an
- * under-constrained model.
+ * truth value). Any other construct -- {@code mdd}, the variable- or range-occurrence forms of
+ * {@code cardinality}, {@code channel}, {@code diffn}/{@code noOverlap}, conflict-mode {@code
+ * extension}, multi-objective COP, {@code minimum}/{@code maximum}/{@code product}/{@code
+ * nValues}-type or general expression objectives -- throws either {@link
+ * UnsupportedXcsp3ConstraintException} (a recognised-but-unmappable variant) or a plain {@link
+ * RuntimeException} from the underlying library (an entirely unrecognised construct); either way
+ * parsing fails immediately rather than silently returning an under-constrained model.
  */
 public final class Xcsp3Parser {
 

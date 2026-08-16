@@ -618,6 +618,71 @@ class Xcsp3ParserTest {
         assertThat(solutions(instance.csp())).isNotEmpty();
     }
 
+    // ---- regular ------------------------------------------------------------------------------------------------------
+
+    @Test void regular_buildsRegularConstraint_acceptsOnlyMatchingSequence() throws IOException {
+        Xcsp3Instance instance = parseXml(
+                "<var id=\"x\"> 0..1 </var><var id=\"y\"> 0..1 </var>",
+                "<regular><list> x y </list>"
+                        + "<transitions> (q0,0,q1)(q1,1,q2) </transitions>"
+                        + "<start> q0 </start><final> q2 </final></regular>");
+        Set<Assignment> sols = solutions(instance.csp());
+        assertThat(sols).hasSize(1);
+        Assignment solution = sols.iterator().next();
+        assertThat(digitOf(solution, "x")).isEqualTo(0);
+        assertThat(digitOf(solution, "y")).isEqualTo(1);
+    }
+
+    @Test void regular_selfLoopAndMultipleFinalStates_acceptsBothLengths() throws IOException {
+        // Language: 0*1 or 0*11 -- any number of leading 0s (self-loop on q0), then either
+        // "1" (accepting at q1) or "11" (accepting at q2), exercising a state visited via a
+        // self-loop (q0) plus more than one accepting state.
+        Xcsp3Instance instance = parseXml(
+                "<var id=\"x\"> 0..1 </var><var id=\"y\"> 0..1 </var>",
+                "<regular><list> x y </list>"
+                        + "<transitions> (q0,0,q0)(q0,1,q1)(q1,1,q2) </transitions>"
+                        + "<start> q0 </start><final> q1 q2 </final></regular>");
+        Set<Assignment> sols = solutions(instance.csp());
+        for (Assignment a : sols) {
+            boolean accepted = (digitOf(a, "x") == 0 && digitOf(a, "y") == 1) || (digitOf(a, "x") == 1 && digitOf(a, "y") == 1);
+            assertThat(accepted).as("x=%d, y=%d", digitOf(a, "x"), digitOf(a, "y")).isTrue();
+        }
+        assertThat(sols).hasSize(2); // (0,1) and (1,1)
+    }
+
+    @Test void regular_outOfOrderTransitionsAndUnreachableFinalState_stillNumbersStatesCorrectly() throws IOException {
+        // Transitions listed out of BFS order: the first transition's start (q1) hasn't been seen
+        // yet via startState or any earlier transition's end, exercising the "newly discovered
+        // state" branch when scanning a transition's start (not just its end). "qz" in <final> is
+        // never referenced by any transition, exercising the same "newly discovered state" branch
+        // when scanning finalStates. Language: q0 --1--> q1 --0--> q2(final); qz is unreachable and
+        // contributes no extra accepted sequences.
+        Xcsp3Instance instance = parseXml(
+                "<var id=\"x\"> 0..1 </var><var id=\"y\"> 0..1 </var>",
+                "<regular><list> x y </list>"
+                        + "<transitions> (q1,0,q2)(q0,1,q1) </transitions>"
+                        + "<start> q0 </start><final> q2 qz </final></regular>");
+        Set<Assignment> sols = solutions(instance.csp());
+        assertThat(sols).hasSize(1);
+        Assignment solution = sols.iterator().next();
+        assertThat(digitOf(solution, "x")).isEqualTo(1);
+        assertThat(digitOf(solution, "y")).isEqualTo(0);
+    }
+
+    @Test void regularReified_indicatorTracksAcceptance() throws IOException {
+        Xcsp3Instance instance = parseXml(
+                "<var id=\"x\"> 0..1 </var><var id=\"y\"> 0..1 </var><var id=\"b\"> 0..1 </var>",
+                "<regular reifiedBy=\"b\"><list> x y </list>"
+                        + "<transitions> (q0,0,q1)(q1,1,q2) </transitions>"
+                        + "<start> q0 </start><final> q2 </final></regular>");
+        Set<Assignment> sols = solutions(instance.csp());
+        for (Assignment a : sols) {
+            boolean accepted = digitOf(a, "x") == 0 && digitOf(a, "y") == 1;
+            assertThat(digitOf(a, "b") == 1).as("x=%d, y=%d", digitOf(a, "x"), digitOf(a, "y")).isEqualTo(accepted);
+        }
+        assertThat(sols).hasSize(4); // all 2x2 combinations, just with b tracking acceptance
+    }
+
     // ---- ordered / lex -----------------------------------------------------------------------------------------------
 
     @Test void ordered_buildsPairwiseComparatorChain() throws IOException {

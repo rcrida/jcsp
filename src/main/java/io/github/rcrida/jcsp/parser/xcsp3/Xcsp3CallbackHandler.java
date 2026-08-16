@@ -13,6 +13,7 @@ import io.github.rcrida.jcsp.constraints.nary.AllEqualConstraint;
 import io.github.rcrida.jcsp.constraints.nary.AmongConstraint;
 import io.github.rcrida.jcsp.constraints.nary.AmongVariableConstraint;
 import io.github.rcrida.jcsp.constraints.nary.AndConstraint;
+import io.github.rcrida.jcsp.constraints.nary.Automaton;
 import io.github.rcrida.jcsp.constraints.nary.BinPackingConstraint;
 import io.github.rcrida.jcsp.constraints.nary.CircuitConstraint;
 import io.github.rcrida.jcsp.constraints.nary.CountConstraint;
@@ -28,6 +29,7 @@ import io.github.rcrida.jcsp.constraints.nary.NaryElementConstraint;
 import io.github.rcrida.jcsp.constraints.nary.NaryTuplesConstraint;
 import io.github.rcrida.jcsp.constraints.nary.OrderedConstraint;
 import io.github.rcrida.jcsp.constraints.nary.PredicateConstraint;
+import io.github.rcrida.jcsp.constraints.nary.RegularConstraint;
 import io.github.rcrida.jcsp.constraints.nary.SumBoundConstraint;
 import io.github.rcrida.jcsp.constraints.unary.UnaryComparatorConstraint;
 import io.github.rcrida.jcsp.constraints.unary.UnaryValueConstraint;
@@ -53,6 +55,7 @@ import org.xcsp.common.Types.TypeReification;
 import org.xcsp.common.predicates.XNode;
 import org.xcsp.common.predicates.XNodeLeaf;
 import org.xcsp.common.predicates.XNodeParent;
+import org.xcsp.common.structures.Transition;
 import org.xcsp.parser.callbacks.XCallbacks;
 import org.xcsp.parser.callbacks.XCallbacks2;
 import org.xcsp.parser.entries.XConstraints.XCtr;
@@ -755,6 +758,41 @@ final class Xcsp3CallbackHandler implements XCallbacks2 {
         } else {
             throw new UnsupportedXcsp3ConstraintException("Unsupported maximum condition: " + id);
         }
+    }
+
+    // ---- regular ----------------------------------------------------------------------------------------------
+
+    /**
+     * Maps xcsp3-tools' symbolic {@code String} state names (e.g. {@code "q0"}) onto the
+     * contiguous {@code 0..numStates-1} integer range {@link Automaton} requires, numbering each
+     * distinct name the first time it's encountered while scanning {@code startState}, then every
+     * {@link Transition}, then {@code finalStates} -- deterministic since {@code transitions}
+     * and {@code finalStates} both arrive as fixed-order arrays from the XML. {@link Transition#value}
+     * is always a boxed {@link Long} in practice (mirroring {@link #buildCtrIntension}'s own leaf
+     * values), never a raw {@code int}.
+     */
+    @Override
+    public void buildCtrRegular(String id, XVarInteger[] list, Transition[] transitions, String startState, String[] finalStates) {
+        Map<String, Integer> stateIndices = new LinkedHashMap<>();
+        stateIndices.computeIfAbsent(startState, s -> stateIndices.size());
+        for (Transition t : transitions) {
+            stateIndices.computeIfAbsent(t.start, s -> stateIndices.size());
+            stateIndices.computeIfAbsent(t.end, s -> stateIndices.size());
+        }
+        for (String finalState : finalStates) {
+            stateIndices.computeIfAbsent(finalState, s -> stateIndices.size());
+        }
+        Map<Integer, Map<Integer, Integer>> automatonTransitions = new LinkedHashMap<>();
+        for (Transition t : transitions) {
+            int value = ((Long) t.value).intValue();
+            automatonTransitions.computeIfAbsent(stateIndices.get(t.start), s -> new LinkedHashMap<>())
+                    .put(value, stateIndices.get(t.end));
+        }
+        Set<Integer> acceptingStates = Arrays.stream(finalStates)
+                .map(stateIndices::get)
+                .collect(Collectors.toCollection(LinkedHashSet::new));
+        Automaton<Integer> automaton = Automaton.of(stateIndices.size(), stateIndices.get(startState), acceptingStates, automatonTransitions);
+        addOrReify(RegularConstraint.of(toVariableList(list), automaton), id);
     }
 
     // ---- ordered / lex --------------------------------------------------------------------------------------
