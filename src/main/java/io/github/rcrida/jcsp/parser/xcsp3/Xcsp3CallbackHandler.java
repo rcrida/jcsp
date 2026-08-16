@@ -19,6 +19,7 @@ import io.github.rcrida.jcsp.constraints.nary.CircuitConstraint;
 import io.github.rcrida.jcsp.constraints.nary.CountConstraint;
 import io.github.rcrida.jcsp.constraints.nary.CountVariableConstraint;
 import io.github.rcrida.jcsp.constraints.nary.CumulativeConstraint;
+import io.github.rcrida.jcsp.constraints.nary.DiffnVariableConstraint;
 import io.github.rcrida.jcsp.constraints.nary.GlobalCardinalityConstraint;
 import io.github.rcrida.jcsp.constraints.nary.InverseConstraint;
 import io.github.rcrida.jcsp.constraints.nary.LexConstraint;
@@ -832,6 +833,45 @@ final class Xcsp3CallbackHandler implements XCallbacks2 {
     @Override
     public void buildCtrChannel(String id, XVarInteger[] list, int startIndex, XVarInteger value) {
         throw new UnsupportedXcsp3ConstraintException("channel with a single hot-index value target is not supported: " + id);
+    }
+
+    // ---- noOverlap --------------------------------------------------------------------------------------------
+
+    /**
+     * 1D scheduling form: no two tasks {@code [origins[i], origins[i]+lengths[i])} may overlap --
+     * exactly {@link CumulativeConstraint} with every resource requirement set to 1 and a capacity
+     * of 1 (the same "disjunctive scheduling via cumulative(limit=1)" pattern
+     * {@code Prob061JobShopSchedulingTest} already uses for same-machine mutual exclusion). {@code
+     * zeroIgnored} needs no special handling either way: a zero-length task's interval is already
+     * empty, so it can never overlap anything under this same modelling regardless of the flag.
+     */
+    @Override
+    public void buildCtrNoOverlap(String id, XVarInteger[] origins, int[] lengths, boolean zeroIgnored) {
+        List<Variable<Integer>> starts = toVariableList(origins);
+        List<Integer> durations = Arrays.stream(lengths).boxed().toList();
+        List<Integer> resources = Collections.nCopies(origins.length, 1);
+        addOrReify(CumulativeConstraint.of(starts, durations, resources, 1), id);
+    }
+
+    /**
+     * 2D geometric form (rectangle packing): {@code origins[i] = [x[i], y[i]]},
+     * {@code lengths[i] = [w[i], h[i]]}, where {@code w[i]}/{@code h[i]} are themselves ordinary
+     * XCSP3 variables (e.g. a rotation choice between two fixed orientations, linked elsewhere by
+     * its own extension/table constraint -- this callback doesn't need to know about that link at
+     * all). Maps onto {@link DiffnVariableConstraint}. Only exactly 2 dimensions are supported --
+     * {@link DiffnVariableConstraint} has no higher-dimensional generalisation, and XCSP3's
+     * {@code noOverlap} technically permits any dimensionality.
+     */
+    @Override
+    public void buildCtrNoOverlap(String id, XVarInteger[][] origins, XVarInteger[][] lengths, boolean zeroIgnored) {
+        if (Arrays.stream(origins).anyMatch(row -> row.length != 2)) {
+            throw new UnsupportedXcsp3ConstraintException("noOverlap with dimensionality other than 2 is not supported: " + id);
+        }
+        List<Variable<? extends Number>> xs = Arrays.stream(origins).<Variable<? extends Number>>map(row -> variableFor(row[0])).toList();
+        List<Variable<? extends Number>> ys = Arrays.stream(origins).<Variable<? extends Number>>map(row -> variableFor(row[1])).toList();
+        List<Variable<? extends Number>> ws = Arrays.stream(lengths).<Variable<? extends Number>>map(row -> variableFor(row[0])).toList();
+        List<Variable<? extends Number>> hs = Arrays.stream(lengths).<Variable<? extends Number>>map(row -> variableFor(row[1])).toList();
+        addOrReify(DiffnVariableConstraint.of(xs, ys, ws, hs), id);
     }
 
     // ---- ordered / lex --------------------------------------------------------------------------------------

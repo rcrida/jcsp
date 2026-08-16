@@ -38,6 +38,7 @@ import io.github.rcrida.jcsp.constraints.nary.Automaton;
 import io.github.rcrida.jcsp.constraints.nary.BinPackingConstraint;
 import io.github.rcrida.jcsp.constraints.nary.CircuitConstraint;
 import io.github.rcrida.jcsp.constraints.nary.DiffnConstraint;
+import io.github.rcrida.jcsp.constraints.nary.DiffnVariableConstraint;
 import io.github.rcrida.jcsp.constraints.nary.RegularConstraint;
 import io.github.rcrida.jcsp.constraints.nary.AtLeastNConstraint;
 import io.github.rcrida.jcsp.constraints.nary.AtMostNConstraint;
@@ -866,11 +867,35 @@ public class ConstraintSatisfactionProblem {
          * @return the builder
          */
         public ConstraintSatisfactionProblemBuilder diffnConstraint(
-                @NonNull List<Variable<?>> xs,
-                @NonNull List<Variable<?>> ys,
+                @NonNull List<Variable<? extends Number>> xs,
+                @NonNull List<Variable<? extends Number>> ys,
                 @NonNull List<Double> widths,
                 @NonNull List<Double> heights) {
             return this.constraint(DiffnConstraint.of(xs, ys, widths, heights));
+        }
+
+        /**
+         * As {@link #diffnConstraint(List, List, List, List)}, but widths/heights are themselves
+         * decision variables rather than fixed constants (e.g. a rotation choice between two fixed
+         * orientations) -- see {@link DiffnVariableConstraint} for the propagation this loses
+         * relative to the fixed-size form. A same-named {@code diffnConstraint} overload isn't
+         * possible here: {@code List<Double>} and {@code List<Variable<? extends Number>>} both
+         * erase to raw {@code List}, so the two would collide (JLS 8.4.2) -- the same reason
+         * {@code linearBooleanConstraint} needed a distinct name rather than overloading {@code
+         * linearConstraint}.
+         *
+         * @param xs      x-origin variables (one per rectangle)
+         * @param ys      y-origin variables (one per rectangle)
+         * @param widths  rectangle width variables
+         * @param heights rectangle height variables
+         * @return the builder
+         */
+        public ConstraintSatisfactionProblemBuilder diffnVariableConstraint(
+                @NonNull List<Variable<? extends Number>> xs,
+                @NonNull List<Variable<? extends Number>> ys,
+                @NonNull List<Variable<? extends Number>> widths,
+                @NonNull List<Variable<? extends Number>> heights) {
+            return this.constraint(DiffnVariableConstraint.of(xs, ys, widths, heights));
         }
 
         /**

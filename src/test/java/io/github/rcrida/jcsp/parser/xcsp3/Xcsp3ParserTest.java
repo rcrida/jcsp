@@ -749,6 +749,82 @@ class Xcsp3ParserTest {
                 .isInstanceOf(UnsupportedXcsp3ConstraintException.class);
     }
 
+    // ---- noOverlap (1D) -----------------------------------------------------------------------------------------------
+
+    @Test void noOverlap1D_buildsCumulativeConstraint_disjointIntervals() throws IOException {
+        // Two length-2 tasks over {0..3}: valid iff x0+2<=x1 or x1+2<=x0. Hand-enumerated: (0,2)
+        // (0,3) (1,3) (2,0) (3,0) (3,1) -- 6 solutions.
+        Xcsp3Instance instance = parseXml(
+                "<var id=\"x0\"> 0..3 </var><var id=\"x1\"> 0..3 </var>",
+                "<noOverlap><origins> x0 x1 </origins><lengths> 2 2 </lengths></noOverlap>");
+        Set<Assignment> sols = solutions(instance.csp());
+        for (Assignment a : sols) {
+            int x0 = digitOf(a, "x0");
+            int x1 = digitOf(a, "x1");
+            assertThat(x0 + 2 <= x1 || x1 + 2 <= x0).as("x0=%d, x1=%d", x0, x1).isTrue();
+        }
+        assertThat(sols).hasSize(6);
+    }
+
+    @Test void noOverlap1DReified_indicatorTracksDisjointness() throws IOException {
+        Xcsp3Instance instance = parseXml(
+                "<var id=\"x0\"> 0..3 </var><var id=\"x1\"> 0..3 </var><var id=\"b\"> 0..1 </var>",
+                "<noOverlap reifiedBy=\"b\"><origins> x0 x1 </origins><lengths> 2 2 </lengths></noOverlap>");
+        Set<Assignment> sols = solutions(instance.csp());
+        for (Assignment a : sols) {
+            int x0 = digitOf(a, "x0");
+            int x1 = digitOf(a, "x1");
+            boolean disjoint = x0 + 2 <= x1 || x1 + 2 <= x0;
+            assertThat(digitOf(a, "b") == 1).as("x0=%d, x1=%d", x0, x1).isEqualTo(disjoint);
+        }
+        assertThat(sols).hasSize(16); // all 4x4 x0,x1 combos, b determined (not free) by disjointness
+    }
+
+    // ---- noOverlap (2D, variable lengths) ------------------------------------------------------------------------------
+
+    @Test void noOverlap2D_variableLengths_buildsDiffnVariableConstraint() throws IOException {
+        // x fixed at 0 for both, w fixed at 2 for both -> mandatory x-overlap always, forcing
+        // y-separation. Same math as noOverlap1D_buildsCumulativeConstraint_disjointIntervals: 6
+        // solutions among y0,y1 in {0..3} with h=2.
+        Xcsp3Instance instance = parseXml(
+                "<var id=\"x0\"> 0 </var><var id=\"y0\"> 0..3 </var><var id=\"w0\"> 2 </var><var id=\"h0\"> 2 </var>"
+                        + "<var id=\"x1\"> 0 </var><var id=\"y1\"> 0..3 </var><var id=\"w1\"> 2 </var><var id=\"h1\"> 2 </var>",
+                "<noOverlap><origins> (x0,y0)(x1,y1) </origins><lengths> (w0,h0)(w1,h1) </lengths></noOverlap>");
+        Set<Assignment> sols = solutions(instance.csp());
+        for (Assignment a : sols) {
+            int y0 = digitOf(a, "y0");
+            int y1 = digitOf(a, "y1");
+            assertThat(y0 + 2 <= y1 || y1 + 2 <= y0).as("y0=%d, y1=%d", y0, y1).isTrue();
+        }
+        assertThat(sols).hasSize(6);
+    }
+
+    @Test void noOverlap2DReified_indicatorTracksSeparation() throws IOException {
+        Xcsp3Instance instance = parseXml(
+                "<var id=\"x0\"> 0 </var><var id=\"y0\"> 0..3 </var><var id=\"w0\"> 2 </var><var id=\"h0\"> 2 </var>"
+                        + "<var id=\"x1\"> 0 </var><var id=\"y1\"> 0..3 </var><var id=\"w1\"> 2 </var><var id=\"h1\"> 2 </var>"
+                        + "<var id=\"b\"> 0..1 </var>",
+                "<noOverlap reifiedBy=\"b\"><origins> (x0,y0)(x1,y1) </origins><lengths> (w0,h0)(w1,h1) </lengths></noOverlap>");
+        Set<Assignment> sols = solutions(instance.csp());
+        for (Assignment a : sols) {
+            int y0 = digitOf(a, "y0");
+            int y1 = digitOf(a, "y1");
+            boolean separated = y0 + 2 <= y1 || y1 + 2 <= y0;
+            assertThat(digitOf(a, "b") == 1).as("y0=%d, y1=%d", y0, y1).isEqualTo(separated);
+        }
+        assertThat(sols).hasSize(16); // all 4x4 y0,y1 combos, b determined (not free) by separation
+    }
+
+    @Test void noOverlap2D_higherDimensionality_throwsUnsupported() {
+        assertThatThrownBy(() -> parseXml(
+                "<var id=\"x0\"> 0 </var><var id=\"y0\"> 0 </var><var id=\"z0\"> 0 </var>"
+                        + "<var id=\"w0\"> 2 </var><var id=\"h0\"> 2 </var><var id=\"d0\"> 2 </var>"
+                        + "<var id=\"x1\"> 0 </var><var id=\"y1\"> 0 </var><var id=\"z1\"> 0 </var>"
+                        + "<var id=\"w1\"> 2 </var><var id=\"h1\"> 2 </var><var id=\"d1\"> 2 </var>",
+                "<noOverlap><origins> (x0,y0,z0)(x1,y1,z1) </origins><lengths> (w0,h0,d0)(w1,h1,d1) </lengths></noOverlap>"))
+                .isInstanceOf(UnsupportedXcsp3ConstraintException.class);
+    }
+
     // ---- ordered / lex -----------------------------------------------------------------------------------------------
 
     @Test void ordered_buildsPairwiseComparatorChain() throws IOException {
