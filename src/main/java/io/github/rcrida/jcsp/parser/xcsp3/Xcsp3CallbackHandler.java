@@ -20,6 +20,7 @@ import io.github.rcrida.jcsp.constraints.nary.CountConstraint;
 import io.github.rcrida.jcsp.constraints.nary.CountVariableConstraint;
 import io.github.rcrida.jcsp.constraints.nary.CumulativeConstraint;
 import io.github.rcrida.jcsp.constraints.nary.GlobalCardinalityConstraint;
+import io.github.rcrida.jcsp.constraints.nary.InverseConstraint;
 import io.github.rcrida.jcsp.constraints.nary.LexConstraint;
 import io.github.rcrida.jcsp.constraints.nary.MaxConstraint;
 import io.github.rcrida.jcsp.constraints.nary.MaxVariableConstraint;
@@ -793,6 +794,44 @@ final class Xcsp3CallbackHandler implements XCallbacks2 {
                 .collect(Collectors.toCollection(LinkedHashSet::new));
         Automaton<Integer> automaton = Automaton.of(stateIndices.size(), stateIndices.get(startState), acceptingStates, automatonTransitions);
         addOrReify(RegularConstraint.of(toVariableList(list), automaton), id);
+    }
+
+    // ---- channel ------------------------------------------------------------------------------------------------
+
+    /**
+     * Self-inverse form: {@code list[i] == j <-> list[j] == i} for every {@code i, j} -- an
+     * involution over one array. Maps onto {@link InverseConstraint} by pairing the (shifted to
+     * 1-based, matching {@link InverseConstraint}'s own convention) list with itself; passing the
+     * same shifted list as both {@code f} and {@code invf} is exactly this relation, since {@code
+     * InverseConstraint} never assumes its two argument lists are distinct.
+     */
+    @Override
+    public void buildCtrChannel(String id, XVarInteger[] list, int startIndex) {
+        List<Variable<Integer>> oneBased = Arrays.stream(list).map(v -> oneBasedIndex(v, startIndex)).toList();
+        addOrReify(InverseConstraint.of(oneBased, oneBased), id);
+    }
+
+    /**
+     * Two-array form: {@code list1[i] == j <-> list2[j] == i} -- exactly {@link InverseConstraint}'s
+     * own definition, once both arrays are shifted (independently, since each carries its own
+     * {@code startIndex}) to the 1-based values it requires.
+     */
+    @Override
+    public void buildCtrChannel(String id, XVarInteger[] list1, int startIndex1, XVarInteger[] list2, int startIndex2) {
+        List<Variable<Integer>> f = Arrays.stream(list1).map(v -> oneBasedIndex(v, startIndex1)).toList();
+        List<Variable<Integer>> invf = Arrays.stream(list2).map(v -> oneBasedIndex(v, startIndex2)).toList();
+        addOrReify(InverseConstraint.of(f, invf), id);
+    }
+
+    /**
+     * Single-target form: {@code value} is the unique index {@code i} with {@code list[i] == 1}.
+     * Unlike the two overloads above, this isn't a reindexing of {@link InverseConstraint} -- it
+     * needs a genuinely different "indexOf" relation this codebase has no existing constraint for,
+     * so it's left unsupported rather than approximated.
+     */
+    @Override
+    public void buildCtrChannel(String id, XVarInteger[] list, int startIndex, XVarInteger value) {
+        throw new UnsupportedXcsp3ConstraintException("channel with a single hot-index value target is not supported: " + id);
     }
 
     // ---- ordered / lex --------------------------------------------------------------------------------------

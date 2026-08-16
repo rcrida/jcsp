@@ -683,6 +683,72 @@ class Xcsp3ParserTest {
         assertThat(sols).hasSize(4); // all 2x2 combinations, just with b tracking acceptance
     }
 
+    // ---- channel --------------------------------------------------------------------------------------------------
+
+    @Test void channelTwoArrays_buildsInverseConstraint_acceptsEveryPermutationPair() throws IOException {
+        // Every permutation of {0,1,2} pairs with its (unique) true inverse permutation --
+        // 3! = 6 solutions, none of them requiring x to be self-inverse (unlike the single-array form).
+        Xcsp3Instance instance = parseXml(
+                "<array id=\"x\" size=\"[3]\"> 0..2 </array><array id=\"y\" size=\"[3]\"> 0..2 </array>",
+                "<channel><list> x[] </list><list> y[] </list></channel>");
+        assertThat(solutions(instance.csp())).hasSize(6);
+    }
+
+    @Test void channelTwoArrays_differentStartIndices_shiftsIndependently() throws IOException {
+        // list1 already 1-based (startIndex 1, offset 0 -- shiftVariable's identity branch) while
+        // list2 is 0-based (startIndex 0, offset 1 -- the real shift branch), exercising both
+        // shiftVariable branches within the same constraint.
+        Xcsp3Instance instance = parseXml(
+                "<array id=\"x\" size=\"[2]\"> 1..2 </array><array id=\"y\" size=\"[2]\"> 0..1 </array>",
+                "<channel><list startIndex=\"1\"> x[] </list><list startIndex=\"0\"> y[] </list></channel>");
+        Set<Assignment> sols = solutions(instance.csp());
+        for (Assignment a : sols) {
+            // x[i] (1-based value, i 0-based) == j <-> y[j] (0-based value, j 0-based) == i
+            int x0 = a.getValue(Variable.Factory.INSTANCE.<Integer>create("x[0]")).orElseThrow();
+            int x1 = a.getValue(Variable.Factory.INSTANCE.<Integer>create("x[1]")).orElseThrow();
+            int y0 = a.getValue(Variable.Factory.INSTANCE.<Integer>create("y[0]")).orElseThrow();
+            int y1 = a.getValue(Variable.Factory.INSTANCE.<Integer>create("y[1]")).orElseThrow();
+            int[] x = {x0, x1};
+            int[] y = {y0, y1};
+            for (int i = 0; i < 2; i++) {
+                assertThat(y[x[i] - 1]).isEqualTo(i);
+            }
+        }
+        assertThat(sols).hasSize(2);
+    }
+
+    @Test void channelSingleArray_buildsSelfInverseConstraint_acceptsOnlyInvolutions() throws IOException {
+        // Involutions of {0,1,2}: identity, and each of the 3 single-swaps with the third element
+        // fixed -- 4 solutions (OEIS A000085).
+        Xcsp3Instance instance = parseXml(
+                "<array id=\"x\" size=\"[3]\"> 0..2 </array>",
+                "<channel><list startIndex=\"0\"> x[] </list></channel>");
+        assertThat(solutions(instance.csp())).hasSize(4);
+    }
+
+    @Test void channelTwoArraysReified_indicatorTracksInverseRelation() throws IOException {
+        Xcsp3Instance instance = parseXml(
+                "<array id=\"x\" size=\"[2]\"> 0..1 </array><array id=\"y\" size=\"[2]\"> 0..1 </array><var id=\"b\"> 0..1 </var>",
+                "<channel reifiedBy=\"b\"><list> x[] </list><list> y[] </list></channel>");
+        Set<Assignment> sols = solutions(instance.csp());
+        for (Assignment a : sols) {
+            int x0 = a.getValue(Variable.Factory.INSTANCE.<Integer>create("x[0]")).orElseThrow();
+            int x1 = a.getValue(Variable.Factory.INSTANCE.<Integer>create("x[1]")).orElseThrow();
+            int y0 = a.getValue(Variable.Factory.INSTANCE.<Integer>create("y[0]")).orElseThrow();
+            int y1 = a.getValue(Variable.Factory.INSTANCE.<Integer>create("y[1]")).orElseThrow();
+            boolean channelled = (x0 == 0 && y0 == 0 && x1 == 1 && y1 == 1) || (x0 == 1 && y1 == 0 && x1 == 0 && y0 == 1);
+            assertThat(digitOf(a, "b") == 1).as("x=[%d,%d], y=[%d,%d]", x0, x1, y0, y1).isEqualTo(channelled);
+        }
+        assertThat(sols).hasSize(16); // all 2x2x2 combinations of x,y,b, just with b tracking the relation
+    }
+
+    @Test void channelWithSingleHotIndexValue_throwsUnsupported() {
+        assertThatThrownBy(() -> parseXml(
+                "<array id=\"x\" size=\"[3]\"> 0..1 </array><var id=\"v\"> 0..2 </var>",
+                "<channel><list> x[] </list><value> v </value></channel>"))
+                .isInstanceOf(UnsupportedXcsp3ConstraintException.class);
+    }
+
     // ---- ordered / lex -----------------------------------------------------------------------------------------------
 
     @Test void ordered_buildsPairwiseComparatorChain() throws IOException {
@@ -1413,9 +1479,12 @@ class Xcsp3ParserTest {
     // ---- unsupported construct falls through to the library's own default --------------------------------------------------
 
     @Test void completelyUnrecognisedConstruct_throwsRuntimeException() {
+        // mdd (task #54) has no buildCtrMDD override at all, so this falls through to
+        // XCallbacks2's own default (unimplementedCase), not UnsupportedXcsp3ConstraintException --
+        // channel used to be this test's example, but it's now a recognised, mapped construct.
         assertThatThrownBy(() -> parseXml(
                 "<var id=\"x\"> 0..2 </var><var id=\"y\"> 0..2 </var>",
-                "<channel><list> x y </list></channel>"))
+                "<mdd><list> x y </list><transitions> (r,0,n1)(n1,1,t) </transitions></mdd>"))
                 .isInstanceOf(RuntimeException.class);
     }
 
