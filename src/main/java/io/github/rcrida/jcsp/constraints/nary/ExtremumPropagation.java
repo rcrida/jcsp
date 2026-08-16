@@ -93,6 +93,67 @@ final class ExtremumPropagation {
         return Optional.of(new double[][]{newMins, newMaxs});
     }
 
+    /** {@code max(vars) op target}'s narrowed bounds: every maxed variable, plus target itself. */
+    record TargetNarrowResult(double[] mins, double[] maxs, double targetLo, double targetHi) {}
+
+    /**
+     * Bounds narrowing for {@code max(vars) op target}, target itself a variable rather than a
+     * fixed bound — the "maximize" direction directly; {@link MinVariableConstraint} reuses this
+     * via the same coordinate transform {@link #narrowMax} documents (negate+swap each variable's
+     * bounds and {@code target}'s own bounds, flip the operator, then un-transform the result).
+     * <p>
+     * Deliberately narrows the maxed variables against {@code tLo}/{@code tHi} as given — not the
+     * freshly-computed {@code newTLo}/{@code newTHi} — since each of {@code propagate}'s steps is
+     * independently sound from the domains this call started with regardless of the others; the
+     * surrounding fixpoint loop calls this again until nothing changes, so using {@code target}'s
+     * bounds before this call's own target-narrowing step only costs a little tightness within a
+     * single call, not soundness.
+     *
+     * @return {@link Optional#empty()} if infeasible, otherwise the narrowed bounds for every
+     *         maxed variable and for {@code target} itself
+     */
+    static Optional<TargetNarrowResult> narrowMaxAgainstTarget(double[] mins, double[] maxs,
+                                                                 double tLo, double tHi, Operator operator) {
+        int n = mins.length;
+        double[] newMins = mins.clone();
+        double[] newMaxs = maxs.clone();
+        boolean leqLike = operator == Operator.EQ || operator == Operator.LEQ;
+        boolean geqLike = operator == Operator.EQ || operator == Operator.GEQ;
+
+        double mLo = Double.NEGATIVE_INFINITY, mHi = Double.NEGATIVE_INFINITY;
+        for (int i = 0; i < n; i++) {
+            mLo = Math.max(mLo, newMins[i]);
+            mHi = Math.max(mHi, newMaxs[i]);
+        }
+
+        if (leqLike && mLo > tHi) return Optional.empty();
+        if (geqLike && mHi < tLo) return Optional.empty();
+
+        double newTLo = leqLike ? Math.max(tLo, mLo) : tLo;
+        double newTHi = geqLike ? Math.min(tHi, mHi) : tHi;
+
+        if (leqLike) {
+            for (int i = 0; i < n; i++) {
+                if (newMaxs[i] > tHi) newMaxs[i] = tHi;
+            }
+        }
+
+        if (geqLike) {
+            int reachCount = 0, reachIdx = -1;
+            for (int i = 0; i < n; i++) {
+                if (newMaxs[i] >= tLo) {
+                    reachCount++;
+                    reachIdx = i;
+                }
+            }
+            if (reachCount == 1 && newMins[reachIdx] < tLo) {
+                newMins[reachIdx] = tLo;
+            }
+        }
+
+        return Optional.of(new TargetNarrowResult(newMins, newMaxs, newTLo, newTHi));
+    }
+
     /**
      * Shared {@code explainInfeasible} for both directions, taking the two independent, always-sound
      * explanations {@link MaxConstraint}/{@link MinConstraint} each try: a <em>single-culprit</em>

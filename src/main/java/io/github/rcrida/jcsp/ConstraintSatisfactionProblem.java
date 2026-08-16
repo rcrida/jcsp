@@ -49,6 +49,7 @@ import io.github.rcrida.jcsp.constraints.nary.LexConstraint;
 import io.github.rcrida.jcsp.constraints.nary.MaxConstraint;
 import io.github.rcrida.jcsp.constraints.nary.MaxVariableConstraint;
 import io.github.rcrida.jcsp.constraints.nary.MinConstraint;
+import io.github.rcrida.jcsp.constraints.nary.MinVariableConstraint;
 import io.github.rcrida.jcsp.constraints.nary.DecreasingConstraint;
 import io.github.rcrida.jcsp.constraints.nary.IncreasingConstraint;
 import io.github.rcrida.jcsp.constraints.nary.OrderedConstraint;
@@ -165,7 +166,7 @@ public class ConstraintSatisfactionProblem {
      * {@link NogoodConstraint} implementation needs its own entry here too.
      */
     private static final Set<Class<? extends Constraint>> CONTINUOUS_COMPATIBLE_CONSTRAINTS =
-            Set.of(SumBoundConstraint.class, SumVariableConstraint.class, LinearBoundConstraint.class, LinearVariableConstraint.class, UnaryComparatorConstraint.class, BinaryComparatorConstraint.class, BinaryOffsetConstraint.class, AbsoluteDifferenceConstraint.class, DivisionConstraint.class, LexConstraint.class, CumulativeConstraint.class, MaxConstraint.class, MaxVariableConstraint.class, MinConstraint.class, ProductConstraint.class, DiffnConstraint.class, GroundNogoodConstraint.class, RangeNogoodConstraint.class, IncreasingConstraint.class, DecreasingConstraint.class, UnaryPredicateConstraint.class, BinaryPredicateConstraint.class, PredicateConstraint.class, ReifiedConstraint.class, ImplicationConstraint.class, AndConstraint.class, NaryElementConstraint.class);
+            Set.of(SumBoundConstraint.class, SumVariableConstraint.class, LinearBoundConstraint.class, LinearVariableConstraint.class, UnaryComparatorConstraint.class, BinaryComparatorConstraint.class, BinaryOffsetConstraint.class, AbsoluteDifferenceConstraint.class, DivisionConstraint.class, LexConstraint.class, CumulativeConstraint.class, MaxConstraint.class, MaxVariableConstraint.class, MinConstraint.class, MinVariableConstraint.class, ProductConstraint.class, DiffnConstraint.class, GroundNogoodConstraint.class, RangeNogoodConstraint.class, IncreasingConstraint.class, DecreasingConstraint.class, UnaryPredicateConstraint.class, BinaryPredicateConstraint.class, PredicateConstraint.class, ReifiedConstraint.class, ImplicationConstraint.class, AndConstraint.class, NaryElementConstraint.class);
 
     /**
      * Constraint types that support {@link io.github.rcrida.jcsp.domains.SetBoundedDomain} (e.g.
@@ -1229,6 +1230,19 @@ public class ConstraintSatisfactionProblem {
          */
         public <N extends Number> ConstraintSatisfactionProblemBuilder minConstraint(@NonNull Set<Variable<N>> variables, @NonNull Operator operator, @NonNull N bound) {
             return this.constraint(MinConstraint.of(variables, operator, bound));
+        }
+
+        /**
+         * Create a constraint that compares the minimum of a set of numeric variables to a variable
+         * target, rather than a fixed bound: {@code min(v1, v2, ..., vn) op target}.
+         *
+         * @param variables the numeric variables to take the minimum over
+         * @param operator  the comparison operator (e.g. {@link Operator#EQ}, {@link Operator#GEQ})
+         * @param target    the variable to compare the minimum against
+         * @return the builder
+         */
+        public <N extends Number> ConstraintSatisfactionProblemBuilder minConstraint(@NonNull Set<Variable<N>> variables, @NonNull Operator operator, @NonNull Variable<N> target) {
+            return this.constraint(MinVariableConstraint.of(variables, operator, target));
         }
 
         /**

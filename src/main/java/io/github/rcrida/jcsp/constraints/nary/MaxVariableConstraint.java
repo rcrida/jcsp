@@ -104,62 +104,32 @@ public class MaxVariableConstraint<N extends Number> extends NaryConstraint impl
         if (operator != Operator.EQ && operator != Operator.LEQ && operator != Operator.GEQ) {
             return Optional.of(Map.of());
         }
-        boolean leqLike = operator == Operator.EQ || operator == Operator.LEQ;
-        boolean geqLike = operator == Operator.EQ || operator == Operator.GEQ;
 
         List<Variable<N>> vars = new ArrayList<>(maxedVariables);
         int n = vars.size();
         double[] mins = new double[n];
         double[] maxs = new double[n];
-        double mLo = Double.NEGATIVE_INFINITY, mHi = Double.NEGATIVE_INFINITY;
         for (int i = 0; i < n; i++) {
             Domain<N> dom = (Domain<N>) domains.get(vars.get(i));
             mins[i] = NumericBounds.min(dom);
             maxs[i] = NumericBounds.max(dom);
-            mLo = Math.max(mLo, mins[i]);
-            mHi = Math.max(mHi, maxs[i]);
         }
-
         Domain<N> targetDomain = (Domain<N>) domains.get(target);
         double tLo = NumericBounds.min(targetDomain), tHi = NumericBounds.max(targetDomain);
 
-        if (leqLike && mLo > tHi) return Optional.empty();
-        if (geqLike && mHi < tLo) return Optional.empty();
+        var narrowed = ExtremumPropagation.narrowMaxAgainstTarget(mins, maxs, tLo, tHi, operator);
+        if (narrowed.isEmpty()) return Optional.empty();
+        var result = narrowed.get();
 
         Map<Variable<?>, Domain<?>> updated = new HashMap<>();
-
-        double newTLo = leqLike ? Math.max(tLo, mLo) : tLo;
-        double newTHi = geqLike ? Math.min(tHi, mHi) : tHi;
-        NumericBounds.<N>narrow(targetDomain, newTLo, newTHi).ifPresent(narrowed -> updated.put(target, narrowed));
-
-        if (leqLike) {
-            for (int i = 0; i < n; i++) {
-                if (maxs[i] > tHi) {
-                    Domain<N> dom = (Domain<N>) domains.get(vars.get(i));
-                    // mins[i] <= mLo <= tHi (leqLike's own feasibility check above) guarantees non-empty
-                    updated.put(vars.get(i), NumericBounds.<N>narrow(dom, mins[i], tHi).orElseThrow());
-                    maxs[i] = tHi;
-                }
-            }
-        }
-
-        if (geqLike) {
-            int reachCount = 0, reachIdx = -1;
-            for (int i = 0; i < n; i++) {
-                if (maxs[i] >= tLo) {
-                    reachCount++;
-                    reachIdx = i;
-                }
-            }
-            if (reachCount == 1 && mins[reachIdx] < tLo) {
-                Domain<N> dom = updated.containsKey(vars.get(reachIdx))
-                        ? (Domain<N>) updated.get(vars.get(reachIdx))
-                        : (Domain<N>) domains.get(vars.get(reachIdx));
-                // mins[reachIdx] < tLo guarantees narrow produces a change; may be empty for discrete with gaps
-                Domain<N> raised = NumericBounds.<N>narrow(dom, tLo, maxs[reachIdx]).orElseThrow();
-                if (raised.isEmpty()) return Optional.empty();
-                updated.put(vars.get(reachIdx), raised);
-            }
+        NumericBounds.<N>narrow(targetDomain, result.targetLo(), result.targetHi())
+                .ifPresent(d -> updated.put(target, d));
+        for (int i = 0; i < n; i++) {
+            Domain<N> dom = (Domain<N>) domains.get(vars.get(i));
+            Optional<Domain<N>> pruned = NumericBounds.narrow(dom, result.mins()[i], result.maxs()[i]);
+            if (pruned.isEmpty()) continue;
+            if (pruned.get().isEmpty()) return Optional.empty();
+            updated.put(vars.get(i), pruned.get());
         }
 
         return Optional.of(updated);

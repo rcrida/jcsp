@@ -41,6 +41,20 @@ class Xcsp3CallbackHandlerTest {
                 .isInstanceOf(UnsupportedXcsp3ConstraintException.class);
     }
 
+    @Test void applyMinimumCondition_unrecognisedConditionShape_throws() {
+        Variable<Integer> x = Variable.Factory.INSTANCE.create("x");
+        Xcsp3CallbackHandler handler = new Xcsp3CallbackHandler();
+        assertThatThrownBy(() -> handler.applyMinimumCondition(Set.of(x), NEITHER_VAL_NOR_VAR, "c0"))
+                .isInstanceOf(UnsupportedXcsp3ConstraintException.class);
+    }
+
+    @Test void applyMaximumCondition_unrecognisedConditionShape_throws() {
+        Variable<Integer> x = Variable.Factory.INSTANCE.create("x");
+        Xcsp3CallbackHandler handler = new Xcsp3CallbackHandler();
+        assertThatThrownBy(() -> handler.applyMaximumCondition(Set.of(x), NEITHER_VAL_NOR_VAR, "c0"))
+                .isInstanceOf(UnsupportedXcsp3ConstraintException.class);
+    }
+
     /**
      * Real "smart" tuple syntax (expressions in place of literal values, e.g. {@code ge(3)}) is
      * obscure enough that no hand-authored XCSP3 fixture exercises {@link TypeFlag#SMART_TUPLES}

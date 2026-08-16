@@ -565,6 +565,59 @@ class Xcsp3ParserTest {
                 .isInstanceOf(UnsupportedXcsp3ConstraintException.class);
     }
 
+    // ---- minimum / maximum ------------------------------------------------------------------------------------------
+
+    @Test void minimumFixedBound_buildsMinConstraint() throws IOException {
+        Xcsp3Instance instance = parseXml(
+                "<var id=\"x\"> 0..5 </var><var id=\"y\"> 0..5 </var>",
+                "<minimum><list> x y </list><condition> (eq,2) </condition></minimum>");
+        for (Assignment a : solutions(instance.csp())) {
+            assertThat(Math.min(digitOf(a, "x"), digitOf(a, "y"))).isEqualTo(2);
+        }
+        assertThat(solutions(instance.csp())).isNotEmpty();
+    }
+
+    @Test void minimumVariableTarget_buildsMinVariableConstraint() throws IOException {
+        Xcsp3Instance instance = parseXml(
+                "<var id=\"x\"> 0..5 </var><var id=\"y\"> 0..5 </var><var id=\"k\"> 0..5 </var>",
+                "<minimum><list> x y </list><condition> (eq,k) </condition></minimum>");
+        for (Assignment a : solutions(instance.csp())) {
+            assertThat(digitOf(a, "k")).isEqualTo(Math.min(digitOf(a, "x"), digitOf(a, "y")));
+        }
+        assertThat(solutions(instance.csp())).isNotEmpty();
+    }
+
+    @Test void minimumReified_indicatorTracksConditionTruthValue() throws IOException {
+        Xcsp3Instance instance = parseXml(
+                "<var id=\"x\"> 0..1 </var><var id=\"y\"> 0..1 </var><var id=\"b\"> 0..1 </var>",
+                "<minimum reifiedBy=\"b\"><list> x y </list><condition> (eq,0) </condition></minimum>");
+        for (Assignment a : solutions(instance.csp())) {
+            boolean expected = Math.min(digitOf(a, "x"), digitOf(a, "y")) == 0;
+            assertThat(digitOf(a, "b") == 1).as("x=%d, y=%d", digitOf(a, "x"), digitOf(a, "y")).isEqualTo(expected);
+        }
+        assertThat(solutions(instance.csp())).isNotEmpty();
+    }
+
+    @Test void maximumFixedBound_buildsMaxConstraint() throws IOException {
+        Xcsp3Instance instance = parseXml(
+                "<var id=\"x\"> 0..5 </var><var id=\"y\"> 0..5 </var>",
+                "<maximum><list> x y </list><condition> (eq,4) </condition></maximum>");
+        for (Assignment a : solutions(instance.csp())) {
+            assertThat(Math.max(digitOf(a, "x"), digitOf(a, "y"))).isEqualTo(4);
+        }
+        assertThat(solutions(instance.csp())).isNotEmpty();
+    }
+
+    @Test void maximumVariableTarget_buildsMaxVariableConstraint() throws IOException {
+        Xcsp3Instance instance = parseXml(
+                "<var id=\"x\"> 0..5 </var><var id=\"y\"> 0..5 </var><var id=\"k\"> 0..5 </var>",
+                "<maximum><list> x y </list><condition> (eq,k) </condition></maximum>");
+        for (Assignment a : solutions(instance.csp())) {
+            assertThat(digitOf(a, "k")).isEqualTo(Math.max(digitOf(a, "x"), digitOf(a, "y")));
+        }
+        assertThat(solutions(instance.csp())).isNotEmpty();
+    }
+
     // ---- ordered / lex -----------------------------------------------------------------------------------------------
 
     @Test void ordered_buildsPairwiseComparatorChain() throws IOException {

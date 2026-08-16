@@ -20,7 +20,10 @@ import io.github.rcrida.jcsp.constraints.nary.CountVariableConstraint;
 import io.github.rcrida.jcsp.constraints.nary.CumulativeConstraint;
 import io.github.rcrida.jcsp.constraints.nary.GlobalCardinalityConstraint;
 import io.github.rcrida.jcsp.constraints.nary.LexConstraint;
+import io.github.rcrida.jcsp.constraints.nary.MaxConstraint;
 import io.github.rcrida.jcsp.constraints.nary.MaxVariableConstraint;
+import io.github.rcrida.jcsp.constraints.nary.MinConstraint;
+import io.github.rcrida.jcsp.constraints.nary.MinVariableConstraint;
 import io.github.rcrida.jcsp.constraints.nary.NaryElementConstraint;
 import io.github.rcrida.jcsp.constraints.nary.NaryTuplesConstraint;
 import io.github.rcrida.jcsp.constraints.nary.OrderedConstraint;
@@ -720,6 +723,38 @@ final class Xcsp3CallbackHandler implements XCallbacks2 {
             throw new UnsupportedXcsp3ConstraintException("element requires an EQ-to-variable condition: " + id);
         }
         return variableFor(var.x);
+    }
+
+    // ---- minimum / maximum ----------------------------------------------------------------------------------
+
+    @Override
+    public void buildCtrMinimum(String id, XVarInteger[] list, Condition condition) {
+        applyMinimumCondition(toVariableSet(list), condition, id);
+    }
+
+    @Override
+    public void buildCtrMaximum(String id, XVarInteger[] list, Condition condition) {
+        applyMaximumCondition(toVariableSet(list), condition, id);
+    }
+
+    void applyMinimumCondition(Set<Variable<Integer>> vars, Condition condition, String id) {
+        if (condition instanceof ConditionVal val) {
+            addOrReify(MinConstraint.of(vars, mapOperator(val.operator), (int) val.k), id);
+        } else if (condition instanceof ConditionVar var) {
+            addOrReify(MinVariableConstraint.of(vars, mapOperator(var.operator), variableFor(var.x)), id);
+        } else {
+            throw new UnsupportedXcsp3ConstraintException("Unsupported minimum condition: " + id);
+        }
+    }
+
+    void applyMaximumCondition(Set<Variable<Integer>> vars, Condition condition, String id) {
+        if (condition instanceof ConditionVal val) {
+            addOrReify(MaxConstraint.of(vars, mapOperator(val.operator), (int) val.k), id);
+        } else if (condition instanceof ConditionVar var) {
+            addOrReify(MaxVariableConstraint.of(vars, mapOperator(var.operator), variableFor(var.x)), id);
+        } else {
+            throw new UnsupportedXcsp3ConstraintException("Unsupported maximum condition: " + id);
+        }
     }
 
     // ---- ordered / lex --------------------------------------------------------------------------------------
