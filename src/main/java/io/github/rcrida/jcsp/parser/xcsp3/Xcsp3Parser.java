@@ -10,7 +10,8 @@ import java.nio.file.Path;
  * builder API.
  * <p>
  * Covers variables/domains, {@code intension} (including the {@code dist} operator), {@code
- * extension} (support/positive tables only), {@code allDifferent}, {@code allEqual}, {@code sum},
+ * extension} (support/positive tables only), {@code allDifferent} (plain list, {@code matrix}, and
+ * multi-list "distinct vectors" forms), {@code allEqual}, {@code sum},
  * {@code count}, {@code nValues}, {@code cardinality} (fixed-value/fixed-occurrence form only --
  * see {@link
  * Xcsp3CallbackHandler#buildCtrCardinality(String, org.xcsp.parser.entries.XVariables.XVarInteger[], boolean, int[], int[])}),

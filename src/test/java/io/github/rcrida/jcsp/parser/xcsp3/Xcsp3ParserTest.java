@@ -307,6 +307,45 @@ class Xcsp3ParserTest {
         assertThat(trueCount).isEqualTo(2); // [[0,1],[1,0]] and [[1,0],[0,1]]
     }
 
+    @Test void allDifferentList_buildsDistinctVectorsConstraint() throws IOException {
+        // 3 lists of 2 booleans -- 4 possible 2-bit vectors, need all 3 pairwise distinct:
+        // 4*3*2 = 24 injective assignments of 3 lists to 4 distinct values.
+        Xcsp3Instance instance = parseXml(
+                "<array id=\"x1\" size=\"[2]\"> 0..1 </array>"
+                        + "<array id=\"x2\" size=\"[2]\"> 0..1 </array>"
+                        + "<array id=\"x3\" size=\"[2]\"> 0..1 </array>",
+                "<allDifferent><list> x1[] </list><list> x2[] </list><list> x3[] </list></allDifferent>");
+        Set<Assignment> sols = solutions(instance.csp());
+        for (Assignment a : sols) {
+            int[] v1 = {digitOf(a, "x1[0]"), digitOf(a, "x1[1]")};
+            int[] v2 = {digitOf(a, "x2[0]"), digitOf(a, "x2[1]")};
+            int[] v3 = {digitOf(a, "x3[0]"), digitOf(a, "x3[1]")};
+            assertThat(v1).isNotEqualTo(v2);
+            assertThat(v1).isNotEqualTo(v3);
+            assertThat(v2).isNotEqualTo(v3);
+        }
+        assertThat(sols).hasSize(24);
+    }
+
+    @Test void allDifferentListReified_indicatorTracksPairwiseDistinctness() throws IOException {
+        // 2 lists of 2 booleans -- 4 possible values each; b tracks whether the two vectors differ
+        // (12 of the 16 combinations have them distinct, matching 4*3 ordered distinct pairs).
+        Xcsp3Instance instance = parseXml(
+                "<array id=\"x1\" size=\"[2]\"> 0..1 </array>"
+                        + "<array id=\"x2\" size=\"[2]\"> 0..1 </array><var id=\"b\"> 0..1 </var>",
+                "<allDifferent reifiedBy=\"b\"><list> x1[] </list><list> x2[] </list></allDifferent>");
+        int trueCount = 0;
+        for (Assignment a : solutions(instance.csp())) {
+            int[] v1 = {digitOf(a, "x1[0]"), digitOf(a, "x1[1]")};
+            int[] v2 = {digitOf(a, "x2[0]"), digitOf(a, "x2[1]")};
+            boolean distinct = !java.util.Arrays.equals(v1, v2);
+            int b = digitOf(a, "b");
+            assertThat(b == 1).as("v1=%s, v2=%s", java.util.Arrays.toString(v1), java.util.Arrays.toString(v2)).isEqualTo(distinct);
+            if (distinct) trueCount++;
+        }
+        assertThat(trueCount).isEqualTo(12);
+    }
+
     // ---- allEqual -----------------------------------------------------------------------------------
 
     @Test void allEqual_buildsAllEqualConstraint() throws IOException {
