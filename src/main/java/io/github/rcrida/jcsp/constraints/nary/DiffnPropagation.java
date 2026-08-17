@@ -15,6 +15,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
 import java.util.stream.Stream;
 
 /**
@@ -132,6 +133,29 @@ final class DiffnPropagation {
             applyBound(sOrigins.get(j), Math.max(sjMin, siMin + hi), sjMax, domains, updated);
         }
         return Optional.empty();
+    }
+
+    /**
+     * Returns, per rectangle index, whether any of its own variables -- both origins, plus either
+     * size when it's a genuine {@link Variable} rather than a fixed constant -- is in {@code
+     * changed}. Lets a caller skip a pair's {@link #separateOnOverlap} call entirely when neither
+     * rectangle in the pair is dirty: that method reads only the pair's own {@code i}/{@code j}
+     * variables, so a pair where neither side changed since it was last checked is provably unable
+     * to have produced a different result, exactly the argument {@code NogoodFixpointConsistency}
+     * already uses for skipping unchanged nogoods.
+     */
+    static boolean[] dirtyRectangles(int n, List<Variable<? extends Number>> xOrigins, SizeLookup widths,
+            List<Variable<? extends Number>> yOrigins, SizeLookup heights, Set<Variable<?>> changed) {
+        boolean[] dirty = new boolean[n];
+        for (int i = 0; i < n; i++) {
+            dirty[i] = changed.contains(xOrigins.get(i)) || changed.contains(yOrigins.get(i))
+                    || referencesChanged(widths.variable(i), changed) || referencesChanged(heights.variable(i), changed);
+        }
+        return dirty;
+    }
+
+    private static boolean referencesChanged(@Nullable Variable<?> sizeVariable, Set<Variable<?>> changed) {
+        return sizeVariable != null && changed.contains(sizeVariable);
     }
 
     static Map<Variable<?>, Object> buildReason(Failure failure,

@@ -4,11 +4,13 @@ import io.github.rcrida.jcsp.constraints.nary.NogoodConstraint;
 import io.github.rcrida.jcsp.domains.Domain;
 import io.github.rcrida.jcsp.variables.Variable;
 import org.jspecify.annotations.NonNull;
+import org.jspecify.annotations.Nullable;
 
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 
 /**
  * A constraint that can propagate domain reductions from the current variable domains.
@@ -23,6 +25,26 @@ public interface Propagatable {
      *         or {@link Optional#empty()} if the constraint is provably infeasible
      */
     Optional<Map<Variable<?>, Domain<?>>> propagate(Map<Variable<?>, Domain<?>> domains);
+
+    /**
+     * Variant of {@link #propagate(Map)} that accepts a hint of which variables' domains changed
+     * since this constraint last propagated in the current fixpoint loop (see {@link
+     * io.github.rcrida.jcsp.solver.FixpointPropagation#applyFixpoint}), or {@code null} meaning
+     * "unknown -- assume everything may have changed". Mirrors {@link
+     * io.github.rcrida.jcsp.consistency.ConstraintConsistency#apply(io.github.rcrida.jcsp.ConstraintSatisfactionProblem, Set)}'s
+     * own hint, but one level deeper: that one lets a {@link
+     * io.github.rcrida.jcsp.consistency.fixpoint.FixpointConsistency} instance skip whole
+     * constraint <em>objects</em> that don't reference a changed variable -- of no help to a
+     * constraint whose own cost is dominated by work <em>internal</em> to a single object (e.g.
+     * {@code DiffnConstraint}'s pairwise compulsory-part checks across all its rectangles). The
+     * default ignores the hint and delegates to {@link #propagate(Map)}, so every existing
+     * implementor is unaffected; a constraint whose internal cost scales with its own variable
+     * count overrides this to skip the sub-computations the hint proves can't have changed.
+     */
+    default Optional<Map<Variable<?>, Domain<?>>> propagate(Map<Variable<?>, Domain<?>> domains,
+                                                              @Nullable Set<Variable<?>> changedSinceLastRun) {
+        return propagate(domains);
+    }
 
     /**
      * Propagates domain reductions and returns the reason for each change: the variable-value

@@ -9,11 +9,13 @@ import lombok.Singular;
 import lombok.experimental.SuperBuilder;
 import lombok.extern.slf4j.Slf4j;
 import org.jspecify.annotations.NonNull;
+import org.jspecify.annotations.Nullable;
 
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 
 /**
  * An n-ary constraint that places axis-aligned rectangles so that none overlap. Rectangle
@@ -89,7 +91,8 @@ public class DiffnConstraint extends NaryConstraint implements Propagatable {
     /**
      * Pairwise compulsory-part propagator. For every pair of rectangles, if their compulsory parts
      * are forced to overlap on one axis, they cannot overlap on the other, so the perpendicular
-     * origin domains are tightened to the still-feasible separation.
+     * origin domains are tightened to the still-feasible separation. Delegates to {@link
+     * #propagate(Map, Set)} with a {@code null} hint (full scan, no pair skipped).
      *
      * @param domains current variable domains
      * @return updated domains for origin variables whose bounds were tightened,
@@ -98,10 +101,27 @@ public class DiffnConstraint extends NaryConstraint implements Propagatable {
     @Override
     public Optional<Map<Variable<?>, Domain<?>>> propagate(
             @NonNull Map<Variable<?>, Domain<?>> domains) {
+        return propagate(domains, null);
+    }
+
+    /**
+     * Skips a pair's {@link DiffnPropagation#separateOnOverlap} call entirely when neither
+     * rectangle's own variables (both origins; widths/heights are fixed constants here, never in
+     * {@code changedSinceLastRun}) are in {@code changedSinceLastRun} -- see {@link
+     * DiffnPropagation#dirtyRectangles}'s own Javadoc for why that's sound, not an approximation.
+     * A {@code null} hint (unknown -- e.g. the first round of a fixpoint call) checks every pair,
+     * matching {@link #propagate(Map)}'s own unconditional scan.
+     */
+    @Override
+    public Optional<Map<Variable<?>, Domain<?>>> propagate(
+            @NonNull Map<Variable<?>, Domain<?>> domains, @Nullable Set<Variable<?>> changedSinceLastRun) {
         int n = xOrigins.size();
         Map<Variable<?>, Domain<?>> updated = new HashMap<>();
+        boolean[] dirty = changedSinceLastRun == null ? null
+                : DiffnPropagation.dirtyRectangles(n, xOrigins, widthLookup(), yOrigins, heightLookup(), changedSinceLastRun);
         for (int i = 0; i < n; i++) {
             for (int j = i + 1; j < n; j++) {
+                if (dirty != null && !dirty[i] && !dirty[j]) continue;
                 // Mandatory x-overlap forces separation on y.
                 if (DiffnPropagation.separateOnOverlap(i, j, xOrigins, widthLookup(), yOrigins, heightLookup(), domains, updated).isPresent()) {
                     return Optional.empty();

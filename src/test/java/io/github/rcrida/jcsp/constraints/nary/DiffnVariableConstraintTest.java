@@ -10,6 +10,7 @@ import org.junit.jupiter.api.Test;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -163,6 +164,69 @@ public class DiffnVariableConstraintTest {
         assertThat(c.propagate(d)).isEmpty();
     }
 
+    // --- propagate(domains, changedSinceLastRun) -- dirty-pair filtering ---
+
+    @Test
+    void propagate_dirtyHintExcludingBothRectangles_skipsPairEntirely() {
+        // Same infeasible setup as propagate_bothCasesImpossible_infeasible, but the hint names a
+        // variable outside this pair entirely -- neither rectangle is dirty (including its size
+        // variables, unlike DiffnConstraint), so the pair must be skipped.
+        Variable<Integer> x0 = F.create("hix0"), y0 = F.create("hiy0"), w0 = F.create("hiw0"), h0 = F.create("hih0");
+        Variable<Integer> x1 = F.create("hix1"), y1 = F.create("hiy1"), w1 = F.create("hiw1"), h1 = F.create("hih1");
+        Variable<Integer> unrelated = F.create("hiUnrelated");
+        var c = DiffnVariableConstraint.of(List.of(x0, x1), List.of(y0, y1), List.of(w0, w1), List.of(h0, h1));
+        var d = domains(
+                x0, IntRangeDomain.of(0, 0), x1, IntRangeDomain.of(2, 2),
+                w0, IntRangeDomain.of(4, 4), w1, IntRangeDomain.of(4, 4),
+                y0, IntRangeDomain.of(2, 2), y1, IntRangeDomain.of(2, 2),
+                h0, IntRangeDomain.of(2, 2), h1, IntRangeDomain.of(2, 2));
+        assertThat(c.propagate(d, java.util.Set.of(unrelated))).contains(Map.of());
+    }
+
+    @Test
+    void propagate_dirtyHintIncludingSizeVariable_stillChecksPair() {
+        // Same setup, but the hint includes w0 (a size variable, not an origin) -- must still be
+        // treated as dirtying rectangle 0, unlike DiffnConstraint where sizes are fixed constants.
+        Variable<Integer> x0 = F.create("hjx0"), y0 = F.create("hjy0"), w0 = F.create("hjw0"), h0 = F.create("hjh0");
+        Variable<Integer> x1 = F.create("hjx1"), y1 = F.create("hjy1"), w1 = F.create("hjw1"), h1 = F.create("hjh1");
+        var c = DiffnVariableConstraint.of(List.of(x0, x1), List.of(y0, y1), List.of(w0, w1), List.of(h0, h1));
+        var d = domains(
+                x0, IntRangeDomain.of(0, 0), x1, IntRangeDomain.of(2, 2),
+                w0, IntRangeDomain.of(4, 4), w1, IntRangeDomain.of(4, 4),
+                y0, IntRangeDomain.of(2, 2), y1, IntRangeDomain.of(2, 2),
+                h0, IntRangeDomain.of(2, 2), h1, IntRangeDomain.of(2, 2));
+        assertThat(c.propagate(d, java.util.Set.of(w0))).isEmpty();
+    }
+
+    @Test
+    void propagate_dirtyHintIncludingHeightVariable_stillChecksPair() {
+        // As propagate_dirtyHintIncludingSizeVariable_stillChecksPair, but via h0 specifically --
+        // dirtyRectangles' own OR chain checks x/y origins then width then height in order, so a
+        // width-only test never exercises the height disjunct actually being the deciding one.
+        Variable<Integer> x0 = F.create("hkx0"), y0 = F.create("hky0"), w0 = F.create("hkw0"), h0 = F.create("hkh0");
+        Variable<Integer> x1 = F.create("hkx1"), y1 = F.create("hky1"), w1 = F.create("hkw1"), h1 = F.create("hkh1");
+        var c = DiffnVariableConstraint.of(List.of(x0, x1), List.of(y0, y1), List.of(w0, w1), List.of(h0, h1));
+        var d = domains(
+                x0, IntRangeDomain.of(0, 0), x1, IntRangeDomain.of(2, 2),
+                w0, IntRangeDomain.of(4, 4), w1, IntRangeDomain.of(4, 4),
+                y0, IntRangeDomain.of(2, 2), y1, IntRangeDomain.of(2, 2),
+                h0, IntRangeDomain.of(2, 2), h1, IntRangeDomain.of(2, 2));
+        assertThat(c.propagate(d, java.util.Set.of(h0))).isEmpty();
+    }
+
+    @Test
+    void propagate_nullHint_behavesLikeFullScan() {
+        Variable<Integer> x0 = F.create("hkx0"), y0 = F.create("hky0"), w0 = F.create("hkw0"), h0 = F.create("hkh0");
+        Variable<Integer> x1 = F.create("hkx1"), y1 = F.create("hky1"), w1 = F.create("hkw1"), h1 = F.create("hkh1");
+        var c = DiffnVariableConstraint.of(List.of(x0, x1), List.of(y0, y1), List.of(w0, w1), List.of(h0, h1));
+        var d = domains(
+                x0, IntRangeDomain.of(0, 0), x1, IntRangeDomain.of(1, 1),
+                w0, IntRangeDomain.of(2, 4), w1, IntRangeDomain.of(2, 4),
+                y0, IntRangeDomain.of(2, 3), y1, IntRangeDomain.of(3, 4),
+                h0, IntRangeDomain.of(2, 4), h1, IntRangeDomain.of(2, 4));
+        assertThat(c.propagate(d, null)).isEqualTo(c.propagate(d));
+    }
+
     // --- explainInfeasible ---
 
     @Test
@@ -277,6 +341,66 @@ public class DiffnVariableConstraintTest {
             int actualY0 = a.getValue(y0).orElseThrow();
             int actualY1 = a.getValue(y1).orElseThrow();
             assertThat(actualY0 + 3 <= actualY1 || actualY1 + 3 <= actualY0).isTrue();
+        }
+    }
+
+    // --- randomized cross-check: dirty-pair filtering must not change the converged fixpoint ---
+
+    /**
+     * As {@link DiffnConstraintTest#propagate_randomizedCrossCheck_fixpointConvergesIdentically}:
+     * a single {@link #propagate(Map, java.util.Set)} call can legitimately do less work than the
+     * unfiltered scan (an earlier-processed dirty pair can narrow a rectangle a later "clean" pair
+     * depends on, invisible to that pair's own hint until the *next* round) -- what must never
+     * differ is where the whole {@code while(changed)} loop converges. Includes width/height in
+     * the random domains too, unlike the fixed-size sibling.
+     */
+    @Test
+    void propagate_randomizedCrossCheck_fixpointConvergesIdentically() {
+        var random = new java.util.Random(13);
+        for (int trial = 0; trial < 300; trial++) {
+            int n = 2 + random.nextInt(4); // 2..5 rectangles
+            List<Variable<? extends Number>> xs = new java.util.ArrayList<>();
+            List<Variable<? extends Number>> ys = new java.util.ArrayList<>();
+            List<Variable<? extends Number>> ws = new java.util.ArrayList<>();
+            List<Variable<? extends Number>> hs = new java.util.ArrayList<>();
+            Map<Variable<?>, Domain<?>> d = new java.util.HashMap<>();
+            for (int i = 0; i < n; i++) {
+                Variable<Integer> x = F.create("vrx" + trial + "_" + i);
+                Variable<Integer> y = F.create("vry" + trial + "_" + i);
+                Variable<Integer> w = F.create("vrw" + trial + "_" + i);
+                Variable<Integer> h = F.create("vrh" + trial + "_" + i);
+                xs.add(x);
+                ys.add(y);
+                ws.add(w);
+                hs.add(h);
+                int xlo = random.nextInt(4), xhi = xlo + random.nextInt(3);
+                int ylo = random.nextInt(4), yhi = ylo + random.nextInt(3);
+                int wlo = 1 + random.nextInt(2), whi = wlo + random.nextInt(2);
+                int hlo = 1 + random.nextInt(2), hhi = hlo + random.nextInt(2);
+                d.put(x, IntRangeDomain.of(xlo, xhi));
+                d.put(y, IntRangeDomain.of(ylo, yhi));
+                d.put(w, IntRangeDomain.of(wlo, whi));
+                d.put(h, IntRangeDomain.of(hlo, hhi));
+            }
+            var c = DiffnVariableConstraint.of(xs, ys, ws, hs);
+
+            var filtered = runToFixpoint(c, d, true);
+            var unfiltered = runToFixpoint(c, d, false);
+            assertThat(filtered).as("trial %d initial=%s", trial, d).isEqualTo(unfiltered);
+        }
+    }
+
+    private static Optional<Map<Variable<?>, Domain<?>>> runToFixpoint(
+            DiffnVariableConstraint c, Map<Variable<?>, Domain<?>> initial, boolean useHint) {
+        Map<Variable<?>, Domain<?>> current = new java.util.HashMap<>(initial);
+        java.util.Set<Variable<?>> changed = null;
+        while (true) {
+            var result = useHint ? c.propagate(current, changed) : c.propagate(current);
+            if (result.isEmpty()) return Optional.empty();
+            Map<Variable<?>, Domain<?>> updates = result.get();
+            if (updates.isEmpty()) return Optional.of(current);
+            current.putAll(updates);
+            changed = new java.util.HashSet<>(updates.keySet());
         }
     }
 }

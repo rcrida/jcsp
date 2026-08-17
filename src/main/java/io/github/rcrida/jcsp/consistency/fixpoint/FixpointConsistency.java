@@ -156,15 +156,20 @@ public class FixpointConsistency implements ConstraintConsistency {
 
     /**
      * Single-pass combination of {@link #apply} and {@link #explainConflict}: calls each
-     * constraint's plain {@link Propagatable#propagate} exactly once — identical cost to {@link
-     * #apply} on the feasible path, since nothing extra is allocated or computed there — and only
-     * on the constraint that actually causes a domain wipeout does it call {@link
+     * constraint's {@link Propagatable#propagate(Map, Set)} exactly once — identical cost to
+     * {@link #apply} on the feasible path, since nothing extra is allocated or computed there —
+     * and only on the constraint that actually causes a domain wipeout does it call {@link
      * Propagatable#explainInfeasible} to derive a reason, tried in the same two tiers {@link
      * #explainConflict} used to: (1) the constraint's own explanation, (2) {@link
      * RangeNogoodConstraint#fromCurrentBounds} over its whole variable set as a generic fallback.
-     * {@code changedSinceLastRun} is accepted for interface conformance but unused, same as {@link
-     * #apply(ConstraintSatisfactionProblem, Set)} — this propagator's cost scales with its own
-     * fixed, small constraint count, so the dirty-variable hint has nothing to save here.
+     * Unlike {@link #apply(ConstraintSatisfactionProblem, Set)}, {@code changedSinceLastRun} is
+     * genuinely forwarded here, not ignored: this decides which constraint <em>objects</em> to
+     * re-invoke (of no help when a {@link #constraintType} typically has only one instance, e.g.
+     * {@code DiffnConstraint}), but the constraint itself now also receives the hint via {@link
+     * Propagatable#propagate(Map, Set)} and can use it to skip <em>internal</em> sub-computations
+     * whose inputs provably didn't change -- found via JFR profiling a hard XCSP3 packing instance
+     * to matter for exactly that constraint, whose own cost is dominated by pairwise checks across
+     * all its rectangles, not by how many constraint objects exist.
      */
     @Override
     public ConsistencyResult applyWithReason(ConstraintSatisfactionProblem csp,
@@ -176,7 +181,7 @@ public class FixpointConsistency implements ConstraintConsistency {
         while (changed) {
             changed = false;
             for (Propagatable constraint : constraints) {
-                Optional<Map<Variable<?>, Domain<?>>> result = constraint.propagate(domains.view());
+                Optional<Map<Variable<?>, Domain<?>>> result = constraint.propagate(domains.view(), changedSinceLastRun);
                 if (result.isEmpty()) {
                     NogoodConstraint reason = constraint.explainInfeasible(domains.view()).orElse(null);
                     if (reason == null) {

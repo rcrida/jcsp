@@ -9,11 +9,13 @@ import lombok.Singular;
 import lombok.experimental.SuperBuilder;
 import lombok.extern.slf4j.Slf4j;
 import org.jspecify.annotations.NonNull;
+import org.jspecify.annotations.Nullable;
 
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 
 /**
  * The variable-sized sibling of {@link DiffnConstraint}: places axis-aligned rectangles so that
@@ -92,10 +94,26 @@ public class DiffnVariableConstraint extends NaryConstraint implements Propagata
 
     @Override
     public Optional<Map<Variable<?>, Domain<?>>> propagate(@NonNull Map<Variable<?>, Domain<?>> domains) {
+        return propagate(domains, null);
+    }
+
+    /**
+     * As {@link DiffnConstraint#propagate(Map, Set)}: skips a pair's {@link
+     * DiffnPropagation#separateOnOverlap} call entirely when neither rectangle's own variables
+     * (both origins and, unlike {@link DiffnConstraint}, both size variables too) are in {@code
+     * changedSinceLastRun}. See {@link DiffnPropagation#dirtyRectangles}'s own Javadoc for the
+     * soundness argument.
+     */
+    @Override
+    public Optional<Map<Variable<?>, Domain<?>>> propagate(
+            @NonNull Map<Variable<?>, Domain<?>> domains, @Nullable Set<Variable<?>> changedSinceLastRun) {
         int n = xOrigins.size();
         Map<Variable<?>, Domain<?>> updated = new HashMap<>();
+        boolean[] dirty = changedSinceLastRun == null ? null
+                : DiffnPropagation.dirtyRectangles(n, xOrigins, widthLookup(), yOrigins, heightLookup(), changedSinceLastRun);
         for (int i = 0; i < n; i++) {
             for (int j = i + 1; j < n; j++) {
+                if (dirty != null && !dirty[i] && !dirty[j]) continue;
                 if (DiffnPropagation.separateOnOverlap(i, j, xOrigins, widthLookup(), yOrigins, heightLookup(), domains, updated).isPresent()) {
                     return Optional.empty();
                 }

@@ -11,6 +11,7 @@ import org.junit.jupiter.api.Test;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -202,6 +203,48 @@ public class DiffnConstraintTest {
                 x0, IntRangeDomain.of(0, 0), x1, IntRangeDomain.of(2, 2),
                 y0, IntRangeDomain.of(2, 2), y1, IntRangeDomain.of(2, 2));
         assertThat(c.propagate(d)).isEmpty();
+    }
+
+    // --- propagate(domains, changedSinceLastRun) -- dirty-pair filtering ---
+
+    @Test
+    void propagate_dirtyHintExcludingBothRectangles_skipsPairEntirely() {
+        // Same infeasible setup as propagate_bothCasesImpossible_infeasible, but the hint names a
+        // variable outside this pair entirely -- neither rectangle is dirty, so the pair must be
+        // skipped and the constraint reports feasible despite the underlying domains still being
+        // genuinely infeasible if actually checked.
+        Variable<Integer> x0 = F.create("pxh0"), y0 = F.create("pyh0");
+        Variable<Integer> x1 = F.create("pxh1"), y1 = F.create("pyh1");
+        Variable<Integer> unrelated = F.create("unrelated");
+        var c = xOverlapConstraint(x0, y0, x1, y1, 2.0, 2.0);
+        var d = domains(
+                x0, IntRangeDomain.of(0, 0), x1, IntRangeDomain.of(2, 2),
+                y0, IntRangeDomain.of(2, 2), y1, IntRangeDomain.of(2, 2));
+        assertThat(c.propagate(d, java.util.Set.of(unrelated))).contains(Map.of());
+    }
+
+    @Test
+    void propagate_dirtyHintIncludingOneRectangle_stillChecksPair() {
+        // Same setup, but the hint includes x0 (one side of the pair) -- the pair must still be
+        // fully checked and the same infeasibility detected as the unfiltered scan.
+        Variable<Integer> x0 = F.create("pxh2"), y0 = F.create("pyh2");
+        Variable<Integer> x1 = F.create("pxh3"), y1 = F.create("pyh3");
+        var c = xOverlapConstraint(x0, y0, x1, y1, 2.0, 2.0);
+        var d = domains(
+                x0, IntRangeDomain.of(0, 0), x1, IntRangeDomain.of(2, 2),
+                y0, IntRangeDomain.of(2, 2), y1, IntRangeDomain.of(2, 2));
+        assertThat(c.propagate(d, java.util.Set.of(x0))).isEmpty();
+    }
+
+    @Test
+    void propagate_nullHint_behavesLikeFullScan() {
+        Variable<Integer> x0 = F.create("pxh4"), y0 = F.create("pyh4");
+        Variable<Integer> x1 = F.create("pxh5"), y1 = F.create("pyh5");
+        var c = xOverlapConstraint(x0, y0, x1, y1, 2.0, 2.0);
+        var d = domains(
+                x0, IntRangeDomain.of(0, 0), x1, IntRangeDomain.of(2, 2),
+                y0, IntRangeDomain.of(2, 3), y1, IntRangeDomain.of(3, 4));
+        assertThat(c.propagate(d, null)).isEqualTo(c.propagate(d));
     }
 
     @Test
@@ -443,5 +486,70 @@ public class DiffnConstraintTest {
                         List.of(2.0, 2.0, 2.0), List.of(2.0, 2.0, 2.0)))
                 .build();
         assertThat(Solver.Factory.INSTANCE.createSolver(csp).getSolutions().toList()).hasSize(6);
+    }
+
+    // --- randomized cross-check: dirty-pair filtering must not change the converged fixpoint ---
+
+    /**
+     * {@link #propagate(Map, java.util.Set)}'s soundness argument is about the whole {@code
+     * while(changed)} fixpoint loop, not a single call in isolation: within one call, an
+     * earlier-processed dirty pair can narrow a rectangle a later "clean" pair depends on, and
+     * that later pair's own dirtiness was decided from the hint passed in at the <em>start</em> of
+     * the call, not from what changed mid-call -- so a single call can legitimately do less work
+     * than the unfiltered scan would in that same call. What must never differ is the fixpoint
+     * the whole loop <em>converges</em> to: any narrowing a filtered call misses becomes visible in
+     * {@code changed} for the next round (since the rectangle's domain did change), so it's always
+     * caught eventually. This test drives both a filtered and an unfiltered {@code while(changed)}
+     * loop to convergence from the same random domains and asserts identical final results.
+     */
+    @Test
+    void propagate_randomizedCrossCheck_fixpointConvergesIdentically() {
+        var random = new java.util.Random(11);
+        for (int trial = 0; trial < 300; trial++) {
+            int n = 2 + random.nextInt(4); // 2..5 rectangles
+            List<Variable<? extends Number>> xs = new java.util.ArrayList<>();
+            List<Variable<? extends Number>> ys = new java.util.ArrayList<>();
+            List<Double> widths = new java.util.ArrayList<>();
+            List<Double> heights = new java.util.ArrayList<>();
+            Map<Variable<?>, Domain<?>> d = new java.util.HashMap<>();
+            for (int i = 0; i < n; i++) {
+                Variable<Integer> x = F.create("rx" + trial + "_" + i);
+                Variable<Integer> y = F.create("ry" + trial + "_" + i);
+                xs.add(x);
+                ys.add(y);
+                widths.add((double) (1 + random.nextInt(3)));
+                heights.add((double) (1 + random.nextInt(3)));
+                int lo = random.nextInt(4);
+                int hi = lo + random.nextInt(3);
+                d.put(x, IntRangeDomain.of(lo, hi));
+                d.put(y, IntRangeDomain.of(lo, hi));
+            }
+            var c = DiffnConstraint.of(xs, ys, widths, heights);
+
+            var filtered = runToFixpoint(c, d, true);
+            var unfiltered = runToFixpoint(c, d, false);
+            assertThat(filtered).as("trial %d initial=%s", trial, d).isEqualTo(unfiltered);
+        }
+    }
+
+    /**
+     * Replays the same {@code while(changed)} loop {@link io.github.rcrida.jcsp.consistency.fixpoint.FixpointConsistency}
+     * runs in production: {@code null} hint on the first round, then the just-applied updates'
+     * keys as the next round's hint -- exactly what {@code FixpointPropagation#changedVariables}
+     * computes from a before/after domain diff, simplified here since a single constraint's own
+     * {@code updated} map already <em>is</em> that diff.
+     */
+    private static Optional<Map<Variable<?>, Domain<?>>> runToFixpoint(
+            DiffnConstraint c, Map<Variable<?>, Domain<?>> initial, boolean useHint) {
+        Map<Variable<?>, Domain<?>> current = new java.util.HashMap<>(initial);
+        java.util.Set<Variable<?>> changed = null;
+        while (true) {
+            var result = useHint ? c.propagate(current, changed) : c.propagate(current);
+            if (result.isEmpty()) return Optional.empty();
+            Map<Variable<?>, Domain<?>> updates = result.get();
+            if (updates.isEmpty()) return Optional.of(current);
+            current.putAll(updates);
+            changed = new java.util.HashSet<>(updates.keySet());
+        }
     }
 }
