@@ -17,7 +17,9 @@ import java.util.concurrent.atomic.AtomicInteger;
  *       terminal solver's part</li>
  *   <li>{@link #constraintChecks} — constraint evaluations performed (incremented by {@link Assignment#isConsistent})</li>
  *   <li>{@link #backtracks} — times tree search reversed a value assignment due to inconsistency or domain wipeout</li>
- *   <li>{@link #restarts} — completed Luby restarts before a solution was found (backtracking search only)</li>
+ *   <li>{@link #restarts} — completed Luby restarts (backtracking search only), recorded as each one
+ *       happens rather than batched up only once a solution is found, so it reflects restarts
+ *       completed so far even when a solve ends via a limit, cancellation, or genuine UNSAT</li>
  *   <li>{@link #steps} — local search moves taken to reach the solution (local search solvers only)</li>
  *   <li>{@link #nogoodsLearned} — nogoods recorded after a domain-wipeout during search (backtracking search only)</li>
  * </ul>

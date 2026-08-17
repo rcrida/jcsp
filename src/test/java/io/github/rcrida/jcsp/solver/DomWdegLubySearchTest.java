@@ -668,6 +668,32 @@ class DomWdegLubySearchTest {
                 .isNotNull();
     }
 
+    @Test
+    void restartsStatisticRecordedIncrementally_notOnlyOnSuccess() {
+        // statistics.addRestarts used to be called only once, on the success path, batching up
+        // (k - 1) restarts -- so a solve that ended any other way (limit hit, cancellation, or
+        // genuine restart exhaustion) always reported zero restarts even after several had
+        // actually completed. lubyUnit=1 forces tiny per-restart budgets (1, 1, 2, ...); nodeLimit=3
+        // reliably cuts the search off after the first two restarts have already exhausted their
+        // budgets (verified empirically: 4-queens under this exact config restarts twice within its
+        // first 3 nodes), so the exception's carried Statistics must already show restarts=2, not 0.
+        DomWdegLubySearch limited = DomWdegLubySearch.builder()
+                .lubyUnit(1)
+                .maxRestarts(512)
+                .domainValuesOrderer(LeastConstrainingValueOrderer.INSTANCE)
+                .inference(Solver.Factory.FULL_PROPAGATION_INFERENCE)
+                .limits(SolverLimits.ofNodes(3))
+                .build();
+
+        assertThatThrownBy(() -> limited.getSolution(fourQueensCsp()))
+                .isInstanceOf(LimitExceededException.class)
+                .extracting(e -> ((LimitExceededException) e).getStatistics())
+                .satisfies(rawStats -> {
+                    Statistics stats = (Statistics) rawStats;
+                    assertThat(stats.getRestarts().get()).isEqualTo(2);
+                });
+    }
+
     // ── Restart randomization ───────────────────────────────────────────────
 
     @Test

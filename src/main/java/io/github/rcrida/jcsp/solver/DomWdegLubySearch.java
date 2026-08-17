@@ -42,6 +42,11 @@ import java.util.stream.Stream;
  * {@link #statistics} field (a shared token seeded into every restart's root {@link Assignment},
  * not a fresh one per restart) still holds the true cumulative counts across the whole call —
  * see {@code SolverConfig.getStatistics()} for how a caller retrieves it regardless of outcome.
+ * {@code restarts} specifically is recorded the moment each {@link BudgetExceeded} is caught, not
+ * batched up at the end on the success path only — so a caller that observes {@link #statistics}
+ * after a {@link LimitExceededException} or {@link SolverCancelledException} (e.g. from a {@link
+ * SolverListener} callback, or by reading the exception's own carried snapshot) still sees every
+ * restart that had actually completed before the interruption, not zero.
  * A lightweight {@link BudgetExceeded} sentinel (pre-allocated, no stack trace) unwinds the
  * recursion when the budget is exhausted.
  * <p>
@@ -135,13 +140,13 @@ public class DomWdegLubySearch implements Solver {
                 Optional<Assignment> result = searchOne(csp, root, selector, failures, budget, deadline);
                 if (result.isPresent()) {
                     log.info("dom/wdeg+Luby: solution found at restart {}", k);
-                    statistics.addRestarts(k - 1);
                     return result;
                 }
                 log.info("dom/wdeg+Luby: UNSAT confirmed at restart {}", k);
                 return Optional.empty();
             } catch (BudgetExceeded ignored) {
                 log.debug("dom/wdeg+Luby: budget {} exceeded at restart {}, restarting", budget, k);
+                statistics.addRestarts(1);
                 listener.onRestart(k);
             } catch (LimitsExceeded ignored) {
                 log.info("dom/wdeg+Luby: limit exceeded at restart {}", k);
