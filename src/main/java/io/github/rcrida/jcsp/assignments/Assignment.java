@@ -142,14 +142,21 @@ public record Assignment(@Singular Map<Variable<?>, Object> values, Statistics s
      * single newly-assigned variable), so repeated calls don't re-scan the whole set every time.
      * Skips {@link #validateAssignment}, since callers using this narrower form are typically
      * re-checking the same {@link ConstraintSatisfactionProblem} they already validated against once.
+     * <p>
+     * Runs on every node of every terminal solver, so the per-constraint "does it reference an
+     * assigned variable" test uses {@link Collections#disjoint} against a plain loop over {@code
+     * candidateConstraints} rather than a nested {@link java.util.stream.Stream} pipeline (one
+     * {@code constraint.getVariables().stream().anyMatch(values::containsKey)} built per candidate)
+     * -- JFR profiling found the same stream-construction cost here that {@code
+     * NogoodFixpointConsistency#relevant} had, fixed the same way there first.
      */
     public boolean isConsistentAmong(@NonNull Collection<? extends Constraint> candidateConstraints) {
-        return candidateConstraints.stream()
-                .filter(constraint -> constraint.getVariables().stream().anyMatch(values::containsKey))
-                .allMatch(constraint -> {
-                    statistics.incrementConstraintChecks();
-                    return constraint.isSatisfiedBy(this);
-                });
+        for (Constraint constraint : candidateConstraints) {
+            if (Collections.disjoint(values.keySet(), constraint.getVariables())) continue;
+            statistics.incrementConstraintChecks();
+            if (!constraint.isSatisfiedBy(this)) return false;
+        }
+        return true;
     }
 
     public boolean isComplete(ConstraintSatisfactionProblem csp) {
