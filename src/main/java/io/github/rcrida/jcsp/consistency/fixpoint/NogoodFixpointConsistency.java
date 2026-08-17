@@ -8,7 +8,10 @@ import io.github.rcrida.jcsp.variables.Variable;
 import lombok.extern.slf4j.Slf4j;
 import org.jspecify.annotations.Nullable;
 
+import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Collections;
+import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 
@@ -86,16 +89,32 @@ public final class NogoodFixpointConsistency implements ConstraintConsistency {
     }
 
     /**
-     * Returns every nogood in {@link #nogoods} that references at least one variable in {@code
-     * changed}, or all of {@link #nogoods} unfiltered when {@link #changed} is {@code null} (unknown
-     * — the safe, always-correct fallback used on a fixpoint call's first round).
+     * Returns every nogood in {@code nogoods} that references at least one variable in {@code
+     * changed}, or all of {@code nogoods} unfiltered when {@code changed} is {@code null} (unknown
+     * — the safe, always-correct fallback used on a fixpoint call's first round). Still an O({@code
+     * nogoods.size()}) scan, but replaces the original nested-{@link java.util.stream.Stream} filter
+     * (JFR-profiled on a nogood-heavy XCSP3 sports-scheduling instance to spend most of its own time
+     * in {@code Stream}/{@code Spliterator} plumbing, not the underlying membership check itself)
+     * with {@link Collections#disjoint}, which iterates whichever of the two collections is smaller
+     * against a plain {@link Set#contains} on the other -- same asymptotic scan cost over {@code
+     * nogoods}, no stream pipeline construction per nogood. A genuine {@code Variable ->
+     * Set<NogoodConstraint>} index was also tried (real algorithmic improvement, O({@code
+     * changed.size()}) instead of O({@code nogoods.size()})) but measured *worse* on the same
+     * profiled scenario: rebuilding the whole index from scratch on every newly-learned nogood
+     * (roughly once per node here) outweighed the savings, since a node's fixpoint only reuses that
+     * index across a handful of rounds before the next nogood invalidates it. This simpler version
+     * has no such rebuild tax and measured both fewer nodes lost to overhead (higher node throughput
+     * under a fixed time budget) and a lower nogood-related CPU share than the indexed version.
      */
-    private static Collection<NogoodConstraint> relevant(Set<NogoodConstraint> nogoods,
-                                                          @Nullable Set<Variable<?>> changed) {
+    private static Collection<NogoodConstraint> relevant(Set<NogoodConstraint> nogoods, @Nullable Set<Variable<?>> changed) {
         if (changed == null) return nogoods;
-        return nogoods.stream()
-                .filter(n -> n.getVariables().stream().anyMatch(changed::contains))
-                .toList();
+        List<NogoodConstraint> result = new ArrayList<>();
+        for (NogoodConstraint nogood : nogoods) {
+            if (!Collections.disjoint(nogood.getVariables(), changed)) {
+                result.add(nogood);
+            }
+        }
+        return result;
     }
 
     /**

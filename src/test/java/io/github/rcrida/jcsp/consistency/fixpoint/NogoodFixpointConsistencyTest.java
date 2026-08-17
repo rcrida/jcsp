@@ -85,6 +85,21 @@ class NogoodFixpointConsistencyTest {
     }
 
     @Test
+    void apply_dirtySetIncludingBothNogoodVariables_stillDetectsInfeasibility() {
+        // The nogood spans X and Y, both named in the dirty set -- relevant()'s indexed lookup
+        // unions per-variable matches, so this nogood is found via two separate index entries
+        // (one per variable) and must still be deduplicated down to a single check, not applied
+        // twice or skipped.
+        var nogood = GroundNogoodConstraint.of(Map.of(X, 1, Y, 2));
+        var csp = ConstraintSatisfactionProblem.builder()
+                .variableDomain(X, IntRangeDomain.of(1, 1))
+                .variableDomain(Y, IntRangeDomain.of(2, 2))
+                .nogood(nogood)
+                .build();
+        assertThat(NogoodFixpointConsistency.INSTANCE.apply(csp, Set.of(X, Y))).isEmpty();
+    }
+
+    @Test
     void explainConflict_noNogoods_returnsEmpty() {
         var csp = ConstraintSatisfactionProblem.builder()
                 .variableDomain(X, IntRangeDomain.of(1, 3))
