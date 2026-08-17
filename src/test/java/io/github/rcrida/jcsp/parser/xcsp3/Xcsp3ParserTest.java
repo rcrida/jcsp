@@ -761,6 +761,50 @@ class Xcsp3ParserTest {
         assertThat(sols).hasSize(4); // all 2x2 combinations, just with b tracking acceptance
     }
 
+    // ---- mdd ------------------------------------------------------------------------------------------------------
+
+    @Test void mdd_buildsRegularConstraint_acceptsOnlyMatchingSequence() throws IOException {
+        // Layered DAG root -> n1 -> nodeT, XCSP3's fixed source/true-terminal names, mirroring
+        // regular_buildsRegularConstraint_acceptsOnlyMatchingSequence's shape exactly.
+        Xcsp3Instance instance = parseXml(
+                "<var id=\"x\"> 0..1 </var><var id=\"y\"> 0..1 </var>",
+                "<mdd><list> x y </list>"
+                        + "<transitions> (root,0,n1)(n1,1,nodeT) </transitions></mdd>");
+        Set<Assignment> sols = solutions(instance.csp());
+        assertThat(sols).hasSize(1);
+        Assignment solution = sols.iterator().next();
+        assertThat(digitOf(solution, "x")).isEqualTo(0);
+        assertThat(digitOf(solution, "y")).isEqualTo(1);
+    }
+
+    @Test void mdd_multipleAcceptingPaths_acceptsBothOrderings() throws IOException {
+        // Two disjoint root-to-nodeT paths: root--0-->n1--1-->nodeT and root--1-->n2--0-->nodeT,
+        // accepting exactly (0,1) and (1,0) out of all four 2x2 combinations.
+        Xcsp3Instance instance = parseXml(
+                "<var id=\"x\"> 0..1 </var><var id=\"y\"> 0..1 </var>",
+                "<mdd><list> x y </list>"
+                        + "<transitions> (root,0,n1)(root,1,n2)(n1,1,nodeT)(n2,0,nodeT) </transitions></mdd>");
+        Set<Assignment> sols = solutions(instance.csp());
+        for (Assignment a : sols) {
+            boolean accepted = digitOf(a, "x") != digitOf(a, "y");
+            assertThat(accepted).as("x=%d, y=%d", digitOf(a, "x"), digitOf(a, "y")).isTrue();
+        }
+        assertThat(sols).hasSize(2);
+    }
+
+    @Test void mddReified_indicatorTracksAcceptance() throws IOException {
+        Xcsp3Instance instance = parseXml(
+                "<var id=\"x\"> 0..1 </var><var id=\"y\"> 0..1 </var><var id=\"b\"> 0..1 </var>",
+                "<mdd reifiedBy=\"b\"><list> x y </list>"
+                        + "<transitions> (root,0,n1)(n1,1,nodeT) </transitions></mdd>");
+        Set<Assignment> sols = solutions(instance.csp());
+        for (Assignment a : sols) {
+            boolean accepted = digitOf(a, "x") == 0 && digitOf(a, "y") == 1;
+            assertThat(digitOf(a, "b") == 1).as("x=%d, y=%d", digitOf(a, "x"), digitOf(a, "y")).isEqualTo(accepted);
+        }
+        assertThat(sols).hasSize(4); // all 2x2 combinations, just with b tracking acceptance
+    }
+
     // ---- channel --------------------------------------------------------------------------------------------------
 
     @Test void channelTwoArrays_buildsInverseConstraint_acceptsEveryPermutationPair() throws IOException {
@@ -1633,12 +1677,12 @@ class Xcsp3ParserTest {
     // ---- unsupported construct falls through to the library's own default --------------------------------------------------
 
     @Test void completelyUnrecognisedConstruct_throwsRuntimeException() {
-        // mdd (task #54) has no buildCtrMDD override at all, so this falls through to
-        // XCallbacks2's own default (unimplementedCase), not UnsupportedXcsp3ConstraintException --
-        // channel used to be this test's example, but it's now a recognised, mapped construct.
+        // clause has no buildCtrClause override at all, so this falls through to XCallbacks2's own
+        // default (unimplementedCase), not UnsupportedXcsp3ConstraintException -- mdd used to be
+        // this test's example, but it's now a recognised, mapped construct (task #54).
         assertThatThrownBy(() -> parseXml(
                 "<var id=\"x\"> 0..2 </var><var id=\"y\"> 0..2 </var>",
-                "<mdd><list> x y </list><transitions> (r,0,n1)(n1,1,t) </transitions></mdd>"))
+                "<clause> x not(y) </clause>"))
                 .isInstanceOf(RuntimeException.class);
     }
 

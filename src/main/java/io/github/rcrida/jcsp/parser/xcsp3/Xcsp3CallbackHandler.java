@@ -828,19 +828,23 @@ final class Xcsp3CallbackHandler implements XCallbacks2 {
         }
     }
 
-    // ---- regular ----------------------------------------------------------------------------------------------
+    // ---- regular / mdd ------------------------------------------------------------------------------------------
 
     /**
      * Maps xcsp3-tools' symbolic {@code String} state names (e.g. {@code "q0"}) onto the
      * contiguous {@code 0..numStates-1} integer range {@link Automaton} requires, numbering each
      * distinct name the first time it's encountered while scanning {@code startState}, then every
      * {@link Transition}, then {@code finalStates} -- deterministic since {@code transitions}
-     * and {@code finalStates} both arrive as fixed-order arrays from the XML. {@link Transition#value}
-     * is always a boxed {@link Long} in practice (mirroring {@link #buildCtrIntension}'s own leaf
-     * values), never a raw {@code int}.
+     * and {@code finalStates} both arrive as fixed-order collections from the XML. {@link
+     * Transition#value} is always a boxed {@link Long} in practice (mirroring {@link
+     * #buildCtrIntension}'s own leaf values), never a raw {@code int}. Shared by {@link
+     * #buildCtrRegular} and {@link #buildCtrMDD}: an XCSP3 {@code mdd} is a layered, acyclic DAG
+     * from a fixed {@code "root"} to a fixed {@code "nodeT"}, but that's just a DFA whose states
+     * happen to never be revisited across positions -- {@link RegularConstraint}'s forward-backward
+     * DP already handles that correctly with no changes, so {@code mdd} needs no constraint type of
+     * its own, only a different {@code startState}/{@code finalStates} pair.
      */
-    @Override
-    public void buildCtrRegular(String id, XVarInteger[] list, Transition[] transitions, String startState, String[] finalStates) {
+    private void buildRegularOrMdd(String id, XVarInteger[] list, Transition[] transitions, String startState, Set<String> finalStates) {
         Map<String, Integer> stateIndices = new LinkedHashMap<>();
         stateIndices.computeIfAbsent(startState, s -> stateIndices.size());
         for (Transition t : transitions) {
@@ -856,11 +860,27 @@ final class Xcsp3CallbackHandler implements XCallbacks2 {
             automatonTransitions.computeIfAbsent(stateIndices.get(t.start), s -> new LinkedHashMap<>())
                     .put(value, stateIndices.get(t.end));
         }
-        Set<Integer> acceptingStates = Arrays.stream(finalStates)
+        Set<Integer> acceptingStates = finalStates.stream()
                 .map(stateIndices::get)
                 .collect(Collectors.toCollection(LinkedHashSet::new));
         Automaton<Integer> automaton = Automaton.of(stateIndices.size(), stateIndices.get(startState), acceptingStates, automatonTransitions);
         addOrReify(RegularConstraint.of(toVariableList(list), automaton), id);
+    }
+
+    @Override
+    public void buildCtrRegular(String id, XVarInteger[] list, Transition[] transitions, String startState, String[] finalStates) {
+        buildRegularOrMdd(id, list, transitions, startState, new LinkedHashSet<>(Arrays.asList(finalStates)));
+    }
+
+    /**
+     * XCSP3 fixes an {@code mdd}'s source and true-terminal node names to {@code "root"} and {@code
+     * "nodeT"} respectively (no {@code "nodeF"} counterpart -- an MDD only ever lists accepting
+     * paths, unlike a conflict-mode table). See {@link #buildRegularOrMdd} for why this maps onto
+     * {@link RegularConstraint} directly rather than a dedicated MDD propagator.
+     */
+    @Override
+    public void buildCtrMDD(String id, XVarInteger[] list, Transition[] transitions) {
+        buildRegularOrMdd(id, list, transitions, "root", Set.of("nodeT"));
     }
 
     // ---- channel ------------------------------------------------------------------------------------------------
