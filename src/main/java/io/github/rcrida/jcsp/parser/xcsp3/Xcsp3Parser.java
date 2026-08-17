@@ -12,9 +12,10 @@ import java.nio.file.Path;
  * Covers variables/domains, {@code intension} (including the {@code dist} operator), {@code
  * extension} (support/positive tables only), {@code allDifferent} (plain list, {@code matrix}, and
  * multi-list "distinct vectors" forms), {@code allEqual}, {@code sum},
- * {@code count}, {@code nValues}, {@code cardinality} (fixed-value/fixed-occurrence form only --
+ * {@code count}, {@code nValues}, {@code cardinality} (fixed-value form, both fixed-occurrence --
  * see {@link
- * Xcsp3CallbackHandler#buildCtrCardinality(String, org.xcsp.parser.entries.XVariables.XVarInteger[], boolean, int[], int[])}),
+ * Xcsp3CallbackHandler#buildCtrCardinality(String, org.xcsp.parser.entries.XVariables.XVarInteger[], boolean, int[], int[])}
+ * -- and min/max-occurrence-range),
  * {@code element}, {@code minimum}/{@code maximum}, {@code ordered}, {@code lex}, {@code
  * cumulative}, {@code circuit}, {@code binPacking}, {@code regular}, {@code instantiation}, and
  * single, sum-type, or unweighted maximum-type {@code minimize}/{@code maximize} objectives. A

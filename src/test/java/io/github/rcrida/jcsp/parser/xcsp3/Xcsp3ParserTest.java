@@ -510,12 +510,51 @@ class Xcsp3ParserTest {
                 .isInstanceOf(UnsupportedXcsp3ConstraintException.class);
     }
 
-    @Test void cardinalityWithOccursRange_throwsUnsupported() {
-        assertThatThrownBy(() -> parseXml(
+    @Test void cardinalityOccursRange_buildsGlobalCardinalityRangeConstraint() throws IOException {
+        // value 1 must appear 1..2 times, value 2 must appear 0..1 times, value 3 unconstrained.
+        Xcsp3Instance instance = parseXml(
                 "<var id=\"x1\"> 1..3 </var><var id=\"x2\"> 1..3 </var><var id=\"x3\"> 1..3 </var>",
-                "<cardinality><list> x1 x2 x3 </list><values closed=\"false\"> 1 2 3 </values>"
-                        + "<occurs> 0..1 1..3 2..3 </occurs></cardinality>"))
+                "<cardinality><list> x1 x2 x3 </list><values closed=\"false\"> 1 2 </values>"
+                        + "<occurs> 1..2 0..1 </occurs></cardinality>");
+        Set<Assignment> sols = solutions(instance.csp());
+        for (Assignment a : sols) {
+            long count1 = java.util.stream.Stream.of("x1", "x2", "x3").filter(n -> digitOf(a, n) == 1).count();
+            long count2 = java.util.stream.Stream.of("x1", "x2", "x3").filter(n -> digitOf(a, n) == 2).count();
+            assertThat(count1).as("solution=%s", a).isBetween(1L, 2L);
+            assertThat(count2).as("solution=%s", a).isBetween(0L, 1L);
+        }
+        assertThat(sols).isNotEmpty();
+    }
+
+    @Test void cardinalityOccursRangeClosedCoveringEveryDomain_buildsGlobalCardinalityRangeConstraint() throws IOException {
+        Xcsp3Instance instance = parseXml(
+                "<var id=\"x1\"> 1..2 </var><var id=\"x2\"> 1..2 </var>",
+                "<cardinality><list> x1 x2 </list><values closed=\"true\"> 1 2 </values>"
+                        + "<occurs> 0..2 0..2 </occurs></cardinality>");
+        assertThat(solutions(instance.csp())).isNotEmpty();
+    }
+
+    @Test void cardinalityOccursRangeClosedNotCoveringEveryDomain_throwsUnsupported() {
+        // x1's domain (1..3) isn't fully covered by values {1,2}.
+        assertThatThrownBy(() -> parseXml(
+                "<var id=\"x1\"> 1..3 </var><var id=\"x2\"> 1..2 </var>",
+                "<cardinality><list> x1 x2 </list><values closed=\"true\"> 1 2 </values>"
+                        + "<occurs> 0..2 0..2 </occurs></cardinality>"))
                 .isInstanceOf(UnsupportedXcsp3ConstraintException.class);
+    }
+
+    @Test void cardinalityOccursRangeReified_indicatorTracksRangeSatisfaction() throws IOException {
+        Xcsp3Instance instance = parseXml(
+                "<var id=\"x1\"> 1..2 </var><var id=\"x2\"> 1..2 </var><var id=\"b\"> 0..1 </var>",
+                "<cardinality reifiedBy=\"b\"><list> x1 x2 </list><values closed=\"false\"> 1 </values>"
+                        + "<occurs> 0..1 </occurs></cardinality>");
+        Set<Assignment> sols = solutions(instance.csp());
+        for (Assignment a : sols) {
+            long count1 = java.util.stream.Stream.of("x1", "x2").filter(n -> digitOf(a, n) == 1).count();
+            boolean inRange = count1 <= 1;
+            assertThat(digitOf(a, "b") == 1).as("solution=%s", a).isEqualTo(inRange);
+        }
+        assertThat(sols).hasSize(4); // all 2x2 x1,x2 combos, b determined (not free) by range membership
     }
 
     @Test void cardinalityWithVariableValuesAndOccurs_throwsUnsupported() {

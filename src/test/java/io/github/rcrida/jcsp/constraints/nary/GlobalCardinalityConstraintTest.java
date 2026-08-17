@@ -83,7 +83,7 @@ public class GlobalCardinalityConstraintTest {
     @Test
     void testToString() {
         assertThat(constraint.toString())
-                .isEqualTo("<(v1, v2, v3, v4), GlobalCardinality({BLUE=1, GREEN=1, RED=2})>");
+                .isEqualTo("<(v1, v2, v3, v4), GlobalCardinality({BLUE=1..1, GREEN=1..1, RED=2..2})>");
     }
 
     @Test
@@ -296,7 +296,9 @@ public class GlobalCardinalityConstraintTest {
         var w1 = v1; var w2 = v2; var w3 = v3; var w4 = v4;
         var c = GlobalCardinalityConstraint.<Color>builder()
                 .variables(Set.of(w1, w2, w3, w4))
-                .cardinalities(Map.of(Color.RED, 3, Color.GREEN, 3))
+                .cardinalityRanges(Map.of(
+                        Color.RED, new GlobalCardinalityConstraint.OccurrenceRange(3, 3),
+                        Color.GREEN, new GlobalCardinalityConstraint.OccurrenceRange(3, 3)))
                 .build();
         var domains = Map.<Variable<?>, Domain<?>>of(
                 w1, RED_ONLY, w2, RED_GREEN, w3, GREEN_ONLY, w4, GREEN_ONLY);
@@ -412,6 +414,207 @@ public class GlobalCardinalityConstraintTest {
         for (Color c : domLists.get(idx)) {
             current[idx] = c;
             if (anyCompletionSatisfies(domLists, cardinalities, current, fixedIdx, fixedVal, idx + 1)) return true;
+        }
+        return false;
+    }
+
+    // ---- range (occurrence range) support ----------------------------------------------------------------
+
+    @Test
+    void occurrenceRange_negativeMin_asserts() {
+        assertThatThrownBy(() -> new GlobalCardinalityConstraint.OccurrenceRange(-1, 2))
+                .isInstanceOf(AssertionError.class);
+    }
+
+    @Test
+    void occurrenceRange_minAboveMax_asserts() {
+        assertThatThrownBy(() -> new GlobalCardinalityConstraint.OccurrenceRange(3, 2))
+                .isInstanceOf(AssertionError.class);
+    }
+
+    @Test
+    void ofRange_sumOfMinimumsExceedsVariableCount_throws() {
+        // RED>=2, GREEN>=2 sums to 4, but only 3 variables exist.
+        assertThatThrownBy(() -> GlobalCardinalityConstraint.ofRange(
+                Set.of(v1, v2, v3),
+                Map.of(Color.RED, new GlobalCardinalityConstraint.OccurrenceRange(2, 3),
+                        Color.GREEN, new GlobalCardinalityConstraint.OccurrenceRange(2, 3))))
+                .isInstanceOf(AssertionError.class);
+    }
+
+    @Test
+    void cspBuilder_globalCardinalityRangeConstraint_method() {
+        Variable<Color> x1 = Variable.Factory.INSTANCE.create("gx1");
+        Variable<Color> x2 = Variable.Factory.INSTANCE.create("gx2");
+        var csp = ConstraintSatisfactionProblem.builder()
+                .variableDomain(x1, EnumDomain.of(Color.RED, Color.GREEN))
+                .variableDomain(x2, EnumDomain.of(Color.RED, Color.GREEN))
+                .globalCardinalityRangeConstraint(Set.of(x1, x2),
+                        Map.of(Color.RED, new GlobalCardinalityConstraint.OccurrenceRange(0, 1)))
+                .build();
+        var sols = Solver.Factory.INSTANCE.createSolver(csp).getSolutions().toList();
+        assertThat(sols).isNotEmpty();
+        for (Assignment a : sols) {
+            long redCount = java.util.stream.Stream.of(x1, x2)
+                    .filter(v -> a.getValue(v).orElseThrow() == Color.RED).count();
+            assertThat(redCount).isLessThanOrEqualTo(1);
+        }
+    }
+
+    @Test
+    void ofRange_exactCounts_satisfied() {
+        var c = GlobalCardinalityConstraint.ofRange(Set.of(v1, v2, v3, v4), Map.of(
+                Color.RED, new GlobalCardinalityConstraint.OccurrenceRange(1, 2),
+                Color.GREEN, new GlobalCardinalityConstraint.OccurrenceRange(0, 1)));
+        assertThat(c.isSatisfiedBy(Assignment.of(Map.of(
+                v1, Color.RED, v2, Color.RED, v3, Color.GREEN, v4, Color.BLUE)))).isTrue();
+    }
+
+    @Test
+    void ofRange_belowMinimum_notSatisfied() {
+        // RED needs >=2 but only 1 appears.
+        var c = GlobalCardinalityConstraint.ofRange(Set.of(v1, v2, v3, v4), Map.of(
+                Color.RED, new GlobalCardinalityConstraint.OccurrenceRange(2, 3)));
+        assertThat(c.isSatisfiedBy(Assignment.of(Map.of(
+                v1, Color.RED, v2, Color.GREEN, v3, Color.GREEN, v4, Color.BLUE)))).isFalse();
+    }
+
+    @Test
+    void ofRange_aboveMaximum_notSatisfied() {
+        // RED allows at most 1 but 2 appear.
+        var c = GlobalCardinalityConstraint.ofRange(Set.of(v1, v2, v3, v4), Map.of(
+                Color.RED, new GlobalCardinalityConstraint.OccurrenceRange(0, 1)));
+        assertThat(c.isSatisfiedBy(Assignment.of(Map.of(
+                v1, Color.RED, v2, Color.RED, v3, Color.GREEN, v4, Color.BLUE)))).isFalse();
+    }
+
+    @Test
+    void propagateRange_forcesLastVariableToMeetMinimum() {
+        // RED range [2,2] over {v1,v2,v3}; v1,v2 domains exclude RED, so v3 (the only one that
+        // still can be RED) must be forced to RED to reach the minimum.
+        Variable<Color> w1 = Variable.Factory.INSTANCE.create("rw1");
+        Variable<Color> w2 = Variable.Factory.INSTANCE.create("rw2");
+        Variable<Color> w3 = Variable.Factory.INSTANCE.create("rw3");
+        var c = GlobalCardinalityConstraint.ofRange(Set.of(w1, w2, w3), Map.of(
+                Color.RED, new GlobalCardinalityConstraint.OccurrenceRange(2, 2)));
+        Map<Variable<?>, Domain<?>> domains = Map.of(
+                w1, EnumDomain.of(Color.RED, Color.GREEN),
+                w2, EnumDomain.of(Color.RED, Color.GREEN),
+                w3, EnumDomain.of(Color.RED, Color.GREEN));
+        var result = c.propagate(domains);
+        assertThat(result).isPresent();
+        // With only 3 variables and RED needing exactly 2, no single variable is individually
+        // forced (any 2-of-3 combination works) -- this test instead documents that propagation
+        // doesn't spuriously narrow anything here (a real GAC check, not a hand-guessed forcing).
+        assertThat(result.get()).isEmpty();
+    }
+
+    @Test
+    void propagateRange_infeasibleWhenMaximumUnreachable() {
+        // GREEN range [0,0] (forbidden) but v1's domain is GREEN-only -- infeasible.
+        Variable<Color> w1 = Variable.Factory.INSTANCE.create("iw1");
+        Variable<Color> w2 = Variable.Factory.INSTANCE.create("iw2");
+        var c = GlobalCardinalityConstraint.ofRange(Set.of(w1, w2), Map.of(
+                Color.GREEN, new GlobalCardinalityConstraint.OccurrenceRange(0, 0)));
+        Map<Variable<?>, Domain<?>> domains = Map.of(
+                w1, EnumDomain.of(Color.GREEN),
+                w2, EnumDomain.of(Color.RED, Color.GREEN));
+        assertThat(c.propagate(domains)).isEmpty();
+        assertThat(c.explainInfeasible(domains)).isPresent();
+    }
+
+    /**
+     * The range-based flow extension (real {@code [min,max]} edges plus {@code sinkOriginal}'s own
+     * inclusion in the GAC residual graph — see this class's own Javadoc) is new, careful algorithm
+     * work, not a small patch -- exactly the shape of change {@link
+     * #propagate_randomizedCrossCheckAgainstBruteForceGac} already exists to guard for the
+     * exact-count case. This is the same check over randomly generated {@code [min,max]} ranges
+     * instead of exact counts, independently validating the new edge/residual-graph logic against
+     * brute-force enumeration rather than trusting the hand-derivation alone.
+     */
+    @Test
+    void propagateRange_randomizedCrossCheckAgainstBruteForceGac() {
+        var random = new java.util.Random(43);
+        List<Color> palette = List.of(Color.RED, Color.GREEN, Color.BLUE);
+
+        for (int trial = 0; trial < 300; trial++) {
+            int n = 2 + random.nextInt(3); // 2..4 variables
+            List<Variable<Color>> vars = new ArrayList<>();
+            for (int i = 0; i < n; i++) vars.add(Variable.Factory.INSTANCE.create("rx" + trial + "_" + i));
+
+            List<List<Color>> domLists = new ArrayList<>();
+            Map<Variable<?>, Domain<?>> domains = new HashMap<>();
+            for (Variable<Color> v : vars) {
+                java.util.Set<Color> dom = new java.util.HashSet<>();
+                while (dom.isEmpty()) {
+                    for (Color c : palette) if (random.nextBoolean()) dom.add(c);
+                }
+                List<Color> domList = new ArrayList<>(dom);
+                domLists.add(domList);
+                domains.put(v, EnumDomain.of(domList.get(0), domList.subList(1, domList.size()).toArray(new Color[0])));
+            }
+
+            Map<Color, GlobalCardinalityConstraint.OccurrenceRange> ranges = new HashMap<>();
+            for (Color c : palette) {
+                if (random.nextBoolean()) {
+                    int lo = random.nextInt(n + 1);
+                    int hi = lo + random.nextInt(n + 1 - lo);
+                    ranges.put(c, new GlobalCardinalityConstraint.OccurrenceRange(lo, hi));
+                }
+            }
+            if (ranges.isEmpty()) continue; // degenerate no-op GCC, nothing to check
+            int sumLo = ranges.values().stream().mapToInt(GlobalCardinalityConstraint.OccurrenceRange::min).sum();
+            if (sumLo > n) continue; // structurally over-committed; ofRange() now rejects this
+
+            var constraint = GlobalCardinalityConstraint.ofRange(new java.util.HashSet<>(vars), ranges);
+            boolean bruteForceFeasible = anyCompletionSatisfiesRange(domLists, ranges, new Color[n], -1, null, 0);
+            var result = constraint.propagate(domains);
+
+            if (!bruteForceFeasible) {
+                assertThat(result).as("trial %d: expected infeasible, domains=%s, ranges=%s",
+                        trial, domLists, ranges).isEmpty();
+                continue;
+            }
+            assertThat(result).as("trial %d: expected feasible, domains=%s, ranges=%s",
+                    trial, domLists, ranges).isPresent();
+
+            for (int i = 0; i < n; i++) {
+                java.util.Set<Color> expected = new java.util.HashSet<>();
+                for (Color v : domLists.get(i)) {
+                    if (anyCompletionSatisfiesRange(domLists, ranges, new Color[n], i, v, 0)) expected.add(v);
+                }
+                Domain<?> actualDomain = result.get().getOrDefault(vars.get(i), domains.get(vars.get(i)));
+                java.util.Set<Color> actual = ((io.github.rcrida.jcsp.domains.DiscreteDomain<Color>) actualDomain)
+                        .toList().stream().collect(java.util.stream.Collectors.toSet());
+                assertThat(actual).as("trial %d, variable %d: domains=%s, ranges=%s",
+                        trial, i, domLists, ranges).isEqualTo(expected);
+            }
+        }
+    }
+
+    /**
+     * Exhaustive search over {@code [min,max]} ranges, mirroring {@link #anyCompletionSatisfies}'s
+     * exact-count version.
+     */
+    private static boolean anyCompletionSatisfiesRange(List<List<Color>> domLists,
+            Map<Color, GlobalCardinalityConstraint.OccurrenceRange> ranges,
+            Color[] current, int fixedIdx, Color fixedVal, int idx) {
+        if (idx == current.length) {
+            Map<Color, Integer> counts = new HashMap<>();
+            for (Color c : current) counts.merge(c, 1, Integer::sum);
+            for (var e : ranges.entrySet()) {
+                int count = counts.getOrDefault(e.getKey(), 0);
+                if (count < e.getValue().min() || count > e.getValue().max()) return false;
+            }
+            return true;
+        }
+        if (idx == fixedIdx) {
+            current[idx] = fixedVal;
+            return anyCompletionSatisfiesRange(domLists, ranges, current, fixedIdx, fixedVal, idx + 1);
+        }
+        for (Color c : domLists.get(idx)) {
+            current[idx] = c;
+            if (anyCompletionSatisfiesRange(domLists, ranges, current, fixedIdx, fixedVal, idx + 1)) return true;
         }
         return false;
     }

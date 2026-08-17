@@ -1454,6 +1454,23 @@ public class ConstraintSatisfactionProblem {
         }
 
         /**
+         * As {@link #globalCardinalityConstraint(Set, Map)}, but each value's occurrence count is a
+         * {@code [min, max]} range rather than a fixed count. A same-named {@code
+         * globalCardinalityConstraint} overload isn't possible here: {@code Map<T, Integer>} and
+         * {@code Map<T, GlobalCardinalityConstraint.OccurrenceRange>} both erase to raw {@code Map},
+         * so the two would collide (JLS 8.4.2) -- the same reason {@code linearBooleanConstraint}
+         * needed a distinct name rather than overloading {@code linearConstraint}.
+         *
+         * @param variables the variables to constrain
+         * @param ranges    map from value to permitted occurrence range
+         * @return the builder
+         */
+        public <T> ConstraintSatisfactionProblemBuilder globalCardinalityRangeConstraint(
+                @NonNull Set<Variable<T>> variables, @NonNull Map<T, GlobalCardinalityConstraint.OccurrenceRange> ranges) {
+            return this.constraint(GlobalCardinalityConstraint.ofRange(variables, ranges));
+        }
+
+        /**
          * Create an nvalue constraint: {@code count} equals the number of distinct values taken
          * by {@code variables}. Unlike other counting constraints, {@code count} is a genuine
          * decision variable rather than a fixed constant, so it can be handed directly to an

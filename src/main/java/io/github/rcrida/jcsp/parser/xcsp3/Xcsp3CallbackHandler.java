@@ -719,7 +719,15 @@ final class Xcsp3CallbackHandler implements XCallbacks2 {
 
     @Override
     public void buildCtrCardinality(String id, XVarInteger[] list, boolean closed, int[] values, int[] occursMin, int[] occursMax) {
-        throw new UnsupportedXcsp3ConstraintException("cardinality with a min/max occurrence range is not supported: " + id);
+        if (closed && !closedCoveredByEveryDomain(list, values)) {
+            throw new UnsupportedXcsp3ConstraintException(
+                    "closed cardinality referencing a value outside some variable's domain is not supported: " + id);
+        }
+        Map<Integer, GlobalCardinalityConstraint.OccurrenceRange> ranges = new LinkedHashMap<>();
+        for (int i = 0; i < values.length; i++) {
+            ranges.put(values[i], new GlobalCardinalityConstraint.OccurrenceRange(occursMin[i], occursMax[i]));
+        }
+        addOrReify(GlobalCardinalityConstraint.ofRange(toVariableSet(list), ranges), id);
     }
 
     @Override
