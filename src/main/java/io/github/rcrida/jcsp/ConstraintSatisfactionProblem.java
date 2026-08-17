@@ -31,6 +31,7 @@ import io.github.rcrida.jcsp.constraints.binary.IntersectionCardinalityConstrain
 import io.github.rcrida.jcsp.constraints.Operator;
 import io.github.rcrida.jcsp.constraints.nary.AllDiffConstraint;
 import io.github.rcrida.jcsp.constraints.nary.AllEqualConstraint;
+import io.github.rcrida.jcsp.constraints.nary.DistinctVectorsConstraint;
 import io.github.rcrida.jcsp.constraints.nary.AmongConstraint;
 import io.github.rcrida.jcsp.constraints.nary.AndConstraint;
 import io.github.rcrida.jcsp.constraints.nary.AmongVariableConstraint;
@@ -785,6 +786,17 @@ public class ConstraintSatisfactionProblem {
          */
         public <T> ConstraintSatisfactionProblemBuilder allEqualConstraint(@NonNull Set<Variable<T>> variables) {
             return this.constraint(AllEqualConstraint.<T>builder().variables(variables).build());
+        }
+
+        /**
+         * Requires every pair of equal-length {@code vectors} to differ in at least one position
+         * (XCSP3's multi-list {@code allDifferent}, "distinct vectors").
+         *
+         * @param vectors equal-length lists of variables, all sharing the same value type
+         * @return the builder
+         */
+        public <T> ConstraintSatisfactionProblemBuilder distinctVectorsConstraint(@NonNull List<List<Variable<T>>> vectors) {
+            return this.constraint(DistinctVectorsConstraint.of(vectors));
         }
 
         /**

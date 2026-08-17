@@ -7,7 +7,6 @@ import io.github.rcrida.jcsp.constraints.Constraint;
 import io.github.rcrida.jcsp.constraints.Operator;
 import io.github.rcrida.jcsp.constraints.binary.BinaryComparatorConstraint;
 import io.github.rcrida.jcsp.constraints.binary.BinaryElementConstraint;
-import io.github.rcrida.jcsp.constraints.binary.BinaryNotEqualsConstraint;
 import io.github.rcrida.jcsp.constraints.binary.BinaryOffsetConstraint;
 import io.github.rcrida.jcsp.constraints.nary.AllDiffConstraint;
 import io.github.rcrida.jcsp.constraints.nary.AllEqualConstraint;
@@ -22,6 +21,7 @@ import io.github.rcrida.jcsp.constraints.nary.CountConstraint;
 import io.github.rcrida.jcsp.constraints.nary.CountVariableConstraint;
 import io.github.rcrida.jcsp.constraints.nary.CumulativeConstraint;
 import io.github.rcrida.jcsp.constraints.nary.DiffnVariableConstraint;
+import io.github.rcrida.jcsp.constraints.nary.DistinctVectorsConstraint;
 import io.github.rcrida.jcsp.constraints.nary.GlobalCardinalityConstraint;
 import io.github.rcrida.jcsp.constraints.nary.InverseConstraint;
 import io.github.rcrida.jcsp.constraints.nary.LexConstraint;
@@ -524,57 +524,20 @@ final class Xcsp3CallbackHandler implements XCallbacks2 {
     /**
      * "Distinct vectors": every pair of lists must differ in at least one position (the lists
      * themselves are pairwise different as tuples, not a global element-wise all-different across
-     * every value in every list). No existing propagator expresses this directly, so each pair is
-     * built from one fresh reified "differs here" indicator per position (via {@link
-     * BinaryNotEqualsConstraint}) plus a plain {@link AtLeastNConstraint} of 1 over those
-     * indicators -- real propagation (once only one indicator's domain remains {@code {true,
-     * false}}, it's forced true), unlike a single {@link PredicateConstraint} checking "some
-     * position differs" directly, which only ever fires once every variable in the pair is already
-     * assigned and gives the backtracking search nothing to prune on beforehand -- confirmed
-     * empirically: the {@code PredicateConstraint} version left the bundled
-     * {@code DistinctVectors-30-050-02} instance unsolved after 60s despite the instance being
-     * combinatorially easy (30 random 50-bit vectors collide with negligible probability), while
-     * this version solves it quickly. {@link AtLeastNConstraint} (not the carry-chain {@code
-     * atLeastNConstraintWithCounting}) is used specifically because it's a genuine standalone
-     * object, needed here (as with {@link #buildCtrAllDifferentMatrix}) for the reified case's
-     * {@link AndConstraint} wrapping -- the carry-chain form is a builder method that adds its
-     * auxiliary constraints directly, with no single object to wrap.
-     * <p>
-     * Unreified/reified split otherwise mirrors {@link #buildCtrAllDifferentMatrix}: added
-     * directly so each pair's own fixpoint entry can re-run independently, or wrapped in one
-     * {@link AndConstraint} when the whole set needs to stand as a single {@link Constraint} for
-     * reification.
+     * every value in every list). Maps directly onto {@link DistinctVectorsConstraint}, a single
+     * object covering every list -- unlike this method's previous reified-{@link
+     * AtLeastNConstraint} decomposition (one indicator per position per pair, replaced after
+     * profiling the bundled {@code DistinctVectors-30-050-02} instance found it multiplying a
+     * 1,500-variable problem into over 23,000 variables/constraints), this needs no {@link
+     * AndConstraint} wrapping for reification either, since it's already a single {@link
+     * Constraint} to route through {@link #addOrReify}, unlike {@link #buildCtrAllDifferentMatrix}
+     * which still needs one (no single-object equivalent of {@link AllDiffConstraint} exists for
+     * "every row and column is all-different" as one relation).
      */
     @Override
     public void buildCtrAllDifferentList(String id, XVarInteger[][] lists) {
-        if (currentReification == null) {
-            for (int i = 0; i < lists.length; i++) {
-                for (int j = i + 1; j < lists.length; j++) {
-                    builder.constraint(distinctVectorsConstraint(lists[i], lists[j]));
-                }
-            }
-            return;
-        }
-        Set<Constraint> conjuncts = new LinkedHashSet<>();
-        for (int i = 0; i < lists.length; i++) {
-            for (int j = i + 1; j < lists.length; j++) {
-                conjuncts.add(distinctVectorsConstraint(lists[i], lists[j]));
-            }
-        }
-        addOrReify(AndConstraint.of(conjuncts), id);
-    }
-
-    private AtLeastNConstraint distinctVectorsConstraint(XVarInteger[] list1, XVarInteger[] list2) {
-        List<Variable<Integer>> a = toVariableList(list1);
-        List<Variable<Integer>> b = toVariableList(list2);
-        Set<Variable<Boolean>> differs = new LinkedHashSet<>();
-        for (int k = 0; k < a.size(); k++) {
-            Variable<Boolean> indicator = Variable.Factory.INSTANCE.create(a.get(k).getName() + "$ne$" + b.get(k).getName());
-            builder.variableDomain(indicator, BooleanDomain.INSTANCE);
-            builder.reifyConstraint(indicator, BinaryNotEqualsConstraint.of(a.get(k), b.get(k)));
-            differs.add(indicator);
-        }
-        return AtLeastNConstraint.builder().variables(differs).n(1).build();
+        List<List<Variable<Integer>>> vectors = Arrays.stream(lists).map(this::toVariableList).toList();
+        addOrReify(DistinctVectorsConstraint.of(vectors), id);
     }
 
     // ---- allEqual -------------------------------------------------------------------------------------
