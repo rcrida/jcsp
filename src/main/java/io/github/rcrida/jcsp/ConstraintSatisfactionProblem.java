@@ -190,6 +190,12 @@ public class ConstraintSatisfactionProblem {
     // Excluded: nogoods are learned facts accumulated during search, not part of the problem's
     // identity -- two CSPs that differ only in what a search has learned so far are the same problem.
     @EqualsAndHashCode.Exclude Set<NogoodConstraint> nogoods;
+    // A live Variable -> nogoods index from the originating NogoodStore (see NogoodStore#byVariable),
+    // or null when nogoods weren't populated via one (e.g. direct/test construction via the builder's
+    // nogood(...) method). Purely a performance hint for NogoodFixpointConsistency#relevant -- a null
+    // value just means "unknown, fall back to a full scan of nogoods" -- so it's excluded from
+    // equals/hashCode/toString exactly like the other derived caches here.
+    @EqualsAndHashCode.Exclude @ToString.Exclude @Nullable Map<Variable<?>, Set<NogoodConstraint>> nogoodsByVariable;
     // Excluded: purely a derived cache of constraintGraph's constraints + nogoods (see
     // mergedWithNogoods), already covered transitively by constraintGraph and nogoods above.
     @Getter(AccessLevel.NONE) @EqualsAndHashCode.Exclude @ToString.Exclude Set<Constraint> allConstraints;
@@ -231,9 +237,10 @@ public class ConstraintSatisfactionProblem {
      * @param constraintGraph pre-computed constraint graph to reuse, or {@code null} to compute fresh
      * @param nogoods learned nogoods folded into {@link #getConstraints()} but excluded from the constraint graph
      * @param nogoodMergeCache pre-existing merge cache to reuse (see the field javadoc), or {@code null} for a fresh one
+     * @param nogoodsByVariable live index from the originating {@link NogoodStore} (see the field javadoc), or {@code null} if unknown
      */
     @Builder
-    ConstraintSatisfactionProblem(@Singular("variableDomainEntry") Map<Variable<?>, Domain<?>> variableDomains, @Singular Set<Constraint> constraints, @Nullable ConstraintGraph constraintGraph, @Nullable Set<NogoodConstraint> nogoods, @Nullable AtomicReference<NogoodMergeCache> nogoodMergeCache) {
+    ConstraintSatisfactionProblem(@Singular("variableDomainEntry") Map<Variable<?>, Domain<?>> variableDomains, @Singular Set<Constraint> constraints, @Nullable ConstraintGraph constraintGraph, @Nullable Set<NogoodConstraint> nogoods, @Nullable AtomicReference<NogoodMergeCache> nogoodMergeCache, @Nullable Map<Variable<?>, Set<NogoodConstraint>> nogoodsByVariable) {
         this.variableDomains = variableDomains;
         if (constraintGraph != null
                 && (constraintGraph.getConstraints() == constraints || constraintGraph.getConstraints().equals(constraints))) {
@@ -245,6 +252,7 @@ public class ConstraintSatisfactionProblem {
         this.nogoods = nogoods == null ? Set.of() : nogoods;
         assert this.nogoods.stream().flatMap(n -> n.getVariables().stream()).allMatch(variableDomains::containsKey)
                 : "Nogoods reference unknown variables";
+        this.nogoodsByVariable = nogoodsByVariable;
         this.nogoodMergeCache = nogoodMergeCache != null ? nogoodMergeCache : new AtomicReference<>();
         this.allConstraints = this.nogoods.isEmpty() ? this.constraintGraph.getConstraints() : mergedWithNogoods(this.nogoods);
     }
@@ -286,7 +294,8 @@ public class ConstraintSatisfactionProblem {
                 .constraints(constraintGraph.getConstraints())
                 .constraintGraph(constraintGraph)
                 .nogoods(nogoods)
-                .nogoodMergeCache(nogoodMergeCache);
+                .nogoodMergeCache(nogoodMergeCache)
+                .nogoodsByVariable(nogoodsByVariable);
     }
 
     /**
@@ -301,8 +310,23 @@ public class ConstraintSatisfactionProblem {
      * constructor, and merge entirely.
      */
     public ConstraintSatisfactionProblem withNogoods(@NonNull Set<NogoodConstraint> newNogoods) {
+        return withNogoods(newNogoods, null);
+    }
+
+    /**
+     * As {@link #withNogoods(Set)}, additionally attaching {@code index} — the originating {@link
+     * NogoodStore}'s live {@code Variable -> nogoods} index (see {@link NogoodStore#byVariable}) —
+     * so {@code NogoodFixpointConsistency}'s own {@code relevant} lookup can find affected nogoods
+     * directly instead of scanning every one of {@code newNogoods}. {@code index} is stored by
+     * reference, not copied: safe because it always arrives freshly re-fetched from its store
+     * immediately before use (see {@link NogoodStore#byVariable}'s own javadoc). The fast path only
+     * compares {@code newNogoods} (matching {@link #withNogoods(Set)}'s existing semantics), since
+     * {@code index} never changes reference independently of the store it came from.
+     */
+    public ConstraintSatisfactionProblem withNogoods(@NonNull Set<NogoodConstraint> newNogoods,
+            @Nullable Map<Variable<?>, Set<NogoodConstraint>> index) {
         if (newNogoods == this.nogoods) return this;
-        return toBuilder().nogoods(newNogoods).build();
+        return toBuilder().nogoods(newNogoods).nogoodsByVariable(index).build();
     }
 
     /**
@@ -325,7 +349,7 @@ public class ConstraintSatisfactionProblem {
     public ConstraintSatisfactionProblem withDomain(@NonNull Variable<?> variable, @NonNull Domain<?> domain) {
         Map<Variable<?>, Domain<?>> newDomains = new LinkedHashMap<>(variableDomains);
         newDomains.put(variable, domain);
-        return new ConstraintSatisfactionProblem(Collections.unmodifiableMap(newDomains), constraintGraph.getConstraints(), constraintGraph, nogoods, nogoodMergeCache);
+        return new ConstraintSatisfactionProblem(Collections.unmodifiableMap(newDomains), constraintGraph.getConstraints(), constraintGraph, nogoods, nogoodMergeCache, nogoodsByVariable);
     }
 
     /** As {@link #withDomain}, applying every entry of {@code updates} in one pass; returns {@code this} unchanged if {@code updates} is empty. */
@@ -333,7 +357,7 @@ public class ConstraintSatisfactionProblem {
         if (updates.isEmpty()) return this;
         Map<Variable<?>, Domain<?>> newDomains = new LinkedHashMap<>(variableDomains);
         newDomains.putAll(updates);
-        return new ConstraintSatisfactionProblem(Collections.unmodifiableMap(newDomains), constraintGraph.getConstraints(), constraintGraph, nogoods, nogoodMergeCache);
+        return new ConstraintSatisfactionProblem(Collections.unmodifiableMap(newDomains), constraintGraph.getConstraints(), constraintGraph, nogoods, nogoodMergeCache, nogoodsByVariable);
     }
 
     private static void validateConstraints(Map<Variable<?>, Domain<?>> variableDomains, Set<Constraint> constraints) {

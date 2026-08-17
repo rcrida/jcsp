@@ -2,6 +2,7 @@ package io.github.rcrida.jcsp.assignments;
 
 import io.github.rcrida.jcsp.ConstraintSatisfactionProblem;
 import io.github.rcrida.jcsp.constraints.nary.NogoodConstraint;
+import io.github.rcrida.jcsp.variables.Variable;
 import lombok.AccessLevel;
 import lombok.EqualsAndHashCode;
 import lombok.Getter;
@@ -9,6 +10,8 @@ import lombok.ToString;
 import lombok.Value;
 
 import java.util.Comparator;
+import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicReference;
@@ -72,6 +75,26 @@ public class NogoodStore {
     Set<NogoodConstraint> nogoods = ConcurrentHashMap.newKeySet();
 
     /**
+     * A {@code Variable -> nogoods referencing it} index, maintained incrementally: {@link #record}
+     * adds the new nogood to each of its own variables' entries (O(arity)); {@link #evictIfOverCap}
+     * removes an evicted nogood from each of its variables' entries the same way. Never rebuilt in
+     * bulk from {@link #nogoods}, unlike the derived-and-cached index attempted (and reverted) in
+     * {@code NogoodFixpointConsistency}'s own history: that attempt rebuilt its whole index from
+     * scratch every time the nogood set changed, and paid that O(nogoods.size()) rebuild on
+     * essentially every node of a search that's actively learning -- outweighing the O(changed
+     * .size()) lookup it was meant to buy. Threaded through to {@link ConstraintSatisfactionProblem}
+     * via {@link #apply}/{@link ConstraintSatisfactionProblem#withNogoods(Set, Map)} as a live
+     * reference (not copied), safe because every production call site re-fetches {@link #apply}
+     * immediately before use and each {@link NogoodStore} instance is single-owner (see {@link
+     * io.github.rcrida.jcsp.solver.IndependentSubproblemSolver}'s own Javadoc for why an independent
+     * subproblem always gets its own fresh store rather than sharing one).
+     */
+    @EqualsAndHashCode.Exclude
+    @ToString.Exclude
+    @Getter(AccessLevel.NONE)
+    Map<Variable<?>, Set<NogoodConstraint>> byVariable = new ConcurrentHashMap<>();
+
+    /**
      * Caches the last {@link Set#copyOf} snapshot of {@link #nogoods}, invalidated (set to {@code
      * null}) only inside {@link #record} and {@link #evictIfOverCap} when the set actually
      * mutates -- not on every {@link #apply} call. Between nogood-learning events (the common case
@@ -114,6 +137,9 @@ public class NogoodStore {
      */
     public void record(NogoodConstraint nogood) {
         if (nogoods.add(nogood)) {
+            for (Variable<?> v : nogood.getVariables()) {
+                byVariable.computeIfAbsent(v, k -> ConcurrentHashMap.newKeySet()).add(nogood);
+            }
             snapshot.set(null);
             evictIfOverCap();
         }
@@ -129,10 +155,19 @@ public class NogoodStore {
     private void evictIfOverCap() {
         int excess = nogoods.size() - maxNogoods;
         if (excess <= 0) return;
-        nogoods.stream()
+        List<NogoodConstraint> toEvict = nogoods.stream()
                 .sorted(Comparator.comparingInt((NogoodConstraint n) -> n.getVariables().size()).reversed())
                 .limit(excess)
-                .forEach(nogoods::remove);
+                .toList();
+        for (NogoodConstraint n : toEvict) {
+            nogoods.remove(n);
+            // byVariable.get(v) is never null here: every variable of a nogood still in `nogoods`
+            // was populated into byVariable by record() when that nogood was added, and entries are
+            // only ever removed from a value set, never the key itself.
+            for (Variable<?> v : n.getVariables()) {
+                byVariable.get(v).remove(n);
+            }
+        }
         snapshot.set(null);
     }
 
@@ -159,7 +194,7 @@ public class NogoodStore {
             current = LightweightSets.snapshot(nogoods);
             snapshot.set(current);
         }
-        return csp.withNogoods(current);
+        return csp.withNogoods(current, byVariable);
     }
 
     public int size() {

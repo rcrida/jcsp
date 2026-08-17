@@ -1,6 +1,7 @@
 package io.github.rcrida.jcsp.consistency.fixpoint;
 
 import io.github.rcrida.jcsp.ConstraintSatisfactionProblem;
+import io.github.rcrida.jcsp.assignments.NogoodStore;
 import io.github.rcrida.jcsp.constraints.nary.GroundNogoodConstraint;
 import io.github.rcrida.jcsp.domains.IntRangeDomain;
 import io.github.rcrida.jcsp.variables.Variable;
@@ -97,6 +98,51 @@ class NogoodFixpointConsistencyTest {
                 .nogood(nogood)
                 .build();
         assertThat(NogoodFixpointConsistency.INSTANCE.apply(csp, Set.of(X, Y))).isEmpty();
+    }
+
+    @Test
+    void apply_withStoreIndex_singleDirtyVariable_stillDetectsInfeasibility() {
+        // csp comes from NogoodStore#apply, so it carries a real byVariable index -- this exercises
+        // relevant()'s indexed lookup (fromIndex's single-variable fast path) rather than the
+        // Collections.disjoint fallback the other tests above exercise.
+        var nogood = GroundNogoodConstraint.of(Map.of(X, 1, Y, 2));
+        var store = new NogoodStore();
+        store.record(nogood);
+        var csp = store.apply(ConstraintSatisfactionProblem.builder()
+                .variableDomain(X, IntRangeDomain.of(1, 1))
+                .variableDomain(Y, IntRangeDomain.of(2, 2))
+                .build());
+        assertThat(csp.getNogoodsByVariable()).isNotNull();
+        assertThat(NogoodFixpointConsistency.INSTANCE.apply(csp, Set.of(X))).isEmpty();
+    }
+
+    @Test
+    void apply_withStoreIndex_multipleDirtyVariables_dedupesAndDetectsInfeasibility() {
+        // Both X and Y are dirty, so fromIndex's multi-variable branch must union the two index
+        // entries and deduplicate the shared nogood rather than checking it twice.
+        var nogood = GroundNogoodConstraint.of(Map.of(X, 1, Y, 2));
+        var store = new NogoodStore();
+        store.record(nogood);
+        var csp = store.apply(ConstraintSatisfactionProblem.builder()
+                .variableDomain(X, IntRangeDomain.of(1, 1))
+                .variableDomain(Y, IntRangeDomain.of(2, 2))
+                .build());
+        assertThat(NogoodFixpointConsistency.INSTANCE.apply(csp, Set.of(X, Y))).isEmpty();
+    }
+
+    @Test
+    void apply_withStoreIndex_dirtyVariableNotReferenced_skipsCheckEntirely() {
+        // Z isn't referenced by the recorded nogood, so its index entry is absent entirely --
+        // exercises fromIndex's getOrDefault(v, Set.of()) empty-result path.
+        var nogood = GroundNogoodConstraint.of(Map.of(X, 1, Y, 2));
+        var store = new NogoodStore();
+        store.record(nogood);
+        var csp = store.apply(ConstraintSatisfactionProblem.builder()
+                .variableDomain(X, IntRangeDomain.of(1, 1))
+                .variableDomain(Y, IntRangeDomain.of(2, 2))
+                .variableDomain(Z, IntRangeDomain.of(1, 3))
+                .build());
+        assertThat(NogoodFixpointConsistency.INSTANCE.apply(csp, Set.of(Z))).hasValue(csp);
     }
 
     @Test

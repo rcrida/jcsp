@@ -6,6 +6,7 @@ import io.github.rcrida.jcsp.constraints.binary.BinaryNotEqualsConstraint;
 import io.github.rcrida.jcsp.constraints.binary.BinaryOffsetConstraint;
 import io.github.rcrida.jcsp.constraints.Operator;
 import io.github.rcrida.jcsp.constraints.nary.GroundNogoodConstraint;
+import io.github.rcrida.jcsp.constraints.nary.NogoodConstraint;
 import io.github.rcrida.jcsp.constraints.unary.UnaryValueConstraint;
 import io.github.rcrida.jcsp.domains.BooleanDomain;
 import io.github.rcrida.jcsp.domains.Domain;
@@ -602,6 +603,43 @@ public class ConstraintSatisfactionProblemTest {
                 .build();
         assertThatThrownBy(() -> csp.withNogoods(Set.of(GroundNogoodConstraint.of(Map.of(stray, 1)))))
                 .isInstanceOf(AssertionError.class);
+    }
+
+    @Test
+    void withNogoodsAndIndex_attachesIndexToCsp() {
+        Variable<Integer> a = VARIABLE_FACTORY.create("A");
+        val csp = ConstraintSatisfactionProblem.builder()
+                .variableDomain(a, IntRangeDomain.of(1, 3))
+                .build();
+        val nogood = GroundNogoodConstraint.of(Map.of(a, 1));
+        val index = Map.<Variable<?>, Set<NogoodConstraint>>of(a, Set.of(nogood));
+        val withIndex = csp.withNogoods(Set.of(nogood), index);
+        assertThat(withIndex.getNogoodsByVariable()).isEqualTo(index);
+    }
+
+    @Test
+    void withNogoodsAndIndex_sameNogoodsReference_returnsSameInstance() {
+        Variable<Integer> a = VARIABLE_FACTORY.create("A");
+        val csp = ConstraintSatisfactionProblem.builder()
+                .variableDomain(a, IntRangeDomain.of(1, 3))
+                .build();
+        val nogoods = Set.<NogoodConstraint>of(GroundNogoodConstraint.of(Map.of(a, 1)));
+        val first = csp.withNogoods(nogoods, Map.of());
+        val second = first.withNogoods(nogoods, Map.of(a, Set.of()));
+        assertThat(second).isSameAs(first);
+    }
+
+    @Test
+    void withDomain_preservesNogoodsByVariableIndex() {
+        Variable<Integer> a = VARIABLE_FACTORY.create("A");
+        val nogood = GroundNogoodConstraint.of(Map.of(a, 1));
+        val index = Map.<Variable<?>, Set<NogoodConstraint>>of(a, Set.of(nogood));
+        val csp = ConstraintSatisfactionProblem.builder()
+                .variableDomain(a, IntRangeDomain.of(1, 3))
+                .build()
+                .withNogoods(Set.of(nogood), index);
+        val narrowed = csp.withDomain(a, IntRangeDomain.of(1, 1));
+        assertThat(narrowed.getNogoodsByVariable()).isEqualTo(index);
     }
 
     @Test

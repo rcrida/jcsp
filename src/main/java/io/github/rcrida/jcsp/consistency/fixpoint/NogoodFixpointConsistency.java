@@ -11,7 +11,9 @@ import org.jspecify.annotations.Nullable;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.IdentityHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 
@@ -62,7 +64,7 @@ public final class NogoodFixpointConsistency implements ConstraintConsistency {
             log.debug("NogoodConstraint: fixpoint reached");
             return Optional.of(csp);
         }
-        Collection<NogoodConstraint> toCheck = relevant(nogoods, changedSinceLastRun);
+        Collection<NogoodConstraint> toCheck = relevant(csp, nogoods, changedSinceLastRun);
         if (toCheck.isEmpty()) {
             log.debug("NogoodConstraint: no nogood references a changed variable, skipping");
             return Optional.of(csp);
@@ -91,28 +93,61 @@ public final class NogoodFixpointConsistency implements ConstraintConsistency {
     /**
      * Returns every nogood in {@code nogoods} that references at least one variable in {@code
      * changed}, or all of {@code nogoods} unfiltered when {@code changed} is {@code null} (unknown
-     * — the safe, always-correct fallback used on a fixpoint call's first round). Still an O({@code
-     * nogoods.size()}) scan, but replaces the original nested-{@link java.util.stream.Stream} filter
-     * (JFR-profiled on a nogood-heavy XCSP3 sports-scheduling instance to spend most of its own time
-     * in {@code Stream}/{@code Spliterator} plumbing, not the underlying membership check itself)
-     * with {@link Collections#disjoint}, which iterates whichever of the two collections is smaller
-     * against a plain {@link Set#contains} on the other -- same asymptotic scan cost over {@code
-     * nogoods}, no stream pipeline construction per nogood. A genuine {@code Variable ->
-     * Set<NogoodConstraint>} index was also tried (real algorithmic improvement, O({@code
-     * changed.size()}) instead of O({@code nogoods.size()})) but measured *worse* on the same
-     * profiled scenario: rebuilding the whole index from scratch on every newly-learned nogood
-     * (roughly once per node here) outweighed the savings, since a node's fixpoint only reuses that
-     * index across a handful of rounds before the next nogood invalidates it. This simpler version
-     * has no such rebuild tax and measured both fewer nodes lost to overhead (higher node throughput
-     * under a fixed time budget) and a lower nogood-related CPU share than the indexed version.
+     * — the safe, always-correct fallback used on a fixpoint call's first round).
+     * <p>
+     * When {@code csp} carries a live {@code Variable -> nogoods} index (see {@link
+     * io.github.rcrida.jcsp.assignments.NogoodStore#byVariable}), looks affected nogoods up directly
+     * — O({@code changed.size()}) — instead of scanning every one of {@code nogoods}. Two earlier
+     * attempts at this exact idea were reverted after measuring worse: a {@code Variable ->
+     * Set<NogoodConstraint>} index rebuilt from scratch on every newly-learned nogood, and (this
+     * session) a single-slot cache keyed on {@code nogoods}' own identity that rebuilt on a miss —
+     * both paid an O({@code nogoods.size()}) rebuild on essentially every learn event, which
+     * outweighed the O({@code changed.size()}) win, since a node's fixpoint only reuses either
+     * index across a handful of rounds before the next learned/evicted nogood invalidates it. {@link
+     * io.github.rcrida.jcsp.assignments.NogoodStore#byVariable} avoids that failure mode by never
+     * rebuilding in bulk at all: it's maintained incrementally, touching only the changed nogood's
+     * own O(arity) variables on every {@code record}/eviction, so there is no rebuild cost to
+     * outweigh the lookup savings with.
+     * <p>
+     * Falls back to the plain O({@code nogoods.size()}) scan — {@link Collections#disjoint}, which
+     * iterates whichever of the two collections is smaller against a plain {@link Set#contains} on
+     * the other, replacing an original nested-{@link java.util.stream.Stream} filter JFR-profiled to
+     * spend most of its own time in {@code Stream}/{@code Spliterator} plumbing rather than the
+     * membership check itself — when no index is available (e.g. nogoods added directly via the
+     * builder's {@code nogood(...)} method rather than through a {@link
+     * io.github.rcrida.jcsp.assignments.NogoodStore}, as in most direct/test construction).
      */
-    private static Collection<NogoodConstraint> relevant(Set<NogoodConstraint> nogoods, @Nullable Set<Variable<?>> changed) {
+    private static Collection<NogoodConstraint> relevant(ConstraintSatisfactionProblem csp,
+            Set<NogoodConstraint> nogoods, @Nullable Set<Variable<?>> changed) {
         if (changed == null) return nogoods;
+        Map<Variable<?>, Set<NogoodConstraint>> index = csp.getNogoodsByVariable();
+        if (index != null) return fromIndex(index, changed);
         List<NogoodConstraint> result = new ArrayList<>();
         for (NogoodConstraint nogood : nogoods) {
             if (!Collections.disjoint(nogood.getVariables(), changed)) {
                 result.add(nogood);
             }
+        }
+        return result;
+    }
+
+    /**
+     * Unions {@code index}'s entries for each variable in {@code changed}. The single-variable case
+     * (the overwhelming majority in practice — a fixpoint round typically narrows one variable at a
+     * time) returns the index's own backing set directly, with no extra allocation or deduplication
+     * needed. The multi-variable case dedupes via an {@link IdentityHashMap}-backed {@link Set}
+     * rather than relying on {@link NogoodConstraint}'s own {@code equals}/{@code hashCode} (already
+     * known expensive elsewhere in this class — it recursively walks a {@code Set<Variable<?>>}) —
+     * identity is sufficient here since a given nogood only ever appears once per {@code index}
+     * entry it's stored under.
+     */
+    private static Collection<NogoodConstraint> fromIndex(Map<Variable<?>, Set<NogoodConstraint>> index, Set<Variable<?>> changed) {
+        if (changed.size() == 1) {
+            return index.getOrDefault(changed.iterator().next(), Set.of());
+        }
+        Set<NogoodConstraint> result = Collections.newSetFromMap(new IdentityHashMap<>());
+        for (Variable<?> v : changed) {
+            result.addAll(index.getOrDefault(v, Set.of()));
         }
         return result;
     }
@@ -146,7 +181,7 @@ public final class NogoodFixpointConsistency implements ConstraintConsistency {
                                              @Nullable Set<Variable<?>> changedSinceLastRun) {
         Set<NogoodConstraint> nogoods = csp.getNogoods();
         if (nogoods.isEmpty()) return ConsistencyResult.feasible(csp);
-        Collection<NogoodConstraint> toCheck = relevant(nogoods, changedSinceLastRun);
+        Collection<NogoodConstraint> toCheck = relevant(csp, nogoods, changedSinceLastRun);
         if (toCheck.isEmpty()) return ConsistencyResult.feasible(csp);
         DomainAccumulator domains = new DomainAccumulator(csp.getVariableDomains());
         boolean changed = true;

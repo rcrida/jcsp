@@ -145,4 +145,47 @@ class NogoodStoreTest {
         var constraints = store.apply(csp()).getConstraints();
         assertThat(constraints).doesNotContain(nogood(Map.of(X, 1, Y, 1, Z, 1)));
     }
+
+    @Test
+    void applyAttachesByVariableIndexToCsp() {
+        NogoodStore store = new NogoodStore();
+        var xOnly = nogood(Map.of(X, 1));
+        store.record(xOnly);
+        var augmented = store.apply(csp());
+        assertThat(augmented.getNogoodsByVariable()).containsEntry(X, java.util.Set.of(xOnly));
+    }
+
+    @Test
+    void byVariableIndexAccumulatesMultipleNogoodsSharingAVariable() {
+        // Exercises computeIfAbsent's "entry already present" branch: X already has an index entry
+        // from the first record() call, so the second must add to it rather than replace it.
+        NogoodStore store = new NogoodStore();
+        var first = nogood(Map.of(X, 1));
+        var second = nogood(Map.of(X, 2, Y, 1));
+        store.record(first);
+        store.record(second);
+        var augmented = store.apply(csp());
+        assertThat(augmented.getNogoodsByVariable()).containsEntry(X, java.util.Set.of(first, second));
+        assertThat(augmented.getNogoodsByVariable()).containsEntry(Y, java.util.Set.of(second));
+    }
+
+    @Test
+    void evictionRemovesNogoodFromByVariableIndex() {
+        NogoodStore store = new NogoodStore(2);
+        var evicted = nogood(Map.of(X, 1, Y, 1, Z, 1));
+        store.record(evicted);
+        store.record(nogood(Map.of(X, 2)));
+        store.record(nogood(Map.of(Y, 2))); // pushes size to 3, evicting `evicted`
+
+        var augmented = store.apply(csp());
+        assertThat(augmented.getNogoodsByVariable().get(Z)).isEmpty();
+        assertThat(augmented.getNogoodsByVariable().get(X)).doesNotContain(evicted);
+        assertThat(augmented.getNogoodsByVariable().get(Y)).doesNotContain(evicted);
+    }
+
+    @Test
+    void emptyStoreLeavesNogoodsByVariableAbsent() {
+        NogoodStore store = new NogoodStore();
+        assertThat(store.apply(csp()).getNogoodsByVariable()).isNull();
+    }
 }
