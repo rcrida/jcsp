@@ -112,16 +112,22 @@ public final class Xcsp3CompetitionRunner {
      * (unresponsive to its own internal {@link io.github.rcrida.jcsp.solver.Cancellation} budget)
      * block this call forever, since {@link java.io.InputStream#readAllBytes()} has no timeout of
      * its own. Waiting first is safe from the opposite risk (the child blocking on a full pipe
-     * while this method isn't draining it) only because {@link Xcsp3ProblemRunner}'s own output is
-     * always small -- a handful of status/solution lines, never more than a few KB, well under any
-     * OS pipe buffer.
+     * while this method isn't draining it) only because {@code -Dorg.slf4j.simpleLogger.defaultLogLevel=error}
+     * is passed to the child, keeping its output to {@link Xcsp3ProblemRunner}'s own handful of
+     * status/solution lines -- without it, an optimization instance whose solver logs every
+     * improving incumbent at INFO (e.g. {@code BranchAndBoundSolver}) can produce well over 100KB
+     * of log output, overflow the OS pipe buffer, and block the child's own search thread on that
+     * write before it ever reaches its {@link io.github.rcrida.jcsp.solver.Cancellation} check --
+     * a genuine deadlock this harness previously (and wrongly) reported as the child having
+     * "HUNG", confirmed by reproducing it directly via an isolated single-instance corpus run
+     * plus a minimal {@link ProcessBuilder} repro comparing default vs. suppressed child logging.
      */
     private static Result runOne(Path instance, long timeLimitSeconds) throws IOException, InterruptedException {
         String javaBin = System.getProperty("java.home") + File.separator + "bin" + File.separator + "java";
         String classpath = System.getProperty("java.class.path");
         ProcessBuilder builder = new ProcessBuilder(
-                javaBin, "-cp", classpath, Xcsp3ProblemRunner.class.getName(),
-                instance.toString(), String.valueOf(timeLimitSeconds));
+                javaBin, "-cp", classpath, "-Dorg.slf4j.simpleLogger.defaultLogLevel=error",
+                Xcsp3ProblemRunner.class.getName(), instance.toString(), String.valueOf(timeLimitSeconds));
         builder.redirectErrorStream(true);
 
         long startNanos = System.nanoTime();
