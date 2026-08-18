@@ -286,6 +286,8 @@ builder.sumConstraint(Set.of(v1, v2, v3), Operator.EQ, 10)          // v1 + v2 +
 builder.sumConstraint(Set.of(v1, v2, v3), Operator.EQ, target)      // v1 + v2 + v3 == target  (target is a variable, not a constant)
 builder.maxConstraint(Set.of(v1, v2, v3), Operator.LEQ, 10)         // max(v1, v2, v3) <= 10  (also EQ, GEQ, LT, GT)
 builder.maxConstraint(Set.of(v1, v2, v3), Operator.EQ, target)      // max(v1, v2, v3) == target  (target is a variable, not a constant)
+builder.minConstraint(Set.of(v1, v2, v3), Operator.GEQ, 0)          // min(v1, v2, v3) >= 0  (also EQ, LEQ, LT, GT)
+builder.minConstraint(Set.of(v1, v2, v3), Operator.EQ, target)      // min(v1, v2, v3) == target  (target is a variable, not a constant)
 builder.productConstraint(Set.of(v1, v2, v3), Operator.EQ, 24)      // v1*v2*v3 == 24  (also LEQ, GEQ; requires strictly positive domain mins)
 builder.divisionConstraint(dividend, divisor, Operator.EQ, 3)        // dividend/divisor == 3  (also LEQ, GEQ; requires strictly positive domain mins for both)
 builder.linearConstraint(Map.of(v1, 2, v2, 3), Operator.LEQ, 10)    // 2*v1 + 3*v2 <= 10  (weighted sum / linear)
@@ -298,6 +300,7 @@ builder.amongConstraint(Set.of(v1, v2, v3), Set.of(a, b), Operator.EQ, 2)       
 builder.amongConstraint(Set.of(v1, v2, v3), Set.of(a, b), Operator.EQ, target)        // number of variables with value in {a,b} == target  (target is a variable, not a constant)
 builder.inverseConstraint(List.of(f1, f2, f3), List.of(g1, g2, g3))                   // f[i]==j ↔ g[j-1]==i+1  (MiniZinc inverse; 1-based values)
 builder.globalCardinalityConstraint(Set.of(v1, v2, v3), Map.of(a, 2, b, 1))           // count(v, a)==2 AND count(v, b)==1  (open GCC)
+builder.globalCardinalityRangeConstraint(Set.of(v1, v2, v3), Map.of(a, new GlobalCardinalityConstraint.OccurrenceRange(1, 2)))  // 1 <= count(v, a) <= 2  (GCC with occurrence ranges)
 builder.nValueConstraint(Set.of(v1, v2, v3), count)                 // count == number of distinct values taken by v1,v2,v3 (count is a variable, so it can be minimized; MiniZinc nvalue)
 builder.tuplesConstraint(Set.of(Assignment.of(...), ...))           // variable values must match one of the allowed assignments (order-independent)
 builder.increasingConstraint(List.of(v1, v2, v3))                   // v1 <= v2 <= v3  (MiniZinc increasing)
@@ -305,6 +308,7 @@ builder.decreasingConstraint(List.of(v1, v2, v3))                   // v1 >= v2 
 builder.orderedConstraint(List.of(v1, v2, v3), Operator.LT)         // v1 < v2 < v3  (any of LT/LEQ/GEQ/GT, chosen at runtime)
 builder.lexConstraint(List.of(a1,a2), Operator.LEQ, List.of(b1,b2)) // [a1,a2] lex<= [b1,b2]  (MiniZinc lex_lesseq)
 builder.allDiffConstraint(Set.of(v1, v2, v3))                       // all different
+builder.allEqualConstraint(Set.of(v1, v2, v3))                      // all equal  (MiniZinc all_equal)
 builder.distinctVectorsConstraint(List.of(List.of(a1, a2), List.of(b1, b2)))  // every pair of equal-length vectors differs in at least one position
 builder.cumulativeConstraint(starts, durations, resources, limit)    // resource-bounded scheduling (MiniZinc cumulative)
 builder.binPackingConstraint(bin, weights, capacities)               // sum(weights[i] : bin[i]==b) <= capacities[b] for every bin b (pair with nValueConstraint over `bin` to minimize bins used; MiniZinc bin_packing_capa)
@@ -316,6 +320,7 @@ builder.exactlyOneConstraint(Set.of(b1, b2, b3))                    // exactly o
 builder.predicateConstraint(Set.of(v1, v2, v3), predicate)          // predicate.test(assignment) over a set of variables
 builder.circuitConstraint(List.of(s0, s1, s2))                      // Hamiltonian circuit: successors[i] is the 1-indexed next node after node i+1 (MiniZinc circuit)
 builder.diffnConstraint(xs, ys, widths, heights)                     // pairwise non-overlapping 2D rectangles; origin variables accept IntRangeDomain or IntervalDomain (MiniZinc diffn)
+builder.diffnVariableConstraint(xs, ys, widths, heights)             // diffn with variable rectangle widths/heights (e.g. a rotation choice), not just fixed sizes
 builder.regularConstraint(sequence, automaton)                       // sequence values must be accepted by the given DFA (MiniZinc regular); build the automaton with Automaton.of(numStates, initialState, acceptingStates, transitions)
 ```
 
@@ -401,7 +406,7 @@ InitialAssignmentFactory factory = FallbackAssignmentFactory.builder()
 <dependency>
     <groupId>io.github.rcrida</groupId>
     <artifactId>jcsp</artifactId>
-    <version>2.42.0</version>
+    <version>2.43.0</version>
 </dependency>
 ```
 
