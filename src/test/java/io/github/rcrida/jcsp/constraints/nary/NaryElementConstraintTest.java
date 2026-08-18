@@ -13,6 +13,7 @@ import io.github.rcrida.jcsp.domains.IntervalDomain;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -238,9 +239,12 @@ public class NaryElementConstraintTest {
     // --- explainInfeasible() ---
 
     @Test
-    void explainInfeasible_allSingleton_returnsFullReason() {
+    void explainInfeasible_allSingleton_citesIndexTooAsValueSet() {
         // Same setup as propagate_infeasibleWhenNoLiveIndices: all three in-bounds candidates
-        // excluded for lack of overlap with result, and every cited variable is singleton.
+        // excluded for lack of overlap with result. index itself is now also cited (its current
+        // 3-value candidate set), so even though every OTHER cited variable is singleton, index
+        // isn't, so the tighter GroundNogoodConstraint tier doesn't apply -- ValueSetNogoodConstraint
+        // does.
         var domains = Map.<Variable<?>, io.github.rcrida.jcsp.domains.Domain<?>>of(
                 INDEX, IntRangeDomain.of(1, 3),
                 RESULT, DiscreteDomain.of("x"),
@@ -249,13 +253,15 @@ public class NaryElementConstraintTest {
                 C, DiscreteDomain.of("gamma")
         );
         assertThat(constraint.propagate(domains)).isEmpty();
-        assertThat(constraint.explainInfeasible(domains))
-                .contains(GroundNogoodConstraint.of(Map.of(A, "alpha", B, "beta", C, "gamma", RESULT, "x")));
+        assertThat(constraint.explainInfeasible(domains)).contains(ValueSetNogoodConstraint.of(Map.of(
+                A, Set.of("alpha"), B, Set.of("beta"), C, Set.of("gamma"), RESULT, Set.of("x"), INDEX, Set.of(1, 2, 3))));
     }
 
     @Test
-    void explainInfeasible_notAllSingleton_returnsEmpty() {
-        // A is not singleton (still no overlap with result), so no reason is sound.
+    void explainInfeasible_notAllSingleton_stillCitesExactValueSets() {
+        // A is not singleton -- an earlier version of this method declined to explain here at all,
+        // losing propagation strength. ValueSetNogoodConstraint#fromCurrentState instead cites A's
+        // exact current 2-value set, staying sound without requiring singletons.
         var domains = Map.<Variable<?>, io.github.rcrida.jcsp.domains.Domain<?>>of(
                 INDEX, IntRangeDomain.of(1, 3),
                 RESULT, DiscreteDomain.of("x"),
@@ -264,12 +270,15 @@ public class NaryElementConstraintTest {
                 C, DiscreteDomain.of("gamma")
         );
         assertThat(constraint.propagate(domains)).isEmpty();
-        assertThat(constraint.explainInfeasible(domains)).isEmpty();
+        assertThat(constraint.explainInfeasible(domains)).contains(ValueSetNogoodConstraint.of(Map.of(
+                A, Set.of("alpha", "delta"), B, Set.of("beta"), C, Set.of("gamma"),
+                RESULT, Set.of("x"), INDEX, Set.of(1, 2, 3))));
     }
 
     @Test
     void explainInfeasible_allOutOfBounds_returnsEmpty() {
-        // Every candidate is out of bounds — nothing to cite, no variable is ever consulted.
+        // Every candidate is out of bounds — nothing to cite, no variable is ever consulted (index
+        // and result are never added to the citation set at all in this case).
         var domains = Map.<Variable<?>, io.github.rcrida.jcsp.domains.Domain<?>>of(
                 INDEX, DiscreteDomain.of(0, 4),
                 RESULT, DiscreteDomain.of("alpha"),
@@ -282,9 +291,10 @@ public class NaryElementConstraintTest {
     }
 
     @Test
-    void explainInfeasible_mixedBoundsAndSupport_citesOnlyInBoundsVars() {
+    void explainInfeasible_mixedBoundsAndSupport_citesOnlyInBoundsVarsPlusIndexAndResult() {
         // 0 and 4 are out of bounds (uncited); 1 and 2 are in-bounds but unsupported (cited via
-        // A and B); index 3 (C) never appears in the domain at all, so C must not be cited.
+        // A and B); index 3 (C) never appears in the domain at all, so C must not be cited. index
+        // and result are now cited too.
         var domains = Map.<Variable<?>, io.github.rcrida.jcsp.domains.Domain<?>>of(
                 INDEX, DiscreteDomain.of(0, 1, 2, 4),
                 RESULT, DiscreteDomain.of("x"),
@@ -293,8 +303,34 @@ public class NaryElementConstraintTest {
                 C, DiscreteDomain.of("gamma")
         );
         assertThat(constraint.propagate(domains)).isEmpty();
-        assertThat(constraint.explainInfeasible(domains))
-                .contains(GroundNogoodConstraint.of(Map.of(A, "alpha", B, "beta", RESULT, "x")));
+        assertThat(constraint.explainInfeasible(domains)).contains(ValueSetNogoodConstraint.of(Map.of(
+                A, Set.of("alpha"), B, Set.of("beta"), RESULT, Set.of("x"), INDEX, Set.of(0, 1, 2, 4))));
+    }
+
+    @Test
+    void explainInfeasible_indexNarrowedByAnotherConstraint_doesNotForbidEscapeViaExcludedIndexValue() {
+        // Regression test for a real unsoundness bug (found via QuasiGroup-7-09.xml.lzma
+        // intermittently reporting a false UNSATISFIABLE under CDCL search): index's domain here is
+        // {1, 3} -- as if some OTHER constraint (e.g. an AllDiffConstraint) already excluded 2 --
+        // and pass 1 empties it because neither in-bounds candidate (A via 1, C via 3) overlaps
+        // result. But index=2 (B) WOULD have provided support in the full, un-narrowed problem. An
+        // earlier version of this method omitted index from its citation entirely, producing a
+        // nogood that wrongly forbade every valid solution using index=2 too. The fixed citation
+        // includes index's own current value set {1, 3}, so a solution using index=2 (outside that
+        // set) correctly escapes it.
+        var domains = Map.<Variable<?>, io.github.rcrida.jcsp.domains.Domain<?>>of(
+                INDEX, IntRangeDomain.of(1, 3).toBuilder().delete(2).build(),
+                RESULT, DiscreteDomain.of("zzz"),
+                A, DiscreteDomain.of("alpha"),
+                B, DiscreteDomain.of("zzz"),
+                C, DiscreteDomain.of("gamma")
+        );
+        assertThat(constraint.propagate(domains)).isEmpty();
+        var reason = constraint.explainInfeasible(domains);
+        assertThat(reason).isPresent();
+        var validSolutionUsingExcludedIndex = Assignment.of(
+                Map.of(INDEX, 2, RESULT, "zzz", A, "alpha", B, "zzz", C, "gamma"));
+        assertThat(reason.get().isSatisfiedBy(validSolutionUsingExcludedIndex)).isTrue();
     }
 
     @Test

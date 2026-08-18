@@ -65,6 +65,7 @@ import io.github.rcrida.jcsp.constraints.nary.NValueConstraint;
 import io.github.rcrida.jcsp.constraints.nary.NogoodConstraint;
 import io.github.rcrida.jcsp.constraints.nary.PartitionConstraint;
 import io.github.rcrida.jcsp.constraints.nary.RangeNogoodConstraint;
+import io.github.rcrida.jcsp.constraints.nary.ValueSetNogoodConstraint;
 import io.github.rcrida.jcsp.constraints.nary.SetBoundsNogoodConstraint;
 import io.github.rcrida.jcsp.constraints.nary.ProductConstraint;
 import io.github.rcrida.jcsp.constraints.nary.NaryTuplesConstraint;
@@ -162,13 +163,14 @@ public class ConstraintSatisfactionProblem {
      *       singletons before tree decomposition ever runs).</li>
      * </ul>
      * <p>
-     * Lists {@link GroundNogoodConstraint} and {@link RangeNogoodConstraint} specifically, not the
+     * Lists {@link GroundNogoodConstraint}, {@link RangeNogoodConstraint}, and {@link
+     * ValueSetNogoodConstraint} specifically, not the
      * {@link NogoodConstraint} interface they implement — this check matches on
      * {@link Object#getClass()}, the concrete runtime type, so any future additional
      * {@link NogoodConstraint} implementation needs its own entry here too.
      */
     private static final Set<Class<? extends Constraint>> CONTINUOUS_COMPATIBLE_CONSTRAINTS =
-            Set.of(SumBoundConstraint.class, SumVariableConstraint.class, LinearBoundConstraint.class, LinearVariableConstraint.class, UnaryComparatorConstraint.class, BinaryComparatorConstraint.class, BinaryOffsetConstraint.class, AbsoluteDifferenceConstraint.class, DivisionConstraint.class, LexConstraint.class, CumulativeConstraint.class, MaxConstraint.class, MaxVariableConstraint.class, MinConstraint.class, MinVariableConstraint.class, ProductConstraint.class, DiffnConstraint.class, GroundNogoodConstraint.class, RangeNogoodConstraint.class, IncreasingConstraint.class, DecreasingConstraint.class, UnaryPredicateConstraint.class, BinaryPredicateConstraint.class, PredicateConstraint.class, ReifiedConstraint.class, ImplicationConstraint.class, AndConstraint.class, NaryElementConstraint.class);
+            Set.of(SumBoundConstraint.class, SumVariableConstraint.class, LinearBoundConstraint.class, LinearVariableConstraint.class, UnaryComparatorConstraint.class, BinaryComparatorConstraint.class, BinaryOffsetConstraint.class, AbsoluteDifferenceConstraint.class, DivisionConstraint.class, LexConstraint.class, CumulativeConstraint.class, MaxConstraint.class, MaxVariableConstraint.class, MinConstraint.class, MinVariableConstraint.class, ProductConstraint.class, DiffnConstraint.class, GroundNogoodConstraint.class, RangeNogoodConstraint.class, ValueSetNogoodConstraint.class, IncreasingConstraint.class, DecreasingConstraint.class, UnaryPredicateConstraint.class, BinaryPredicateConstraint.class, PredicateConstraint.class, ReifiedConstraint.class, ImplicationConstraint.class, AndConstraint.class, NaryElementConstraint.class);
 
     /**
      * Constraint types that support {@link io.github.rcrida.jcsp.domains.SetBoundedDomain} (e.g.

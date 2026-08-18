@@ -1,5 +1,6 @@
 package io.github.rcrida.jcsp.constraints.binary;
 
+import io.github.rcrida.jcsp.assignments.Assignment;
 import io.github.rcrida.jcsp.constraints.Operator;
 import io.github.rcrida.jcsp.constraints.nary.GroundNogoodConstraint;
 import io.github.rcrida.jcsp.domains.Domain;
@@ -282,12 +283,36 @@ public class AbsoluteDifferenceConstraintTest {
         assertThat(result.reason()).isNull();
     }
 
-    @Test void propagateWithReasons_leq_infeasible_leftSingleton_attributesLeft() {
-        // L=[8,8] (singleton), R=[0,3], |L-R|<=3 is infeasible (min dist 5 > 3). Only L can be
-        // blamed on a specific value; R is a genuine open range with nothing to pin the conflict on.
+    @Test void propagateWithReasons_leq_infeasible_leftSingletonRightBounded_declinesReason() {
+        // L=[8,8] (singleton), R=[0,3] (a genuine continuous IntervalDomain, non-singleton):
+        // |L-R|<=3 is infeasible (min dist 5 > 3). An earlier version cited only L unconditionally
+        // ("L != 8"), unsound if R's domain here happened to be externally narrowed away from a
+        // wider range that still included values close enough to 8. ValueSetNogoodConstraint
+        // #fromCurrentState declines instead (R isn't a DiscreteDomain), leaving the caller's
+        // RangeNogoodConstraint fallback to cite R's own current bounds rather than omitting it.
         var result = AbsoluteDifferenceConstraint.of(L, R, Operator.LEQ, 3.0).propagateWithReasons(intervals(8, 8, 0, 3));
         assertThat(result.isInfeasible()).isTrue();
-        assertThat(result.reason()).isEqualTo(GroundNogoodConstraint.of(Map.of(L, 8.0)));
+        assertThat(result.reason()).isNull();
+    }
+
+    @Test void propagateWithReasons_leq_infeasible_discreteLeftSingletonRightGapped_citesRightsExactValueSetNotJustLeft() {
+        // Regression test for a real unsoundness bug (see Propagatable#addIfSingleton's Javadoc):
+        // left=8 (singleton), right's *current* discrete domain is {0,1} -- e.g. as if some other
+        // constraint had already excluded values close to 8 from a wider original domain. |left-
+        // right|<=3 is infeasible (min dist 7 > 3). An earlier version cited only "left != 8"
+        // unconditionally, which would wrongly forbid left=8 even in a branch where right could
+        // still be, say, 6 (|8-6|=2<=3 is feasible). The fixed reason cites right's own current
+        // value set too, so a solution using right=6 correctly escapes it.
+        Variable<Integer> left = Variable.Factory.INSTANCE.create("l_abs_gap_reason");
+        Variable<Integer> right = Variable.Factory.INSTANCE.create("r_abs_gap_reason");
+        var domains = Map.<Variable<?>, Domain<?>>of(
+                left, IntRangeDomain.of(8, 8),
+                right, DiscreteDomain.of(0, 1));
+        var result = AbsoluteDifferenceConstraint.of(left, right, Operator.LEQ, 3).propagateWithReasons(domains);
+        assertThat(result.isInfeasible()).isTrue();
+        assertThat(result.reason()).isNotNull();
+        var escapeUsingExcludedRightValue = Assignment.of(Map.of(left, 8, right, 6));
+        assertThat(result.reason().isSatisfiedBy(escapeUsingExcludedRightValue)).isTrue();
     }
 
     @Test void propagateWithReasons_leq_infeasible_bothSingleton_attributesBoth() {

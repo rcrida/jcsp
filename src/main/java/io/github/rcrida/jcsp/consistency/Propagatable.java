@@ -90,9 +90,28 @@ public interface Propagatable {
 
     /**
      * If {@code domain} is a singleton, records its sole value against {@code variable} in
-     * {@code reason}. Shared by {@code propagateWithReasons} overrides that attribute an
-     * infeasible narrowing to whichever side of a binary constraint already holds a pinned
-     * value — a non-singleton side is left unblamed since no single value can be cited for it.
+     * {@code reason}. Sound only when {@code variable} being pinned to that value is, on its own,
+     * a fully self-contained explanation for the failure being cited — i.e. every other variable
+     * the derivation depended on is either cited independently in the same {@code reason} map or
+     * genuinely irrelevant to it, not merely "currently non-singleton and therefore skipped."
+     * {@link io.github.rcrida.jcsp.constraints.nary.CircuitConstraint}'s self-loop citation is the
+     * safe pattern: the domain being singleton at exactly the pruned value is itself the complete
+     * cause, with no other variable involved at all.
+     * <p>
+     * Do <em>not</em> call this independently per side of a jointly-interacting pair (e.g. once for
+     * each side of a binary constraint), omitting whichever side isn't currently singleton — that
+     * pattern shipped as a real, confirmed bug in {@code BinaryComparatorConstraint}/{@code
+     * BinaryOffsetConstraint}/{@code AbsoluteDifferenceConstraint}/{@code DivisionConstraint}'s
+     * former {@code explainInfeasible} implementations: the omitted side's current domain can be
+     * narrower than its full range (narrowed by a <em>different</em> constraint sharing it), so
+     * silently dropping it from the citation produces a nogood that's unsound in a branch where the
+     * omitted side's excluded values would have provided a valid escape. That regression was
+     * confirmed via {@code QuasiGroup-7-09.xml.lzma} intermittently reporting a false {@code
+     * UNSATISFIABLE} despite a verified solution existing. Use {@link
+     * io.github.rcrida.jcsp.constraints.nary.ValueSetNogoodConstraint#fromCurrentState} instead for
+     * a jointly-interacting pair or group: it tries {@link #allSingletonReason} first (this
+     * helper's collective, sound analogue) and falls back to citing each variable's <em>exact</em>
+     * current value set rather than omitting any of them.
      */
     static void addIfSingleton(@NonNull Domain<?> domain, Variable<?> variable, @NonNull Map<Variable<?>, Object> reason) {
         if (domain.isSingleton()) {

@@ -255,26 +255,54 @@ public class BinaryOffsetConstraintTest {
         assertThat(result.reason()).isNull();
     }
 
-    @Test void propagateWithReasons_infeasible_leftSingleton_attributesLeft() {
-        // L=[5,5] (singleton), R=[0,3], L+3<=R is infeasible. Only L can be blamed on a specific
-        // value; R is a genuine open range with nothing to pin the conflict on.
+    @Test void propagateWithReasons_infeasible_leftSingletonRightBounded_declinesReason() {
+        // L=[5,5] (singleton), R=[0,3] (a genuine continuous IntervalDomain, non-singleton),
+        // L+3<=R is infeasible. An earlier version cited only L unconditionally ("L != 5"), which
+        // was unsound: if R's domain here happened to be externally narrowed away from a wider
+        // range that still included values >= 8, "L != 5" would wrongly forbid a combination that's
+        // actually feasible elsewhere. ValueSetNogoodConstraint#fromCurrentState declines instead
+        // (R isn't a DiscreteDomain, so no exact value-set citation is possible either) -- the
+        // caller (FixpointConsistency) falls back to RangeNogoodConstraint#fromCurrentBounds over
+        // both sides instead, which correctly cites R's own current bounds rather than omitting it.
         var result = BinaryOffsetConstraint.of(L, O, Operator.LEQ, R).propagateWithReasons(domains(5, 5, 0, 3));
         assertThat(result.isInfeasible()).isTrue();
-        assertThat(result.reason()).isEqualTo(GroundNogoodConstraint.of(Map.of(L, 5.0)));
+        assertThat(result.reason()).isNull();
     }
 
     @Test void propagateWithReasons_infeasible_bothSingleton_attributesBoth() {
-        // L=[5,5], R=[1,1]: L+3<=R is infeasible with both sides pinned to a concrete value.
+        // L=[5,5], R=[1,1]: L+3<=R is infeasible with both sides pinned to a concrete value --
+        // allSingletonReason succeeds here, so the tighter GroundNogoodConstraint is still used.
         var result = BinaryOffsetConstraint.of(L, O, Operator.LEQ, R).propagateWithReasons(domains(5, 5, 1, 1));
         assertThat(result.isInfeasible()).isTrue();
         assertThat(result.reason()).isEqualTo(GroundNogoodConstraint.of(Map.of(L, 5.0, R, 1.0)));
     }
 
     @Test void propagateWithReasons_infeasible_neitherSingleton_returnsEmptyReason() {
-        // L=[5,10], R=[0,3]: infeasible, but neither side is pinned to a single value, so no
-        // variable-value pair can be blamed — matches propagate_infeasible() above.
+        // L=[5,10], R=[0,3]: infeasible, but neither side is pinned to a single value, and neither
+        // is a DiscreteDomain (both IntervalDomain) -- ValueSetNogoodConstraint#fromCurrentState
+        // declines, leaving the caller's RangeNogoodConstraint fallback to handle it.
         var result = BinaryOffsetConstraint.of(L, O, Operator.LEQ, R).propagateWithReasons(domains(5, 10, 0, 3));
         assertThat(result.isInfeasible()).isTrue();
         assertThat(result.reason()).isNull();
+    }
+
+    @Test void propagateWithReasons_infeasible_discreteLeftSingletonRightGapped_citesRightsExactValueSetNotJustLeft() {
+        // Regression test for a real unsoundness bug (see Propagatable#addIfSingleton's Javadoc):
+        // left=25 (singleton), right's *current* discrete domain is {10,20} -- e.g. as if some
+        // other constraint had already excluded 30 from a wider original domain. left+0<=right is
+        // infeasible (25 > 20). An earlier version cited only "left != 25" unconditionally, which
+        // would wrongly forbid left=25 even in a branch where right could still be, say, 30 (25<=30
+        // is feasible). The fixed reason cites right's own current value set too, so a solution
+        // using right=30 correctly escapes it.
+        Variable<Integer> left = Variable.Factory.INSTANCE.create("l_off_gap_reason");
+        Variable<Integer> right = Variable.Factory.INSTANCE.create("r_off_gap_reason");
+        var domains = Map.<Variable<?>, Domain<?>>of(
+                left, IntRangeDomain.of(25, 25),
+                right, DiscreteDomain.of(10, 20));
+        var result = BinaryOffsetConstraint.of(left, 0, Operator.LEQ, right).propagateWithReasons(domains);
+        assertThat(result.isInfeasible()).isTrue();
+        assertThat(result.reason()).isNotNull();
+        var escapeUsingExcludedRightValue = Assignment.of(Map.of(left, 25, right, 30));
+        assertThat(result.reason().isSatisfiedBy(escapeUsingExcludedRightValue)).isTrue();
     }
 }

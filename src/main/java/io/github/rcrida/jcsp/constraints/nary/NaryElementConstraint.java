@@ -176,13 +176,23 @@ public class NaryElementConstraint<T> extends NaryConstraint implements Propagat
      * {@code explainInfeasible} is only ever invoked with the same {@code domains} that made
      * {@code propagate} return infeasible), no redundant type check is needed here.
      * <p>
-     * Attributes the wipeout to {@link #result} plus every {@code vars[i-1]} for in-bounds
-     * candidates only — out-of-bounds candidates contribute to the wipeout "for free" and cite
-     * nothing. Sound only when every cited variable is singleton, via
-     * {@link Propagatable#allSingletonReason}: a non-singleton {@code vars[i-1]} could still narrow
-     * to a value overlapping {@link #result} along a different search path. If every candidate was
-     * out of bounds (nothing to cite), returns {@link Map#of()} directly rather than degrading
-     * through an empty {@code allSingletonReason} call on an empty set.
+     * Attributes the wipeout to {@link #result}, every {@code vars[i-1]} for in-bounds candidates,
+     * <em>and</em> {@link #index} itself — citing {@link #index}'s own current value set is what
+     * makes this sound: {@link #index}'s domain can be narrowed by a <em>different</em> constraint
+     * sharing that variable (e.g. an {@link AllDiffConstraint}, or a {@code BinaryOffsetConstraint}
+     * shifting it for a 1-based encoding) before pass 1 ever runs, so the candidate set pass 1
+     * iterates over can already be narrower than {@code [1, vars.size()]}. An earlier version of
+     * this method omitted {@link #index} from the citation entirely, silently assuming none of the
+     * externally-excluded values could ever provide support in a different branch — unsound, and
+     * confirmed via a real regression: {@code QuasiGroup-7-09.xml.lzma} intermittently reported a
+     * false {@code UNSATISFIABLE} under CDCL search before this fix (a verified solution existed,
+     * but a learned nogood built from the old citation wrongly forbade part of the solution space).
+     * <p>
+     * Delegates to {@link ValueSetNogoodConstraint#fromCurrentState}, which tries a tighter {@link
+     * GroundNogoodConstraint} first (when every cited variable happens to be singleton) and falls
+     * back to a {@link ValueSetNogoodConstraint} citing each variable's exact current value set
+     * otherwise — sound regardless of whether {@link #index}'s domain has gaps, unlike a {@link
+     * RangeNogoodConstraint#fromCurrentBounds} citation would be.
      */
     @Override
     @SuppressWarnings("unchecked")
@@ -197,7 +207,8 @@ public class NaryElementConstraint<T> extends NaryConstraint implements Propagat
         }
         if (cited.isEmpty()) return Optional.empty();
         cited.add(result);
-        return GroundNogoodConstraint.fromReason(Propagatable.allSingletonReason(cited, domains));
+        cited.add(index);
+        return ValueSetNogoodConstraint.fromCurrentState(cited, domains);
     }
 
     @Override

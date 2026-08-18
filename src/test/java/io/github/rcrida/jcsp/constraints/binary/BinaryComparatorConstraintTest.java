@@ -226,24 +226,31 @@ public class BinaryComparatorConstraintTest {
         assertThat(result.reason()).isNull();
     }
 
-    @Test void propagateWithReasons_infeasible_leftSingleton_attributesLeft() {
-        // L=[5,5] (singleton), R=[0,3]: L<=R is infeasible. Only L can be blamed on a specific
-        // value; R is a genuine open range with nothing to pin the conflict on.
+    @Test void propagateWithReasons_infeasible_leftSingletonRightBounded_declinesReason() {
+        // L=[5,5] (singleton), R=[0,3] (a genuine continuous IntervalDomain, non-singleton):
+        // L<=R is infeasible. An earlier version cited only L unconditionally ("L != 5"), unsound
+        // if R's domain here happened to be externally narrowed away from a wider range that still
+        // included values >= 5. ValueSetNogoodConstraint#fromCurrentState declines instead (R isn't
+        // a DiscreteDomain), leaving the caller's RangeNogoodConstraint fallback to cite R's own
+        // current bounds rather than omitting it. See BinaryOffsetConstraintTest's discrete-gapped
+        // regression test for the fully worked, gap-escaping counterexample this pattern caused.
         var result = BinaryComparatorConstraint.of(L, Operator.LEQ, R).propagateWithReasons(domains(5.0, 5.0, 0.0, 3.0));
         assertThat(result.isInfeasible()).isTrue();
-        assertThat(result.reason()).isEqualTo(GroundNogoodConstraint.of(Map.of(L, 5.0)));
+        assertThat(result.reason()).isNull();
     }
 
     @Test void propagateWithReasons_infeasible_bothSingleton_attributesBoth() {
-        // L=[5,5], R=[1,1]: L<=R is infeasible with both sides pinned to a concrete value.
+        // L=[5,5], R=[1,1]: L<=R is infeasible with both sides pinned to a concrete value --
+        // allSingletonReason succeeds here, so the tighter GroundNogoodConstraint is still used.
         var result = BinaryComparatorConstraint.of(L, Operator.LEQ, R).propagateWithReasons(domains(5.0, 5.0, 1.0, 1.0));
         assertThat(result.isInfeasible()).isTrue();
         assertThat(result.reason()).isEqualTo(GroundNogoodConstraint.of(Map.of(L, 5.0, R, 1.0)));
     }
 
     @Test void propagateWithReasons_infeasible_neitherSingleton_returnsEmptyReason() {
-        // L=[5,10], R=[0,3]: infeasible, but neither side is pinned to a single value, so no
-        // variable-value pair can be blamed — matches propagate_infeasible_returnsEmpty() above.
+        // L=[5,10], R=[0,3]: infeasible, but neither side is pinned to a single value, and neither
+        // is a DiscreteDomain (both IntervalDomain) -- declines, leaving the caller's
+        // RangeNogoodConstraint fallback to handle it.
         var result = BinaryComparatorConstraint.of(L, Operator.LEQ, R).propagateWithReasons(domains(5.0, 10.0, 0.0, 3.0));
         assertThat(result.isInfeasible()).isTrue();
         assertThat(result.reason()).isNull();

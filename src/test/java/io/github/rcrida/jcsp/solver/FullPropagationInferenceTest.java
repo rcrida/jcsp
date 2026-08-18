@@ -102,9 +102,12 @@ class FullPropagationInferenceTest {
     void applyWithReason_fixpointFindsReason_returnsReasonInsteadOfAssignment() {
         // x, y are unrelated to a, b: MAC starting from x only revises y (notEquals), succeeds,
         // and never touches a/b. The fixpoint then reaches comparatorConstraint(a, LEQ, b): a=[5,5]
-        // is pinned singleton and already exceeds b's range [0,3], so
-        // BinaryComparatorConstraint.propagateWithReasons reports {a=5.0} as the reason (see
-        // BinaryComparatorConstraintTest) instead of falling back to the full assignment.
+        // is pinned singleton but b=[0,3] is not, so BinaryComparatorConstraint's own
+        // explainInfeasible declines (citing only a would be unsound -- see
+        // BinaryComparatorConstraintTest and Propagatable#addIfSingleton's Javadoc) and
+        // FixpointConsistency's own generic fallback, RangeNogoodConstraint#fromCurrentBounds over
+        // the whole constraint's variable set, supplies the reason instead of falling back all the
+        // way to the full assignment.
         Variable<Integer> x = F.create("x"), y = F.create("y");
         Variable<Double> a = F.create("a"), b = F.create("b");
         var csp = ConstraintSatisfactionProblem.builder()
@@ -118,7 +121,8 @@ class FullPropagationInferenceTest {
         var assignment = Assignment.of(Map.of(x, 1));
         ConsistencyResult result = Solver.Factory.FULL_PROPAGATION_INFERENCE.applyWithReason(csp, x, assignment);
         assertThat(result.isInfeasible()).isTrue();
-        assertThat(result.reason()).isEqualTo(GroundNogoodConstraint.of(Map.of(a, 5.0)));
+        assertThat(result.reason()).isEqualTo(RangeNogoodConstraint.of(
+                Map.of(a, IntervalDomain.of(5.0, 5.0), b, IntervalDomain.of(0.0, 3.0))));
         assertThat(result.reason()).isNotEqualTo(GroundNogoodConstraint.of(assignment.getValues()));
     }
 

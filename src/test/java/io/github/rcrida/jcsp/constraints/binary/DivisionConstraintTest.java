@@ -296,12 +296,36 @@ public class DivisionConstraintTest {
         assertThat(result.reason()).isNull();
     }
 
-    @Test void propagateWithReasons_leq_infeasible_leftSingleton_attributesLeft() {
-        // X=[6,6] (singleton), Y=[1,2], xMin/yMax=3.0 > 2.0 (LEQ) → infeasible. Only X can be
-        // blamed on a specific value; Y is a genuine open range with nothing to pin the conflict on.
+    @Test void propagateWithReasons_leq_infeasible_leftSingletonRightBounded_declinesReason() {
+        // X=[6,6] (singleton), Y=[1,2] (a genuine continuous IntervalDomain, non-singleton):
+        // xMin/yMax=3.0 > 2.0 (LEQ) → infeasible. An earlier version cited only X unconditionally
+        // ("X != 6"), unsound if Y's domain here happened to be externally narrowed away from a
+        // wider range that still included larger values. ValueSetNogoodConstraint#fromCurrentState
+        // declines instead (Y isn't a DiscreteDomain), leaving the caller's RangeNogoodConstraint
+        // fallback to cite Y's own current bounds rather than omitting it.
         var result = DivisionConstraint.of(X, Y, Operator.LEQ, 2.0).propagateWithReasons(intervals(6, 6, 1, 2));
         assertThat(result.isInfeasible()).isTrue();
-        assertThat(result.reason()).isEqualTo(GroundNogoodConstraint.of(Map.of(X, 6.0)));
+        assertThat(result.reason()).isNull();
+    }
+
+    @Test void propagateWithReasons_leq_infeasible_discreteLeftSingletonRightGapped_citesRightsExactValueSetNotJustLeft() {
+        // Regression test for a real unsoundness bug (see Propagatable#addIfSingleton's Javadoc):
+        // left=6 (singleton), right's *current* discrete domain is {1,2} -- e.g. as if some other
+        // constraint had already excluded larger values from a wider original domain. left/right<=2
+        // is infeasible for both 1 and 2 (ratios 6 and 3). An earlier version cited only "left !=
+        // 6" unconditionally, which would wrongly forbid left=6 even in a branch where right could
+        // still be, say, 4 (6/4=1.5<=2 is feasible). The fixed reason cites right's own current
+        // value set too, so a solution using right=4 correctly escapes it.
+        Variable<Integer> left = Variable.Factory.INSTANCE.create("x_div_gap_reason");
+        Variable<Integer> right = Variable.Factory.INSTANCE.create("y_div_gap_reason");
+        var domains = Map.<Variable<?>, Domain<?>>of(
+                left, IntRangeDomain.of(6, 6),
+                right, DiscreteDomain.of(1, 2));
+        var result = DivisionConstraint.of(left, right, Operator.LEQ, 2).propagateWithReasons(domains);
+        assertThat(result.isInfeasible()).isTrue();
+        assertThat(result.reason()).isNotNull();
+        var escapeUsingExcludedRightValue = Assignment.of(Map.of(left, 6, right, 4));
+        assertThat(result.reason().isSatisfiedBy(escapeUsingExcludedRightValue)).isTrue();
     }
 
     @Test void propagateWithReasons_leq_infeasible_bothSingleton_attributesBoth() {

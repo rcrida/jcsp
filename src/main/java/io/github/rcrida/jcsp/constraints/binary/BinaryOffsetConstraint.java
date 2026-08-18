@@ -5,6 +5,7 @@ import io.github.rcrida.jcsp.constraints.NumericBounds;
 import io.github.rcrida.jcsp.constraints.Operator;
 import io.github.rcrida.jcsp.constraints.nary.GroundNogoodConstraint;
 import io.github.rcrida.jcsp.constraints.nary.NogoodConstraint;
+import io.github.rcrida.jcsp.constraints.nary.ValueSetNogoodConstraint;
 import io.github.rcrida.jcsp.domains.Domain;
 import io.github.rcrida.jcsp.variables.Variable;
 import lombok.EqualsAndHashCode;
@@ -14,6 +15,7 @@ import org.jspecify.annotations.NonNull;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 
 /**
  * Represents a binary constraint with an offset applied to the left operand.
@@ -125,21 +127,28 @@ public class BinaryOffsetConstraint<N extends Number> extends BinaryConstraint<N
     }
 
     /**
-     * When bounds narrowing empties the feasible range, attributes the conflict to whichever
-     * side already holds a singleton domain — the other side is omitted since no single value
-     * can be blamed for it. Empty when neither side is singleton. Structurally mirrors
-     * {@link BinaryComparatorConstraint#explainInfeasible}, but unlike that constraint,
-     * {@link #propagate} here narrows discrete/discrete pairs too (via
+     * When bounds narrowing empties the feasible range, attributes the conflict to both sides via
+     * {@link ValueSetNogoodConstraint#fromCurrentState} — a {@link GroundNogoodConstraint} when
+     * both happen to be singleton, else a {@link ValueSetNogoodConstraint} citing each side's exact
+     * current value set, else {@link Optional#empty()} when a side isn't a {@link
+     * io.github.rcrida.jcsp.domains.DiscreteDomain} at all. Structurally mirrors {@link
+     * BinaryComparatorConstraint#explainInfeasible}, but unlike that constraint, {@link #propagate}
+     * here narrows discrete/discrete pairs too (via
      * {@link io.github.rcrida.jcsp.constraints.NumericBounds#narrow}, not just
      * {@link io.github.rcrida.jcsp.domains.BoundedDomain#withBounds}), so this method's
      * infeasible branch is reachable for plain discrete pairs as well, not only mixed
      * discrete/bounded ones.
+     * <p>
+     * An earlier version cited only whichever side was singleton via {@link
+     * Propagatable#addIfSingleton}, independently, omitting the other side entirely — unsound
+     * whenever the omitted side's current domain had been narrowed by a <em>different</em>
+     * constraint sharing it. Confirmed via a real regression: {@code QuasiGroup-7-09.xml.lzma}
+     * (whose encoding shifts index variables through this constraint before feeding them into
+     * {@link io.github.rcrida.jcsp.constraints.nary.NaryElementConstraint}) intermittently reported
+     * a false {@code UNSATISFIABLE} under CDCL search before this fix.
      */
     @Override
     public Optional<NogoodConstraint> explainInfeasible(@NonNull Map<Variable<?>, Domain<?>> domains) {
-        Map<Variable<?>, Object> reason = new HashMap<>();
-        Propagatable.addIfSingleton(domains.get(getLeft()), getLeft(), reason);
-        Propagatable.addIfSingleton(domains.get(getRight()), getRight(), reason);
-        return GroundNogoodConstraint.fromReason(reason);
+        return ValueSetNogoodConstraint.fromCurrentState(Set.of(getLeft(), getRight()), domains);
     }
 }

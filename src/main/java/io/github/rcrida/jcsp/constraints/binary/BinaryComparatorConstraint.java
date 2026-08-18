@@ -6,6 +6,7 @@ import io.github.rcrida.jcsp.constraints.NumericBounds;
 import io.github.rcrida.jcsp.constraints.Operator;
 import io.github.rcrida.jcsp.constraints.nary.GroundNogoodConstraint;
 import io.github.rcrida.jcsp.constraints.nary.NogoodConstraint;
+import io.github.rcrida.jcsp.constraints.nary.ValueSetNogoodConstraint;
 import io.github.rcrida.jcsp.domains.BoundedDomain;
 import io.github.rcrida.jcsp.domains.DiscreteDomain;
 import io.github.rcrida.jcsp.domains.Domain;
@@ -17,6 +18,7 @@ import org.jspecify.annotations.NonNull;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 
 /**
  * A binary constraint that compares two variables of the same type using an {@link Operator}:
@@ -110,10 +112,23 @@ public class BinaryComparatorConstraint<T extends Comparable<T>> extends BinaryC
     }
 
     /**
-     * When bounds narrowing empties the feasible range, attributes the conflict to whichever
-     * side already holds a singleton domain (a value pinned by earlier propagation) — the other
-     * side is omitted since no single value can be blamed for it. Empty when neither side is
-     * singleton, e.g. two open ranges with no overlap; callers fall back to the full assignment.
+     * When bounds narrowing empties the feasible range, attributes the conflict to both sides via
+     * {@link ValueSetNogoodConstraint#fromCurrentState} — a {@link GroundNogoodConstraint} when
+     * both happen to be singleton, else a {@link ValueSetNogoodConstraint} citing each side's exact
+     * current value set, else {@link Optional#empty()} when a side isn't a {@link DiscreteDomain}
+     * at all (e.g. one side is {@link BoundedDomain}; callers fall back further, e.g. to {@link
+     * io.github.rcrida.jcsp.constraints.nary.RangeNogoodConstraint#fromCurrentBounds}, or to the
+     * full assignment).
+     * <p>
+     * An earlier version of this method cited only whichever side was singleton via {@link
+     * Propagatable#addIfSingleton}, independently, omitting the other side entirely — unsound
+     * whenever the omitted side's current domain had been narrowed by a <em>different</em>
+     * constraint sharing it: the derived nogood then implicitly (and wrongly) assumed the omitted
+     * side's excluded values could never provide support in a different branch. Confirmed via a
+     * real regression: {@code QuasiGroup-7-09.xml.lzma} (whose encoding chains this constraint
+     * with {@link io.github.rcrida.jcsp.constraints.nary.NaryElementConstraint} through shifted
+     * index variables) intermittently reported a false {@code UNSATISFIABLE} under CDCL search
+     * before this fix.
      * <p>
      * This is the reference implementation of {@link Propagatable#explainInfeasible}. Its benefit
      * varies by domain-type pairing, since {@link #propagate} only narrows when the pair is
@@ -141,9 +156,6 @@ public class BinaryComparatorConstraint<T extends Comparable<T>> extends BinaryC
      */
     @Override
     public Optional<NogoodConstraint> explainInfeasible(@NonNull Map<Variable<?>, Domain<?>> domains) {
-        Map<Variable<?>, Object> reason = new HashMap<>();
-        Propagatable.addIfSingleton(domains.get(getLeft()), getLeft(), reason);
-        Propagatable.addIfSingleton(domains.get(getRight()), getRight(), reason);
-        return GroundNogoodConstraint.fromReason(reason);
+        return ValueSetNogoodConstraint.fromCurrentState(Set.of(getLeft(), getRight()), domains);
     }
 }
