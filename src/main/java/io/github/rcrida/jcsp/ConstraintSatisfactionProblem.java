@@ -70,6 +70,7 @@ import io.github.rcrida.jcsp.constraints.nary.ValueSetNogoodConstraint;
 import io.github.rcrida.jcsp.constraints.nary.SetBoundsNogoodConstraint;
 import io.github.rcrida.jcsp.constraints.nary.ProductConstraint;
 import io.github.rcrida.jcsp.constraints.nary.ProductVariableConstraint;
+import io.github.rcrida.jcsp.constraints.nary.NaryConflictTuplesConstraint;
 import io.github.rcrida.jcsp.constraints.nary.NaryStarredTuplesConstraint;
 import io.github.rcrida.jcsp.constraints.nary.NaryTuplesConstraint;
 import io.github.rcrida.jcsp.constraints.nary.SumBoundConstraint;
@@ -1605,6 +1606,18 @@ public class ConstraintSatisfactionProblem {
          */
         public ConstraintSatisfactionProblemBuilder starredTuplesConstraint(@NonNull Set<Map<Variable<?>, Object>> tuples) {
             return this.constraint(NaryStarredTuplesConstraint.of(tuples));
+        }
+
+        /**
+         * The negative-tuple sibling of {@link #tuplesConstraint}: {@code conflicts} lists
+         * forbidden combinations rather than permitted ones, with everything else implicitly
+         * allowed.
+         *
+         * @param conflicts the forbidden assignments; all must share the same variable set
+         * @return the builder
+         */
+        public ConstraintSatisfactionProblemBuilder conflictTuplesConstraint(@NonNull Set<Assignment> conflicts) {
+            return this.constraint(NaryConflictTuplesConstraint.of(conflicts));
         }
 
         /**

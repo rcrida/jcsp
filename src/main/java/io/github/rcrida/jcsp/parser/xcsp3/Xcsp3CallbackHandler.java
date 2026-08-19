@@ -32,6 +32,7 @@ import io.github.rcrida.jcsp.constraints.nary.MaxVariableConstraint;
 import io.github.rcrida.jcsp.constraints.nary.MinConstraint;
 import io.github.rcrida.jcsp.constraints.nary.MinVariableConstraint;
 import io.github.rcrida.jcsp.constraints.nary.NaryElementConstraint;
+import io.github.rcrida.jcsp.constraints.nary.NaryConflictTuplesConstraint;
 import io.github.rcrida.jcsp.constraints.nary.NaryStarredTuplesConstraint;
 import io.github.rcrida.jcsp.constraints.nary.NaryTuplesConstraint;
 import io.github.rcrida.jcsp.constraints.nary.OrderedConstraint;
@@ -577,26 +578,32 @@ final class Xcsp3CallbackHandler implements XCallbacks2 {
     // ---- extension (table) ------------------------------------------------------------------------
 
     /**
-     * {@link TypeFlag#STARRED_TUPLES} (a {@code *} entry in {@code <supports>}, surfaced here as
-     * {@code tuple[i] == Constants#STAR_INT}) routes to {@link NaryStarredTuplesConstraint} rather
-     * than being rejected or expanded: a real competition instance ({@code
-     * PrizeCollecting-15-3-5-0.xml.lzma}) uses a starred table to link a 15-element successor array
-     * to a 15-element position array with only 2-3 of 16 columns ever concrete per row, which a
-     * cross-product expansion into plain {@link NaryTuplesConstraint} tuples could never
-     * materialise. {@link TypeFlag#SMART_TUPLES} (arbitrary expressions in place of literal values)
-     * remains rejected -- unlike a plain wildcard, an expression cell isn't representable by the
-     * {@code int[]}/{@code int[][]} this class works with at all.
+     * {@link TypeFlag#STARRED_TUPLES} (a {@code *} entry in {@code <supports>}/{@code <conflicts>},
+     * surfaced here as {@code tuple[i] == Constants#STAR_INT}) routes to {@link
+     * NaryStarredTuplesConstraint} rather than being rejected or expanded: a real competition
+     * instance ({@code PrizeCollecting-15-3-5-0.xml.lzma}) uses a starred table to link a
+     * 15-element successor array to a 15-element position array with only 2-3 of 16 columns ever
+     * concrete per row, which a cross-product expansion into plain {@link NaryTuplesConstraint}
+     * tuples could never materialise -- only supported for {@code positive}, since {@link
+     * NaryConflictTuplesConstraint}'s own counting argument (see its class Javadoc) assumes each
+     * listed conflict is one concrete combination, not a star-weighted group of many; combining the
+     * two isn't attempted here. {@code positive=false} (with no stars) routes to {@link
+     * NaryConflictTuplesConstraint} instead of the old blanket rejection -- confirmed via a second
+     * real competition instance ({@code driverlogw-09.xml.lzma}, 1300+ binary conflict tables).
+     * {@link TypeFlag#SMART_TUPLES} (arbitrary expressions in place of literal values) remains
+     * rejected in every case -- unlike a plain wildcard, an expression cell isn't representable by
+     * the {@code int[]}/{@code int[][]} this class works with at all.
      */
     @Override
     public void buildCtrExtension(String id, XVarInteger[] list, int[][] tuples, boolean positive, Set<TypeFlag> flags) {
-        if (!positive) {
-            throw new UnsupportedXcsp3ConstraintException("Negative (conflict) extension tables are not supported: " + id);
-        }
         if (flags.contains(TypeFlag.SMART_TUPLES)) {
             throw new UnsupportedXcsp3ConstraintException("Smart extension tuples are not supported: " + id);
         }
         List<Variable<Integer>> vars = toVariableList(list);
         if (flags.contains(TypeFlag.STARRED_TUPLES)) {
+            if (!positive) {
+                throw new UnsupportedXcsp3ConstraintException("Starred negative (conflict) extension tuples are not supported: " + id);
+            }
             Set<Map<Variable<?>, Object>> starredTuples = new LinkedHashSet<>();
             for (int[] tuple : tuples) {
                 Map<Variable<?>, Object> tupleValues = new LinkedHashMap<>();
@@ -616,7 +623,7 @@ final class Xcsp3CallbackHandler implements XCallbacks2 {
             }
             assignments.add(Assignment.of(tupleValues));
         }
-        addOrReify(NaryTuplesConstraint.of(assignments), id);
+        addOrReify(positive ? NaryTuplesConstraint.of(assignments) : NaryConflictTuplesConstraint.of(assignments), id);
     }
 
     /**

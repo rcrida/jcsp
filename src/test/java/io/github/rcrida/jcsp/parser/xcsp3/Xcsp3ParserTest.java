@@ -269,10 +269,25 @@ class Xcsp3ParserTest {
         assertThat(solutions(instance.csp())).hasSize(2);
     }
 
-    @Test void extensionConflict_throwsUnsupported() {
+    @Test void extensionConflict_buildsConflictTuplesConstraint() throws IOException {
+        // x,y in {0,1,2}: 9 combinations total, minus the single listed conflict (0,0) -> 8 solutions.
+        Xcsp3Instance instance = parseXml(
+                "<var id=\"x\"> 0..2 </var><var id=\"y\"> 0..2 </var>",
+                "<extension><list> x y </list><conflicts> (0,0) </conflicts></extension>");
+        Set<Assignment> found = solutions(instance.csp());
+        assertThat(found).hasSize(8);
+        for (Assignment a : found) {
+            assertThat(digitOf(a, "x") == 0 && digitOf(a, "y") == 0).isFalse();
+        }
+    }
+
+    @Test void extensionStarredConflict_throwsUnsupported() {
+        // NaryConflictTuplesConstraint's counting argument assumes each listed conflict is one
+        // concrete combination, not a star-weighted group of many -- combining STARRED_TUPLES with
+        // positive="false" isn't attempted, unlike the plain (non-starred) conflict case above.
         assertThatThrownBy(() -> parseXml(
                 "<var id=\"x\"> 0..2 </var><var id=\"y\"> 0..2 </var>",
-                "<extension><list> x y </list><conflicts> (0,0) </conflicts></extension>"))
+                "<extension><list> x y </list><conflicts> (0,*) </conflicts></extension>"))
                 .isInstanceOf(UnsupportedXcsp3ConstraintException.class);
     }
 
@@ -307,10 +322,12 @@ class Xcsp3ParserTest {
     }
 
     @Test void unaryExtensionNegative_excludesListedValues() throws IOException {
-        // Unlike the n-ary conflict-table form (rejected -- see extensionConflict_throwsUnsupported
-        // -- since materializing its complement over several variables could blow up
-        // combinatorially), a unary restriction is just a predicate over one variable's own domain,
-        // so negation is cheap and safe to support directly.
+        // A unary restriction is just a predicate over one variable's own domain, so it maps onto
+        // UnaryPredicateConstraint directly rather than the n-ary NaryConflictTuplesConstraint form
+        // (see extensionConflict_buildsConflictTuplesConstraint) -- functionally equivalent for
+        // arity 1, but a genuine UnaryConstraint is eligible for NodeConsistency's preprocessing
+        // pass the way an ordinary NaryConstraint is not, the same reasoning the unary positive form
+        // above already documents.
         Xcsp3Instance instance = parseXml(
                 "<var id=\"x\"> 0..3 </var>",
                 "<extension><list> x </list><conflicts> 1 2 </conflicts></extension>");
