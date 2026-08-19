@@ -69,6 +69,7 @@ import io.github.rcrida.jcsp.constraints.nary.RangeNogoodConstraint;
 import io.github.rcrida.jcsp.constraints.nary.ValueSetNogoodConstraint;
 import io.github.rcrida.jcsp.constraints.nary.SetBoundsNogoodConstraint;
 import io.github.rcrida.jcsp.constraints.nary.ProductConstraint;
+import io.github.rcrida.jcsp.constraints.nary.ProductVariableConstraint;
 import io.github.rcrida.jcsp.constraints.nary.NaryTuplesConstraint;
 import io.github.rcrida.jcsp.constraints.nary.SumBoundConstraint;
 import io.github.rcrida.jcsp.constraints.nary.SumVariableConstraint;
@@ -1323,6 +1324,23 @@ public class ConstraintSatisfactionProblem {
          */
         public <N extends Number> ConstraintSatisfactionProblemBuilder productConstraint(@NonNull Set<Variable<N>> variables, @NonNull Operator operator, @NonNull N bound) {
             return this.constraint(ProductConstraint.of(variables, operator, bound));
+        }
+
+        /**
+         * As {@link #productConstraint(Set, Operator, Number)}, but the bound is itself a variable
+         * rather than a fixed value: {@code v1 * v2 * ... * vn op target}. Same overload shape as
+         * {@link #maxConstraint(Set, Operator, Number)}/{@link #maxConstraint(Set, Operator, Variable)}
+         * -- {@code N} and {@code Variable<N>} erase to different raw types ({@code Number} vs.
+         * {@code Variable}), so no distinct name is needed the way {@code Map}-valued overloads
+         * elsewhere in this class require.
+         *
+         * @param variables the numeric variables to multiply
+         * @param operator  the comparison operator (e.g. {@link Operator#EQ}, {@link Operator#LEQ})
+         * @param target    the variable to compare the product against
+         * @return the builder
+         */
+        public <N extends Number> ConstraintSatisfactionProblemBuilder productConstraint(@NonNull Set<Variable<N>> variables, @NonNull Operator operator, @NonNull Variable<N> target) {
+            return this.constraint(ProductVariableConstraint.of(variables, operator, target));
         }
 
         /**
