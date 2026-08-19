@@ -2,6 +2,7 @@ package io.github.rcrida.jcsp.parser.xcsp3;
 
 import io.github.rcrida.jcsp.ConstraintSatisfactionProblem;
 import io.github.rcrida.jcsp.assignments.Assignment;
+import io.github.rcrida.jcsp.assignments.Statistics;
 import io.github.rcrida.jcsp.solver.BoundSolver;
 import io.github.rcrida.jcsp.solver.BranchAndBoundSolver;
 import io.github.rcrida.jcsp.solver.Cancellation;
@@ -55,12 +56,20 @@ public final class Xcsp3ProblemRunner {
         }
     }
 
+    /**
+     * {@code stats} is printed as a {@code c} (comment) line after the result, regardless of
+     * outcome (SAT, UNSAT, UNKNOWN, or OPTIMUM FOUND) -- {@code c}-prefixed lines are the standard
+     * SAT/CP competition convention for extra, parser-ignorable information alongside the {@code
+     * s}/{@code o}/{@code v} status lines, so this doesn't change this class's own output contract.
+     */
     static void solve(Xcsp3Instance instance, Cancellation cancellation, SolverListener listener, PrintStream out) {
+        Statistics stats = new Statistics();
         if (instance.objective() == null) {
-            solveSatisfaction(instance, cancellation, listener, out);
+            solveSatisfaction(instance, cancellation, listener, stats, out);
         } else {
-            solveOptimization(instance, cancellation, listener, out);
+            solveOptimization(instance, cancellation, listener, stats, out);
         }
+        out.println("c stats: " + stats);
     }
 
     /**
@@ -71,8 +80,8 @@ public final class Xcsp3ProblemRunner {
      * {@link Optional#empty()}, indistinguishable here from genuine {@code UNSATISFIABLE}. Only the
      * thrown case is reported as {@code UNKNOWN}.
      */
-    private static void solveSatisfaction(Xcsp3Instance instance, Cancellation cancellation, SolverListener listener, PrintStream out) {
-        SolverConfig config = SolverConfig.builder().cancellation(cancellation).listener(listener).build();
+    private static void solveSatisfaction(Xcsp3Instance instance, Cancellation cancellation, SolverListener listener, Statistics stats, PrintStream out) {
+        SolverConfig config = SolverConfig.builder().cancellation(cancellation).listener(listener).statistics(stats).build();
         BoundSolver solver = Solver.Factory.INSTANCE.createSolver(instance.csp(), config);
         try {
             Optional<Assignment> solution = solver.getSolution();
@@ -94,8 +103,8 @@ public final class Xcsp3ProblemRunner {
      * the last improving solution is a genuine, search-complete optimum ({@code OPTIMUM FOUND})
      * rather than just the best incumbent found before time ran out ({@code SATISFIABLE}).
      */
-    private static void solveOptimization(Xcsp3Instance instance, Cancellation cancellation, SolverListener listener, PrintStream out) {
-        SolverConfig config = SolverConfig.builder().cancellation(cancellation).listener(listener).build();
+    private static void solveOptimization(Xcsp3Instance instance, Cancellation cancellation, SolverListener listener, Statistics stats, PrintStream out) {
+        SolverConfig config = SolverConfig.builder().cancellation(cancellation).listener(listener).statistics(stats).build();
         BoundSolver solver = Solver.Factory.INSTANCE.createSolver(instance.csp(), instance.objective(), config);
         List<Assignment> improving = solver.getSolutions().collect(Collectors.toList());
         boolean provenOptimal = !cancellation.isCancelled();

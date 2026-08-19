@@ -71,12 +71,12 @@ public final class Xcsp3CompetitionRunner {
         try (Stream<Path> files = Files.list(directory)) {
             instances = files.filter(Xcsp3CompetitionRunner::isXcsp3Instance).sorted().toList();
         }
-        out.printf("%-40s %-10s %s%n", "Instance", "Time(s)", "Result");
+        out.printf("%-40s %-10s %-20s %s%n", "Instance", "Time(s)", "Result", "Statistics");
         out.println("-".repeat(90));
         int solved = 0, unknown = 0, failed = 0;
         for (Path instance : instances) {
             Result result = runOne(instance, timeLimitSeconds);
-            out.printf("%-40s %-10.2f %s%n", instanceName(instance), result.elapsedSeconds(), result.summary());
+            out.printf("%-40s %-10.2f %-20s %s%n", instanceName(instance), result.elapsedSeconds(), result.summary(), result.statsLine());
             switch (category(result.summary())) {
                 case SOLVED -> solved++;
                 case UNKNOWN -> unknown++;
@@ -92,7 +92,7 @@ public final class Xcsp3CompetitionRunner {
         return name.endsWith(".xml") || name.endsWith(".xml.lzma");
     }
 
-    private record Result(double elapsedSeconds, String summary) {}
+    private record Result(double elapsedSeconds, String summary, String statsLine) {}
 
     private enum Category {SOLVED, UNKNOWN, FAILED}
 
@@ -136,10 +136,10 @@ public final class Xcsp3CompetitionRunner {
         double elapsedSeconds = (System.nanoTime() - startNanos) / 1_000_000_000.0;
         if (!finished) {
             process.destroyForcibly();
-            return new Result(elapsedSeconds, "HUNG (killed after " + elapsedSeconds + "s)");
+            return new Result(elapsedSeconds, "HUNG (killed after " + elapsedSeconds + "s)", "(no stats -- process killed)");
         }
         String output = new String(process.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
-        return new Result(elapsedSeconds, firstResultLine(output));
+        return new Result(elapsedSeconds, firstResultLine(output), statsLine(output));
     }
 
     private static String firstResultLine(String output) {
@@ -147,6 +147,21 @@ public final class Xcsp3CompetitionRunner {
                 .filter(line -> line.startsWith("s ") || line.contains("Exception"))
                 .findFirst()
                 .orElse("NO OUTPUT");
+    }
+
+    /**
+     * {@link Xcsp3ProblemRunner#solve} always prints exactly one {@code c stats: ...} line as its
+     * last line of output, regardless of outcome (SAT, UNSAT, UNKNOWN, or OPTIMUM FOUND) -- the one
+     * case that line is genuinely absent is a raw, uncaught exception (e.g. {@code
+     * UnsupportedXcsp3ConstraintException} from the parser) thrown before {@link
+     * Xcsp3ProblemRunner#solve} is ever reached, which {@link #firstResultLine} already reports via
+     * its own {@code Exception} match instead.
+     */
+    private static String statsLine(String output) {
+        return output.lines()
+                .filter(line -> line.startsWith("c stats: "))
+                .findFirst()
+                .orElse("(no stats)");
     }
 
     private static String instanceName(Path instance) {

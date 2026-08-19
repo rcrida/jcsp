@@ -64,7 +64,7 @@ class Xcsp3ProblemRunnerTest {
         Xcsp3ProblemRunner.solve(instance, Cancellation.NEVER, SolverListener.NONE, printStreamInto(buffer));
 
         String output = buffer.toString(StandardCharsets.UTF_8);
-        assertThat(output).contains("s SATISFIABLE").contains("v x=");
+        assertThat(output).contains("s SATISFIABLE").contains("v x=").contains("c stats: Statistics(");
     }
 
     @Test void satisfaction_infeasibleProblem_reportsUnsatisfiable() {
@@ -79,7 +79,9 @@ class Xcsp3ProblemRunnerTest {
         ByteArrayOutputStream buffer = new ByteArrayOutputStream();
         Xcsp3ProblemRunner.solve(instance, Cancellation.NEVER, SolverListener.NONE, printStreamInto(buffer));
 
-        assertThat(buffer.toString(StandardCharsets.UTF_8).strip()).isEqualTo("s UNSATISFIABLE");
+        List<String> lines = buffer.toString(StandardCharsets.UTF_8).lines().toList();
+        assertThat(lines.get(0)).isEqualTo("s UNSATISFIABLE");
+        assertThat(lines.get(1)).startsWith("c stats: Statistics(");
     }
 
     @Test void satisfaction_cancelledBeforeSearchCompletes_reportsUnknown() {
@@ -110,7 +112,9 @@ class Xcsp3ProblemRunnerTest {
         ByteArrayOutputStream buffer = new ByteArrayOutputStream();
         Xcsp3ProblemRunner.solve(instance, cancellation, cancelOnFirstNode, printStreamInto(buffer));
 
-        assertThat(buffer.toString(StandardCharsets.UTF_8).strip()).isEqualTo("s UNKNOWN");
+        List<String> lines = buffer.toString(StandardCharsets.UTF_8).lines().toList();
+        assertThat(lines.get(0)).isEqualTo("s UNKNOWN");
+        assertThat(lines.get(1)).startsWith("c stats: Statistics(");
     }
 
     // ---- optimization chain -------------------------------------------------------------------------------------
@@ -127,7 +131,7 @@ class Xcsp3ProblemRunnerTest {
         Xcsp3ProblemRunner.solve(instance, Cancellation.NEVER, SolverListener.NONE, printStreamInto(buffer));
 
         String output = buffer.toString(StandardCharsets.UTF_8);
-        assertThat(output).contains("o 1").contains("s OPTIMUM FOUND").contains("v x=1");
+        assertThat(output).contains("o 1").contains("s OPTIMUM FOUND").contains("v x=1").contains("c stats: Statistics(");
     }
 
     @Test void optimization_infeasibleProblem_reportsUnsatisfiable() {
@@ -143,7 +147,9 @@ class Xcsp3ProblemRunnerTest {
         ByteArrayOutputStream buffer = new ByteArrayOutputStream();
         Xcsp3ProblemRunner.solve(instance, Cancellation.NEVER, SolverListener.NONE, printStreamInto(buffer));
 
-        assertThat(buffer.toString(StandardCharsets.UTF_8).strip()).isEqualTo("s UNSATISFIABLE");
+        List<String> lines = buffer.toString(StandardCharsets.UTF_8).lines().toList();
+        assertThat(lines.get(0)).isEqualTo("s UNSATISFIABLE");
+        assertThat(lines.get(1)).startsWith("c stats: Statistics(");
     }
 
     @Test void optimization_cancelledBeforeAnySolutionFound_reportsUnknown() {
@@ -159,7 +165,9 @@ class Xcsp3ProblemRunnerTest {
         ByteArrayOutputStream buffer = new ByteArrayOutputStream();
         Xcsp3ProblemRunner.solve(instance, cancellation, SolverListener.NONE, printStreamInto(buffer));
 
-        assertThat(buffer.toString(StandardCharsets.UTF_8).strip()).isEqualTo("s UNKNOWN");
+        List<String> lines = buffer.toString(StandardCharsets.UTF_8).lines().toList();
+        assertThat(lines.get(0)).isEqualTo("s UNKNOWN");
+        assertThat(lines.get(1)).startsWith("c stats: Statistics(");
     }
 
     @Test void optimization_cancelledAfterFirstIncumbent_reportsSatisfiableNotProvenOptimal() {
