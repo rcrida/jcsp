@@ -67,6 +67,7 @@ import org.xcsp.parser.entries.XConstraints.XCtr;
 import org.xcsp.parser.entries.XConstraints.XReification;
 import org.xcsp.parser.entries.XVariables.XVarInteger;
 
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.LinkedHashMap;
@@ -1039,6 +1040,50 @@ final class Xcsp3CallbackHandler implements XCallbacks2 {
             conjuncts.add(LexConstraint.of(toVariableList(lists[i]), op, toVariableList(lists[i + 1])));
         }
         addOrReify(AndConstraint.of(conjuncts), id);
+    }
+
+    /**
+     * {@code lexMatrix}: every consecutive pair of rows, and every consecutive pair of columns, must
+     * satisfy {@code operator} under lex ordering -- the matrix analogue of {@link #buildCtrLex}'s
+     * multi-list decomposition (order matters, so columns are collected into a {@link List} the same
+     * shape as a row, not a {@link Set} the way {@link #buildCtrAllDifferentMatrix}'s columns are).
+     * Unreified, each pairwise {@link LexConstraint} is added directly (same reasoning as {@link
+     * #buildCtrAllDifferentMatrix}/{@link #buildCtrLex}'s own unreified cases); reified, the set is
+     * wrapped in one {@link AndConstraint} before routing through {@link #addOrReify}.
+     */
+    @Override
+    public void buildCtrLexMatrix(String id, XVarInteger[][] matrix, TypeOperatorRel operator) {
+        Operator op = mapOrderingOperator(operator);
+        List<List<Variable<Integer>>> rows = Arrays.stream(matrix).map(this::toVariableList).toList();
+        List<List<Variable<Integer>>> columns = new ArrayList<>();
+        for (int col = 0; col < matrix[0].length; col++) {
+            columns.add(lexMatrixColumn(matrix, col));
+        }
+        if (currentReification == null) {
+            for (int i = 0; i + 1 < rows.size(); i++) {
+                builder.constraint(LexConstraint.of(rows.get(i), op, rows.get(i + 1)));
+            }
+            for (int i = 0; i + 1 < columns.size(); i++) {
+                builder.constraint(LexConstraint.of(columns.get(i), op, columns.get(i + 1)));
+            }
+            return;
+        }
+        Set<Constraint> conjuncts = new LinkedHashSet<>();
+        for (int i = 0; i + 1 < rows.size(); i++) {
+            conjuncts.add(LexConstraint.of(rows.get(i), op, rows.get(i + 1)));
+        }
+        for (int i = 0; i + 1 < columns.size(); i++) {
+            conjuncts.add(LexConstraint.of(columns.get(i), op, columns.get(i + 1)));
+        }
+        addOrReify(AndConstraint.of(conjuncts), id);
+    }
+
+    private List<Variable<Integer>> lexMatrixColumn(XVarInteger[][] matrix, int col) {
+        List<Variable<Integer>> column = new ArrayList<>();
+        for (XVarInteger[] row : matrix) {
+            column.add(variableFor(row[col]));
+        }
+        return column;
     }
 
     // ---- cumulative -------------------------------------------------------------------------------------------

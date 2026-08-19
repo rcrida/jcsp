@@ -356,6 +356,43 @@ class Xcsp3ParserTest {
         assertThat(trueCount).isEqualTo(2); // [[0,1],[1,0]] and [[1,0],[0,1]]
     }
 
+    @Test void lexMatrix_buildsRowAndColumnLexConstraints() throws IOException {
+        // 2x2 matrix over {0,1}: rows must be pairwise lex<=, and so must columns.
+        Xcsp3Instance instance = parseXml(
+                "<array id=\"x\" size=\"[2][2]\"> 0..1 </array>",
+                "<lex><matrix> x[][] </matrix><operator> le </operator></lex>");
+        Set<Assignment> solutions = solutions(instance.csp());
+        assertThat(solutions).isNotEmpty();
+        for (Assignment a : solutions) {
+            int x00 = digitOf(a, "x[0][0]");
+            int x01 = digitOf(a, "x[0][1]");
+            int x10 = digitOf(a, "x[1][0]");
+            int x11 = digitOf(a, "x[1][1]");
+            boolean rowsLex = x00 < x10 || (x00 == x10 && x01 <= x11);
+            boolean colsLex = x00 < x01 || (x00 == x01 && x10 <= x11);
+            assertThat(rowsLex).as("rows [%d,%d] <= [%d,%d]", x00, x01, x10, x11).isTrue();
+            assertThat(colsLex).as("cols [%d,%d] <= [%d,%d]", x00, x10, x01, x11).isTrue();
+        }
+    }
+
+    @Test void lexMatrixReified_indicatorTracksConstraintTruthValue() throws IOException {
+        Xcsp3Instance instance = parseXml(
+                "<array id=\"x\" size=\"[2][2]\"> 0..1 </array><var id=\"b\"> 0..1 </var>",
+                "<lex reifiedBy=\"b\"><matrix> x[][] </matrix><operator> le </operator></lex>");
+        for (Assignment a : solutions(instance.csp())) {
+            int x00 = digitOf(a, "x[0][0]");
+            int x01 = digitOf(a, "x[0][1]");
+            int x10 = digitOf(a, "x[1][0]");
+            int x11 = digitOf(a, "x[1][1]");
+            boolean rowsLex = x00 < x10 || (x00 == x10 && x01 <= x11);
+            boolean colsLex = x00 < x01 || (x00 == x01 && x10 <= x11);
+            int b = digitOf(a, "b");
+            assertThat(b == 1).as("matrix=[[%d,%d],[%d,%d]], b=%d", x00, x01, x10, x11, b)
+                    .isEqualTo(rowsLex && colsLex);
+        }
+        assertThat(solutions(instance.csp())).isNotEmpty();
+    }
+
     @Test void allDifferentList_buildsDistinctVectorsConstraint() throws IOException {
         // 3 lists of 2 booleans -- 4 possible 2-bit vectors, need all 3 pairwise distinct:
         // 4*3*2 = 24 injective assignments of 3 lists to 4 distinct values.
