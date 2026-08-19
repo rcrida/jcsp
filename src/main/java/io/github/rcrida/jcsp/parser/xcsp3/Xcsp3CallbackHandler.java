@@ -425,7 +425,13 @@ final class Xcsp3CallbackHandler implements XCallbacks2 {
     // variablesByName, which registerVariable always populates in lockstep with boundsByName, so a
     // variable present in one is guaranteed present in the other too.
     private boolean isBooleanDomain(Variable<Integer> variable) {
-        int[] bounds = boundsByName.get(variable.getName());
+        return isBooleanBounds(boundsByName.get(variable.getName()));
+    }
+
+    // Shared by isBooleanDomain (looks up bounds by Variable) and productOfPair (which already has
+    // both operands' bounds in hand from its own lo/hi interval-arithmetic computation, so looking
+    // them up a second time by variable would be redundant).
+    private static boolean isBooleanBounds(int[] bounds) {
         return bounds[0] == 0 && bounds[1] == 1;
     }
 
@@ -842,6 +848,21 @@ final class Xcsp3CallbackHandler implements XCallbacks2 {
         applySumCondition(products, condition, id);
     }
 
+    /**
+     * When both factors are confirmed {@code {0,1}}-domain, builds a {@link MinVariableConstraint}
+     * instead of a {@link ProductVariableConstraint} for exactly the same reason {@link
+     * #recognizeBooleanProductChannel} does on the {@code intension} side: {@code a*b ==
+     * min(a,b)} for every value in that domain, and {@link ProductVariableConstraint}'s
+     * interval-arithmetic propagation bails whenever a factor's domain minimum is {@code <= 0} --
+     * true of every 0/1 variable -- so it would silently give zero propagation here otherwise.
+     * Confirmed via a real XCSP3 competition instance ({@code Bibd-sum-06-050-25-03-10.xml.lzma}):
+     * the same BIBD design as {@code Bibd-sc-06-050-25-03-10} (see {@link
+     * #recognizeBooleanProductChannel}'s own Javadoc), but with its pairwise block-intersection
+     * (lambda) constraints expressed as a variable-coefficient {@code sum} directly -- {@code
+     * Σ_k x[i][k]*x[j][k] == lambda} -- rather than via an auxiliary channeling tensor, so this
+     * method (not {@code recognizeBooleanProductChannel}) is the one that needs strengthening for
+     * that instance's 750 boolean product terms.
+     */
     private Variable<Integer> productOfPair(XVarInteger a, XVarInteger b, String id, int index) {
         Variable<Integer> varA = variableFor(a);
         Variable<Integer> varB = variableFor(b);
@@ -853,7 +874,10 @@ final class Xcsp3CallbackHandler implements XCallbacks2 {
         int hi = Math.max(Math.max(p1, p2), Math.max(p3, p4));
         Variable<Integer> product = Variable.Factory.INSTANCE.create(id + "$product" + index);
         builder.variableDomain(product, IntRangeDomain.of(lo, hi));
-        builder.constraint(ProductVariableConstraint.of(Set.of(varA, varB), Operator.EQ, product));
+        Constraint productConstraint = isBooleanBounds(boundsA) && isBooleanBounds(boundsB)
+                ? MinVariableConstraint.of(Set.of(varA, varB), Operator.EQ, product)
+                : ProductVariableConstraint.of(Set.of(varA, varB), Operator.EQ, product);
+        builder.constraint(productConstraint);
         return product;
     }
 

@@ -6,6 +6,7 @@ import io.github.rcrida.jcsp.constraints.binary.BinaryComparatorConstraint;
 import io.github.rcrida.jcsp.constraints.binary.BinaryOffsetConstraint;
 import io.github.rcrida.jcsp.constraints.nary.MinVariableConstraint;
 import io.github.rcrida.jcsp.constraints.nary.PredicateConstraint;
+import io.github.rcrida.jcsp.constraints.nary.ProductVariableConstraint;
 import io.github.rcrida.jcsp.constraints.unary.UnaryPredicateConstraint;
 import io.github.rcrida.jcsp.solver.Solver;
 import io.github.rcrida.jcsp.variables.Variable;
@@ -607,6 +608,50 @@ class Xcsp3ParserTest {
         for (Assignment a : solutions) {
             int total = digitOf(a, "x") * digitOf(a, "c1") + digitOf(a, "y") * digitOf(a, "c2");
             assertThat(total).isEqualTo(10);
+        }
+    }
+
+    @Test void sumVariableCoefficients_booleanOperands_decomposesIntoMinVariableConstraints() throws IOException {
+        // Both list and coeffVars are {0,1} -- x[i]*c[i] == min(x[i],c[i]) exactly for every value,
+        // so productOfPair should route through MinVariableConstraint instead of
+        // ProductVariableConstraint (which bails on propagation whenever a factor's domain minimum
+        // is <= 0, true of every 0/1 variable) -- the same reasoning
+        // recognizeBooleanProductChannel applies on the intension side. Confirmed against a real
+        // XCSP3 competition instance (Bibd-sum-06-050-25-03-10.xml.lzma), whose pairwise
+        // block-intersection constraints are exactly this shape at scale (15 pairs x 50 positions).
+        Xcsp3Instance instance = parseXml(
+                "<var id=\"x\"> 0 1 </var><var id=\"y\"> 0 1 </var><var id=\"c1\"> 0 1 </var><var id=\"c2\"> 0 1 </var>",
+                "<sum><list> x y </list><coeffs> c1 c2 </coeffs><condition> (eq,1) </condition></sum>");
+        assertThat(instance.csp().getConstraints()).anyMatch(MinVariableConstraint.class::isInstance);
+        assertThat(instance.csp().getConstraints()).noneMatch(ProductVariableConstraint.class::isInstance);
+        Set<Assignment> solutions = solutions(instance.csp());
+        assertThat(solutions).isNotEmpty();
+        for (Assignment a : solutions) {
+            int total = digitOf(a, "x") * digitOf(a, "c1") + digitOf(a, "y") * digitOf(a, "c2");
+            assertThat(total).isEqualTo(1);
+        }
+    }
+
+    @Test void sumVariableCoefficients_mixedBooleanAndNonBooleanOperands_perPositionRoutingDiffers() throws IOException {
+        // Position 0 (x,c1) is boolean-boolean -> MinVariableConstraint. Position 1 (y,c2): y's own
+        // domain 0..2 is non-boolean, so productOfPair's isBooleanBounds(boundsA) check alone is
+        // already false -> ProductVariableConstraint. Position 2 (z,c3): z is boolean but c3's
+        // domain 0..2 isn't -> isBooleanBounds(boundsA) is true this time, only
+        // isBooleanBounds(boundsB) is false -> ProductVariableConstraint via the other operand.
+        // Exercises that the boolean check in productOfPair is genuinely per-position, not an
+        // all-or-nothing decision for the whole sum, and covers both operands of the check
+        // independently failing.
+        Xcsp3Instance instance = parseXml(
+                "<var id=\"x\"> 0 1 </var><var id=\"y\"> 0..2 </var><var id=\"z\"> 0 1 </var>"
+                        + "<var id=\"c1\"> 0 1 </var><var id=\"c2\"> 0..2 </var><var id=\"c3\"> 0..2 </var>",
+                "<sum><list> x y z </list><coeffs> c1 c2 c3 </coeffs><condition> (eq,2) </condition></sum>");
+        assertThat(instance.csp().getConstraints()).anyMatch(MinVariableConstraint.class::isInstance);
+        assertThat(instance.csp().getConstraints()).anyMatch(ProductVariableConstraint.class::isInstance);
+        Set<Assignment> solutions = solutions(instance.csp());
+        assertThat(solutions).isNotEmpty();
+        for (Assignment a : solutions) {
+            int total = digitOf(a, "x") * digitOf(a, "c1") + digitOf(a, "y") * digitOf(a, "c2") + digitOf(a, "z") * digitOf(a, "c3");
+            assertThat(total).isEqualTo(2);
         }
     }
 
