@@ -5,6 +5,7 @@ import io.github.rcrida.jcsp.assignments.Assignment;
 import io.github.rcrida.jcsp.constraints.binary.BinaryComparatorConstraint;
 import io.github.rcrida.jcsp.constraints.binary.BinaryOffsetConstraint;
 import io.github.rcrida.jcsp.constraints.nary.PredicateConstraint;
+import io.github.rcrida.jcsp.constraints.unary.UnaryPredicateConstraint;
 import io.github.rcrida.jcsp.solver.Solver;
 import io.github.rcrida.jcsp.variables.Variable;
 import org.junit.jupiter.api.Test;
@@ -1609,6 +1610,21 @@ class Xcsp3ParserTest {
         for (Assignment a : solutions) {
             assertThat(digitOf(a, "z")).isEqualTo(digitOf(a, "x") * 2 + 5);
         }
+    }
+
+    @Test void intensionOverSingleVariable_routesThroughUnaryPredicateConstraint() throws IOException {
+        // eq(x,5): a bare variable-vs-constant relation, not variable-vs-variable or
+        // variable-vs-add(var,const), so recognizeBinaryRelation doesn't match -- but with only one
+        // variable in scope, genericIntensionConstraint routes it through UnaryPredicateConstraint
+        // (a real UnaryConstraint, eligible for NodeConsistency's own preprocessing) rather than
+        // the n-ary PredicateConstraint every other fallback case here uses.
+        Xcsp3Instance instance = parseXml(
+                "<var id=\"x\"> 0..9 </var>",
+                "<intension> eq(x,5) </intension>");
+        assertThat(instance.csp().getConstraints().iterator().next()).isInstanceOf(UnaryPredicateConstraint.class);
+        Optional<Assignment> solution = Solver.Factory.INSTANCE.createSolver(instance.csp()).getSolution();
+        assertThat(solution).isPresent();
+        assertThat(digitOf(solution.get(), "x")).isEqualTo(5);
     }
 
     @Test void intensionBinaryComparisonReified_indicatorTracksConstraintTruthValue() throws IOException {

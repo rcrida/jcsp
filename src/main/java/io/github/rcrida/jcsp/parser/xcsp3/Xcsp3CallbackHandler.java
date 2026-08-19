@@ -75,6 +75,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.function.Predicate;
 import java.util.function.ToDoubleFunction;
 import java.util.stream.Collectors;
 
@@ -340,14 +341,32 @@ final class Xcsp3CallbackHandler implements XCallbacks2 {
      * instead of the generic {@link PredicateConstraint}, since those already have real
      * bounds-consistency propagation where {@link PredicateConstraint} has none (only checked once
      * every variable is assigned). Everything else -- deeper nesting, more than two operands, a
-     * non-relational root -- falls back to {@link PredicateConstraint} unchanged; recognition
-     * failure is always safe, just less propagated, never incorrect.
+     * non-relational root -- falls back to {@link #genericIntensionConstraint}; recognition failure
+     * is always safe, just less propagated, never incorrect.
      */
     @Override
     public void buildCtrIntension(String id, XVarInteger[] list, XNodeParent<XVarInteger> tree) {
-        addOrReify(recognizeBinaryRelation(tree).orElseGet(() ->
-                PredicateConstraint.builder().variables(toVariableSet(list))
-                        .predicate(IntensionExpressionEvaluator.toPredicate(tree, variablesByName)).build()), id);
+        addOrReify(recognizeBinaryRelation(tree).orElseGet(() -> genericIntensionConstraint(list, tree)), id);
+    }
+
+    /**
+     * A genuinely single-variable intension (e.g. a bare {@code eq(x,5)}, unreachable by {@link
+     * #recognizeBinaryRelation} since neither side is a plain variable-vs-variable or
+     * variable-vs-{@code add(var,const)} shape) routes through {@link UnaryPredicateConstraint}
+     * rather than {@link PredicateConstraint} -- same reasoning as {@link #buildCtrExtension(String,
+     * XVarInteger, int[], boolean, Set)}'s unary form: a real {@code UnaryConstraint} is eligible
+     * for {@link io.github.rcrida.jcsp.consistency.node.NodeConsistency}'s domain-pruning
+     * preprocessing, where an n-ary {@link PredicateConstraint} (even over one variable) is not.
+     * Everything with two or more distinct variables keeps using {@link PredicateConstraint}.
+     */
+    private Constraint genericIntensionConstraint(XVarInteger[] list, XNodeParent<XVarInteger> tree) {
+        Predicate<Assignment> predicate = IntensionExpressionEvaluator.toPredicate(tree, variablesByName);
+        if (list.length == 1) {
+            Variable<Integer> variable = variableFor(list[0]);
+            return UnaryPredicateConstraint.of(variable,
+                    (Integer value) -> predicate.test(Assignment.of(Map.of(variable, value))));
+        }
+        return PredicateConstraint.builder().variables(toVariableSet(list)).predicate(predicate).build();
     }
 
     private Optional<Constraint> recognizeBinaryRelation(XNode<XVarInteger> node) {
