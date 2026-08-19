@@ -23,6 +23,7 @@ import io.github.rcrida.jcsp.constraints.nary.CumulativeConstraint;
 import io.github.rcrida.jcsp.constraints.nary.DiffnVariableConstraint;
 import io.github.rcrida.jcsp.constraints.nary.DistinctVectorsConstraint;
 import io.github.rcrida.jcsp.constraints.nary.GlobalCardinalityConstraint;
+import io.github.rcrida.jcsp.constraints.nary.GlobalCardinalityVariableConstraint;
 import io.github.rcrida.jcsp.constraints.nary.InverseConstraint;
 import io.github.rcrida.jcsp.constraints.nary.LexConstraint;
 import io.github.rcrida.jcsp.constraints.nary.MaxConstraint;
@@ -752,9 +753,29 @@ final class Xcsp3CallbackHandler implements XCallbacks2 {
         addOrReify(GlobalCardinalityConstraint.of(toVariableSet(list), cardinalities), id);
     }
 
+    /**
+     * Fixed values, but the occurrence count of each is itself a variable -- distinct from both the
+     * exact-count ({@code int[] occurs}) and range-count ({@code int[] occursMin, occursMax}) forms
+     * above, and unlike those two, {@link GlobalCardinalityConstraint} has no variable-target form
+     * to route through. Maps directly onto {@link GlobalCardinalityVariableConstraint} -- a single
+     * object covering every tracked value jointly (see that class's own Javadoc for why a
+     * per-value {@link CountVariableConstraint} decomposition would reintroduce the joint-
+     * infeasibility blind spot ADR-0016 fixed for the fixed-count case), so unlike {@link
+     * #buildCtrLexMatrix}/{@link #buildCtrAllDifferentMatrix} this needs no {@link AndConstraint}
+     * wrapping for reification either. {@code occurs} may (harmlessly) reference the same variables
+     * as {@code list} itself -- e.g. a "magic sequence" where {@code occurs == list}.
+     */
     @Override
     public void buildCtrCardinality(String id, XVarInteger[] list, boolean closed, int[] values, XVarInteger[] occurs) {
-        throw new UnsupportedXcsp3ConstraintException("cardinality with variable occurrence counts is not supported: " + id);
+        if (closed && !closedCoveredByEveryDomain(list, values)) {
+            throw new UnsupportedXcsp3ConstraintException(
+                    "closed cardinality referencing a value outside some variable's domain is not supported: " + id);
+        }
+        Map<Integer, Variable<Integer>> targets = new LinkedHashMap<>();
+        for (int i = 0; i < values.length; i++) {
+            targets.put(values[i], variableFor(occurs[i]));
+        }
+        addOrReify(GlobalCardinalityVariableConstraint.of(toVariableSet(list), targets), id);
     }
 
     @Override

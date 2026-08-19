@@ -587,13 +587,83 @@ class Xcsp3ParserTest {
                 .isInstanceOf(UnsupportedXcsp3ConstraintException.class);
     }
 
-    @Test void cardinalityWithVariableOccurs_throwsUnsupported() {
-        assertThatThrownBy(() -> parseXml(
+    @Test void cardinalityWithVariableOccurs_buildsGlobalCardinalityVariableConstraint() throws IOException {
+        // Fixed values, but each occurrence count is itself a variable -- one
+        // GlobalCardinalityVariableConstraint covering every tracked value jointly:
+        // count(list,1)==o1, count(list,2)==o2, count(list,3)==o3.
+        Xcsp3Instance instance = parseXml(
                 "<var id=\"x1\"> 1..3 </var><var id=\"x2\"> 1..3 </var><var id=\"x3\"> 1..3 </var>"
                         + "<var id=\"o1\"> 0..3 </var><var id=\"o2\"> 0..3 </var><var id=\"o3\"> 0..3 </var>",
                 "<cardinality><list> x1 x2 x3 </list><values closed=\"false\"> 1 2 3 </values>"
+                        + "<occurs> o1 o2 o3 </occurs></cardinality>");
+        Set<Assignment> solutions = solutions(instance.csp());
+        assertThat(solutions).isNotEmpty();
+        for (Assignment a : solutions) {
+            long count1 = java.util.stream.Stream.of("x1", "x2", "x3").filter(n -> digitOf(a, n) == 1).count();
+            long count2 = java.util.stream.Stream.of("x1", "x2", "x3").filter(n -> digitOf(a, n) == 2).count();
+            long count3 = java.util.stream.Stream.of("x1", "x2", "x3").filter(n -> digitOf(a, n) == 3).count();
+            assertThat(digitOf(a, "o1")).as("solution=%s", a).isEqualTo((int) count1);
+            assertThat(digitOf(a, "o2")).as("solution=%s", a).isEqualTo((int) count2);
+            assertThat(digitOf(a, "o3")).as("solution=%s", a).isEqualTo((int) count3);
+        }
+    }
+
+    @Test void cardinalityWithVariableOccursClosedCoveringEveryDomain_buildsConstraints() throws IOException {
+        Xcsp3Instance instance = parseXml(
+                "<var id=\"x1\"> 1..3 </var><var id=\"x2\"> 1..3 </var><var id=\"x3\"> 1..3 </var>"
+                        + "<var id=\"o1\"> 0..3 </var><var id=\"o2\"> 0..3 </var><var id=\"o3\"> 0..3 </var>",
+                "<cardinality><list> x1 x2 x3 </list><values closed=\"true\"> 1 2 3 </values>"
+                        + "<occurs> o1 o2 o3 </occurs></cardinality>");
+        assertThat(solutions(instance.csp())).isNotEmpty();
+    }
+
+    @Test void cardinalityWithVariableOccursClosedNotCoveringEveryDomain_throwsUnsupported() {
+        // x1's domain (1..4) isn't fully covered by values {1,2,3} -- same guard as the fixed-occurs
+        // closed case, exercised here for the variable-occurs overload specifically.
+        assertThatThrownBy(() -> parseXml(
+                "<var id=\"x1\"> 1..4 </var><var id=\"x2\"> 1..3 </var><var id=\"x3\"> 1..3 </var>"
+                        + "<var id=\"o1\"> 0..3 </var><var id=\"o2\"> 0..3 </var><var id=\"o3\"> 0..3 </var>",
+                "<cardinality><list> x1 x2 x3 </list><values closed=\"true\"> 1 2 3 </values>"
                         + "<occurs> o1 o2 o3 </occurs></cardinality>"))
                 .isInstanceOf(UnsupportedXcsp3ConstraintException.class);
+    }
+
+    @Test void cardinalityWithVariableOccursSelfReferential_solvesMagicSequence() throws IOException {
+        // The classic "magic sequence" over length 4: x[i] == the number of occurrences of i in x
+        // itself -- occurs and list are literally the same variables. Unique known solution family
+        // for n=4 is {2,0,2,0} up to the fixed prefix pattern (and its trivial n-1,1,0,...,0 sibling
+        // family only appears for n>=7), so just check the defining property holds, not a specific
+        // solution -- the point of this test is the self-reference wiring, not the puzzle's math.
+        Xcsp3Instance instance = parseXml(
+                "<array id=\"x\" size=\"[4]\"> 0..4 </array>",
+                "<cardinality><list> x[] </list><values closed=\"false\"> 0 1 2 3 </values>"
+                        + "<occurs> x[] </occurs></cardinality>");
+        Set<Assignment> solutions = solutions(instance.csp());
+        assertThat(solutions).isNotEmpty();
+        for (Assignment a : solutions) {
+            for (int value = 0; value < 4; value++) {
+                int finalValue = value;
+                long count = java.util.stream.IntStream.range(0, 4)
+                        .filter(i -> digitOf(a, "x[" + i + "]") == finalValue).count();
+                assertThat(digitOf(a, "x[" + value + "]")).as("solution=%s, value=%d", a, value).isEqualTo((int) count);
+            }
+        }
+    }
+
+    @Test void cardinalityWithVariableOccursReified_indicatorTracksConstraintTruthValue() throws IOException {
+        Xcsp3Instance instance = parseXml(
+                "<var id=\"x1\"> 1..2 </var><var id=\"x2\"> 1..2 </var>"
+                        + "<var id=\"o1\"> 0..2 </var><var id=\"o2\"> 0..2 </var><var id=\"b\"> 0..1 </var>",
+                "<cardinality reifiedBy=\"b\"><list> x1 x2 </list><values closed=\"false\"> 1 2 </values>"
+                        + "<occurs> o1 o2 </occurs></cardinality>");
+        for (Assignment a : solutions(instance.csp())) {
+            long count1 = java.util.stream.Stream.of("x1", "x2").filter(n -> digitOf(a, n) == 1).count();
+            long count2 = java.util.stream.Stream.of("x1", "x2").filter(n -> digitOf(a, n) == 2).count();
+            boolean matches = digitOf(a, "o1") == count1 && digitOf(a, "o2") == count2;
+            int b = digitOf(a, "b");
+            assertThat(b == 1).as("solution=%s", a).isEqualTo(matches);
+        }
+        assertThat(solutions(instance.csp())).isNotEmpty();
     }
 
     @Test void cardinalityOccursRange_buildsGlobalCardinalityRangeConstraint() throws IOException {
