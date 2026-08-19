@@ -34,6 +34,7 @@ import io.github.rcrida.jcsp.constraints.nary.NaryElementConstraint;
 import io.github.rcrida.jcsp.constraints.nary.NaryTuplesConstraint;
 import io.github.rcrida.jcsp.constraints.nary.OrderedConstraint;
 import io.github.rcrida.jcsp.constraints.nary.PredicateConstraint;
+import io.github.rcrida.jcsp.constraints.nary.ProductVariableConstraint;
 import io.github.rcrida.jcsp.constraints.nary.RegularConstraint;
 import io.github.rcrida.jcsp.constraints.nary.SumBoundConstraint;
 import io.github.rcrida.jcsp.constraints.unary.UnaryComparatorConstraint;
@@ -637,9 +638,44 @@ final class Xcsp3CallbackHandler implements XCallbacks2 {
         applyLinearCondition(toCoefficientMap(list, coeffs), condition, id);
     }
 
+    /**
+     * {@code Σ list[i] * coeffVars[i] <op> condition}: decomposes into one {@link
+     * ProductVariableConstraint} per position -- a fresh auxiliary variable holding {@code
+     * list[i] * coeffVars[i]}, its domain the standard 4-way interval-multiplication bound of the
+     * two operands' own bounds (sound for either sign, not just the non-negative case XCSP3-core
+     * instances typically use) -- then {@link #applySumCondition} over the auxiliaries, the same
+     * plain (unweighted) sum-condition helper {@link #buildCtrSum(String, XVarInteger[],
+     * Condition)} already uses, since the per-position weighting is now folded into each
+     * auxiliary itself. Reification throws rather than wrapping the whole decomposition in an
+     * {@link AndConstraint}: {@link #applySumCondition} already declines a reified variable-target
+     * condition for the plain (no-coefficients) case, and no bundled instance needs this reified
+     * either, so this stays a narrower, explicit gap rather than speculative generality.
+     */
     @Override
     public void buildCtrSum(String id, XVarInteger[] list, XVarInteger[] coeffVars, Condition condition) {
-        throw new UnsupportedXcsp3ConstraintException("Sum with variable coefficients is not supported: " + id);
+        if (currentReification != null) {
+            throw new UnsupportedXcsp3ConstraintException("Reified sum with variable coefficients is not supported: " + id);
+        }
+        Set<Variable<Integer>> products = new LinkedHashSet<>();
+        for (int i = 0; i < list.length; i++) {
+            products.add(productOfPair(list[i], coeffVars[i], id, i));
+        }
+        applySumCondition(products, condition, id);
+    }
+
+    private Variable<Integer> productOfPair(XVarInteger a, XVarInteger b, String id, int index) {
+        Variable<Integer> varA = variableFor(a);
+        Variable<Integer> varB = variableFor(b);
+        int[] boundsA = boundsByName.get(a.id());
+        int[] boundsB = boundsByName.get(b.id());
+        int p1 = boundsA[0] * boundsB[0], p2 = boundsA[0] * boundsB[1];
+        int p3 = boundsA[1] * boundsB[0], p4 = boundsA[1] * boundsB[1];
+        int lo = Math.min(Math.min(p1, p2), Math.min(p3, p4));
+        int hi = Math.max(Math.max(p1, p2), Math.max(p3, p4));
+        Variable<Integer> product = Variable.Factory.INSTANCE.create(id + "$product" + index);
+        builder.variableDomain(product, IntRangeDomain.of(lo, hi));
+        builder.constraint(ProductVariableConstraint.of(Set.of(varA, varB), Operator.EQ, product));
+        return product;
     }
 
     // applySumCondition/applyLinearCondition's final "else" is unreachable through any real XCSP3

@@ -472,10 +472,25 @@ class Xcsp3ParserTest {
         assertThat(solutions(instance.csp())).isNotEmpty();
     }
 
-    @Test void sumVariableCoefficients_throwsUnsupported() {
-        assertThatThrownBy(() -> parseXml(
+    @Test void sumVariableCoefficients_decomposesIntoProductVariableConstraintsPlusSum() throws IOException {
+        // Sigma x[i]*c[i] == 10, decomposing into one ProductVariableConstraint per position (a
+        // fresh auxiliary holding x*c1, y*c2) plus a plain sumConstraint over the auxiliaries.
+        Xcsp3Instance instance = parseXml(
                 "<var id=\"x\"> 0..5 </var><var id=\"y\"> 0..5 </var><var id=\"c1\"> 1..2 </var><var id=\"c2\"> 1..2 </var>",
-                "<sum><list> x y </list><coeffs> c1 c2 </coeffs><condition> (eq,10) </condition></sum>"))
+                "<sum><list> x y </list><coeffs> c1 c2 </coeffs><condition> (eq,10) </condition></sum>");
+        Set<Assignment> solutions = solutions(instance.csp());
+        assertThat(solutions).isNotEmpty();
+        for (Assignment a : solutions) {
+            int total = digitOf(a, "x") * digitOf(a, "c1") + digitOf(a, "y") * digitOf(a, "c2");
+            assertThat(total).isEqualTo(10);
+        }
+    }
+
+    @Test void sumVariableCoefficientsReified_throwsUnsupported() {
+        assertThatThrownBy(() -> parseXml(
+                "<var id=\"x\"> 0..5 </var><var id=\"y\"> 0..5 </var><var id=\"c1\"> 1..2 </var><var id=\"c2\"> 1..2 </var>"
+                        + "<var id=\"b\"> 0..1 </var>",
+                "<sum reifiedBy=\"b\"><list> x y </list><coeffs> c1 c2 </coeffs><condition> (eq,10) </condition></sum>"))
                 .isInstanceOf(UnsupportedXcsp3ConstraintException.class);
     }
 
