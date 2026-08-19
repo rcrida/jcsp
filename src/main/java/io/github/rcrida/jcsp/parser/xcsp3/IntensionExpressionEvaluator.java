@@ -19,12 +19,12 @@ import java.util.stream.LongStream;
  * io.github.rcrida.jcsp.ConstraintSatisfactionProblem.ConstraintSatisfactionProblemBuilder#predicateConstraint}.
  * Covers the arithmetic ({@code neg}/{@code abs}/{@code add}/{@code sub}/{@code mul}/{@code
  * div}/{@code mod}/{@code dist}), relational ({@code eq}/{@code ne}/{@code lt}/{@code le}/{@code
- * ge}/{@code gt}), boolean ({@code not}/{@code and}/{@code or}), and set-membership ({@code
- * in}/{@code notin} against a literal {@code set(...)} of constants) operators that appear in this
- * project's XCSP3 test fixtures -- not the full XCSP3 expression language (e.g. {@code min}/{@code
- * max}/{@code xor}/{@code iff}, or a {@code set(...)} containing anything other than constants, are
- * not handled). An operator outside this set throws {@link UnsupportedXcsp3ConstraintException}
- * rather than silently mis-evaluating.
+ * ge}/{@code gt}), boolean ({@code not}/{@code and}/{@code or}/{@code xor}/{@code iff}), and
+ * set-membership ({@code in}/{@code notin} against a literal {@code set(...)} of constants)
+ * operators that appear in this project's XCSP3 test fixtures -- not the full XCSP3 expression
+ * language (e.g. {@code min}/{@code max}/{@code imp}/{@code if}, or a {@code set(...)} containing
+ * anything other than constants, are not handled). An operator outside this set throws
+ * {@link UnsupportedXcsp3ConstraintException} rather than silently mis-evaluating.
  */
 final class IntensionExpressionEvaluator {
 
@@ -103,6 +103,12 @@ final class IntensionExpressionEvaluator {
             case NOT -> operands[0] == 0 ? 1 : 0;
             case AND -> LongStream.of(operands).allMatch(v -> v != 0) ? 1 : 0;
             case OR -> LongStream.of(operands).anyMatch(v -> v != 0) ? 1 : 0;
+            // XCSP3 core: true iff an odd number of operands are true (n-ary parity, generalising
+            // binary xor).
+            case XOR -> LongStream.of(operands).filter(v -> v != 0).count() % 2 == 1 ? 1 : 0;
+            // XCSP3 core: true iff every operand shares the same truth value -- operationally
+            // identical to EQ (allEqual), just restricted to boolean-typed operands.
+            case IFF -> allEqual(operands) ? 1 : 0;
             default -> throw new UnsupportedXcsp3ConstraintException("Unsupported intension operator: " + type);
         };
     }

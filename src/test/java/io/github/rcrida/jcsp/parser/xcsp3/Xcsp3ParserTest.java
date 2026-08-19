@@ -95,6 +95,27 @@ class Xcsp3ParserTest {
         assertThat(solutions(instance.csp())).isNotEmpty();
     }
 
+    @Test void intensionXor_solutionsHaveExactlyOneTrue() throws IOException {
+        Xcsp3Instance instance = parseXml(
+                "<var id=\"x\"> 0 1 </var><var id=\"y\"> 0 1 </var>",
+                "<intension> xor(x,y) </intension>");
+        Set<Assignment> found = solutions(instance.csp());
+        assertThat(found).hasSize(2);
+        for (Assignment solution : found) {
+            assertThat(digitOf(solution, "x") + digitOf(solution, "y")).isEqualTo(1);
+        }
+    }
+
+    @Test void intensionIff_solutionsAllEqual() throws IOException {
+        Xcsp3Instance instance = parseXml(
+                "<var id=\"x\"> 0 1 </var><var id=\"y\"> 0 1 </var>",
+                "<intension> iff(x,y) </intension>");
+        for (Assignment solution : solutions(instance.csp())) {
+            assertThat(digitOf(solution, "x")).isEqualTo(digitOf(solution, "y"));
+        }
+        assertThat(solutions(instance.csp())).hasSize(2);
+    }
+
     // ---- reification ------------------------------------------------------------------------------------------------
 
     @Test void intensionFullyReified_indicatorTracksConstraintTruthValue() throws IOException {
