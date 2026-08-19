@@ -45,12 +45,23 @@ import java.util.Set;
  * broken. Left unseeded ({@code null}, the default), ties are broken by {@code
  * csp.getVariableDomains()}'s iteration order (a {@code LinkedHashMap}, so this is the
  * first-declared tied variable, deterministically) -- today's exact behaviour, unchanged.
+ * <p>
+ * {@link #recordConflict} implements last-conflict reasoning (Lecoutre, Saïs, Tabary &amp; Vion
+ * 2009): {@link #select} checks it first, ahead of the dom/wdeg ratio computation (and its own
+ * tie-break) entirely, and immediately re-selects the most recently failed variable as long as it's
+ * still unassigned. This is a different mechanism from dom/wdeg's own weight accumulation, not a
+ * substitute for it -- weights are a slow, aggregate signal that dominates the ratio only after
+ * many nodes' worth of evidence, while last-conflict is an immediate, per-backtrack override that
+ * exploits failure locality (whatever variable just blocked progress is likely to block it again
+ * nearby) to fail fast and prune a larger subtree, instead of wasting nodes on other variables
+ * before naturally working back around to the same bottleneck.
  */
 public class DomWdegVariableSelector implements UnassignedVariableSelector {
 
     private final Map<Constraint, Long> weights;
     private final Map<Variable<?>, List<Constraint>> constraintsByVariable;
     private @Nullable Random tieBreakRandom;
+    private @Nullable Variable<?> lastConflictVariable;
 
     /**
      * {@link NogoodConstraint}s in {@code constraints} are dropped entirely rather than indexed:
@@ -96,8 +107,24 @@ public class DomWdegVariableSelector implements UnassignedVariableSelector {
         this.tieBreakRandom = random;
     }
 
+    /**
+     * Records {@code variable} as the site of the most recent search failure -- call this at
+     * every backtrack/domain-wipeout site, both the {@link #incrementWeights} sites (an inference
+     * pass detected a domain wipeout) and the plain direct-consistency-violation sites that
+     * precede inference (see {@link io.github.rcrida.jcsp.solver.DomWdegLubySearch}'s own call
+     * sites for both). See this class's own Javadoc for why this is a different mechanism from
+     * {@link #incrementWeights}, not a substitute for it.
+     */
+    public void recordConflict(@NonNull Variable<?> variable) {
+        lastConflictVariable = variable;
+    }
+
     @Override
     public Variable<?> select(@NonNull ConstraintSatisfactionProblem csp, @NonNull Assignment assignment) {
+        if (lastConflictVariable != null && csp.getVariableDomains().containsKey(lastConflictVariable)
+                && assignment.getValue(lastConflictVariable).isEmpty()) {
+            return lastConflictVariable;
+        }
         double bestRatio = Double.MAX_VALUE;
         List<Variable<?>> tied = new ArrayList<>();
         for (Map.Entry<Variable<?>, Domain<?>> e : csp.getVariableDomains().entrySet()) {

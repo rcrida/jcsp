@@ -450,17 +450,29 @@ class DomWdegLubySearchTest {
         //
         // Both w=10 and w=20 hit this same conflict shape (for b=3 and b=4), giving 4 opportunities
         // to learn a nogood, but only the first two calls to reach it produce the general, reusable
-        // reason {b:3, c:1} / {b:4, c:1}. Whichever subtree runs second inherits those two already
-        // -- their propagation prunes value 1 from c's domain before CountConstraint ever runs, so
-        // c becomes "impossible" (can't be 1) but is left with {2,3,4}, not singleton.
+        // reason {b:3, c:1} / {b:4, c:1}. Without last-conflict reasoning, whichever subtree ran
+        // second used to inherit those two already-learned nogoods only as domain pruning (value 1
+        // removed from c) -- their propagation prunes value 1 from c's domain before CountConstraint
+        // ever runs, so c becomes "impossible" (can't be 1) but is left with {2,3,4}, not singleton.
         // CountConstraint#explainInfeasible can only cite an impossible variable when it's singleton
         // (Propagatable#allSingletonReason): the nogood format is equality-only ("variable = value"),
         // with no way to express "variable != value" as a literal, so a non-singleton impossible
-        // variable simply can't be cited soundly. That branch's explanation falls back to the full
-        // assignment ({w:10, a:2, b:3} etc.) -- still sound, just not general enough to be reused,
-        // so the second subtree independently records its own (looser) pair. Net result: 4 distinct,
-        // individually sound nogoods, not 2 -- reusing an earlier general nogood's partial pruning
-        // can ironically make a later branch's own explanation less precise, not more.
+        // variable simply can't be cited soundly. That branch's explanation used to fall back to the
+        // full assignment ({w:10, a:2, b:3} etc.) -- still sound, just not general enough to be
+        // reused -- so the second subtree independently recorded its own (looser) pair, 4 distinct
+        // nogoods in total.
+        //
+        // With last-conflict reasoning (DomWdegVariableSelector#recordConflict) now steering
+        // DomWdegLubySearch, the second subtree (w=20) re-selects b immediately, the same variable
+        // the first subtree (w=10) last failed on -- so it retries the exact same b=3/b=4 assignments
+        // in the same order as the first subtree did. The two general nogoods learned under w=10
+        // ({b:3,c:1}/{b:4,c:1}) then reject those same assignments directly via NogoodFixpointConsistency
+        // before CountConstraint's own (previously degraded) explanation path is ever reached a
+        // second time -- confirmed by inspecting NogoodStore's contents directly (both nogoods
+        // present, both the general {b,c} form, none falling back to a full-assignment reason). Net
+        // result: only the 2 general nogoods get learned at all now, not 4 -- last-conflict's more
+        // consistent search-path shape across subtrees happens to improve nogood reuse here, not
+        // just search-order efficiency.
         Variable<Integer> w  = VF.create("nw");
         Variable<Integer> a  = VF.create("na");
         Variable<Integer> b  = VF.create("nb");
@@ -495,7 +507,7 @@ class DomWdegLubySearchTest {
 
         List<Assignment> solutions = solver.getSolutions(csp).toList();
         assertThat(solutions).hasSize(12); // 2 (w) x 6 (valid a,b,c combos)
-        assertThat(store.size()).isEqualTo(4);
+        assertThat(store.size()).isEqualTo(2);
     }
 
     // ── Builder validation ────────────────────────────────────────────────────

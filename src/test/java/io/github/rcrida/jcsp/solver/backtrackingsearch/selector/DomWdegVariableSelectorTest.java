@@ -234,6 +234,58 @@ class DomWdegVariableSelectorTest {
         verifyNoInteractions(random); // no tie -> the shared Random is never drawn from
     }
 
+    // ── last-conflict reasoning ───────────────────────────────────────────────
+
+    @Test
+    void recordConflict_thenSelect_overridesNormalRatioComputation() {
+        // c12 connects v1,v2, giving both wdeg=1. d1.size()=10 -> ratio=10.0, d2.size()=1 ->
+        // ratio=1.0: normal dom/wdeg would pick v2 (smaller ratio). recordConflict(v1) must make
+        // select() return v1 regardless, proving the override actually bypasses the ratio
+        // computation rather than coincidentally agreeing with it.
+        when(c12.getVariables()).thenReturn(Set.of(v1, v2));
+        var selector = new DomWdegVariableSelector(Set.of(c12));
+
+        when(csp.getVariableDomains()).thenReturn(Map.of(v1, d1, v2, d2));
+        when(assignment.getValue(v1)).thenReturn(Optional.empty());
+
+        selector.recordConflict(v1);
+        assertThat(selector.select(csp, assignment)).isEqualTo(v1);
+    }
+
+    @Test
+    void recordConflict_variableSubsequentlyAssigned_fallsBackToNormalRatio() {
+        // v1 is now assigned in `assignment` -- the recorded last-conflict variable is no longer a
+        // valid choice, so select() must fall through to the normal dom/wdeg computation (over just
+        // v2, the only unassigned variable in csp.getVariableDomains(); v1 is excluded by the same
+        // "already assigned" filter the ratio loop applies to every candidate) instead of throwing
+        // or returning the now-assigned v1.
+        when(c12.getVariables()).thenReturn(Set.of(v1, v2));
+        var selector = new DomWdegVariableSelector(Set.of(c12));
+
+        when(csp.getVariableDomains()).thenReturn(Map.of(v1, d1, v2, d2));
+        when(assignment.getValue(v1)).thenReturn(Optional.of("assigned"));
+        when(assignment.getValue(v2)).thenReturn(Optional.empty());
+        when(d2.size()).thenReturn(1);
+
+        selector.recordConflict(v1);
+        assertThat(selector.select(csp, assignment)).isEqualTo(v2);
+    }
+
+    @Test
+    void recordConflict_variableNotInCsp_fallsBackToNormalRatio() {
+        // The recorded last-conflict variable (v1) isn't part of this csp's own variable domains
+        // at all -- select() must not return it regardless (and must not throw), falling through to
+        // the normal dom/wdeg computation over the variables that actually are present.
+        var selector = new DomWdegVariableSelector(Set.of());
+
+        when(csp.getVariableDomains()).thenReturn(Map.of(v2, d2));
+        when(assignment.getValue(v2)).thenReturn(Optional.empty());
+        when(d2.size()).thenReturn(3);
+
+        selector.recordConflict(v1);
+        assertThat(selector.select(csp, assignment)).isEqualTo(v2);
+    }
+
     @Test
     void throwsWhenNoUnassignedVariable() {
         var selector = new DomWdegVariableSelector(Set.of());

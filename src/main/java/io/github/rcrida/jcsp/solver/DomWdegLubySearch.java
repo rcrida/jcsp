@@ -26,6 +26,12 @@ import java.util.stream.Stream;
  * weights of active constraints on the failing variable are bumped (via
  * {@link DomWdegVariableSelector#incrementWeights}). The variable selector then picks
  * {@code argmin(domainSize / weightedDegree)}, steering search away from costly failure regions.
+ * Every backtrack site here also calls {@link DomWdegVariableSelector#recordConflict} (last-conflict
+ * reasoning, Lecoutre et al. 2009): the selector immediately re-picks the most recently failed
+ * variable ahead of the ratio computation, as long as it's still unassigned, rather than waiting
+ * for wdeg's own slower, aggregate weight accumulation to steer back to it. See {@link
+ * DomWdegVariableSelector}'s own Javadoc for why these are two complementary mechanisms, not one
+ * substituting for the other.
  * <p>
  * <b>{@link #getSolutions}</b> returns a complete lazy stream of all solutions using dom/wdeg
  * variable ordering and weight accumulation during the search — a drop-in replacement for
@@ -180,6 +186,7 @@ public class DomWdegLubySearch implements Solver {
                     ConstraintSatisfactionProblem cspWithNogoods = nogoodStore.apply(csp);
                     if (!next.isConsistent(cspWithNogoods)) {
                         next.getStatistics().incrementBacktracks();
+                        selector.recordConflict(variable);
                         listener.onBacktrack(variable, next);
                         return Stream.empty();
                     }
@@ -209,6 +216,7 @@ public class DomWdegLubySearch implements Solver {
         ConsistencyResult inferred = inference.applyWithReason(cspWithNogoods, variable, next);
         if (inferred.isInfeasible()) {
             selector.incrementWeights(variable, next);
+            selector.recordConflict(variable);
             if (inferred.reason() != null) {
                 nogoodStore.record(inferred.reason());
                 next.getStatistics().incrementNogoodsLearned();
@@ -243,6 +251,7 @@ public class DomWdegLubySearch implements Solver {
             ConstraintSatisfactionProblem cspWithNogoods = nogoodStore.apply(csp);
             if (!next.isConsistent(cspWithNogoods)) {
                 next.getStatistics().incrementBacktracks();
+                selector.recordConflict(variable);
                 listener.onBacktrack(variable, next);
                 continue;
             }
