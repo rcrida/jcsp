@@ -36,6 +36,7 @@ import io.github.rcrida.jcsp.constraints.nary.PredicateConstraint;
 import io.github.rcrida.jcsp.constraints.nary.RegularConstraint;
 import io.github.rcrida.jcsp.constraints.nary.SumBoundConstraint;
 import io.github.rcrida.jcsp.constraints.unary.UnaryComparatorConstraint;
+import io.github.rcrida.jcsp.constraints.unary.UnaryPredicateConstraint;
 import io.github.rcrida.jcsp.constraints.unary.UnaryValueConstraint;
 import io.github.rcrida.jcsp.domains.BooleanDomain;
 import io.github.rcrida.jcsp.domains.Domain;
@@ -489,17 +490,20 @@ final class Xcsp3CallbackHandler implements XCallbacks2 {
     /**
      * The unary form of {@code extension}: a single variable restricted to (or, when {@code
      * !positive}, excluded from) a fixed list of integer values -- functionally a value-membership
-     * predicate rather than a tuple table, so it maps onto the same {@link PredicateConstraint}
-     * {@link #buildCtrIntension} already uses rather than {@link NaryTuplesConstraint}.
+     * predicate rather than a tuple table, so it maps onto {@link UnaryPredicateConstraint} rather
+     * than {@link NaryTuplesConstraint}. Deliberately {@link UnaryPredicateConstraint}, not the
+     * n-ary {@link PredicateConstraint} {@link #buildCtrIntension} falls back to: a genuine {@link
+     * io.github.rcrida.jcsp.constraints.unary.UnaryConstraint} is eligible for {@link
+     * io.github.rcrida.jcsp.consistency.node.NodeConsistency}'s domain-pruning preprocessing pass,
+     * where {@link PredicateConstraint} (an ordinary {@code NaryConstraint} even with one variable)
+     * is not -- it would only ever be checked once the variable is fully assigned.
      */
     @Override
     public void buildCtrExtension(String id, XVarInteger x, int[] values, boolean positive, Set<TypeFlag> flags) {
         requireNoUnsupportedFlags(flags, id);
         Variable<Integer> variable = variableFor(x);
         Set<Integer> valueSet = Arrays.stream(values).boxed().collect(Collectors.toCollection(LinkedHashSet::new));
-        addOrReify(PredicateConstraint.builder().variables(Set.of(variable))
-                .predicate(a -> valueSet.contains(a.getValue(variable).orElseThrow()) == positive)
-                .build(), id);
+        addOrReify(UnaryPredicateConstraint.of(variable, (Integer value) -> valueSet.contains(value) == positive), id);
     }
 
     /**
