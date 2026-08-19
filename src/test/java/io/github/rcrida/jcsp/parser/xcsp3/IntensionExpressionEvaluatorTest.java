@@ -78,15 +78,13 @@ class IntensionExpressionEvaluatorTest {
                 .isInstanceOf(UnsupportedXcsp3ConstraintException.class);
     }
 
-    @Test void evaluate_setLiteral_withNonLongLeafMember_throws() {
+    @Test void evaluate_setLiteral_withUnsupportedLeafMember_throws() {
+        // A set(...) member still goes through evaluate's own leaf-type check (unchanged) -- only
+        // the "must be a constant" restriction was lifted, not leaf-type validation itself. Real
+        // variable/expression members are covered end-to-end via
+        // Xcsp3ParserTest#intensionSetMembership_withVariableAndExpressionMembers_evaluatesPerAssignment,
+        // per this class's own scope (branches unreachable through real parsing only).
         XNode<XVarInteger> set = XNode.node(TypeExpr.SET, XNode.specialLeaf("unsupported"), XNode.longLeaf(2));
-        XNode<XVarInteger> tree = XNode.node(TypeExpr.IN, XNode.longLeaf(1), set);
-        assertThatThrownBy(() -> IntensionExpressionEvaluator.evaluate(tree, Assignment.empty(), Map.of()))
-                .isInstanceOf(UnsupportedXcsp3ConstraintException.class);
-    }
-
-    @Test void evaluate_setLiteral_withNonLeafMember_throws() {
-        XNode<XVarInteger> set = XNode.node(TypeExpr.SET, XNode.node(TypeExpr.ADD, XNode.longLeaf(1), XNode.longLeaf(1)), XNode.longLeaf(2));
         XNode<XVarInteger> tree = XNode.node(TypeExpr.IN, XNode.longLeaf(1), set);
         assertThatThrownBy(() -> IntensionExpressionEvaluator.evaluate(tree, Assignment.empty(), Map.of()))
                 .isInstanceOf(UnsupportedXcsp3ConstraintException.class);

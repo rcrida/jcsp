@@ -1473,6 +1473,21 @@ class Xcsp3ParserTest {
         }
     }
 
+    @Test void intensionSetMembership_withVariableAndExpressionMembers_evaluatesPerAssignment() throws IOException {
+        // set(...) members are arbitrary sub-expressions, not just constants -- the classic Zebra
+        // puzzle's own XCSP3 encoding needs exactly this: in(horse,set(sub(diplomat,1),add(diplomat,1))).
+        // Here: x in {y, z+1} -- each member evaluated against the current assignment, not a fixed set.
+        Xcsp3Instance instance = parseXml(
+                "<var id=\"x\"> 0..5 </var><var id=\"y\"> 0..5 </var><var id=\"z\"> 0..4 </var>",
+                "<intension> in(x,set(y,add(z,1))) </intension>");
+        Set<Assignment> solutions = solutions(instance.csp());
+        assertThat(solutions).isNotEmpty();
+        for (Assignment a : solutions) {
+            int x = digitOf(a, "x");
+            assertThat(x == digitOf(a, "y") || x == digitOf(a, "z") + 1).isTrue();
+        }
+    }
+
     // ---- intension binary-relation recognition (BinaryComparatorConstraint / BinaryOffsetConstraint) ------------------
 
     @Test void intensionBareBinaryComparison_recognizedAsBinaryComparatorConstraint() throws IOException {
