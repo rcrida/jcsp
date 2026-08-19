@@ -55,6 +55,10 @@ class Xcsp3ParserTest {
         return assignment.getValue(Variable.Factory.INSTANCE.<Integer>create(name)).orElseThrow();
     }
 
+    private static String stringOf(Assignment assignment, String name) {
+        return assignment.getValue(Variable.Factory.INSTANCE.<String>create(name)).orElseThrow();
+    }
+
     // ---- variable domains -------------------------------------------------------------------------
 
     @Test void rangeDomain_solvesWithinBounds() throws IOException {
@@ -1889,16 +1893,125 @@ class Xcsp3ParserTest {
                 .isInstanceOf(UnsupportedXcsp3ConstraintException.class);
     }
 
+    // ---- symbolic (string-valued) variable domains -------------------------------------------------------------------------
+
+    @Test void symbolicDomain_solvesWithinDeclaredValues() throws IOException {
+        Xcsp3Instance instance = parseXml(
+                "<var id=\"x\" type=\"symbolic\"> A B C </var>",
+                "<intension> eq(x,B) </intension>");
+        Optional<Assignment> solution = Solver.Factory.INSTANCE.createSolver(instance.csp()).getSolution();
+        assertThat(solution).isPresent();
+        assertThat(stringOf(solution.get(), "x")).isEqualTo("B");
+    }
+
+    @Test void symbolicIntensionEqVarVar_solutionsMatch() throws IOException {
+        Xcsp3Instance instance = parseXml(
+                "<var id=\"x\" type=\"symbolic\"> A B C </var><var id=\"y\" type=\"symbolic\"> A B C </var>",
+                "<intension> eq(x,y) </intension>");
+        Set<Assignment> found = solutions(instance.csp());
+        assertThat(found).hasSize(3);
+        for (Assignment a : found) {
+            assertThat(stringOf(a, "x")).isEqualTo(stringOf(a, "y"));
+        }
+    }
+
+    @Test void symbolicIntensionNeVarVar_solutionsDiffer() throws IOException {
+        Xcsp3Instance instance = parseXml(
+                "<var id=\"x\" type=\"symbolic\"> A B C </var><var id=\"y\" type=\"symbolic\"> A B C </var>",
+                "<intension> ne(x,y) </intension>");
+        Set<Assignment> found = solutions(instance.csp());
+        assertThat(found).hasSize(6);
+        for (Assignment a : found) {
+            assertThat(stringOf(a, "x")).isNotEqualTo(stringOf(a, "y"));
+        }
+    }
+
+    @Test void symbolicIntensionEqVarConstant_variableOnLeft_pinsVariable() throws IOException {
+        Xcsp3Instance instance = parseXml(
+                "<var id=\"x\" type=\"symbolic\"> A B C </var>",
+                "<intension> eq(x,B) </intension>");
+        Set<Assignment> found = solutions(instance.csp());
+        assertThat(found).hasSize(1);
+        assertThat(stringOf(found.iterator().next(), "x")).isEqualTo("B");
+    }
+
+    @Test void symbolicIntensionEqVarConstant_variableOnRight_pinsVariable() throws IOException {
+        // xcsp3-tools' own canonizer may reorder eq's operands, but a constant-on-the-left source
+        // XML still needs to resolve correctly regardless of which side the library hands us.
+        Xcsp3Instance instance = parseXml(
+                "<var id=\"x\" type=\"symbolic\"> A B C </var>",
+                "<intension> eq(B,x) </intension>");
+        Set<Assignment> found = solutions(instance.csp());
+        assertThat(found).hasSize(1);
+        assertThat(stringOf(found.iterator().next(), "x")).isEqualTo("B");
+    }
+
+    @Test void symbolicIntensionNeVarConstant_variableOnLeft_excludesValue() throws IOException {
+        Xcsp3Instance instance = parseXml(
+                "<var id=\"x\" type=\"symbolic\"> A B C </var>",
+                "<intension> ne(x,B) </intension>");
+        Set<Assignment> found = solutions(instance.csp());
+        assertThat(found).hasSize(2);
+        for (Assignment a : found) {
+            assertThat(stringOf(a, "x")).isNotEqualTo("B");
+        }
+    }
+
+    @Test void symbolicIntensionNeVarConstant_variableOnRight_excludesValue() throws IOException {
+        Xcsp3Instance instance = parseXml(
+                "<var id=\"x\" type=\"symbolic\"> A B C </var>",
+                "<intension> ne(B,x) </intension>");
+        Set<Assignment> found = solutions(instance.csp());
+        assertThat(found).hasSize(2);
+        for (Assignment a : found) {
+            assertThat(stringOf(a, "x")).isNotEqualTo("B");
+        }
+    }
+
+    // Reification of symbolic intension/allDifferent isn't reachable through real parsing at all --
+    // xcsp3-tools' own loadCtr dispatch has no route for it (confirmed empirically, see
+    // Xcsp3CallbackHandler#buildCtrIntension(String, XVarSymbolic[], XNodeParent)'s own Javadoc); it
+    // throws the library's raw RuntimeException before either buildCtrXxx override is ever entered,
+    // the same as completelyUnrecognisedConstruct_throwsRuntimeException below.
+
+    @Test void symbolicIntensionWrongArity_throwsUnsupported() {
+        // eq(x,y,z) is still TypeExpr.EQ, but with 3 sons rather than the 2 this handler supports.
+        assertThatThrownBy(() -> parseXml(
+                "<var id=\"x\" type=\"symbolic\"> A B </var><var id=\"y\" type=\"symbolic\"> A B </var>"
+                        + "<var id=\"z\" type=\"symbolic\"> A B </var>",
+                "<intension> eq(x,y,z) </intension>"))
+                .isInstanceOf(UnsupportedXcsp3ConstraintException.class);
+    }
+
+    // symbolicIntensionBothOperandsConstants (neither operand a variable) can't be reached through
+    // real XML parsing -- xcsp3-tools' own CtrLoaderInteger.intension NPEs first on a
+    // zero-variable-scope intension before our buildCtrIntension(XVarSymbolic...) is ever entered --
+    // so it's a direct white-box test on Xcsp3CallbackHandlerTest instead; see
+    // Xcsp3CallbackHandlerTest#buildCtrIntensionSymbolic_bothOperandsConstants_throwsUnsupported.
+
+    @Test void symbolicAllDifferent_solutionsAllDistinct() throws IOException {
+        Xcsp3Instance instance = parseXml(
+                "<var id=\"x\" type=\"symbolic\"> A B C </var><var id=\"y\" type=\"symbolic\"> A B C </var>"
+                        + "<var id=\"z\" type=\"symbolic\"> A B C </var>",
+                "<allDifferent><list> x y z </list></allDifferent>");
+        Set<Assignment> found = solutions(instance.csp());
+        assertThat(found).hasSize(6);
+        for (Assignment a : found) {
+            assertThat(Set.of(stringOf(a, "x"), stringOf(a, "y"), stringOf(a, "z"))).hasSize(3);
+        }
+    }
+
     // ---- unsupported construct falls through to the library's own default --------------------------------------------------
 
     @Test void completelyUnrecognisedConstruct_throwsRuntimeException() {
-        // A symbolic (string-valued) variable domain has no buildVarSymbolic override at all, so
-        // this falls through to XCallbacks2's own default (unimplementedCase), not
-        // UnsupportedXcsp3ConstraintException -- mdd, then clause, used to be this test's example,
-        // but both are now recognised, mapped constructs.
+        // extension over symbolic variables has no buildCtrExtension(XVarSymbolic[]...) override at
+        // all, so this falls through to XCallbacks2's own default (unimplementedCase), not
+        // UnsupportedXcsp3ConstraintException -- mdd, then clause, then a bare symbolic variable
+        // domain (buildVarSymbolic) used to be this test's example, but all three are now
+        // recognised, mapped constructs.
         assertThatThrownBy(() -> parseXml(
                 "<var id=\"x\" type=\"symbolic\"> A B C </var><var id=\"y\" type=\"symbolic\"> A B C </var>",
-                "<intension> ne(x,y) </intension>"))
+                "<extension><list> x y </list><supports> (A,B)(B,C) </supports></extension>"))
                 .isInstanceOf(RuntimeException.class);
     }
 

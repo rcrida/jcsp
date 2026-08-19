@@ -7,6 +7,7 @@ import io.github.rcrida.jcsp.constraints.Constraint;
 import io.github.rcrida.jcsp.constraints.Operator;
 import io.github.rcrida.jcsp.constraints.binary.BinaryComparatorConstraint;
 import io.github.rcrida.jcsp.constraints.binary.BinaryElementConstraint;
+import io.github.rcrida.jcsp.constraints.binary.BinaryNotEqualsConstraint;
 import io.github.rcrida.jcsp.constraints.binary.BinaryOffsetConstraint;
 import io.github.rcrida.jcsp.constraints.nary.AllDiffConstraint;
 import io.github.rcrida.jcsp.constraints.nary.AllEqualConstraint;
@@ -38,9 +39,11 @@ import io.github.rcrida.jcsp.constraints.nary.ProductVariableConstraint;
 import io.github.rcrida.jcsp.constraints.nary.RegularConstraint;
 import io.github.rcrida.jcsp.constraints.nary.SumBoundConstraint;
 import io.github.rcrida.jcsp.constraints.unary.UnaryComparatorConstraint;
+import io.github.rcrida.jcsp.constraints.unary.UnaryNotEqualsConstraint;
 import io.github.rcrida.jcsp.constraints.unary.UnaryPredicateConstraint;
 import io.github.rcrida.jcsp.constraints.unary.UnaryValueConstraint;
 import io.github.rcrida.jcsp.domains.BooleanDomain;
+import io.github.rcrida.jcsp.domains.DiscreteDomain;
 import io.github.rcrida.jcsp.domains.Domain;
 import io.github.rcrida.jcsp.domains.IntRangeDomain;
 import io.github.rcrida.jcsp.domains.NumericDiscreteDomain;
@@ -68,6 +71,7 @@ import org.xcsp.parser.callbacks.XCallbacks2;
 import org.xcsp.parser.entries.XConstraints.XCtr;
 import org.xcsp.parser.entries.XConstraints.XReification;
 import org.xcsp.parser.entries.XVariables.XVarInteger;
+import org.xcsp.parser.entries.XVariables.XVarSymbolic;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -114,6 +118,7 @@ final class Xcsp3CallbackHandler implements XCallbacks2 {
     private final XCallbacks.Implem implem = new XCallbacks.Implem(this);
     private final ConstraintSatisfactionProblemBuilder builder = ConstraintSatisfactionProblem.builder();
     private final Map<String, Variable<Integer>> variablesByName = new LinkedHashMap<>();
+    private final Map<String, Variable<String>> symbolicVariablesByName = new LinkedHashMap<>();
     private final Map<String, int[]> boundsByName = new LinkedHashMap<>();
     private final Map<String, Variable<Integer>> shiftedVariables = new LinkedHashMap<>();
     private final Map<String, Variable<Boolean>> booleanIndicators = new LinkedHashMap<>();
@@ -260,8 +265,26 @@ final class Xcsp3CallbackHandler implements XCallbacks2 {
         builder.variableDomain(variable, domain);
     }
 
+    /**
+     * Symbolic (string-valued) variables are a separate {@code XVarSymbolic} hierarchy in {@code
+     * xcsp3-tools}, parallel to {@code XVarInteger} throughout -- {@link #symbolicVariablesByName}
+     * mirrors {@link #variablesByName} rather than trying to unify the two, since every other
+     * per-variable map here ({@link #boundsByName}, {@link #shiftedVariables}, etc.) is genuinely
+     * integer-specific (bounds, arithmetic shifts) and has no symbolic analogue to share.
+     */
+    @Override
+    public void buildVarSymbolic(XVarSymbolic x, String[] values) {
+        Variable<String> variable = Variable.Factory.INSTANCE.create(x.id());
+        symbolicVariablesByName.put(x.id(), variable);
+        builder.variableDomain(variable, DiscreteDomain.of(values));
+    }
+
     private Variable<Integer> variableFor(IVar v) {
         return variablesByName.get(((XVarInteger) v).id());
+    }
+
+    private Variable<String> symbolicVariableFor(IVar v) {
+        return symbolicVariablesByName.get(((XVarSymbolic) v).id());
     }
 
     private List<Variable<Integer>> toVariableList(XVarInteger[] list) {
@@ -350,6 +373,66 @@ final class Xcsp3CallbackHandler implements XCallbacks2 {
     @Override
     public void buildCtrIntension(String id, XVarInteger[] list, XNodeParent<XVarInteger> tree) {
         addOrReify(recognizeBinaryRelation(tree).orElseGet(() -> genericIntensionConstraint(list, tree)), id);
+    }
+
+    /**
+     * Symbolic (string-valued) intension has no arithmetic to speak of -- {@code eq}/{@code ne}
+     * between two operands is the only shape XCSP3-core symbolic instances actually need (no
+     * {@code and}/{@code or}/nesting attempted here, since none is confirmed needed by any bundled
+     * instance and {@link IntensionExpressionEvaluator}'s whole design is built around {@code long}
+     * arithmetic, not reusable for strings without a genuinely separate evaluator). Each operand is
+     * either a variable ({@link TypeExpr#VAR}) or a symbolic constant ({@link TypeExpr#SYMBOL});
+     * routes to {@link BinaryComparatorConstraint}/{@link BinaryNotEqualsConstraint} for
+     * variable-vs-variable, {@link UnaryValueConstraint}/{@link UnaryNotEqualsConstraint} for
+     * variable-vs-constant (either operand order). Reification is never actually reachable here
+     * despite the {@link #addOrReify} call below -- confirmed empirically -- since {@code
+     * xcsp3-tools}' own {@code loadCtr} dispatch table has no entry routing a reified symbolic
+     * {@code intension}/{@code allDifferent} to any {@code buildCtrXxx(XVarSymbolic...)} overload at
+     * all; it throws its own raw {@code RuntimeException} (the same {@code unimplementedCase} path
+     * {@code completelyUnrecognisedConstruct_throwsRuntimeException} documents) before this method
+     * is ever entered, a library-level gap rather than one fixable in this class.
+     */
+    @Override
+    public void buildCtrIntension(String id, XVarSymbolic[] list, XNodeParent<XVarSymbolic> tree) {
+        if ((tree.getType() != TypeExpr.EQ && tree.getType() != TypeExpr.NE) || tree.sons.length != 2) {
+            throw new UnsupportedXcsp3ConstraintException("Unsupported symbolic intension shape: " + id);
+        }
+        boolean eq = tree.getType() == TypeExpr.EQ;
+        Object left = symbolicOperand(tree.sons[0], id);
+        Object right = symbolicOperand(tree.sons[1], id);
+        // symbolicOperand's own contract is exhaustive -- left/right are always exactly one of
+        // Variable<?> or String, never anything else -- so once "left is a variable" is settled,
+        // right's kind follows deterministically; testing right/left's kind again inside a compound
+        // `&&` condition here (as an earlier version did) leaves one of the four resulting branches
+        // permanently dead, since that combination can never actually occur.
+        if (left instanceof Variable<?> leftVar) {
+            if (right instanceof Variable<?> rightVar) {
+                addOrReify(eq
+                        ? BinaryComparatorConstraint.of((Variable<String>) leftVar, Operator.EQ, (Variable<String>) rightVar)
+                        : BinaryNotEqualsConstraint.of((Variable<String>) leftVar, (Variable<String>) rightVar), id);
+            } else {
+                String rightVal = (String) right;
+                addOrReify(eq
+                        ? UnaryValueConstraint.of((Variable<String>) leftVar, rightVal)
+                        : UnaryNotEqualsConstraint.of((Variable<String>) leftVar, rightVal), id);
+            }
+        } else if (right instanceof Variable<?> rightVar) {
+            String leftVal = (String) left;
+            addOrReify(eq
+                    ? UnaryValueConstraint.of((Variable<String>) rightVar, leftVal)
+                    : UnaryNotEqualsConstraint.of((Variable<String>) rightVar, leftVal), id);
+        } else {
+            throw new UnsupportedXcsp3ConstraintException("Symbolic intension requires at least one variable operand: " + id);
+        }
+    }
+
+    @SuppressWarnings("unchecked")
+    private Object symbolicOperand(XNode<XVarSymbolic> node, String id) {
+        if (node instanceof XNodeLeaf<XVarSymbolic> leaf) {
+            if (leaf.getType() == TypeExpr.VAR) return symbolicVariableFor((XVarSymbolic) leaf.value);
+            if (leaf.getType() == TypeExpr.SYMBOL) return (String) leaf.value;
+        }
+        throw new UnsupportedXcsp3ConstraintException("Unsupported symbolic intension operand: " + id);
     }
 
     /**
@@ -552,6 +635,14 @@ final class Xcsp3CallbackHandler implements XCallbacks2 {
     @Override
     public void buildCtrAllDifferent(String id, XVarInteger[] list) {
         addOrReify(AllDiffConstraint.builder().variables(toVariableSet(list)).build(), id);
+    }
+
+    /** {@link AllDiffConstraint} is already generic over its value type, so the symbolic case needs no separate class. */
+    @Override
+    public void buildCtrAllDifferent(String id, XVarSymbolic[] list) {
+        Set<Variable<String>> vars = Arrays.stream(list).map(this::symbolicVariableFor)
+                .collect(Collectors.toCollection(LinkedHashSet::new));
+        addOrReify(AllDiffConstraint.builder().variables(vars).build(), id);
     }
 
     /**
