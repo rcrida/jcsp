@@ -112,6 +112,7 @@ final class Xcsp3CallbackHandler implements XCallbacks2 {
     private final Map<String, int[]> boundsByName = new LinkedHashMap<>();
     private final Map<String, Variable<Integer>> shiftedVariables = new LinkedHashMap<>();
     private final Map<String, Variable<Boolean>> booleanIndicators = new LinkedHashMap<>();
+    private final Map<Integer, Variable<Integer>> constantVariables = new LinkedHashMap<>();
     private @Nullable ToDoubleFunction<Assignment> objective;
     private boolean maximize;
     private @Nullable XReification currentReification;
@@ -273,6 +274,21 @@ final class Xcsp3CallbackHandler implements XCallbacks2 {
 
     private Variable<Integer> oneBasedIndex(XVarInteger indexVar, int startIndex) {
         return shiftVariable(indexVar, 1 - startIndex);
+    }
+
+    /**
+     * Fresh singleton-domain variable pinned to {@code value}, for constructs (e.g. {@link
+     * #elementResult}) that need a genuine {@code Variable<Integer>} but the source XCSP3 condition
+     * is a constant, not a variable reference. Memoized by value, the same pattern {@link
+     * #shiftVariable}/{@link #booleanIndicatorFor} use, so repeated occurrences of the same constant
+     * share one auxiliary variable instead of building a redundant copy per occurrence.
+     */
+    private Variable<Integer> constantVariable(int value) {
+        return constantVariables.computeIfAbsent(value, v -> {
+            Variable<Integer> constant = Variable.Factory.INSTANCE.create("$const" + v);
+            builder.variableDomain(constant, IntRangeDomain.of(v, v));
+            return constant;
+        });
     }
 
     // ---- Operator mapping -----------------------------------------------------------------------
@@ -753,10 +769,13 @@ final class Xcsp3CallbackHandler implements XCallbacks2 {
     }
 
     private Variable<Integer> elementResult(Condition condition, String id) {
-        if (!(condition instanceof ConditionVar var) || var.operator != TypeConditionOperatorRel.EQ) {
-            throw new UnsupportedXcsp3ConstraintException("element requires an EQ-to-variable condition: " + id);
+        if (condition instanceof ConditionVar var && var.operator == TypeConditionOperatorRel.EQ) {
+            return variableFor(var.x);
         }
-        return variableFor(var.x);
+        if (condition instanceof ConditionVal val && val.operator == TypeConditionOperatorRel.EQ) {
+            return constantVariable((int) val.k);
+        }
+        throw new UnsupportedXcsp3ConstraintException("element requires an EQ-to-variable or EQ-to-constant condition: " + id);
     }
 
     // ---- minimum / maximum ----------------------------------------------------------------------------------

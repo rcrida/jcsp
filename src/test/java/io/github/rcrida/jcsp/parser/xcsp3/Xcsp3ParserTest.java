@@ -640,13 +640,27 @@ class Xcsp3ParserTest {
         assertThat(instance.csp().getVariableDomains()).hasSize(7);
     }
 
-    @Test void elementWithConstantCondition_throwsUnsupported() {
-        // <value> 5 </value> against a constant (rather than a variable) yields a ConditionVal,
-        // which elementResult rejects -- jcsp's element/elementVariable constraints always need a
-        // real result *variable*, not a fixed constant.
+    @Test void elementWithConstantCondition_bindsResultToAuxiliaryConstantVariable() throws IOException {
+        // <value> 5 </value> against a constant (rather than a variable) yields a ConditionVal;
+        // elementResult bridges it via a fresh singleton-domain auxiliary variable ($const5) rather
+        // than requiring a real result variable -- solutions must place 5 somewhere in a[] at index i.
+        Xcsp3Instance instance = parseXml(
+                "<array id=\"a\" size=\"[3]\"> 0..5 </array><var id=\"i\"> 0..2 </var>",
+                "<element><list startIndex=\"0\"> a[0] a[1] a[2] </list><index> i </index><value> 5 </value></element>");
+        Set<Assignment> found = solutions(instance.csp());
+        assertThat(found).isNotEmpty();
+        for (Assignment solution : found) {
+            int index = digitOf(solution, "i");
+            assertThat(digitOf(solution, "a[" + index + "]")).isEqualTo(5);
+        }
+    }
+
+    @Test void elementWithNonEqConstantCondition_throwsUnsupported() {
+        // <condition>(ne,5)</condition> against a constant yields a ConditionVal with a non-EQ
+        // operator -- still rejected, same as the ConditionVar non-EQ case below.
         assertThatThrownBy(() -> parseXml(
                 "<array id=\"a\" size=\"[3]\"> 0..5 </array><var id=\"i\"> 0..2 </var>",
-                "<element><list startIndex=\"0\"> a[0] a[1] a[2] </list><index> i </index><value> 5 </value></element>"))
+                "<element><list startIndex=\"0\"> a[0] a[1] a[2] </list><index> i </index><condition> (ne,5) </condition></element>"))
                 .isInstanceOf(UnsupportedXcsp3ConstraintException.class);
     }
 
