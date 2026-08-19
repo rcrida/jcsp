@@ -55,6 +55,7 @@ import io.github.rcrida.jcsp.constraints.nary.NValueConstraint;
 import io.github.rcrida.jcsp.constraints.nary.PartitionConstraint;
 import io.github.rcrida.jcsp.constraints.nary.ProductConstraint;
 import io.github.rcrida.jcsp.constraints.nary.ProductVariableConstraint;
+import io.github.rcrida.jcsp.constraints.nary.NaryStarredTuplesConstraint;
 import io.github.rcrida.jcsp.constraints.nary.NaryTuplesConstraint;
 import io.github.rcrida.jcsp.constraints.nary.RegularConstraint;
 import io.github.rcrida.jcsp.constraints.nary.ReifiedConstraint;
@@ -163,6 +164,7 @@ public class FixpointPropagation {
             FixpointConsistency.of(MinVariableConstraint.class),
             FixpointConsistency.of(NaryElementConstraint.class),
             FixpointConsistency.of(NaryTuplesConstraint.class),
+            FixpointConsistency.of(NaryStarredTuplesConstraint.class),
             FixpointConsistency.of(ProductConstraint.class),
             FixpointConsistency.of(ProductVariableConstraint.class),
             FixpointConsistency.of(DivisionConstraint.class),

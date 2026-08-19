@@ -8,6 +8,7 @@ import org.xcsp.common.Types.TypeExpr;
 import org.xcsp.common.Types.TypeFlag;
 import org.xcsp.common.predicates.XNodeLeaf;
 import org.xcsp.common.predicates.XNodeParent;
+import org.xcsp.parser.entries.XVariables.XVarInteger;
 import org.xcsp.parser.entries.XVariables.XVarSymbolic;
 
 import java.util.Map;
@@ -67,6 +68,30 @@ class Xcsp3CallbackHandlerTest {
      */
     @Test void requireNoUnsupportedFlags_smartTuples_throws() {
         assertThatThrownBy(() -> Xcsp3CallbackHandler.requireNoUnsupportedFlags(Set.of(TypeFlag.SMART_TUPLES), "c0"))
+                .isInstanceOf(UnsupportedXcsp3ConstraintException.class);
+    }
+
+    /**
+     * The unary form of {@code extension} has no other columns for a wildcard to leave
+     * unconstrained -- a starred single-variable value list has no real XCSP3 syntax to produce it
+     * -- so {@code requireNoUnsupportedFlags}'s {@code STARRED_TUPLES} branch needs the same direct
+     * construction as its {@code SMART_TUPLES} sibling above.
+     */
+    @Test void requireNoUnsupportedFlags_starredTuples_throws() {
+        assertThatThrownBy(() -> Xcsp3CallbackHandler.requireNoUnsupportedFlags(Set.of(TypeFlag.STARRED_TUPLES), "c0"))
+                .isInstanceOf(UnsupportedXcsp3ConstraintException.class);
+    }
+
+    /**
+     * {@code SMART_TUPLES} on the n-ary form of {@code extension} is checked before {@code list} is
+     * ever used, so an empty {@code XVarInteger[]} is safe here -- real smart-tuple XML syntax is
+     * obscure enough that no hand-authored fixture in {@code Xcsp3ParserTest} exercises it, same as
+     * the unary case above.
+     */
+    @Test void buildCtrExtension_naryForm_smartTuples_throws() {
+        Xcsp3CallbackHandler handler = new Xcsp3CallbackHandler();
+        assertThatThrownBy(() -> handler.buildCtrExtension(
+                "c0", new XVarInteger[0], new int[][] {}, true, Set.of(TypeFlag.SMART_TUPLES)))
                 .isInstanceOf(UnsupportedXcsp3ConstraintException.class);
     }
 

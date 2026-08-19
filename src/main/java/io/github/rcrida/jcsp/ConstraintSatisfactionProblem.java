@@ -70,6 +70,7 @@ import io.github.rcrida.jcsp.constraints.nary.ValueSetNogoodConstraint;
 import io.github.rcrida.jcsp.constraints.nary.SetBoundsNogoodConstraint;
 import io.github.rcrida.jcsp.constraints.nary.ProductConstraint;
 import io.github.rcrida.jcsp.constraints.nary.ProductVariableConstraint;
+import io.github.rcrida.jcsp.constraints.nary.NaryStarredTuplesConstraint;
 import io.github.rcrida.jcsp.constraints.nary.NaryTuplesConstraint;
 import io.github.rcrida.jcsp.constraints.nary.SumBoundConstraint;
 import io.github.rcrida.jcsp.constraints.nary.SumVariableConstraint;
@@ -1590,6 +1591,20 @@ public class ConstraintSatisfactionProblem {
          */
         public ConstraintSatisfactionProblemBuilder tuplesConstraint(@NonNull Set<Assignment> tuples) {
             return this.constraint(NaryTuplesConstraint.of(tuples));
+        }
+
+        /**
+         * The starred-tuple sibling of {@link #tuplesConstraint}: each tuple is a {@code
+         * Map<Variable<?>, Object>} whose values may be {@link NaryStarredTuplesConstraint#STAR}
+         * ("don't care") instead of a concrete value, for tables with wildcard positions too large
+         * to expand into {@link #tuplesConstraint}'s plain {@link Assignment} tuples.
+         *
+         * @param tuples the allowed tuples, each possibly containing {@link
+         *     NaryStarredTuplesConstraint#STAR} entries; all must share the same variable set
+         * @return the builder
+         */
+        public ConstraintSatisfactionProblemBuilder starredTuplesConstraint(@NonNull Set<Map<Variable<?>, Object>> tuples) {
+            return this.constraint(NaryStarredTuplesConstraint.of(tuples));
         }
 
         /**

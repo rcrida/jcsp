@@ -32,6 +32,7 @@ import io.github.rcrida.jcsp.constraints.nary.MaxVariableConstraint;
 import io.github.rcrida.jcsp.constraints.nary.MinConstraint;
 import io.github.rcrida.jcsp.constraints.nary.MinVariableConstraint;
 import io.github.rcrida.jcsp.constraints.nary.NaryElementConstraint;
+import io.github.rcrida.jcsp.constraints.nary.NaryStarredTuplesConstraint;
 import io.github.rcrida.jcsp.constraints.nary.NaryTuplesConstraint;
 import io.github.rcrida.jcsp.constraints.nary.OrderedConstraint;
 import io.github.rcrida.jcsp.constraints.nary.PredicateConstraint;
@@ -52,6 +53,7 @@ import io.github.rcrida.jcsp.solver.LinearObjective;
 import io.github.rcrida.jcsp.variables.Variable;
 import org.jspecify.annotations.Nullable;
 import org.xcsp.common.Condition;
+import org.xcsp.common.Constants;
 import org.xcsp.common.Condition.ConditionVal;
 import org.xcsp.common.Condition.ConditionVar;
 import org.xcsp.common.IVar;
@@ -574,13 +576,38 @@ final class Xcsp3CallbackHandler implements XCallbacks2 {
 
     // ---- extension (table) ------------------------------------------------------------------------
 
+    /**
+     * {@link TypeFlag#STARRED_TUPLES} (a {@code *} entry in {@code <supports>}, surfaced here as
+     * {@code tuple[i] == Constants#STAR_INT}) routes to {@link NaryStarredTuplesConstraint} rather
+     * than being rejected or expanded: a real competition instance ({@code
+     * PrizeCollecting-15-3-5-0.xml.lzma}) uses a starred table to link a 15-element successor array
+     * to a 15-element position array with only 2-3 of 16 columns ever concrete per row, which a
+     * cross-product expansion into plain {@link NaryTuplesConstraint} tuples could never
+     * materialise. {@link TypeFlag#SMART_TUPLES} (arbitrary expressions in place of literal values)
+     * remains rejected -- unlike a plain wildcard, an expression cell isn't representable by the
+     * {@code int[]}/{@code int[][]} this class works with at all.
+     */
     @Override
     public void buildCtrExtension(String id, XVarInteger[] list, int[][] tuples, boolean positive, Set<TypeFlag> flags) {
         if (!positive) {
             throw new UnsupportedXcsp3ConstraintException("Negative (conflict) extension tables are not supported: " + id);
         }
-        requireNoUnsupportedFlags(flags, id);
+        if (flags.contains(TypeFlag.SMART_TUPLES)) {
+            throw new UnsupportedXcsp3ConstraintException("Smart extension tuples are not supported: " + id);
+        }
         List<Variable<Integer>> vars = toVariableList(list);
+        if (flags.contains(TypeFlag.STARRED_TUPLES)) {
+            Set<Map<Variable<?>, Object>> starredTuples = new LinkedHashSet<>();
+            for (int[] tuple : tuples) {
+                Map<Variable<?>, Object> tupleValues = new LinkedHashMap<>();
+                for (int i = 0; i < vars.size(); i++) {
+                    tupleValues.put(vars.get(i), tuple[i] == Constants.STAR_INT ? NaryStarredTuplesConstraint.STAR : tuple[i]);
+                }
+                starredTuples.add(tupleValues);
+            }
+            addOrReify(NaryStarredTuplesConstraint.of(starredTuples), id);
+            return;
+        }
         Set<Assignment> assignments = new LinkedHashSet<>();
         for (int[] tuple : tuples) {
             Map<Variable<Integer>, Integer> tupleValues = new LinkedHashMap<>();
@@ -612,17 +639,20 @@ final class Xcsp3CallbackHandler implements XCallbacks2 {
     }
 
     /**
-     * Rejects {@link TypeFlag#STARRED_TUPLES} (wildcard "don't care" entries) and {@link
-     * TypeFlag#SMART_TUPLES} (arbitrary expressions in place of literal values) -- neither is
-     * representable by the plain {@code int[]}/{@code int[][]} this class works with. {@link
-     * TypeFlag#UNCLEAN_TUPLES} is deliberately allowed through unchecked: it only records that the
-     * original XML used compact notation (e.g. a {@code 0..4} range) for the value/tuple list --
-     * {@code xcsp3-tools} has already expanded that into a plain, fully-materialized array by the
-     * time it reaches {@code buildCtrExtension}, so there is nothing left here to reject.
-     * Package-private (not private) so {@code Xcsp3CallbackHandlerTest} can exercise the {@link
-     * TypeFlag#SMART_TUPLES} branch directly -- real "smart" tuple syntax is obscure enough that no
-     * hand-authored XCSP3 fixture in {@code Xcsp3ParserTest} exercises it, the same reasoning
-     * {@link #applySumCondition}'s own comment gives for its package-private visibility.
+     * Used only by the unary form of {@code extension} (below): rejects {@link
+     * TypeFlag#STARRED_TUPLES} (wildcard "don't care" entries) and {@link TypeFlag#SMART_TUPLES}
+     * (arbitrary expressions in place of literal values). Unlike the n-ary form above, a starred
+     * unary value list has no other columns for a wildcard to leave unconstrained -- an entry that
+     * doesn't narrow the one variable at all wouldn't be a meaningful constraint -- so there's no
+     * analogous case to support here. {@link TypeFlag#UNCLEAN_TUPLES} is deliberately allowed
+     * through unchecked: it only records that the original XML used compact notation (e.g. a
+     * {@code 0..4} range) for the value/tuple list -- {@code xcsp3-tools} has already expanded that
+     * into a plain, fully-materialized array by the time it reaches {@code buildCtrExtension}, so
+     * there is nothing left here to reject. Package-private (not private) so {@code
+     * Xcsp3CallbackHandlerTest} can exercise the {@link TypeFlag#SMART_TUPLES} branch directly --
+     * real "smart" tuple syntax is obscure enough that no hand-authored XCSP3 fixture in {@code
+     * Xcsp3ParserTest} exercises it, the same reasoning {@link #applySumCondition}'s own comment
+     * gives for its package-private visibility.
      */
     static void requireNoUnsupportedFlags(Set<TypeFlag> flags, String id) {
         if (flags.contains(TypeFlag.STARRED_TUPLES) || flags.contains(TypeFlag.SMART_TUPLES)) {

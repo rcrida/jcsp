@@ -276,12 +276,24 @@ class Xcsp3ParserTest {
                 .isInstanceOf(UnsupportedXcsp3ConstraintException.class);
     }
 
-    @Test void extensionStarredTuples_throwsUnsupported() {
-        assertThatThrownBy(() -> parseXml(
+    @Test void extensionStarredTuples_buildsStarredTuplesConstraint() throws IOException {
+        // (0,*): x=0 with y unconstrained -- 3 solutions (y=0,1,2). (1,1): exactly x=1,y=1 -- 1
+        // solution. 4 total, not the 2 a plain (non-starred) reading of the same two rows would give.
+        Xcsp3Instance instance = parseXml(
                 "<var id=\"x\"> 0..2 </var><var id=\"y\"> 0..2 </var>",
-                "<extension><list> x y </list><supports> (0,*)(1,1) </supports></extension>"))
-                .isInstanceOf(UnsupportedXcsp3ConstraintException.class);
+                "<extension><list> x y </list><supports> (0,*)(1,1) </supports></extension>");
+        Set<Assignment> found = solutions(instance.csp());
+        assertThat(found).hasSize(4);
+        for (Assignment a : found) {
+            int x = digitOf(a, "x"), y = digitOf(a, "y");
+            assertThat(x == 0 || (x == 1 && y == 1)).as("x=%d, y=%d", x, y).isTrue();
+        }
     }
+
+    // Smart tuples (expression cells like "ge(3)" in place of literal values) have no real,
+    // hand-authorable XML fixture obscure/rare enough to be worth constructing here -- see
+    // Xcsp3CallbackHandlerTest#buildCtrExtension_naryForm_smartTuples_throws for the direct
+    // white-box coverage of that throw branch instead.
 
     @Test void unaryExtensionPositive_restrictsVariableToListedValues() throws IOException {
         Xcsp3Instance instance = parseXml(
