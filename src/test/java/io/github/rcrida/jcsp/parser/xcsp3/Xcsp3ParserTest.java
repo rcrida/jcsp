@@ -228,6 +228,33 @@ class Xcsp3ParserTest {
         }
     }
 
+    // ---- clause ---------------------------------------------------------------------------------------
+
+    @Test void clause_positiveAndNegativeLiterals_excludesOnlyFalsifyingCombination() throws IOException {
+        // x OR NOT(y) -- falsified only by x=0,y=1.
+        Xcsp3Instance instance = parseXml(
+                "<var id=\"x\"> 0 1 </var><var id=\"y\"> 0 1 </var>",
+                "<clause> x not(y) </clause>");
+        Set<Assignment> solutions = solutions(instance.csp());
+        assertThat(solutions).hasSize(3);
+        for (Assignment a : solutions) {
+            assertThat(digitOf(a, "x") == 1 || digitOf(a, "y") == 0).isTrue();
+        }
+    }
+
+    @Test void clauseReified_indicatorTracksConstraintTruthValue() throws IOException {
+        Xcsp3Instance instance = parseXml(
+                "<var id=\"x\"> 0 1 </var><var id=\"y\"> 0 1 </var><var id=\"b\"> 0 1 </var>",
+                "<clause reifiedBy=\"b\"> x not(y) </clause>");
+        for (Assignment a : solutions(instance.csp())) {
+            int x = digitOf(a, "x");
+            int y = digitOf(a, "y");
+            int b = digitOf(a, "b");
+            assertThat(b == 1).as("x=%d, y=%d, b=%d", x, y, b).isEqualTo(x == 1 || y == 0);
+        }
+        assertThat(solutions(instance.csp())).hasSize(4);
+    }
+
     // ---- extension (table) --------------------------------------------------------------------------
 
     @Test void extensionSupport_buildsTuplesConstraint() throws IOException {
@@ -1727,12 +1754,13 @@ class Xcsp3ParserTest {
     // ---- unsupported construct falls through to the library's own default --------------------------------------------------
 
     @Test void completelyUnrecognisedConstruct_throwsRuntimeException() {
-        // clause has no buildCtrClause override at all, so this falls through to XCallbacks2's own
-        // default (unimplementedCase), not UnsupportedXcsp3ConstraintException -- mdd used to be
-        // this test's example, but it's now a recognised, mapped construct (task #54).
+        // A symbolic (string-valued) variable domain has no buildVarSymbolic override at all, so
+        // this falls through to XCallbacks2's own default (unimplementedCase), not
+        // UnsupportedXcsp3ConstraintException -- mdd, then clause, used to be this test's example,
+        // but both are now recognised, mapped constructs.
         assertThatThrownBy(() -> parseXml(
-                "<var id=\"x\"> 0..2 </var><var id=\"y\"> 0..2 </var>",
-                "<clause> x not(y) </clause>"))
+                "<var id=\"x\" type=\"symbolic\"> A B C </var><var id=\"y\" type=\"symbolic\"> A B C </var>",
+                "<intension> ne(x,y) </intension>"))
                 .isInstanceOf(RuntimeException.class);
     }
 

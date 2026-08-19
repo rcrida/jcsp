@@ -112,6 +112,7 @@ final class Xcsp3CallbackHandler implements XCallbacks2 {
     private final Map<String, int[]> boundsByName = new LinkedHashMap<>();
     private final Map<String, Variable<Integer>> shiftedVariables = new LinkedHashMap<>();
     private final Map<String, Variable<Boolean>> booleanIndicators = new LinkedHashMap<>();
+    private final Map<String, Variable<Boolean>> negatedBooleanIndicators = new LinkedHashMap<>();
     private final Map<Integer, Variable<Integer>> constantVariables = new LinkedHashMap<>();
     private @Nullable ToDoubleFunction<Assignment> objective;
     private boolean maximize;
@@ -208,6 +209,21 @@ final class Xcsp3CallbackHandler implements XCallbacks2 {
             Variable<Boolean> boolVar = Variable.Factory.INSTANCE.create(name + "$bool");
             builder.variableDomain(boolVar, BooleanDomain.INSTANCE);
             builder.reifyConstraint(boolVar, UnaryValueConstraint.of(variablesByName.get(name), 1));
+            return boolVar;
+        });
+    }
+
+    /**
+     * {@link #booleanIndicatorFor}'s negation: tied to {@code intVar == 0} rather than {@code == 1}
+     * (memoized separately -- the two indicators for the same {@code intVar} are different
+     * variables, not complements of one shared one). Used for a negative SAT-clause literal (see
+     * {@link #buildCtrClause}), where "this literal holds" means the underlying variable is 0.
+     */
+    private Variable<Boolean> negatedBooleanIndicatorFor(XVarInteger intVar) {
+        return negatedBooleanIndicators.computeIfAbsent(intVar.id(), name -> {
+            Variable<Boolean> boolVar = Variable.Factory.INSTANCE.create(name + "$notbool");
+            builder.variableDomain(boolVar, BooleanDomain.INSTANCE);
+            builder.reifyConstraint(boolVar, UnaryValueConstraint.of(variablesByName.get(name), 0));
             return boolVar;
         });
     }
@@ -427,6 +443,27 @@ final class Xcsp3CallbackHandler implements XCallbacks2 {
             return Optional.of(((Long) leaf.value).intValue());
         }
         return Optional.empty();
+    }
+
+    // ---- clause ---------------------------------------------------------------------------------
+
+    /**
+     * A plain SAT clause: {@code OR(pos) OR OR(NOT neg)}. Bridges each literal to a boolean
+     * indicator -- {@link #booleanIndicatorFor} for a positive literal, {@link
+     * #negatedBooleanIndicatorFor} for a negative one -- then routes through {@link
+     * AtLeastNConstraint} with {@code n=1}, the same boolean-counting primitive {@code
+     * atLeastNConstraint} uses, rather than a bare {@link PredicateConstraint}: {@link
+     * AtLeastNConstraint} is a registered {@link io.github.rcrida.jcsp.consistency.Propagatable}
+     * (unlike {@link PredicateConstraint}, checked only once every variable is assigned), so once
+     * every literal but one has been excluded it forces the last remaining one true -- real unit
+     * propagation, not just a satisfaction check.
+     */
+    @Override
+    public void buildCtrClause(String id, XVarInteger[] pos, XVarInteger[] neg) {
+        Set<Variable<Boolean>> indicators = new LinkedHashSet<>();
+        for (XVarInteger v : pos) indicators.add(booleanIndicatorFor(v));
+        for (XVarInteger v : neg) indicators.add(negatedBooleanIndicatorFor(v));
+        addOrReify(AtLeastNConstraint.builder().variables(indicators).n(1).build(), id);
     }
 
     // ---- extension (table) ------------------------------------------------------------------------
