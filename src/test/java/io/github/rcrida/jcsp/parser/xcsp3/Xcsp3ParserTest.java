@@ -4,6 +4,7 @@ import io.github.rcrida.jcsp.ConstraintSatisfactionProblem;
 import io.github.rcrida.jcsp.assignments.Assignment;
 import io.github.rcrida.jcsp.constraints.binary.BinaryComparatorConstraint;
 import io.github.rcrida.jcsp.constraints.binary.BinaryOffsetConstraint;
+import io.github.rcrida.jcsp.constraints.nary.MinVariableConstraint;
 import io.github.rcrida.jcsp.constraints.nary.PredicateConstraint;
 import io.github.rcrida.jcsp.constraints.unary.UnaryPredicateConstraint;
 import io.github.rcrida.jcsp.solver.Solver;
@@ -119,6 +120,96 @@ class Xcsp3ParserTest {
             assertThat(digitOf(solution, "x")).isEqualTo(digitOf(solution, "y"));
         }
         assertThat(solutions(instance.csp())).hasSize(2);
+    }
+
+    @Test void intensionBooleanProductChannel_routesThroughMinVariableConstraint() throws IOException {
+        // x,y in {0,1}: eq(mul(x,y),t) is exactly boolean AND -- xcsp3-tools' canonizer always puts
+        // mul(...) first, t second (confirmed empirically against a real BIBD instance's own
+        // channeling constraints), so this exercises recognizeBooleanProductChannel rather than
+        // falling back to PredicateConstraint, which has no propagation at all.
+        Xcsp3Instance instance = parseXml(
+                "<var id=\"x\"> 0 1 </var><var id=\"y\"> 0 1 </var><var id=\"t\"> 0 1 </var>",
+                "<intension> eq(mul(x,y),t) </intension>");
+        assertThat(instance.csp().getConstraints().iterator().next()).isInstanceOf(MinVariableConstraint.class);
+        Set<Assignment> found = solutions(instance.csp());
+        assertThat(found).hasSize(4);
+        for (Assignment a : found) {
+            assertThat(digitOf(a, "t")).isEqualTo(digitOf(a, "x") * digitOf(a, "y"));
+        }
+    }
+
+    @Test void intensionBooleanProductChannel_secondOperandNonBooleanDomain_fallsBackToPredicateConstraint() throws IOException {
+        // y's domain is 0..2, not confined to {0,1} -- a*b == min(a,b) doesn't hold in general there
+        // (e.g. min(2,3)=2 but 2*3=6), so recognition must decline even though the tree shape
+        // (eq(mul(var,var),var)) matches exactly.
+        Xcsp3Instance instance = parseXml(
+                "<var id=\"x\"> 0 1 </var><var id=\"y\"> 0..2 </var><var id=\"t\"> 0..2 </var>",
+                "<intension> eq(mul(x,y),t) </intension>");
+        assertThat(instance.csp().getConstraints().iterator().next()).isInstanceOf(PredicateConstraint.class);
+        Set<Assignment> found = solutions(instance.csp());
+        assertThat(found).isNotEmpty();
+        for (Assignment a : found) {
+            assertThat(digitOf(a, "t")).isEqualTo(digitOf(a, "x") * digitOf(a, "y"));
+        }
+    }
+
+    @Test void intensionBooleanProductChannel_firstOperandNonBooleanDomain_fallsBackToPredicateConstraint() throws IOException {
+        // Same as above with the roles reversed -- x (the mul node's first operand) is the
+        // non-boolean side this time, exercising isBooleanDomain(a) rather than isBooleanDomain(b).
+        Xcsp3Instance instance = parseXml(
+                "<var id=\"x\"> 0..2 </var><var id=\"y\"> 0 1 </var><var id=\"t\"> 0..2 </var>",
+                "<intension> eq(mul(x,y),t) </intension>");
+        assertThat(instance.csp().getConstraints().iterator().next()).isInstanceOf(PredicateConstraint.class);
+        Set<Assignment> found = solutions(instance.csp());
+        assertThat(found).isNotEmpty();
+        for (Assignment a : found) {
+            assertThat(digitOf(a, "t")).isEqualTo(digitOf(a, "x") * digitOf(a, "y"));
+        }
+    }
+
+    @Test void intensionBooleanProductChannel_operandDomainNotStartingAtZero_fallsBackToPredicateConstraint() throws IOException {
+        // x's domain is {1,2} -- bounds[0] != 0, so isBooleanDomain's first comparison short-circuits
+        // to false without needing to check the upper bound too (distinct from the 0..2 case above,
+        // whose lower bound is 0 but whose upper bound is what fails).
+        Xcsp3Instance instance = parseXml(
+                "<var id=\"x\"> 1 2 </var><var id=\"y\"> 0 1 </var><var id=\"t\"> 0..2 </var>",
+                "<intension> eq(mul(x,y),t) </intension>");
+        assertThat(instance.csp().getConstraints().iterator().next()).isInstanceOf(PredicateConstraint.class);
+        Set<Assignment> found = solutions(instance.csp());
+        assertThat(found).isNotEmpty();
+        for (Assignment a : found) {
+            assertThat(digitOf(a, "t")).isEqualTo(digitOf(a, "x") * digitOf(a, "y"));
+        }
+    }
+
+    @Test void intensionBooleanProductChannel_mulOperandIsCompoundExpression_fallsBackToPredicateConstraint() throws IOException {
+        // add(x,1) canonicalizes to mul's first operand ahead of the bare variable y (same
+        // complexity-based reordering as everywhere else), so asVariable(mulNode.sons[0]) finds a
+        // compound node rather than a plain variable -- exercises a.isEmpty() specifically.
+        Xcsp3Instance instance = parseXml(
+                "<var id=\"x\"> 0..2 </var><var id=\"y\"> 0 1 </var><var id=\"t\"> 0..4 </var>",
+                "<intension> eq(mul(add(x,1),y),t) </intension>");
+        assertThat(instance.csp().getConstraints().iterator().next()).isInstanceOf(PredicateConstraint.class);
+        Set<Assignment> found = solutions(instance.csp());
+        assertThat(found).isNotEmpty();
+        for (Assignment a : found) {
+            assertThat(digitOf(a, "t")).isEqualTo((digitOf(a, "x") + 1) * digitOf(a, "y"));
+        }
+    }
+
+    @Test void intensionBooleanProductChannel_threeOperandMul_fallsBackToPredicateConstraint() throws IOException {
+        // mul(x,y,z) canonicalizes with the compound node first (same complexity-based reordering
+        // as the two-operand case), but its arity is 3, not the 2 this recognizer requires --
+        // exercises the sons.length != 2 rejection specifically.
+        Xcsp3Instance instance = parseXml(
+                "<var id=\"x\"> 0 1 </var><var id=\"y\"> 0 1 </var><var id=\"z\"> 0 1 </var><var id=\"t\"> 0..1 </var>",
+                "<intension> eq(mul(x,y,z),t) </intension>");
+        assertThat(instance.csp().getConstraints().iterator().next()).isInstanceOf(PredicateConstraint.class);
+        Set<Assignment> found = solutions(instance.csp());
+        assertThat(found).isNotEmpty();
+        for (Assignment a : found) {
+            assertThat(digitOf(a, "t")).isEqualTo(digitOf(a, "x") * digitOf(a, "y") * digitOf(a, "z"));
+        }
     }
 
     // ---- reification ------------------------------------------------------------------------------------------------
