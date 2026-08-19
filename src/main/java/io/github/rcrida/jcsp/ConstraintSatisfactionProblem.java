@@ -47,6 +47,7 @@ import io.github.rcrida.jcsp.constraints.nary.CumulativeConstraint;
 import io.github.rcrida.jcsp.constraints.nary.CountConstraint;
 import io.github.rcrida.jcsp.constraints.nary.CountVariableConstraint;
 import io.github.rcrida.jcsp.constraints.nary.GlobalCardinalityConstraint;
+import io.github.rcrida.jcsp.constraints.nary.GlobalCardinalityVariableConstraint;
 import io.github.rcrida.jcsp.constraints.nary.LexConstraint;
 import io.github.rcrida.jcsp.constraints.nary.MaxConstraint;
 import io.github.rcrida.jcsp.constraints.nary.MaxVariableConstraint;
@@ -1506,6 +1507,24 @@ public class ConstraintSatisfactionProblem {
         public <T> ConstraintSatisfactionProblemBuilder globalCardinalityRangeConstraint(
                 @NonNull Set<Variable<T>> variables, @NonNull Map<T, GlobalCardinalityConstraint.OccurrenceRange> ranges) {
             return this.constraint(GlobalCardinalityConstraint.ofRange(variables, ranges));
+        }
+
+        /**
+         * As {@link #globalCardinalityConstraint(Set, Map)}, but each value's occurrence count is
+         * itself a variable rather than a fixed number -- {@code count(variables, value) ==
+         * targets.get(value)} for every tracked value, jointly (see {@link
+         * GlobalCardinalityVariableConstraint}'s own Javadoc for why this is a dedicated propagator
+         * rather than one {@code countVariableConstraint} per tracked value). {@code targets} may
+         * reuse {@code variables} themselves as targets (e.g. a "magic sequence": {@code
+         * variables.get(i) == count of i in variables}).
+         *
+         * @param variables the variables to constrain
+         * @param targets   map from value to the variable tracking its occurrence count
+         * @return the builder
+         */
+        public <T> ConstraintSatisfactionProblemBuilder globalCardinalityVariableConstraint(
+                @NonNull Set<Variable<T>> variables, @NonNull Map<T, Variable<Integer>> targets) {
+            return this.constraint(GlobalCardinalityVariableConstraint.of(variables, targets));
         }
 
         /**
