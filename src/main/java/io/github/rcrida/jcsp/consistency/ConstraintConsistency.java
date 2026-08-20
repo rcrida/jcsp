@@ -20,14 +20,17 @@ public interface ConstraintConsistency {
      * Variant of {@link #apply(ConstraintSatisfactionProblem)} that accepts a hint of which
      * variables' domains changed since this consistency pass last ran in the current fixpoint
      * loop (see {@link io.github.rcrida.jcsp.solver.FixpointPropagation#applyFixpoint}), or {@code null} meaning "unknown
-     * — assume everything may have changed". Passes whose cost scales with a fixed, small
-     * constraint count (every {@link io.github.rcrida.jcsp.consistency.fixpoint.FixpointConsistency}
-     * instance, {@link io.github.rcrida.jcsp.consistency.arc.AC3}) have no need for the hint and
-     * inherit this default, which simply ignores it and delegates to {@link #apply}.
-     * {@code io.github.rcrida.jcsp.consistency.fixpoint.NogoodFixpointConsistency} is the one
-     * override: its constraint count grows unboundedly over a search (see {@link io.github.rcrida.jcsp.assignments.NogoodStore}),
-     * so skipping constraints that don't reference any changed variable is where this hint
-     * actually pays for itself.
+     * — assume everything may have changed". A pass whose cost genuinely doesn't scale with
+     * constraint count (e.g. {@link io.github.rcrida.jcsp.consistency.arc.AC3}, a single object
+     * internally managing its own revise queue over binary arcs) has no need for the hint and
+     * inherits this default, which simply ignores it and delegates to {@link #apply}. Both {@link
+     * io.github.rcrida.jcsp.consistency.fixpoint.FixpointConsistency} and {@link
+     * io.github.rcrida.jcsp.consistency.fixpoint.NogoodFixpointConsistency} override it: each can
+     * back a constraint count that grows past "fixed and small" (a learned nogood set grows
+     * unboundedly over a search, per {@link io.github.rcrida.jcsp.assignments.NogoodStore}; an
+     * XCSP3 {@code <group>}-templated constraint type can have thousands of instances from a single
+     * parsed instance file), so skipping constraint objects that don't reference any changed
+     * variable is where this hint pays for itself.
      */
     default Optional<ConstraintSatisfactionProblem> apply(ConstraintSatisfactionProblem csp,
                                                            @Nullable Set<Variable<?>> changedSinceLastRun) {

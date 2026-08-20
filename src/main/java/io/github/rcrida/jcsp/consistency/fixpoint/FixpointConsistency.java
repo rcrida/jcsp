@@ -16,6 +16,10 @@ import lombok.extern.slf4j.Slf4j;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -38,7 +42,8 @@ import java.util.concurrent.atomic.AtomicReference;
 public class FixpointConsistency implements ConstraintConsistency {
     @NonNull Class<? extends Propagatable> constraintType;
 
-    private record FilterCache(Set<Constraint> source, List<Propagatable> filtered) {}
+    private record FilterCache(Set<Constraint> source, List<Propagatable> filtered,
+                               Map<Variable<?>, List<Propagatable>> byVariable) {}
 
     public static FixpointConsistency of(Class<? extends Propagatable> constraintType) {
         return new FixpointConsistency(constraintType);
@@ -65,18 +70,65 @@ public class FixpointConsistency implements ConstraintConsistency {
      * a single cache slot shared across every {@link ConstraintSatisfactionProblem} solved by the
      * same shared {@code PROPAGATORS}-list instance would let two different problems solved
      * concurrently (e.g. independent subproblems) keep evicting each other's entry.
+     * <p>
+     * Also builds {@link FilterCache#byVariable}, a {@code Variable -> constraints} index used by
+     * {@link #relevant} to skip constraint objects none of whose variables changed since they were
+     * last checked -- built unconditionally, not lazily/optionally the way {@link
+     * NogoodFixpointConsistency}'s own {@code NogoodStore#byVariable} index is: unlike the nogood
+     * set, {@code source} here is fixed at CSP-build time and never mutates mid-solve, so there is
+     * no "expensive to keep rebuilding" tradeoff to weigh (the two reverted eager-nogood-index
+     * attempts {@link NogoodFixpointConsistency} documents don't apply -- this index is built once
+     * per distinct {@code source} reference and reused for that {@link ConstraintSatisfactionProblem}'s
+     * entire solve, exactly like {@link FilterCache#filtered} itself already is).
      */
     @SuppressWarnings({"unchecked", "rawtypes"})
-    private List<Propagatable> filteredConstraints(ConstraintSatisfactionProblem csp) {
+    private FilterCache filterCache(ConstraintSatisfactionProblem csp) {
         AtomicReference<FilterCache> holder = csp.computeAuxiliaryCacheIfAbsent(constraintType, ignored -> new AtomicReference<>());
         Set<Constraint> source = csp.getConstraints();
         FilterCache cached = holder.get();
         if (cached != null && cached.source() == source) {
-            return cached.filtered();
+            return cached;
         }
         List<Propagatable> filtered = (List) source.stream().filter(constraintType::isInstance).toList();
-        holder.set(new FilterCache(source, filtered));
-        return filtered;
+        Map<Variable<?>, List<Propagatable>> byVariable = new HashMap<>();
+        for (Propagatable constraint : filtered) {
+            for (Variable<?> variable : ((Constraint) constraint).getVariables()) {
+                byVariable.computeIfAbsent(variable, ignored -> new ArrayList<>()).add(constraint);
+            }
+        }
+        FilterCache fresh = new FilterCache(source, filtered, byVariable);
+        holder.set(fresh);
+        return fresh;
+    }
+
+    private List<Propagatable> filteredConstraints(ConstraintSatisfactionProblem csp) {
+        return filterCache(csp).filtered();
+    }
+
+    /**
+     * Returns every constraint in {@code cache}'s filtered list that references at least one
+     * variable in {@code changed}, or the full unfiltered list when {@code changed} is {@code null}
+     * (unknown -- the safe, always-correct fallback for a fixpoint call's first round, mirroring
+     * {@link NogoodFixpointConsistency#relevant}'s identical semantics). The single-variable case
+     * (the overwhelming majority in practice -- a fixpoint round typically narrows one variable at a
+     * time) returns {@link FilterCache#byVariable}'s own backing list directly, with no extra
+     * allocation. The multi-variable case dedupes via an {@link IdentityHashMap}-backed {@link Set}
+     * rather than relying on a constraint's own {@code equals}/{@code hashCode} (e.g. {@link
+     * io.github.rcrida.jcsp.constraints.nary.NaryTuplesConstraint}'s recursively walks a {@code
+     * Set<Assignment>}) -- identity is sufficient here since a given constraint only ever appears
+     * once per {@link FilterCache#byVariable} entry it's stored under, same reasoning as {@link
+     * NogoodFixpointConsistency#fromIndex}.
+     */
+    private static List<Propagatable> relevant(FilterCache cache, @Nullable Set<Variable<?>> changed) {
+        if (changed == null) return cache.filtered();
+        if (changed.size() == 1) {
+            return cache.byVariable().getOrDefault(changed.iterator().next(), List.of());
+        }
+        Set<Propagatable> result = Collections.newSetFromMap(new IdentityHashMap<>());
+        for (Variable<?> variable : changed) {
+            result.addAll(cache.byVariable().getOrDefault(variable, List.of()));
+        }
+        return new ArrayList<>(result);
     }
 
     /**
@@ -109,8 +161,24 @@ public class FixpointConsistency implements ConstraintConsistency {
 
     @Override
     public Optional<ConstraintSatisfactionProblem> apply(ConstraintSatisfactionProblem csp) {
-        List<Propagatable> constraints = filteredConstraints(csp);
+        return apply(csp, null);
+    }
+
+    /**
+     * Filters to {@link #relevant} constraints before running to fixpoint -- unlike the default
+     * {@link ConstraintConsistency#apply(ConstraintSatisfactionProblem, Set)} inherited by most
+     * other {@link ConstraintConsistency} implementors (which silently ignores {@code
+     * changedSinceLastRun} and delegates to {@link #apply(ConstraintSatisfactionProblem)}), this is
+     * a genuine override: skipping constraint objects none of whose variables changed since they
+     * were last checked is pure waste elimination (see {@link #relevant}'s own Javadoc), not an
+     * approximation, so this never loses propagation strength relative to the unfiltered scan.
+     */
+    @Override
+    public Optional<ConstraintSatisfactionProblem> apply(ConstraintSatisfactionProblem csp,
+                                                          @Nullable Set<Variable<?>> changedSinceLastRun) {
+        FilterCache cache = filterCache(csp);
         var name = constraintType.getSimpleName();
+        List<Propagatable> constraints = relevant(cache, changedSinceLastRun);
         if (constraints.isEmpty()) {
             return Optional.of(csp);
         }
@@ -162,19 +230,21 @@ public class FixpointConsistency implements ConstraintConsistency {
      * Propagatable#explainInfeasible} to derive a reason, tried in the same two tiers {@link
      * #explainConflict} used to: (1) the constraint's own explanation, (2) {@link
      * RangeNogoodConstraint#fromCurrentBounds} over its whole variable set as a generic fallback.
-     * Unlike {@link #apply(ConstraintSatisfactionProblem, Set)}, {@code changedSinceLastRun} is
-     * genuinely forwarded here, not ignored: this decides which constraint <em>objects</em> to
-     * re-invoke (of no help when a {@link #constraintType} typically has only one instance, e.g.
-     * {@code DiffnConstraint}), but the constraint itself now also receives the hint via {@link
-     * Propagatable#propagate(Map, Set)} and can use it to skip <em>internal</em> sub-computations
-     * whose inputs provably didn't change -- found via JFR profiling a hard XCSP3 packing instance
-     * to matter for exactly that constraint, whose own cost is dominated by pairwise checks across
-     * all its rectangles, not by how many constraint objects exist.
+     * {@code changedSinceLastRun} does double duty here: {@link #relevant} uses it to decide which
+     * constraint <em>objects</em> to re-invoke at all (the win that matters when {@link
+     * #constraintType} has many instances, e.g. thousands of small XCSP3 {@code <group>}-templated
+     * table constraints), and each constraint still separately receives it via {@link
+     * Propagatable#propagate(Map, Set)} so it can also skip <em>internal</em> sub-computations whose
+     * inputs provably didn't change (of no help when a type typically has only one instance, e.g.
+     * {@code DiffnConstraint} -- found via JFR profiling a hard XCSP3 packing instance to matter for
+     * exactly that constraint, whose own cost is dominated by pairwise checks across all its
+     * rectangles, not by how many constraint objects exist).
      */
     @Override
     public ConsistencyResult applyWithReason(ConstraintSatisfactionProblem csp,
                                              @Nullable Set<Variable<?>> changedSinceLastRun) {
-        List<Propagatable> constraints = filteredConstraints(csp);
+        FilterCache cache = filterCache(csp);
+        List<Propagatable> constraints = relevant(cache, changedSinceLastRun);
         if (constraints.isEmpty()) return ConsistencyResult.feasible(csp);
         DomainAccumulator domains = new DomainAccumulator(csp.getVariableDomains());
         boolean changed = true;

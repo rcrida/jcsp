@@ -58,4 +58,90 @@ public class FixpointConsistencyTest {
                 .build();
         assertThat(FixpointConsistency.of(SumBoundConstraint.class).explainConflict(csp)).isPresent();
     }
+
+    // --- per-object dirty tracking (relevant()/byVariable index) ---
+
+    @Test
+    void apply_dirtySetExcludingConstraintVariables_skipsCheckEntirely() {
+        // The constraint (x=y=5, sum<=3) is already infeasible if checked -- but the dirty set only
+        // names z, which the constraint doesn't reference, so it must be skipped entirely and the
+        // CSP returned unchanged, mirroring NogoodFixpointConsistencyTest's identical scenario.
+        Variable<Integer> x = Variable.Factory.INSTANCE.create("dtx1");
+        Variable<Integer> y = Variable.Factory.INSTANCE.create("dty1");
+        Variable<Integer> z = Variable.Factory.INSTANCE.create("dtz1");
+        var csp = ConstraintSatisfactionProblem.builder()
+                .variableDomain(x, IntRangeDomain.of(5, 5))
+                .variableDomain(y, IntRangeDomain.of(5, 5))
+                .variableDomain(z, IntRangeDomain.of(1, 3))
+                .sumConstraint(Set.of(x, y), Operator.LEQ, 3)
+                .build();
+        assertThat(FixpointConsistency.of(SumBoundConstraint.class).apply(csp, Set.of(z))).hasValue(csp);
+    }
+
+    @Test
+    void apply_dirtySetIncludingConstraintVariable_stillDetectsInfeasibility() {
+        Variable<Integer> x = Variable.Factory.INSTANCE.create("dtx2");
+        Variable<Integer> y = Variable.Factory.INSTANCE.create("dty2");
+        var csp = ConstraintSatisfactionProblem.builder()
+                .variableDomain(x, IntRangeDomain.of(5, 5))
+                .variableDomain(y, IntRangeDomain.of(5, 5))
+                .sumConstraint(Set.of(x, y), Operator.LEQ, 3)
+                .build();
+        assertThat(FixpointConsistency.of(SumBoundConstraint.class).apply(csp, Set.of(x))).isEmpty();
+    }
+
+    @Test
+    void apply_dirtySetSpanningBothConstraintVariables_dedupesAndDetectsInfeasibility() {
+        // Both x and y are dirty, so relevant()'s indexed lookup unions per-variable matches for a
+        // constraint referencing both -- must still be deduplicated down to a single check, not
+        // applied/counted twice.
+        Variable<Integer> x = Variable.Factory.INSTANCE.create("dtx3");
+        Variable<Integer> y = Variable.Factory.INSTANCE.create("dty3");
+        var csp = ConstraintSatisfactionProblem.builder()
+                .variableDomain(x, IntRangeDomain.of(5, 5))
+                .variableDomain(y, IntRangeDomain.of(5, 5))
+                .sumConstraint(Set.of(x, y), Operator.LEQ, 3)
+                .build();
+        assertThat(FixpointConsistency.of(SumBoundConstraint.class).apply(csp, Set.of(x, y))).isEmpty();
+    }
+
+    @Test
+    void apply_nullDirtySet_fullScanStillDetectsInfeasibility() {
+        Variable<Integer> x = Variable.Factory.INSTANCE.create("dtx4");
+        Variable<Integer> y = Variable.Factory.INSTANCE.create("dty4");
+        var csp = ConstraintSatisfactionProblem.builder()
+                .variableDomain(x, IntRangeDomain.of(5, 5))
+                .variableDomain(y, IntRangeDomain.of(5, 5))
+                .sumConstraint(Set.of(x, y), Operator.LEQ, 3)
+                .build();
+        assertThat(FixpointConsistency.of(SumBoundConstraint.class).apply(csp, null)).isEmpty();
+    }
+
+    @Test
+    void applyWithReason_dirtySetExcludingConstraintVariables_skipsCheckEntirely() {
+        Variable<Integer> x = Variable.Factory.INSTANCE.create("dtx5");
+        Variable<Integer> y = Variable.Factory.INSTANCE.create("dty5");
+        Variable<Integer> z = Variable.Factory.INSTANCE.create("dtz5");
+        var csp = ConstraintSatisfactionProblem.builder()
+                .variableDomain(x, IntRangeDomain.of(5, 5))
+                .variableDomain(y, IntRangeDomain.of(5, 5))
+                .variableDomain(z, IntRangeDomain.of(1, 3))
+                .sumConstraint(Set.of(x, y), Operator.LEQ, 3)
+                .build();
+        var result = FixpointConsistency.of(SumBoundConstraint.class).applyWithReason(csp, Set.of(z));
+        assertThat(result.isInfeasible()).isFalse();
+    }
+
+    @Test
+    void applyWithReason_dirtySetIncludingConstraintVariable_stillDetectsInfeasibility() {
+        Variable<Integer> x = Variable.Factory.INSTANCE.create("dtx6");
+        Variable<Integer> y = Variable.Factory.INSTANCE.create("dty6");
+        var csp = ConstraintSatisfactionProblem.builder()
+                .variableDomain(x, IntRangeDomain.of(5, 5))
+                .variableDomain(y, IntRangeDomain.of(5, 5))
+                .sumConstraint(Set.of(x, y), Operator.LEQ, 3)
+                .build();
+        var result = FixpointConsistency.of(SumBoundConstraint.class).applyWithReason(csp, Set.of(x));
+        assertThat(result.isInfeasible()).isTrue();
+    }
 }

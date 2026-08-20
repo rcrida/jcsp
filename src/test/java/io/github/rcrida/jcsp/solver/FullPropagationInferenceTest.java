@@ -100,29 +100,33 @@ class FullPropagationInferenceTest {
 
     @Test
     void applyWithReason_fixpointFindsReason_returnsReasonInsteadOfAssignment() {
-        // x, y are unrelated to a, b: MAC starting from x only revises y (notEquals), succeeds,
-        // and never touches a/b. The fixpoint then reaches comparatorConstraint(a, LEQ, b): a=[5,5]
-        // is pinned singleton but b=[0,3] is not, so BinaryComparatorConstraint's own
-        // explainInfeasible declines (citing only a would be unsound -- see
-        // BinaryComparatorConstraintTest and Propagatable#addIfSingleton's Javadoc) and
-        // FixpointConsistency's own generic fallback, RangeNogoodConstraint#fromCurrentBounds over
-        // the whole constraint's variable set, supplies the reason instead of falling back all the
-        // way to the full assignment.
-        Variable<Integer> x = F.create("x"), y = F.create("y");
-        Variable<Double> a = F.create("a"), b = F.create("b");
+        // x=1 forces s1=5 via the binary offsetConstraint (resolved by MAC itself, since
+        // BinaryOffsetConstraint is a binary arc); s1 is therefore a genuine, traceable consequence
+        // of x's own assignment -- required since FixpointPropagation#applyFixpoint's documented
+        // contract for a search-node call is that its input is "exactly the parent's
+        // already-converged CSP", so a constraint whose variables were never touched by MAC (or an
+        // earlier fixpoint round) is presumed already-checked-and-feasible and may legitimately be
+        // skipped by FixpointConsistency's own per-object dirty tracking -- an *unrelated*,
+        // already-infeasible constraint (the shape this test used before) would violate that
+        // precondition rather than exercise the fixpoint. sumConstraint(s1+s2<=3) is an n-ary
+        // constraint outside MAC's own binary-arc-consistency scope, so only the wider fixpoint (not
+        // MAC) detects it: s1=[5,5] is pinned singleton but s2=[0,3] is not, so SumBoundConstraint's
+        // own explainInfeasible declines a ground reason and FixpointConsistency's generic fallback,
+        // RangeNogoodConstraint#fromCurrentBounds over the whole constraint's variable set, supplies
+        // the reason instead of falling back all the way to the full assignment.
+        Variable<Integer> x = F.create("x"), s1 = F.create("s1"), s2 = F.create("s2");
         var csp = ConstraintSatisfactionProblem.builder()
                 .variableDomain(x, IntRangeDomain.of(1, 2))
-                .variableDomain(y, IntRangeDomain.of(1, 2))
-                .variableDomain(a, IntervalDomain.of(5.0, 5.0))
-                .variableDomain(b, IntervalDomain.of(0.0, 3.0))
-                .notEqualsConstraint(x, y)
-                .comparatorConstraint(a, Operator.LEQ, b)
+                .variableDomain(s1, IntRangeDomain.of(1, 10))
+                .variableDomain(s2, IntRangeDomain.of(0, 3))
+                .offsetConstraint(x, 4, Operator.EQ, s1) // x + 4 = s1
+                .sumConstraint(Set.of(s1, s2), Operator.LEQ, 3)
                 .build();
         var assignment = Assignment.of(Map.of(x, 1));
         ConsistencyResult result = Solver.Factory.FULL_PROPAGATION_INFERENCE.applyWithReason(csp, x, assignment);
         assertThat(result.isInfeasible()).isTrue();
         assertThat(result.reason()).isEqualTo(RangeNogoodConstraint.of(
-                Map.of(a, IntervalDomain.of(5.0, 5.0), b, IntervalDomain.of(0.0, 3.0))));
+                Map.of(s1, IntervalDomain.of(5, 5), s2, IntervalDomain.of(0, 3))));
         assertThat(result.reason()).isNotEqualTo(GroundNogoodConstraint.of(assignment.getValues()));
     }
 

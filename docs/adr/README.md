@@ -72,3 +72,4 @@ section instead.
 | [0016](0016-flow-based-gac-for-global-cardinality-constraint.md) | Flow-based GAC for GlobalCardinalityConstraint | Accepted |
 | [0017](0017-range-based-gac-for-global-cardinality-constraint.md) | Range-based GAC for GlobalCardinalityConstraint | Accepted |
 | [0018](0018-disjunctive-edge-finding-propagator.md) | Disjunctive edge-finding propagator | Accepted |
+| [0019](0019-fixpointconsistency-per-object-dirty-tracking.md) | Per-object dirty tracking in FixpointConsistency | Accepted |
