@@ -22,6 +22,7 @@ import io.github.rcrida.jcsp.constraints.nary.CountConstraint;
 import io.github.rcrida.jcsp.constraints.nary.CountVariableConstraint;
 import io.github.rcrida.jcsp.constraints.nary.CumulativeConstraint;
 import io.github.rcrida.jcsp.constraints.nary.DiffnVariableConstraint;
+import io.github.rcrida.jcsp.constraints.nary.DisjunctiveConstraint;
 import io.github.rcrida.jcsp.constraints.nary.DistinctVectorsConstraint;
 import io.github.rcrida.jcsp.constraints.nary.GlobalCardinalityConstraint;
 import io.github.rcrida.jcsp.constraints.nary.GlobalCardinalityVariableConstraint;
@@ -1227,18 +1228,21 @@ final class Xcsp3CallbackHandler implements XCallbacks2 {
 
     /**
      * 1D scheduling form: no two tasks {@code [origins[i], origins[i]+lengths[i])} may overlap --
-     * exactly {@link CumulativeConstraint} with every resource requirement set to 1 and a capacity
-     * of 1 (the same "disjunctive scheduling via cumulative(limit=1)" pattern
-     * {@code Prob061JobShopSchedulingTest} already uses for same-machine mutual exclusion). {@code
-     * zeroIgnored} needs no special handling either way: a zero-length task's interval is already
-     * empty, so it can never overlap anything under this same modelling regardless of the flag.
+     * a unary resource, routed through {@link DisjunctiveConstraint} rather than {@link
+     * CumulativeConstraint} with every resource requirement and the capacity fixed to 1 (the
+     * pattern this used before -- see {@link DisjunctiveConstraint}'s own Javadoc for why: {@link
+     * CumulativeConstraint#propagate} only performs timetabling, which contributes nothing until
+     * tasks' domains have already narrowed enough for compulsory parts to exist, a real gap traced
+     * to real competition instances like {@code Taillard-js-015-15-0.xml.lzma}).
+     * {@code zeroIgnored} needs no special handling either way: a zero-length task's interval is
+     * already empty, so it can never overlap anything under this same modelling regardless of the
+     * flag.
      */
     @Override
     public void buildCtrNoOverlap(String id, XVarInteger[] origins, int[] lengths, boolean zeroIgnored) {
         List<Variable<Integer>> starts = toVariableList(origins);
         List<Integer> durations = Arrays.stream(lengths).boxed().toList();
-        List<Integer> resources = Collections.nCopies(origins.length, 1);
-        addOrReify(CumulativeConstraint.of(starts, durations, resources, 1), id);
+        addOrReify(DisjunctiveConstraint.of(starts, durations), id);
     }
 
     /**

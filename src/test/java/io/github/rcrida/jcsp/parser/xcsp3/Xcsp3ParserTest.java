@@ -1235,7 +1235,7 @@ class Xcsp3ParserTest {
 
     // ---- noOverlap (1D) -----------------------------------------------------------------------------------------------
 
-    @Test void noOverlap1D_buildsCumulativeConstraint_disjointIntervals() throws IOException {
+    @Test void noOverlap1D_buildsDisjunctiveConstraint_disjointIntervals() throws IOException {
         // Two length-2 tasks over {0..3}: valid iff x0+2<=x1 or x1+2<=x0. Hand-enumerated: (0,2)
         // (0,3) (1,3) (2,0) (3,0) (3,1) -- 6 solutions.
         Xcsp3Instance instance = parseXml(

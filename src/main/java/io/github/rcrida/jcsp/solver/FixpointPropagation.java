@@ -34,6 +34,7 @@ import io.github.rcrida.jcsp.constraints.nary.CumulativeConstraint;
 import io.github.rcrida.jcsp.constraints.nary.DecreasingConstraint;
 import io.github.rcrida.jcsp.constraints.nary.DiffnConstraint;
 import io.github.rcrida.jcsp.constraints.nary.DiffnVariableConstraint;
+import io.github.rcrida.jcsp.constraints.nary.DisjunctiveConstraint;
 import io.github.rcrida.jcsp.constraints.nary.DistinctVectorsConstraint;
 import io.github.rcrida.jcsp.constraints.nary.GlobalCardinalityConstraint;
 import io.github.rcrida.jcsp.constraints.nary.GlobalCardinalityVariableConstraint;
@@ -156,6 +157,7 @@ public class FixpointPropagation {
             FixpointConsistency.of(AtMostOneConstraint.class),
             FixpointConsistency.of(BinPackingConstraint.class),
             FixpointConsistency.of(CumulativeConstraint.class),
+            FixpointConsistency.of(DisjunctiveConstraint.class),
             FixpointConsistency.of(GlobalCardinalityConstraint.class),
             FixpointConsistency.of(GlobalCardinalityVariableConstraint.class),
             FixpointConsistency.of(NValueConstraint.class),

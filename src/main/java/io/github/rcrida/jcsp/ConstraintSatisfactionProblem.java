@@ -44,6 +44,7 @@ import io.github.rcrida.jcsp.constraints.nary.RegularConstraint;
 import io.github.rcrida.jcsp.constraints.nary.AtLeastNConstraint;
 import io.github.rcrida.jcsp.constraints.nary.AtMostNConstraint;
 import io.github.rcrida.jcsp.constraints.nary.CumulativeConstraint;
+import io.github.rcrida.jcsp.constraints.nary.DisjunctiveConstraint;
 import io.github.rcrida.jcsp.constraints.nary.CountConstraint;
 import io.github.rcrida.jcsp.constraints.nary.CountVariableConstraint;
 import io.github.rcrida.jcsp.constraints.nary.GlobalCardinalityConstraint;
@@ -879,6 +880,23 @@ public class ConstraintSatisfactionProblem {
                 @NonNull List<Double> resources,
                 double limit) {
             return this.constraint(CumulativeConstraint.of(starts, durations, resources, limit));
+        }
+
+        /**
+         * Create a unary-resource ("disjunctive") scheduling constraint: no two tasks may overlap.
+         * Task {@code i} executes during {@code [starts[i], starts[i] + durations[i])}. Equivalent
+         * to {@code cumulativeConstraint(starts, durations, resources, 1)} with every resource
+         * requirement fixed to {@code 1}, but with strictly stronger (edge-finding) propagation —
+         * see {@link DisjunctiveConstraint}'s own Javadoc.
+         *
+         * @param starts    start-time variables (one per task)
+         * @param durations fixed task durations
+         * @return the builder
+         */
+        public ConstraintSatisfactionProblemBuilder disjunctiveConstraint(
+                @NonNull List<Variable<Integer>> starts,
+                @NonNull List<Integer> durations) {
+            return this.constraint(DisjunctiveConstraint.of(starts, durations));
         }
 
         /**

@@ -6,7 +6,7 @@ import lombok.val;
 import io.github.rcrida.jcsp.ConstraintSatisfactionProblem;
 import io.github.rcrida.jcsp.assignments.Assignment;
 import io.github.rcrida.jcsp.constraints.Operator;
-import io.github.rcrida.jcsp.constraints.nary.CumulativeConstraint;
+import io.github.rcrida.jcsp.constraints.nary.DisjunctiveConstraint;
 import io.github.rcrida.jcsp.domains.IntRangeDomain;
 import io.github.rcrida.jcsp.variables.Variable;
 import org.junit.jupiter.api.Test;
@@ -27,11 +27,11 @@ import static org.assertj.core.api.Assertions.assertThat;
  * </pre>
  *
  * <p>Within-job precedence is a {@code BinaryOffsetConstraint}. The disjunctive
- * "two operations on the same machine cannot overlap" rule has no dedicated constraint
- * type, but is exactly a {@link CumulativeConstraint} with a resource requirement of 1
- * per task and a capacity of 1 — a unary/disjunctive resource is just a cumulative one
- * with limit 1, so each machine's two operations are modelled with a single
- * {@code cumulativeConstraint} call rather than a hand-rolled boolean ordering indicator.
+ * "two operations on the same machine cannot overlap" rule is a {@link DisjunctiveConstraint} —
+ * a unary resource, with real edge-finding propagation rather than the plain timetabling a
+ * {@code cumulativeConstraint(..., 1)} call would fall back to — so each machine's two
+ * operations are modelled with a single {@code disjunctiveConstraint} call rather than a
+ * hand-rolled boolean ordering indicator.
  *
  * <p>Machine loads (A: 3+4=7, B: 2+2=4) and job loads (job1: 3+2=5, job2: 2+4=6) give a
  * static lower bound of 7 on the makespan — achieved by running op11 and op22 back-to-back
@@ -67,10 +67,10 @@ public class Prob061JobShopSchedulingTest {
             // within-job precedence
             .offsetConstraint(START_11, DUR_11, Operator.LEQ, START_12)
             .offsetConstraint(START_21, DUR_21, Operator.LEQ, START_22)
-            // machine A: op11 and op22 must not overlap (unary resource, capacity 1)
-            .cumulativeConstraint(List.of(START_11, START_22), List.of(DUR_11, DUR_22), List.of(1, 1), 1)
+            // machine A: op11 and op22 must not overlap (unary resource)
+            .disjunctiveConstraint(List.of(START_11, START_22), List.of(DUR_11, DUR_22))
             // machine B: op12 and op21 must not overlap
-            .cumulativeConstraint(List.of(START_12, START_21), List.of(DUR_12, DUR_21), List.of(1, 1), 1)
+            .disjunctiveConstraint(List.of(START_12, START_21), List.of(DUR_12, DUR_21))
             .build();
 
     static double makespan(Assignment a) {
