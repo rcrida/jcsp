@@ -348,7 +348,10 @@ public class FixpointPropagation {
      * the propagator that actually signals infeasibility contributes a reason, computed as part of
      * this same pass rather than a second, from-scratch, unseeded replay. {@code cancellation} is
      * checked the same way -- and with the same caller obligations, including the up-front check
-     * before the round loop -- as in {@link #applyFixpoint}.
+     * before the round loop -- as in {@link #applyFixpoint}. When the infeasible {@code propagator}
+     * is specifically {@link NogoodFixpointConsistency#INSTANCE}, bumps {@link
+     * Statistics#incrementNogoodRejections} -- purely observational, doesn't change which {@link
+     * ConsistencyResult} is returned or how the caller treats it.
      */
     public ConsistencyResult applyFixpointWithReason(
             @NonNull ConstraintSatisfactionProblem csp, @Nullable Set<Variable<?>> initialSeed,
@@ -365,7 +368,10 @@ public class FixpointPropagation {
                 if (cancellation.isCancelled()) throw new SolverCancelledException(statistics);
                 var beforePropagator = current;
                 ConsistencyResult after = propagator.applyWithReason(current, changedVariables);
-                if (after.isInfeasible()) return after;
+                if (after.isInfeasible()) {
+                    if (propagator == NogoodFixpointConsistency.INSTANCE) statistics.incrementNogoodRejections();
+                    return after;
+                }
                 current = after.problem();
                 logIfDomainSumReduced(propagator, beforePropagator, current, log.isDebugEnabled(), listener);
             }

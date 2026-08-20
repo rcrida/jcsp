@@ -40,6 +40,35 @@ public class FixpointPropagationTest {
     }
 
     @Test
+    void applyFixpointWithReason_nogoodCausesWipeout_incrementsNogoodRejections() {
+        Variable<Integer> x = F.create("statx"), y = F.create("staty");
+        var nogood = GroundNogoodConstraint.of(Map.of(x, 1, y, 2));
+        var csp = ConstraintSatisfactionProblem.builder()
+                .variableDomain(x, IntRangeDomain.of(1, 1))
+                .variableDomain(y, IntRangeDomain.of(2, 2))
+                .nogood(nogood)
+                .build();
+        var statistics = new Statistics();
+        var result = FixpointPropagation.FULL.applyFixpointWithReason(csp, null, SolverListener.NONE, statistics, Cancellation.NEVER);
+        assertThat(result.isInfeasible()).isTrue();
+        assertThat(statistics.getNogoodRejections().get()).isEqualTo(1);
+    }
+
+    @Test
+    void applyFixpointWithReason_ordinaryConstraintCausesWipeout_doesNotIncrementNogoodRejections() {
+        Variable<Integer> x = F.create("statx2"), y = F.create("staty2");
+        var csp = ConstraintSatisfactionProblem.builder()
+                .variableDomain(x, IntRangeDomain.of(1, 1))
+                .variableDomain(y, IntRangeDomain.of(1, 1))
+                .notEqualsConstraint(x, y)
+                .build();
+        var statistics = new Statistics();
+        var result = FixpointPropagation.FULL.applyFixpointWithReason(csp, null, SolverListener.NONE, statistics, Cancellation.NEVER);
+        assertThat(result.isInfeasible()).isTrue();
+        assertThat(statistics.getNogoodRejections().get()).isZero();
+    }
+
+    @Test
     void applyFixpoint_cancelledBeforeFirstPropagator_throwsSolverCancelledException() {
         Variable<Integer> x = F.create("cancelledx");
         var csp = ConstraintSatisfactionProblem.builder().variableDomain(x, IntRangeDomain.of(1, 5)).build();

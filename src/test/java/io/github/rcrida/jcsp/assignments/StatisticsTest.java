@@ -57,12 +57,21 @@ public class StatisticsTest {
     }
 
     @Test
+    void incrementNogoodRejections() {
+        val statistics = new Statistics();
+        statistics.incrementNogoodRejections();
+        statistics.incrementNogoodRejections();
+        assertThat(statistics.getNogoodRejections().get()).isEqualTo(2);
+    }
+
+    @Test
     void add() {
         val a = new Statistics();
         a.incrementNodesExplored();
         a.incrementBacktracks();
         a.incrementSteps();
         a.incrementNogoodsLearned();
+        a.incrementNogoodRejections();
         val b = new Statistics();
         b.incrementConstraintChecks();
         b.incrementConstraintChecks();
@@ -74,5 +83,6 @@ public class StatisticsTest {
         assertThat(a.getRestarts().get()).isEqualTo(2);
         assertThat(a.getSteps().get()).isEqualTo(1);
         assertThat(a.getNogoodsLearned().get()).isEqualTo(1);
+        assertThat(a.getNogoodRejections().get()).isEqualTo(1);
     }
 }

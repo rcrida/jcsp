@@ -22,13 +22,17 @@ import java.util.concurrent.atomic.AtomicInteger;
  *       completed so far even when a solve ends via a limit, cancellation, or genuine UNSAT</li>
  *   <li>{@link #steps} — local search moves taken to reach the solution (local search solvers only)</li>
  *   <li>{@link #nogoodsLearned} — nogoods recorded after a domain-wipeout during search (backtracking search only)</li>
+ *   <li>{@link #nogoodRejections} — times a learned {@link io.github.rcrida.jcsp.constraints.nary.NogoodConstraint}
+ *       specifically (not some other constraint) was the one that caused a rejection, counted at
+ *       both of its two detection sites: a direct {@code isSatisfiedBy} violation ({@link
+ *       Assignment#isConsistentAmong}) and a propagation-detected domain wipeout ({@link
+ *       io.github.rcrida.jcsp.solver.FixpointPropagation#applyFixpointWithReason}'s {@code
+ *       NogoodFixpointConsistency} entry). A purely additive, observational counter — it doesn't
+ *       change how a nogood-caused rejection is treated by search itself (still folded into
+ *       {@link #backtracks} exactly like any other constraint's rejection, per {@link
+ *       io.github.rcrida.jcsp.assignments.NogoodStore}'s own design), only how much of that total
+ *       is attributable to CDCL specifically.</li>
  * </ul>
- *
- * <p>There is deliberately no separate "nogood prunes" counter: nogoods are modelled as ordinary
- * {@link io.github.rcrida.jcsp.constraints.nary.NogoodConstraint}s that join the same propagation
- * fixpoint as every other constraint (see {@link io.github.rcrida.jcsp.assignments.NogoodStore}),
- * so a candidate rejected because of a learned nogood is architecturally indistinguishable from
- * one rejected by any other constraint — it's simply counted under {@link #backtracks}.
  */
 @Value
 public class Statistics {
@@ -38,6 +42,7 @@ public class Statistics {
     AtomicInteger restarts = new AtomicInteger();
     AtomicInteger steps = new AtomicInteger();
     AtomicInteger nogoodsLearned = new AtomicInteger();
+    AtomicInteger nogoodRejections = new AtomicInteger();
 
     public void incrementNodesExplored() {
         nodesExplored.incrementAndGet();
@@ -63,6 +68,10 @@ public class Statistics {
         nogoodsLearned.incrementAndGet();
     }
 
+    public void incrementNogoodRejections() {
+        nogoodRejections.incrementAndGet();
+    }
+
     void add(Statistics other) {
         nodesExplored.addAndGet(other.nodesExplored.get());
         constraintChecks.addAndGet(other.constraintChecks.get());
@@ -70,5 +79,6 @@ public class Statistics {
         restarts.addAndGet(other.restarts.get());
         steps.addAndGet(other.steps.get());
         nogoodsLearned.addAndGet(other.nogoodsLearned.get());
+        nogoodRejections.addAndGet(other.nogoodRejections.get());
     }
 }

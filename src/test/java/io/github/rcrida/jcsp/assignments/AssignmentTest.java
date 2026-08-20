@@ -2,6 +2,8 @@ package io.github.rcrida.jcsp.assignments;
 
 import lombok.val;
 import io.github.rcrida.jcsp.ConstraintSatisfactionProblem;
+import io.github.rcrida.jcsp.constraints.nary.GroundNogoodConstraint;
+import io.github.rcrida.jcsp.constraints.nary.NogoodConstraint;
 import io.github.rcrida.jcsp.domains.Domain;
 import io.github.rcrida.jcsp.solver.listener.SolverListener;
 import io.github.rcrida.jcsp.variables.Variable;
@@ -172,6 +174,26 @@ public class AssignmentTest {
         val theOnlyConstraint = csp.getConstraints().iterator().next();
         assertThat(assignment.isConsistentAmong(Set.of(theOnlyConstraint))).isFalse();
         assertThat(assignment.isConsistentAmong(Set.of())).isTrue();
+    }
+
+    @Test
+    void isConsistentAmong_violatedByOrdinaryConstraint_doesNotIncrementNogoodRejections() {
+        val assignment = Assignment.of(Map.of(variable, value));
+        val csp = ConstraintSatisfactionProblem.builder()
+                .variableDomain(variable, domain)
+                .notEqualsConstraint(variable, value)
+                .build();
+        val theOnlyConstraint = csp.getConstraints().iterator().next();
+        assertThat(assignment.isConsistentAmong(Set.of(theOnlyConstraint))).isFalse();
+        assertThat(assignment.getStatistics().getNogoodRejections().get()).isZero();
+    }
+
+    @Test
+    void isConsistentAmong_violatedByNogoodConstraint_incrementsNogoodRejections() {
+        val assignment = Assignment.of(Map.of(variable, value));
+        NogoodConstraint nogood = GroundNogoodConstraint.of(Map.of(variable, value));
+        assertThat(assignment.isConsistentAmong(Set.of(nogood))).isFalse();
+        assertThat(assignment.getStatistics().getNogoodRejections().get()).isEqualTo(1);
     }
 
     @Test

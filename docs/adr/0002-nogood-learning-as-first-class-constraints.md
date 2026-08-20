@@ -73,9 +73,16 @@ found).
   a `BoundedDomain`/`SetBoundedDomain` that was already snapped/narrowed before search began.
 - A single `NogoodStore` is shared across Luby restarts (`DomWdegLubySearch`) and across the whole
   optimization search (`BranchAndBoundSolver`), so learned nogoods compound rather than resetting.
-- There's deliberately no separate "nogood prunes" statistic: a nogood-caused rejection is
-  architecturally indistinguishable from any other constraint-caused rejection at `isConsistent`,
-  which is the point — nogoods are first-class constraints, not a bolted-on special case.
+- A nogood-caused rejection is architecturally indistinguishable from any other constraint-caused
+  rejection at `isConsistent` *in how search treats it* — no separate decision path, still folded
+  into `Statistics#backtracks` like any other rejection — which is the point: nogoods are
+  first-class constraints, not a bolted-on special case. This was originally read as "no separate
+  nogood statistic at all," but `Statistics#nogoodRejections` (added 2026-08-20) narrows that: a
+  purely observational, additive counter incremented at both of a nogood's genuine detection sites
+  (`Assignment#isConsistentAmong`'s direct violation check, `FixpointPropagation#applyFixpointWithReason`'s
+  `NogoodFixpointConsistency` entry) doesn't reintroduce a decision-making special case — it answers
+  "how much is CDCL contributing," a different question from "should search treat nogoods
+  differently," which remains no.
 - `ConstraintConsistency.explainConflict` (single-CSP-argument) is now a thin wrapper kept for
   direct callers/tests; the real per-pass mechanism is `applyWithReason(csp, changedSinceLastRun)`,
   which only `FixpointConsistency`/`AC3`/`NogoodFixpointConsistency` override with a genuine single

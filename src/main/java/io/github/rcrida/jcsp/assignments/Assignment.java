@@ -6,6 +6,7 @@ import lombok.extern.slf4j.Slf4j;
 import lombok.val;
 import io.github.rcrida.jcsp.ConstraintSatisfactionProblem;
 import io.github.rcrida.jcsp.constraints.Constraint;
+import io.github.rcrida.jcsp.constraints.nary.NogoodConstraint;
 import io.github.rcrida.jcsp.solver.Cancellation;
 import io.github.rcrida.jcsp.solver.listener.SolverListener;
 import io.github.rcrida.jcsp.variables.Variable;
@@ -154,7 +155,10 @@ public record Assignment(@Singular Map<Variable<?>, Object> values, Statistics s
         for (Constraint constraint : candidateConstraints) {
             if (Collections.disjoint(values.keySet(), constraint.getVariables())) continue;
             statistics.incrementConstraintChecks();
-            if (!constraint.isSatisfiedBy(this)) return false;
+            if (!constraint.isSatisfiedBy(this)) {
+                if (constraint instanceof NogoodConstraint) statistics.incrementNogoodRejections();
+                return false;
+            }
         }
         return true;
     }
