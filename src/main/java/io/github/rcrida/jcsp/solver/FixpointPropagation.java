@@ -135,7 +135,6 @@ public class FixpointPropagation {
             FixpointConsistency.of(BinaryComparatorConstraint.class),
             FixpointConsistency.of(BinaryOffsetConstraint.class),
             FixpointConsistency.of(AbsoluteDifferenceConstraint.class),
-            NogoodFixpointConsistency.INSTANCE,
             FixpointConsistency.of(AllDiffConstraint.class),
             FixpointConsistency.of(AllEqualConstraint.class),
             FixpointConsistency.of(DistinctVectorsConstraint.class),
@@ -193,7 +192,29 @@ public class FixpointPropagation {
             // choice -- every propagator here is prune-only, so the final result doesn't depend on
             // position -- confirmed empirically on the XCSP3 Taillard job-shop corpus (~1.7-1.9x
             // fewer wall-clock ms for an identical node count under a fixed node budget).
-            AC3.INSTANCE
+            AC3.INSTANCE,
+            // Also last, for the same "let cheaper/narrowing propagators run first" reasoning as AC3
+            // above. Originally sat right after the four cheapest unary/binary bound propagators
+            // (position 5 of ~55), on the theory that CDCL nogoods are disproportionately likely to
+            // be the reason a nearby node fails, so checking them early would fail fast -- measured
+            // and found not to hold: on two structurally different real XCSP3 instances (a fixed
+            // RestartRandomization seed + SolverLimits#ofNodes(long) node budget, same methodology as
+            // AC3's own measurement above), only a small fraction of backtracks were actually
+            // nogood-caused ({@link io.github.rcrida.jcsp.assignments.Statistics#nogoodRejections}
+            // confirmed this directly), so running everything else first -- against the widest
+            // domains, but also the propagators most likely to prune them down -- then nogoods last
+            // against whatever's left, won on both: StripPacking-C1P1 12-16% fewer wall-clock ms on
+            // 3 of 4 seeds (nodesExplored/backtracks byte-identical to the position-5 placement, a
+            // clean comparison), BinPacking-sum-n1c1w4a a smaller 1-3% win on 3 of 4 seeds (backtracks
+            // diverged slightly from the position-5 placement on some seeds here -- which propagator's
+            // own explainInfeasible supplies the learned reason when more than one would find the same
+            // wipeout in a round isn't itself order-independent, even though the final fixpoint result
+            // is, per AC3's own comment above). A different, narrower reordering question -- whether
+            // {@link io.github.rcrida.jcsp.assignments.Assignment#isConsistentAmong} should check
+            // nogoods before structural constraints in its own direct violation scan -- was measured
+            // separately on the same two instances and found to regress (worse on both), so declined;
+            // that's an unrelated code path from this one and not affected by this reordering.
+            NogoodFixpointConsistency.INSTANCE
     );
 
     /** The always-everything instance, backed by the complete {@link #PROPAGATORS} catalog. */
