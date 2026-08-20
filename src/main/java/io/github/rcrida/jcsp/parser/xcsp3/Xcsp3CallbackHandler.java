@@ -40,6 +40,7 @@ import io.github.rcrida.jcsp.constraints.nary.PredicateConstraint;
 import io.github.rcrida.jcsp.constraints.nary.ProductVariableConstraint;
 import io.github.rcrida.jcsp.constraints.nary.RegularConstraint;
 import io.github.rcrida.jcsp.constraints.nary.SumBoundConstraint;
+import io.github.rcrida.jcsp.constraints.nary.ValueDisjunctionConstraint;
 import io.github.rcrida.jcsp.constraints.unary.UnaryComparatorConstraint;
 import io.github.rcrida.jcsp.constraints.unary.UnaryNotEqualsConstraint;
 import io.github.rcrida.jcsp.constraints.unary.UnaryPredicateConstraint;
@@ -125,7 +126,6 @@ final class Xcsp3CallbackHandler implements XCallbacks2 {
     private final Map<String, int[]> boundsByName = new LinkedHashMap<>();
     private final Map<String, Variable<Integer>> shiftedVariables = new LinkedHashMap<>();
     private final Map<String, Variable<Boolean>> booleanIndicators = new LinkedHashMap<>();
-    private final Map<String, Variable<Boolean>> negatedBooleanIndicators = new LinkedHashMap<>();
     private final Map<Integer, Variable<Integer>> constantVariables = new LinkedHashMap<>();
     private @Nullable ToDoubleFunction<Assignment> objective;
     private boolean maximize;
@@ -222,21 +222,6 @@ final class Xcsp3CallbackHandler implements XCallbacks2 {
             Variable<Boolean> boolVar = Variable.Factory.INSTANCE.create(name + "$bool");
             builder.variableDomain(boolVar, BooleanDomain.INSTANCE);
             builder.reifyConstraint(boolVar, UnaryValueConstraint.of(variablesByName.get(name), 1));
-            return boolVar;
-        });
-    }
-
-    /**
-     * {@link #booleanIndicatorFor}'s negation: tied to {@code intVar == 0} rather than {@code == 1}
-     * (memoized separately -- the two indicators for the same {@code intVar} are different
-     * variables, not complements of one shared one). Used for a negative SAT-clause literal (see
-     * {@link #buildCtrClause}), where "this literal holds" means the underlying variable is 0.
-     */
-    private Variable<Boolean> negatedBooleanIndicatorFor(XVarInteger intVar) {
-        return negatedBooleanIndicators.computeIfAbsent(intVar.id(), name -> {
-            Variable<Boolean> boolVar = Variable.Factory.INSTANCE.create(name + "$notbool");
-            builder.variableDomain(boolVar, BooleanDomain.INSTANCE);
-            builder.reifyConstraint(boolVar, UnaryValueConstraint.of(variablesByName.get(name), 0));
             return boolVar;
         });
     }
@@ -614,22 +599,36 @@ final class Xcsp3CallbackHandler implements XCallbacks2 {
     // ---- clause ---------------------------------------------------------------------------------
 
     /**
-     * A plain SAT clause: {@code OR(pos) OR OR(NOT neg)}. Bridges each literal to a boolean
-     * indicator -- {@link #booleanIndicatorFor} for a positive literal, {@link
-     * #negatedBooleanIndicatorFor} for a negative one -- then routes through {@link
-     * AtLeastNConstraint} with {@code n=1}, the same boolean-counting primitive {@code
-     * atLeastNConstraint} uses, rather than a bare {@link PredicateConstraint}: {@link
-     * AtLeastNConstraint} is a registered {@link io.github.rcrida.jcsp.consistency.Propagatable}
-     * (unlike {@link PredicateConstraint}, checked only once every variable is assigned), so once
-     * every literal but one has been excluded it forces the last remaining one true -- real unit
-     * propagation, not just a satisfaction check.
+     * A plain SAT clause: {@code OR(pos) OR OR(NOT neg)}. Builds a {@link
+     * ValueDisjunctionConstraint} directly over each literal's own underlying {@code
+     * Variable<Integer>} -- target {@code 1} for a positive literal, {@code 0} for a negative one
+     * -- rather than bridging each literal through its own boolean indicator variable and
+     * reification constraint the way this used to work; see {@link ValueDisjunctionConstraint}'s
+     * own Javadoc for why. {@link ValueDisjunctionConstraint} is a registered {@link
+     * io.github.rcrida.jcsp.consistency.Propagatable} (unlike {@link PredicateConstraint}, checked
+     * only once every variable is assigned), so once every literal but one has been excluded it
+     * forces the last remaining one -- real unit propagation, not just a satisfaction check.
+     * <p>
+     * A variable referenced by both a positive and a negative literal in the same clause is a
+     * tautology (its domain is exactly {@code {0, 1}}, so one of the two literals is always true)
+     * -- {@link Map#put} can only hold one target per key, so this is detected explicitly up front
+     * and routed to a vacuously-true {@link AndConstraint} of no conjuncts, rather than silently
+     * collapsing to whichever literal happened to be inserted last (which would incorrectly turn an
+     * unconstrained clause into a hard requirement on one specific literal). Not observed in any
+     * bundled competition instance, but a real generator's output isn't guaranteed to exclude it.
      */
     @Override
     public void buildCtrClause(String id, XVarInteger[] pos, XVarInteger[] neg) {
-        Set<Variable<Boolean>> indicators = new LinkedHashSet<>();
-        for (XVarInteger v : pos) indicators.add(booleanIndicatorFor(v));
-        for (XVarInteger v : neg) indicators.add(negatedBooleanIndicatorFor(v));
-        addOrReify(AtLeastNConstraint.builder().variables(indicators).n(1).build(), id);
+        Set<String> posIds = Arrays.stream(pos).map(XVarInteger::id).collect(Collectors.toSet());
+        boolean tautology = Arrays.stream(neg).anyMatch(v -> posIds.contains(v.id()));
+        if (tautology) {
+            addOrReify(AndConstraint.of(Set.of()), id);
+            return;
+        }
+        Map<Variable<Integer>, Integer> literals = new LinkedHashMap<>();
+        for (XVarInteger v : pos) literals.put(variableFor(v), 1);
+        for (XVarInteger v : neg) literals.put(variableFor(v), 0);
+        addOrReify(ValueDisjunctionConstraint.of(literals), id);
     }
 
     // ---- extension (table) ------------------------------------------------------------------------

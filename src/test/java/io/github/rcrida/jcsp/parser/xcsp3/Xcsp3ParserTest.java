@@ -352,6 +352,14 @@ class Xcsp3ParserTest {
         assertThat(solutions(instance.csp())).hasSize(4);
     }
 
+    @Test void clauseTautology_sameVariablePositiveAndNegative_leavesVariableUnconstrained() throws IOException {
+        // x OR NOT(x) -- always true regardless of x's value, since its domain is exactly {0, 1}.
+        Xcsp3Instance instance = parseXml(
+                "<var id=\"x\"> 0 1 </var>",
+                "<clause> x not(x) </clause>");
+        assertThat(solutions(instance.csp())).hasSize(2);
+    }
+
     // ---- extension (table) --------------------------------------------------------------------------
 
     @Test void extensionSupport_buildsTuplesConstraint() throws IOException {
