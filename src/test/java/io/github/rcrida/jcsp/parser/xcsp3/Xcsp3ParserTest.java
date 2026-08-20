@@ -123,6 +123,197 @@ class Xcsp3ParserTest {
         assertThat(solutions(instance.csp())).hasSize(2);
     }
 
+    @Test void intensionIffOfGroundEqualities_routesThroughReifiedValueConjunction() throws IOException {
+        // Mario-easy-4.xml.lzma's own shape: iff(eq(s,i), eq(g,0)) -- neither operand is a plain
+        // boolean variable, so this doesn't match intensionIff_solutionsAllEqual's bare-variable
+        // case above; recognizeIffOperands/recognizeGroundEquality route it through a pair of
+        // ReifiedConstraints instead of the generic (unpropagated) PredicateConstraint.
+        // x==1 iff y==2, x,y in {0,1,2}: satisfying pairs are (0,0),(0,1),(1,2),(2,0),(2,1) --
+        // x!=1 (2 choices) paired with each y!=2 (2 choices) = 4, plus x==1,y==2 = 1, total 5.
+        Xcsp3Instance instance = parseXml(
+                "<var id=\"x\"> 0..2 </var><var id=\"y\"> 0..2 </var>",
+                "<intension> iff(eq(x,1),eq(y,2)) </intension>");
+        Set<Assignment> solutions = solutions(instance.csp());
+        for (Assignment a : solutions) {
+            int x = digitOf(a, "x");
+            int y = digitOf(a, "y");
+            assertThat(x == 1).as("x=%d, y=%d", x, y).isEqualTo(y == 2);
+        }
+        assertThat(solutions).hasSize(5);
+    }
+
+    @Test void intensionIffOfGroundEqualities_neOperandRecognized() throws IOException {
+        // ne(x,1) iff eq(y,2), x,y in {0,1,2}: confirms recognizeGroundEquality's NEQ branch, not
+        // just EQ. Hand-enumerated: x=0 (x!=1 true) needs y=2 -> (0,2); x=1 (x!=1 false) needs
+        // y!=2 -> (1,0),(1,1); x=2 (x!=1 true) needs y=2 -> (2,2). 4 solutions total.
+        Xcsp3Instance instance = parseXml(
+                "<var id=\"x\"> 0..2 </var><var id=\"y\"> 0..2 </var>",
+                "<intension> iff(ne(x,1),eq(y,2)) </intension>");
+        Set<Assignment> solutions = solutions(instance.csp());
+        for (Assignment a : solutions) {
+            int x = digitOf(a, "x");
+            int y = digitOf(a, "y");
+            assertThat(x != 1).as("x=%d, y=%d", x, y).isEqualTo(y == 2);
+        }
+        assertThat(solutions).hasSize(4);
+    }
+
+    @Test void intensionIffOneSideProperBinaryRelation_recognizedTogetherWithGroundEquality() throws IOException {
+        // lt(x,y) iff eq(z,0): confirms recognizeRelation's reuse of recognizeBinaryRelation for a
+        // proper two-variable relation on one side, not just ground equalities on both sides. For
+        // every one of the 9 (x,y) pairs exactly one z in {0,1} satisfies the biconditional -- 9
+        // solutions total.
+        Xcsp3Instance instance = parseXml(
+                "<var id=\"x\"> 0..2 </var><var id=\"y\"> 0..2 </var><var id=\"z\"> 0..1 </var>",
+                "<intension> iff(lt(x,y),eq(z,0)) </intension>");
+        Set<Assignment> solutions = solutions(instance.csp());
+        for (Assignment a : solutions) {
+            int x = digitOf(a, "x");
+            int y = digitOf(a, "y");
+            int z = digitOf(a, "z");
+            assertThat(x < y).as("x=%d, y=%d, z=%d", x, y, z).isEqualTo(z == 0);
+        }
+        assertThat(solutions).hasSize(9);
+    }
+
+    @Test void intensionIffReified_indicatorTracksWholeBiconditionalTruthValue() throws IOException {
+        Xcsp3Instance instance = parseXml(
+                "<var id=\"x\"> 0..2 </var><var id=\"y\"> 0..2 </var><var id=\"b\"> 0..1 </var>",
+                "<intension reifiedBy=\"b\"> iff(eq(x,1),eq(y,2)) </intension>");
+        for (Assignment a : solutions(instance.csp())) {
+            int x = digitOf(a, "x");
+            int y = digitOf(a, "y");
+            int b = digitOf(a, "b");
+            assertThat(b == 1).as("x=%d, y=%d, b=%d", x, y, b).isEqualTo((x == 1) == (y == 2));
+        }
+        assertThat(solutions(instance.csp())).hasSize(9); // every (x,y) combo, b determined each time
+    }
+
+    @Test void intensionIffOneSideUnrecognizable_fallsBackToGenericIntensionConstraint() throws IOException {
+        // eq(add(y,z),3) has a compound add(y,z) expression as its left operand -- neither a bare
+        // variable nor a bare constant, so both recognizeBinaryRelation (which needs var op var or
+        // var op (var+const), not var+var op const) and recognizeGroundEquality (which needs a bare
+        // variable) decline it. recognizeRelation must fail cleanly and fall through to the
+        // pre-existing genericIntensionConstraint path, not throw or misbehave. Note: xcsp3-tools'
+        // own canonizer reorders the iff's two top-level operands by complexity, putting this
+        // (more complex) one at tree.sons[0] regardless of the order written here -- so this
+        // exercises recognizeIffOperands' left.isEmpty() branch, not its right.isEmpty() one (see
+        // intensionIffOperandOnRightUnrecognizable_fallsBackToGenericIntensionConstraint below for
+        // a case that survives canonization with the unrecognizable side on the right).
+        Xcsp3Instance instance = parseXml(
+                "<var id=\"x\"> 0..2 </var><var id=\"y\"> 0..2 </var><var id=\"z\"> 0..2 </var>",
+                "<intension> iff(eq(x,1),eq(add(y,z),3)) </intension>");
+        Set<Assignment> solutions = solutions(instance.csp());
+        for (Assignment a : solutions) {
+            int x = digitOf(a, "x");
+            int y = digitOf(a, "y");
+            int z = digitOf(a, "z");
+            assertThat(x == 1).as("x=%d, y=%d, z=%d", x, y, z).isEqualTo(y + z == 3);
+        }
+        assertThat(solutions).hasSize(16); // (x,y,z) in {0..2}^3: verified by brute-force enumeration
+    }
+
+    @Test void intensionIffLeftSideUnrecognizable_fallsBackToGenericIntensionConstraint() throws IOException {
+        // Mirrors intensionIffOneSideUnrecognizable_fallsBackToGenericIntensionConstraint but with
+        // the unrecognizable operand on the LEFT instead of the right -- recognizeIffOperands must
+        // fail on tree.sons[0] specifically (not just tree.sons[1]) and still fall through cleanly.
+        // eq(add(x,y),1) has a compound add(x,y) as its own left operand, so both
+        // recognizeBinaryRelation and recognizeGroundEquality decline it.
+        Xcsp3Instance instance = parseXml(
+                "<var id=\"x\"> 0..2 </var><var id=\"y\"> 0..2 </var><var id=\"w\"> 0..1 </var>",
+                "<intension> iff(eq(add(x,y),1),eq(w,1)) </intension>");
+        Set<Assignment> solutions = solutions(instance.csp());
+        for (Assignment a : solutions) {
+            int x = digitOf(a, "x");
+            int y = digitOf(a, "y");
+            int w = digitOf(a, "w");
+            assertThat(x + y == 1).as("x=%d, y=%d, w=%d", x, y, w).isEqualTo(w == 1);
+        }
+        assertThat(solutions).hasSize(9); // (x,y,w) in {0..2}x{0..2}x{0..1}: verified by brute-force enumeration
+    }
+
+    @Test void intensionIffOperandOrderingOperator_recognizeGroundEqualityDeclinesNonEqNeq() throws IOException {
+        // lt(x,add(y,z)) as the iff's left operand: recognizeBinaryRelation declines (add(y,z) is
+        // var+var, not var+const), and recognizeGroundEquality also declines since its own operator
+        // guard only accepts EQ/NEQ, not LT -- exercises that guard's first disjunct as true
+        // (distinct from the sons.length disjunct exercised by the n-ary iff test below).
+        Xcsp3Instance instance = parseXml(
+                "<var id=\"x\"> 0..2 </var><var id=\"y\"> 0..2 </var><var id=\"z\"> 0..2 </var><var id=\"w\"> 0..1 </var>",
+                "<intension> iff(lt(x,add(y,z)),eq(w,1)) </intension>");
+        Set<Assignment> solutions = solutions(instance.csp());
+        for (Assignment a : solutions) {
+            int x = digitOf(a, "x");
+            int y = digitOf(a, "y");
+            int z = digitOf(a, "z");
+            int w = digitOf(a, "w");
+            assertThat(x < y + z).as("x=%d, y=%d, z=%d, w=%d", x, y, z, w).isEqualTo(w == 1);
+        }
+        assertThat(solutions).hasSize(27); // (x,y,z,w) in {0..2}^3x{0..1}: verified by brute-force enumeration
+    }
+
+    @Test void intensionIffOperandOnRightUnrecognizable_fallsBackToGenericIntensionConstraint() throws IOException {
+        // eq(x,1) iff y: a bare boolean variable as the SECOND operand. Unlike a compound
+        // sub-expression (add(...), etc.), a bare variable leaf doesn't get reordered ahead of a
+        // relational EQ node by xcsp3-tools' complexity-based canonizer (confirmed via a throwaway
+        // probe), so this survives as tree.sons = [eq(x,1), y] -- the one case in this file that
+        // actually exercises recognizeIffOperands' right.isEmpty() branch as true, distinct from
+        // every left-side-unrecognizable case above.
+        Xcsp3Instance instance = parseXml(
+                "<var id=\"x\"> 0..2 </var><var id=\"y\"> 0 1 </var>",
+                "<intension> iff(eq(x,1),y) </intension>");
+        Set<Assignment> solutions = solutions(instance.csp());
+        for (Assignment a : solutions) {
+            int x = digitOf(a, "x");
+            int y = digitOf(a, "y");
+            assertThat(x == 1).as("x=%d, y=%d", x, y).isEqualTo(y == 1);
+        }
+        assertThat(solutions).hasSize(3); // (x,y) in {0..2}x{0,1}: verified by brute-force enumeration
+    }
+
+    @Test void intensionIffOperandNaryEquality_recognizeGroundEqualitySonsLengthGuardDeclines() throws IOException {
+        // eq(x,y,z) (n-ary equality, 3 operands) as the iff's left operand: recognizeBinaryRelation
+        // declines outright (its own guard also requires exactly 2 sons), and recognizeGroundEquality
+        // declines too via its own node.sons.length != 2 check -- exercises that check's true outcome
+        // specifically with operator already EQ/NEQ (distinct from
+        // intensionIffOperandOrderingOperator_recognizeGroundEqualityDeclinesNonEqNeq's ordering-operator
+        // case above, where the operator check alone already short-circuits before sons.length is
+        // even reached).
+        Xcsp3Instance instance = parseXml(
+                "<var id=\"x\"> 0..2 </var><var id=\"y\"> 0..2 </var><var id=\"z\"> 0..2 </var><var id=\"w\"> 0..1 </var>",
+                "<intension> iff(eq(x,y,z),eq(w,1)) </intension>");
+        Set<Assignment> solutions = solutions(instance.csp());
+        for (Assignment a : solutions) {
+            int x = digitOf(a, "x");
+            int y = digitOf(a, "y");
+            int z = digitOf(a, "z");
+            int w = digitOf(a, "w");
+            assertThat(x == y && y == z).as("x=%d, y=%d, z=%d, w=%d", x, y, z, w).isEqualTo(w == 1);
+        }
+        assertThat(solutions).hasSize(27); // (x,y,z,w) in {0..2}^3x{0..1}: verified by brute-force enumeration
+    }
+
+    @Test void intensionIffThreeOperands_sonsLengthGuardFallsBackToGeneric() throws IOException {
+        // XCSP3's iff is a generalized n-ary biconditional (IntensionExpressionEvaluator's own IFF
+        // case is allEqual(operands), not just a pairwise check) -- confirmed via a throwaway probe
+        // that xcsp3-tools accepts a 3-operand iff node. recognizeIffOperands only ever matches
+        // exactly two operands (ValueConjunctionConstraint-backed pairs need exactly a left and a
+        // right side), so a 3-operand iff must decline and fall through to the pre-existing generic
+        // path, which already handles n-ary IFF correctly.
+        Xcsp3Instance instance = parseXml(
+                "<var id=\"x\"> 0..3 </var><var id=\"y\"> 0..3 </var><var id=\"z\"> 0..3 </var>",
+                "<intension> iff(eq(x,1),eq(y,2),eq(z,3)) </intension>");
+        Set<Assignment> solutions = solutions(instance.csp());
+        for (Assignment a : solutions) {
+            int x = digitOf(a, "x");
+            int y = digitOf(a, "y");
+            int z = digitOf(a, "z");
+            // n-ary iff is allEqual, not a pairwise chain: all three booleans must match each other.
+            boolean p = x == 1, q = y == 2, r = z == 3;
+            assertThat(p == q && q == r).as("x=%d, y=%d, z=%d", x, y, z).isTrue();
+        }
+        assertThat(solutions).hasSize(28); // (x,y,z) in {0..3}^3: verified by brute-force enumeration
+    }
+
     @Test void intensionBooleanProductChannel_routesThroughMinVariableConstraint() throws IOException {
         // x,y in {0,1}: eq(mul(x,y),t) is exactly boolean AND -- xcsp3-tools' canonizer always puts
         // mul(...) first, t second (confirmed empirically against a real BIBD instance's own

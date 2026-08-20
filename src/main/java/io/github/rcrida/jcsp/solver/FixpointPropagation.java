@@ -63,6 +63,7 @@ import io.github.rcrida.jcsp.constraints.nary.RegularConstraint;
 import io.github.rcrida.jcsp.constraints.nary.ReifiedConstraint;
 import io.github.rcrida.jcsp.constraints.nary.SumBoundConstraint;
 import io.github.rcrida.jcsp.constraints.nary.SumVariableConstraint;
+import io.github.rcrida.jcsp.constraints.nary.ValueConjunctionConstraint;
 import io.github.rcrida.jcsp.constraints.nary.ValueDisjunctionConstraint;
 import io.github.rcrida.jcsp.constraints.unary.SetMembershipConstraint;
 import io.github.rcrida.jcsp.constraints.unary.UnaryComparatorConstraint;
@@ -153,6 +154,7 @@ public class FixpointPropagation {
             FixpointConsistency.of(AmongVariableConstraint.class),
             FixpointConsistency.of(AtLeastNConstraint.class),
             FixpointConsistency.of(ValueDisjunctionConstraint.class),
+            FixpointConsistency.of(ValueConjunctionConstraint.class),
             FixpointConsistency.of(AtMostNConstraint.class),
             FixpointConsistency.of(AtMostOneConstraint.class),
             FixpointConsistency.of(BinPackingConstraint.class),

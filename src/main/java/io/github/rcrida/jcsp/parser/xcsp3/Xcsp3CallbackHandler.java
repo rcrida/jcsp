@@ -37,10 +37,12 @@ import io.github.rcrida.jcsp.constraints.nary.NaryConflictTuplesConstraint;
 import io.github.rcrida.jcsp.constraints.nary.NaryStarredTuplesConstraint;
 import io.github.rcrida.jcsp.constraints.nary.NaryTuplesConstraint;
 import io.github.rcrida.jcsp.constraints.nary.OrderedConstraint;
+import io.github.rcrida.jcsp.constraints.nary.ReifiedConstraint;
 import io.github.rcrida.jcsp.constraints.nary.PredicateConstraint;
 import io.github.rcrida.jcsp.constraints.nary.ProductVariableConstraint;
 import io.github.rcrida.jcsp.constraints.nary.RegularConstraint;
 import io.github.rcrida.jcsp.constraints.nary.SumBoundConstraint;
+import io.github.rcrida.jcsp.constraints.nary.ValueConjunctionConstraint;
 import io.github.rcrida.jcsp.constraints.nary.ValueDisjunctionConstraint;
 import io.github.rcrida.jcsp.constraints.unary.UnaryComparatorConstraint;
 import io.github.rcrida.jcsp.constraints.unary.UnaryNotEqualsConstraint;
@@ -361,9 +363,115 @@ final class Xcsp3CallbackHandler implements XCallbacks2 {
      */
     @Override
     public void buildCtrIntension(String id, XVarInteger[] list, XNodeParent<XVarInteger> tree) {
+        Optional<IffOperands> iffOperands = recognizeIffOperands(tree);
+        if (iffOperands.isPresent()) {
+            addIff(iffOperands.get(), id);
+            return;
+        }
         addOrReify(recognizeBinaryRelation(tree)
                 .or(() -> recognizeBooleanProductChannel(tree))
                 .orElseGet(() -> genericIntensionConstraint(list, tree)), id);
+    }
+
+    private record IffOperands(Constraint left, Constraint right) {}
+
+    /**
+     * Recognizes {@code iff(X, Y)} where both {@code X} and {@code Y} independently recognize as
+     * standalone relations via {@link #recognizeRelation} -- routes onto a pair of fresh {@link
+     * ReifiedConstraint}-backed indicators (see {@link #addIff}) instead of {@link
+     * #genericIntensionConstraint}'s opaque {@link PredicateConstraint}, which has no propagation at
+     * all. Neither operand of an {@code iff} is a plain boolean variable the way {@link
+     * #addOrReify}'s own reification handles, so this can't route through a single {@code
+     * reifyConstraint} call the way a top-level {@code reifiedBy} attribute does -- it needs its own
+     * decomposition. Confirmed via a real competition instance ({@code Mario-easy-4.xml.lzma}'s
+     * {@code iff(eq(s[i],i), eq(g[i],0))} gold-earning rule, 13 occurrences all previously falling
+     * to {@link PredicateConstraint}). Recognition failure on either side is always safe, just less
+     * propagated -- falls through to the existing chain unchanged.
+     */
+    private Optional<IffOperands> recognizeIffOperands(XNodeParent<XVarInteger> tree) {
+        if (tree.getType() != TypeExpr.IFF || tree.sons.length != 2) return Optional.empty();
+        Optional<Constraint> left = recognizeRelation(tree.sons[0]);
+        if (left.isEmpty()) return Optional.empty();
+        Optional<Constraint> right = recognizeRelation(tree.sons[1]);
+        if (right.isEmpty()) return Optional.empty();
+        return Optional.of(new IffOperands(left.get(), right.get()));
+    }
+
+    private Optional<Constraint> recognizeRelation(XNode<XVarInteger> node) {
+        return recognizeBinaryRelation(node).or(() -> recognizeGroundEquality(node));
+    }
+
+    /**
+     * Matches a bare {@code eq(var, constant)}/{@code ne(var, constant)} -- no {@code add(...)}
+     * wrapper, the shape {@link #asVariablePlusConstant} doesn't cover. Only checks {@code (var,
+     * const)} operand order, not the reverse: confirmed empirically (a throwaway probe parsing
+     * {@code eq(1,x)}) that {@code xcsp3-tools}' canonizer always reorders a bare {@code eq}/{@code
+     * ne} to put the variable first, the same confirmed canonicalization {@link
+     * #recognizeBinaryRelation}'s own Javadoc already documents for {@code add}/{@code eq}/{@code
+     * ne} more generally -- a defensive constant-first check would be permanently dead code, per
+     * this codebase's general preference for trusting a confirmed framework guarantee (see {@link
+     * #asVariablePlusConstant}'s own precedent). Restricted to {@code EQ}/{@code NEQ}: {@link
+     * ValueConjunctionConstraint} only propagates those two (see its own Javadoc), so recognizing an
+     * ordering operator here would gain nothing over falling through to {@link
+     * #genericIntensionConstraint}.
+     */
+    private Optional<Constraint> recognizeGroundEquality(XNode<XVarInteger> node) {
+        Operator operator = intensionRelationalOperator(node.getType());
+        if ((operator != Operator.EQ && operator != Operator.NEQ) || node.sons.length != 2) {
+            return Optional.empty();
+        }
+        Optional<Variable<Integer>> variable = asVariable(node.sons[0]);
+        if (variable.isEmpty()) {
+            return Optional.empty();
+        }
+        return asConstant(node.sons[1])
+                .map(constant -> ValueConjunctionConstraint.of(Map.of(variable.get(), constant), operator));
+    }
+
+    /**
+     * Builds one fresh boolean indicator per side, each <em>unconditionally</em> reified (hard,
+     * always added directly via {@link ConstraintSatisfactionProblemBuilder#reifyConstraint} --
+     * never wrapped, regardless of whether the {@code iff} itself is reified) against its own
+     * operand: {@code leftIndicator <-> left}, {@code rightIndicator <-> right}. With both
+     * indicators now exactly tracking their own operand's truth value unconditionally, {@code left
+     * <-> right} reduces to a plain {@code leftIndicator == rightIndicator} over two ordinary
+     * boolean variables -- a {@link BinaryComparatorConstraint} (generic over any {@code
+     * Comparable}, including {@link Boolean}), the same class {@link #recognizeBinaryRelation}
+     * already uses for a bare {@code var op var} shape -- which {@link #addOrReify} then adds
+     * directly or reifies against {@code id}'s own indicator exactly like any other recognized
+     * constraint.
+     * <p>
+     * A single shared indicator reified against <em>both</em> operands directly (an earlier version
+     * of this method) is unsound once the pair itself needs reifying: nothing then forces the shared
+     * indicator to the value that actually makes {@code left <-> right} hold, since it's otherwise
+     * completely free -- e.g. with {@code left = right = true}, the shared indicator could still be
+     * assigned {@code false} in a candidate solution (satisfying neither reification), silently
+     * forcing the outer indicator to a wrong value. Caught by a real reified-{@code iff} test
+     * asserting the outer indicator's truth value, not merely inferred. Splitting into two
+     * indicators with their own <em>unconditional</em> reifications avoids this entirely: neither
+     * indicator has any degree of freedom beyond exactly mirroring its own operand, in either the
+     * reified or unreified case.
+     * <p>
+     * Each indicator's name is derived from its own operand's {@link Constraint#getVariables()}
+     * (not {@code id}): many instances of this pattern share one XCSP3 {@code <group>}-templated
+     * {@code id} (confirmed on {@code Mario-easy-4.xml.lzma}'s 13 houses), which would otherwise
+     * collide.
+     */
+    private void addIff(IffOperands operands, String id) {
+        Variable<Boolean> leftIndicator = Variable.Factory.INSTANCE.create(indicatorName("L", operands.left()));
+        Variable<Boolean> rightIndicator = Variable.Factory.INSTANCE.create(indicatorName("R", operands.right()));
+        builder.variableDomain(leftIndicator, BooleanDomain.INSTANCE);
+        builder.variableDomain(rightIndicator, BooleanDomain.INSTANCE);
+        builder.reifyConstraint(leftIndicator, operands.left());
+        builder.reifyConstraint(rightIndicator, operands.right());
+        addOrReify(BinaryComparatorConstraint.of(leftIndicator, Operator.EQ, rightIndicator), id);
+    }
+
+    private static String indicatorName(String side, Constraint operand) {
+        return operand.getVariables().stream()
+                .map(Object::toString)
+                .sorted()
+                .collect(Collectors.joining("$", "$iff" + side + "$", ""));
     }
 
     /**
@@ -1398,9 +1506,11 @@ final class Xcsp3CallbackHandler implements XCallbacks2 {
      * domain directly instead isn't an option, since {@link #builder} has already accepted that
      * variable's original declared domain by the time this callback runs. Reified, "the whole fixed
      * assignment holds" genuinely needs one {@link Constraint} object standing for the conjunction of
-     * every pin, so that case builds each pin as a standalone {@link UnaryValueConstraint} (the same
-     * constraint {@code equalsConstraint} builds internally, just not added directly) and wraps the
-     * set in an {@link AndConstraint} before routing through {@link #addOrReify}.
+     * every pin -- {@link ValueConjunctionConstraint} exists specifically for this shape (see its own
+     * Javadoc): a single real {@link io.github.rcrida.jcsp.consistency.Propagatable} object, unlike
+     * the {@code AndConstraint.of(Set.of(UnaryValueConstraint...))} this used to build, which silently
+     * dropped every conjunct's propagation ({@code UnaryConstraint} isn't itself {@code Propagatable},
+     * and {@link AndConstraint#propagate} skips any conjunct that isn't).
      */
     @Override
     public void buildCtrInstantiation(String id, XVarInteger[] list, int[] values) {
@@ -1411,11 +1521,11 @@ final class Xcsp3CallbackHandler implements XCallbacks2 {
             }
             return;
         }
-        Set<Constraint> conjuncts = new LinkedHashSet<>();
+        Map<Variable<Integer>, Integer> literals = new LinkedHashMap<>();
         for (int i = 0; i < vars.size(); i++) {
-            conjuncts.add(UnaryValueConstraint.of(vars.get(i), values[i]));
+            literals.put(vars.get(i), values[i]);
         }
-        addOrReify(AndConstraint.of(conjuncts), id);
+        addOrReify(ValueConjunctionConstraint.of(literals, Operator.EQ), id);
     }
 
     // ---- objectives -----------------------------------------------------------------------------------------------
