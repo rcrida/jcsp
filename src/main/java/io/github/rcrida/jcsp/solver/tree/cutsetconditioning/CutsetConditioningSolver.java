@@ -19,9 +19,12 @@ import io.github.rcrida.jcsp.variables.Variable;
 import org.jspecify.annotations.NonNull;
 
 import java.util.ArrayDeque;
+import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.Iterator;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
@@ -121,7 +124,13 @@ public class CutsetConditioningSolver extends SolverDecorator {
      * this codebase; this method instead throws {@link SolverCancelledException} once cancellation
      * is detected and no solution was found, the same distinguishing signal {@link
      * io.github.rcrida.jcsp.solver.DomWdegLubySearch#getSolution} gives its own caller, so a cancelled
-     * search isn't misreported as genuine UNSAT.
+     * search isn't misreported as genuine UNSAT. Processed via {@link #solveByCutsetBatches} rather
+     * than one big {@code .parallel()} stream over {@link #getSolutions(ConstraintSatisfactionProblem)}
+     * directly -- both a {@link Stream#takeWhile} gate and a per-element check inside {@code
+     * flatMap} were tried and confirmed unsafe (real {@link OutOfMemoryError}s, the first from
+     * {@code takeWhile}'s own parallel-mode buffering, the second from the JDK's unsized-source
+     * spliterator batching growing without bound when nothing ever matches -- neither is specific
+     * to the cutset-assignment source itself, so no restructuring of just the check avoids them).
      */
     @Override
     public Optional<Assignment> getSolution(@NonNull ConstraintSatisfactionProblem csp) {
@@ -129,18 +138,47 @@ public class CutsetConditioningSolver extends SolverDecorator {
             return treeSolver.getSolution(csp);
         }
         Optional<Assignment> solution = decomposeCsp(csp)
-                .map(decomposition -> getSolutions(decomposition.cycleCutset)
-                        .takeWhile(cutsetAssignment -> !cancellation.isCancelled())
-                        .parallel()
-                        .flatMap(cutsetAssignment -> decomposition.constrainTree(cutsetAssignment).stream()
-                                .flatMap(treeSolver::getSolutions)
-                                .map(cutsetAssignment::merge))
-                        .findAny())
+                .map(this::solveByCutsetBatches)
                 .orElseGet(() -> getInner().getSolution(csp));
         if (solution.isEmpty() && cancellation.isCancelled()) {
             throw new SolverCancelledException(statistics);
         }
         return solution;
+    }
+
+    /**
+     * Cutset assignments this large in one batch, {@code .parallel()}'d, are safe: a {@link List}
+     * has a known, finite size, unlike the raw {@link #getSolutions(ConstraintSatisfactionProblem)}
+     * stream itself (see {@link #getSolution}'s own Javadoc for why parallelizing that stream
+     * directly isn't).
+     */
+    private static final int CUTSET_BATCH_SIZE = 10_000;
+
+    /**
+     * Pulls {@link #getSolutions(ConstraintSatisfactionProblem)}'s cutset-assignment stream in
+     * bounded batches of {@link #CUTSET_BATCH_SIZE} rather than parallelizing over it directly,
+     * trying each batch (in parallel) against {@link #treeSolver} before pulling the next; checks
+     * {@link #cancellation} between batches, bounding cancellation latency to one batch's worth of
+     * work instead of the whole (potentially unbounded) enumeration.
+     */
+    private Optional<Assignment> solveByCutsetBatches(Decomposition decomposition) {
+        Iterator<Assignment> cutsetAssignments = getSolutions(decomposition.cycleCutset).iterator();
+        while (cutsetAssignments.hasNext() && !cancellation.isCancelled()) {
+            List<Assignment> batch = new ArrayList<>(CUTSET_BATCH_SIZE);
+            while (batch.size() < CUTSET_BATCH_SIZE && cutsetAssignments.hasNext()) {
+                batch.add(cutsetAssignments.next());
+            }
+            Optional<Assignment> found = batch.stream()
+                    .parallel()
+                    .flatMap(cutsetAssignment -> decomposition.constrainTree(cutsetAssignment).stream()
+                            .flatMap(treeSolver::getSolutions)
+                            .map(cutsetAssignment::merge))
+                    .findAny();
+            if (found.isPresent()) {
+                return found;
+            }
+        }
+        return Optional.empty();
     }
 
     /**
@@ -220,6 +258,23 @@ public class CutsetConditioningSolver extends SolverDecorator {
     }
 
     /**
+     * Cutset conditioning enumerates one cutset assignment per combination of cutset-variable
+     * values ({@code d^cycleCutsetSize} below) -- a real absolute ceiling on that count, not just a
+     * relative one, since {@link #isComplexityDecreased}'s own {@code cspComplexity} baseline
+     * (raw {@code d^n}, no propagation credit) is generous enough that a decomposition can look
+     * "better than brute force" while still being astronomically intractable in absolute terms.
+     * Confirmed on a real instance ({@code ColouredQueens-07.xml.lzma}, a densely-connected 7x7
+     * board where every cell is constrained against its row, column, and diagonal neighbors): the
+     * tree-expansion heuristic above can only ever find a tiny tree, so the cutset came out to 38 of
+     * 49 variables (domain size 7) -- {@code 7^38 ≈ 3e32} cutset assignments, "better" than the
+     * {@code ~2.6e41} raw baseline by this method's own math, but hopeless either way, causing
+     * {@link #getSolution} to burn CPU (or, once cancellation was wired in, memory) indefinitely.
+     * Mirrors {@code Xcsp3CallbackHandler#MAX_MATERIALIZED_DOMAIN_SIZE}'s own value for the same
+     * "too big to ever be worth materializing" judgment call.
+     */
+    private static final double MAX_CUTSET_ASSIGNMENTS = 1_000_000;
+
+    /**
      * Is conditioning applied to this cycle cutset expected to decrease the overall problem complexity?
      *
      * @param csp overall problem
@@ -233,8 +288,13 @@ public class CutsetConditioningSolver extends SolverDecorator {
                 .max(Comparator.naturalOrder())
                 .orElseThrow();
         val c = cycleCutsetSize;
+        val cutsetAssignments = Math.pow(d, c);
+        if (cutsetAssignments > MAX_CUTSET_ASSIGNMENTS) {
+            log.debug("cutset assignments {} exceeds absolute cap {}, declining decomposition", cutsetAssignments, MAX_CUTSET_ASSIGNMENTS);
+            return false;
+        }
         val cspComplexity = csp.getSearchSpace().doubleValue();
-        val cutsetConditioningComplexity = Math.pow(d, c) * (n - c) * Math.pow(d, 2);
+        val cutsetConditioningComplexity = cutsetAssignments * (n - c) * Math.pow(d, 2);
         log.debug("csp -> {}, cutset -> {}", cspComplexity, cutsetConditioningComplexity);
         return cutsetConditioningComplexity < cspComplexity;
     }

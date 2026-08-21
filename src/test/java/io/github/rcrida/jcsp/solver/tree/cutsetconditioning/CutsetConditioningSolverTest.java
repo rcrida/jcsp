@@ -17,9 +17,12 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.stream.IntStream;
 import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -93,6 +96,32 @@ public class CutsetConditioningSolverTest {
                 .allDiffConstraint(Set.of(a, b, c))
                 .build();
         val assignment = Assignment.builder().value(a, 1).build();
+        when(cycleCutsetSolver.getSolutions(csp)).thenReturn(Stream.of(assignment));
+        assertThat(cutsetConditioningSolver.getSolutions(csp)).containsExactly(assignment);
+    }
+
+    @Test
+    void getSolutions_cutsetTooLargeToEnumerate_declinesDecomposition() {
+        // A complete graph (every pair directly constrained) grows its tree component to just 2
+        // nodes regardless of size: decomposeCsp's BFS adds the first two visited nodes (each has
+        // fewer than 2 tree-neighbors so far), then every subsequent node sees both of those as
+        // tree-neighbors simultaneously and is excluded. 10 variables, domain size 10: cutset size
+        // 8, so 10^8 = 100,000,000 cutset assignments -- comfortably over MAX_CUTSET_ASSIGNMENTS
+        // (1,000,000), exercising the new absolute cap specifically (a treeSize-of-2 decomposition
+        // would already fail the pre-existing relative complexity check regardless of cutset size,
+        // so this alone wouldn't prove the new cap is doing anything without the cap in place).
+        List<Variable<Integer>> vars = new ArrayList<>();
+        for (int i = 0; i < 10; i++) vars.add(VARIABLE_FACTORY.create("V" + i));
+        Domain tenValues = IntRangeDomain.of(0, 9);
+        var builder = ConstraintSatisfactionProblem.builder();
+        for (Variable<Integer> v : vars) builder = builder.variableDomain(v, tenValues);
+        for (int i = 0; i < vars.size(); i++) {
+            for (int j = i + 1; j < vars.size(); j++) {
+                builder = builder.notEqualsConstraint(vars.get(i), vars.get(j));
+            }
+        }
+        val csp = builder.build();
+        val assignment = Assignment.builder().value(vars.get(0), 1).build();
         when(cycleCutsetSolver.getSolutions(csp)).thenReturn(Stream.of(assignment));
         assertThat(cutsetConditioningSolver.getSolutions(csp)).containsExactly(assignment);
     }
@@ -185,6 +214,39 @@ public class CutsetConditioningSolverTest {
         when(treeSolver.getSolutions(tree)).thenReturn(Stream.of(treeAssignment));
         assertThat(cutsetConditioningSolver.getSolution(CUTSET_CONDITIONING_PROBLEM))
                 .contains(cutsetAssignment.merge(treeAssignment));
+    }
+
+    @Test
+    void getSolution_cutsetAssignmentCountExceedsBatchSize_processesInBoundedBatches() {
+        // One more than CUTSET_BATCH_SIZE (10,000): the first batch fills to capacity (exercising
+        // "batch.size() < CUTSET_BATCH_SIZE" going false), then the second batch's single element
+        // exhausts the source (exercising "hasNext()" going false) -- both deterministically, no
+        // cancellation/threading needed. Real memory safety at this scale isn't something a unit
+        // test can assert directly, but is worth recording: two earlier, rejected designs (a
+        // Stream#takeWhile gate before .parallel(), and a per-element cancellation check inside
+        // flatMap) both crashed with a real OutOfMemoryError under this exact shape when the source
+        // ran into the millions, confirming batching genuinely differs from a re-labeled version of
+        // the same unsafe pipeline, not just moving the same bug elsewhere.
+        val cutset = ConstraintSatisfactionProblem.builder()
+                .variableDomain(C, DOMAIN)
+                .build();
+        when(treeSolver.getSolutions(cutset)).thenAnswer(invocation ->
+                IntStream.rangeClosed(1, 10_001).mapToObj(i -> Assignment.builder().value(C, 1).build()));
+
+        val tree = ConstraintSatisfactionProblem.builder()
+                .variableDomain(T1, CONSTRAINED_DOMAIN)
+                .variableDomain(T2, CONSTRAINED_DOMAIN)
+                .variableDomain(T3, CONSTRAINED_DOMAIN)
+                .variableDomain(T4, CONSTRAINED_DOMAIN)
+                .notEqualsConstraint(T1, T2)
+                .notEqualsConstraint(T2, T3)
+                .notEqualsConstraint(T3, T4)
+                .build();
+        // thenAnswer, not thenReturn(Stream.empty()): getSolutions(tree) is invoked once per
+        // cutset assignment (10,001 times here), and a Stream can only be traversed once, so a
+        // single shared instance would throw on the second reuse.
+        when(treeSolver.getSolutions(tree)).thenAnswer(invocation -> Stream.<Assignment>empty());
+        assertThat(cutsetConditioningSolver.getSolution(CUTSET_CONDITIONING_PROBLEM)).isEmpty();
     }
 
     @Test
