@@ -4,6 +4,7 @@ import io.github.rcrida.jcsp.ConstraintSatisfactionProblem;
 import io.github.rcrida.jcsp.assignments.Assignment;
 import org.jspecify.annotations.Nullable;
 
+import java.util.Set;
 import java.util.function.ToDoubleFunction;
 
 /**
@@ -19,7 +20,16 @@ import java.util.function.ToDoubleFunction;
  * directly to {@code createSolver(csp, objective)}, which always minimizes. {@link #maximize}
  * records the original sense purely so a caller can report the solved objective value back in
  * XCSP3's own terms (negate it again if {@link #maximize} is {@code true}).
+ * <p>
+ * {@link #declaredVariableNames}, in original {@code <variables>} declaration order, is exactly
+ * the set of variable names the source XCSP3 file itself declared -- excluding every synthetic
+ * variable {@link Xcsp3CallbackHandler} creates internally (reification indicators, {@code
+ * shiftVariable}/{@code booleanIndicatorFor} bridges, {@code addIff}'s fresh indicators, the
+ * {@code $max} objective auxiliary, etc.). A tool re-emitting a solution in XCSP3's own {@code
+ * <instantiation>} format (e.g. for {@code org.xcsp.parser.callbacks.SolutionChecker}) must
+ * restrict itself to this set -- a synthetic variable's name has no counterpart in the original
+ * file for the checker to resolve.
  */
 public record Xcsp3Instance(ConstraintSatisfactionProblem csp, @Nullable ToDoubleFunction<Assignment> objective,
-                             boolean maximize) {
+                             boolean maximize, Set<String> declaredVariableNames) {
 }

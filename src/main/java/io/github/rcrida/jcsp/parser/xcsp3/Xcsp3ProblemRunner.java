@@ -10,6 +10,7 @@ import io.github.rcrida.jcsp.solver.Solver;
 import io.github.rcrida.jcsp.solver.SolverCancelledException;
 import io.github.rcrida.jcsp.solver.SolverConfig;
 import io.github.rcrida.jcsp.solver.listener.SolverListener;
+import io.github.rcrida.jcsp.variables.Variable;
 
 import java.io.IOException;
 import java.io.PrintStream;
@@ -90,7 +91,7 @@ public final class Xcsp3ProblemRunner {
                 return;
             }
             out.println("s SATISFIABLE");
-            printSolution(instance.csp(), solution.get(), out);
+            printSolution(instance, solution.get(), out);
         } catch (SolverCancelledException e) {
             out.println("s UNKNOWN");
         }
@@ -116,13 +117,29 @@ public final class Xcsp3ProblemRunner {
         double value = instance.objective().applyAsDouble(best);
         out.println("o " + Math.round(instance.maximize() ? -value : value));
         out.println(provenOptimal ? "s OPTIMUM FOUND" : "s SATISFIABLE");
-        printSolution(instance.csp(), best, out);
+        printSolution(instance, best, out);
     }
 
-    private static void printSolution(ConstraintSatisfactionProblem csp, Assignment solution, PrintStream out) {
-        String values = csp.getVariableDomains().keySet().stream()
-                .map(v -> v.getName() + "=" + solution.getValue(v).orElseThrow())
+    /**
+     * Emits the solution as a single {@code v}-prefixed XCSP3 {@code <instantiation>} line -- the
+     * format {@code org.xcsp.parser.callbacks.SolutionChecker} (in its {@code -cm}/competition-mode
+     * constructor) parses directly back out of a captured {@code s}/{@code v} transcript, letting a
+     * caller independently re-verify this class's own output against the original instance file.
+     * Restricted to {@link Xcsp3Instance#declaredVariableNames()} -- {@link
+     * ConstraintSatisfactionProblem#getVariableDomains()} also carries every synthetic variable
+     * {@link Xcsp3CallbackHandler} creates internally (reification indicators, {@code addIff}'s
+     * fresh indicators, etc.), which have no counterpart in the original file for the checker to
+     * resolve. {@code getVariableDomains().keySet()} isn't ordered by declaration, so this iterates
+     * {@link Xcsp3Instance#declaredVariableNames()} itself (declaration order) and looks each
+     * variable up by name instead.
+     */
+    private static void printSolution(Xcsp3Instance instance, Assignment solution, PrintStream out) {
+        List<String> names = instance.declaredVariableNames().stream().toList();
+        Variable.Factory factory = Variable.Factory.INSTANCE;
+        String list = String.join(" ", names);
+        String values = names.stream()
+                .map(name -> String.valueOf(solution.getValue(factory.<Object>create(name)).orElseThrow()))
                 .collect(Collectors.joining(" "));
-        out.println("v " + values);
+        out.println("v <instantiation><list> " + list + " </list><values> " + values + " </values></instantiation>");
     }
 }

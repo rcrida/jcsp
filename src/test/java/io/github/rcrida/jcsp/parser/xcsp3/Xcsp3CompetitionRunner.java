@@ -1,5 +1,8 @@
 package io.github.rcrida.jcsp.parser.xcsp3;
 
+import org.xcsp.parser.callbacks.SolutionChecker;
+
+import java.io.ByteArrayInputStream;
 import java.io.File;
 import java.io.IOException;
 import java.io.PrintStream;
@@ -31,7 +34,13 @@ import java.util.stream.Stream;
  * src/test/resources/xcsp3/competition/} — sourced from {@code xcsp3team/XCSP3-Java-Tools}'s own
  * parser-conformance test fixtures (real competition-distributed {@code .xml.lzma} files, not
  * fabricated ones; MIT-licensed, matching this project's own {@code xcsp3-tools} dependency) —
- * under a {@value #DEFAULT_TIME_LIMIT_SECONDS}-second-per-instance budget.
+ * under a {@value #DEFAULT_TIME_LIMIT_SECONDS}-second-per-instance budget. Every {@code s
+ * SATISFIABLE}/{@code s OPTIMUM FOUND} result is also independently re-verified against the
+ * original instance file via {@code org.xcsp.parser.callbacks.SolutionChecker} (see {@link
+ * #crossCheck}) — a mismatch there indicates a real soundness bug (jcsp accepted or produced an
+ * assignment that violates the instance's own constraints), not just a performance regression.
+ * {@code SolutionChecker} can only validate a claimed solution, so a {@code s UNSATISFIABLE}
+ * result is reported {@code "-"} (skipped) in the Check column rather than confirmed or refuted.
  */
 public final class Xcsp3CompetitionRunner {
 
@@ -71,20 +80,26 @@ public final class Xcsp3CompetitionRunner {
         try (Stream<Path> files = Files.list(directory)) {
             instances = files.filter(Xcsp3CompetitionRunner::isXcsp3Instance).sorted().toList();
         }
-        out.printf("%-40s %-10s %-20s %s%n", "Instance", "Time(s)", "Result", "Statistics");
+        out.printf("%-40s %-10s %-20s %-12s %s%n", "Instance", "Time(s)", "Result", "Check", "Statistics");
         out.println("-".repeat(90));
-        int solved = 0, unknown = 0, failed = 0;
+        int solved = 0, unknown = 0, failed = 0, checkMismatches = 0;
         for (Path instance : instances) {
             Result result = runOne(instance, timeLimitSeconds);
-            out.printf("%-40s %-10.2f %-20s %s%n", instanceName(instance), result.elapsedSeconds(), result.summary(), result.statsLine());
+            out.printf("%-40s %-10.2f %-20s %-12s %s%n", instanceName(instance), result.elapsedSeconds(), result.summary(), result.crossCheck(), result.statsLine());
             switch (category(result.summary())) {
                 case SOLVED -> solved++;
                 case UNKNOWN -> unknown++;
                 case FAILED -> failed++;
             }
+            if (result.crossCheck().startsWith("MISMATCH") || result.crossCheck().startsWith("CHECK ERROR")) {
+                checkMismatches++;
+            }
         }
         out.println();
         out.printf("%d solved, %d unknown/timeout, %d failed (of %d)%n", solved, unknown, failed, instances.size());
+        if (checkMismatches > 0) {
+            out.printf("%d SolutionChecker cross-check MISMATCH(ES) -- see Check column above%n", checkMismatches);
+        }
     }
 
     private static boolean isXcsp3Instance(Path path) {
@@ -92,7 +107,7 @@ public final class Xcsp3CompetitionRunner {
         return name.endsWith(".xml") || name.endsWith(".xml.lzma");
     }
 
-    private record Result(double elapsedSeconds, String summary, String statsLine) {}
+    private record Result(double elapsedSeconds, String summary, String statsLine, String crossCheck) {}
 
     private enum Category {SOLVED, UNKNOWN, FAILED}
 
@@ -136,10 +151,43 @@ public final class Xcsp3CompetitionRunner {
         double elapsedSeconds = (System.nanoTime() - startNanos) / 1_000_000_000.0;
         if (!finished) {
             process.destroyForcibly();
-            return new Result(elapsedSeconds, "HUNG (killed after " + elapsedSeconds + "s)", "(no stats -- process killed)");
+            return new Result(elapsedSeconds, "HUNG (killed after " + elapsedSeconds + "s)", "(no stats -- process killed)", "-");
         }
         String output = new String(process.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
-        return new Result(elapsedSeconds, firstResultLine(output), statsLine(output));
+        String summary = firstResultLine(output);
+        return new Result(elapsedSeconds, summary, statsLine(output), crossCheck(instance, summary, output));
+    }
+
+    /**
+     * Independently re-verifies a {@code s SATISFIABLE}/{@code s OPTIMUM FOUND} result against the
+     * original instance file via {@code org.xcsp.parser.callbacks.SolutionChecker} -- the same
+     * checker real XCSP3 Competition entries are validated with (see {@link
+     * Xcsp3ProblemRunnerSolutionCheckerTest} for the equivalent single-instance test coverage of
+     * this exact mechanism). Skipped ({@code "-"}) for every other outcome: {@code
+     * SolutionChecker} can only validate a claimed solution, so there's nothing to check against a
+     * {@code s UNSATISFIABLE}/{@code s UNKNOWN}/{@code HUNG} result. {@code SolutionChecker}'s own
+     * competition-mode constructor prints "OK"/"INVALID Solution!" directly to {@link System#out}
+     * regardless of caller -- temporarily redirected here so it doesn't interleave with this
+     * class's own table output; {@link SolutionChecker#violatedCtrs}/{@link
+     * SolutionChecker#invalidObjs} (both public fields) are read directly afterward instead of
+     * parsing that captured text.
+     */
+    private static String crossCheck(Path instance, String summary, String output) {
+        if (!summary.startsWith("s SATISFIABLE") && !summary.startsWith("s OPTIMUM")) {
+            return "-";
+        }
+        PrintStream realOut = System.out;
+        try {
+            System.setOut(new PrintStream(java.io.OutputStream.nullOutputStream()));
+            SolutionChecker checker = new SolutionChecker(true, instance.toString(),
+                    new ByteArrayInputStream(output.getBytes(StandardCharsets.UTF_8)));
+            int errors = checker.violatedCtrs.size() + checker.invalidObjs.size();
+            return errors == 0 ? "OK" : "MISMATCH (" + errors + " errors)";
+        } catch (Exception e) {
+            return "CHECK ERROR: " + e;
+        } finally {
+            System.setOut(realOut);
+        }
     }
 
     private static String firstResultLine(String output) {

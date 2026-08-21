@@ -149,7 +149,9 @@ final class Xcsp3CallbackHandler implements XCallbacks2 {
     }
 
     Xcsp3Instance toInstance() {
-        return new Xcsp3Instance(builder.build(), objective, maximize);
+        Set<String> declaredVariableNames = new LinkedHashSet<>(variablesByName.keySet());
+        declaredVariableNames.addAll(symbolicVariablesByName.keySet());
+        return new Xcsp3Instance(builder.build(), objective, maximize, Collections.unmodifiableSet(declaredVariableNames));
     }
 
     // ---- Reification ------------------------------------------------------------------------------------------

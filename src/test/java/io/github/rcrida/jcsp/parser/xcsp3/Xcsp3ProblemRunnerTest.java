@@ -16,7 +16,10 @@ import java.io.PrintStream;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -48,7 +51,7 @@ class Xcsp3ProblemRunnerTest {
         } finally {
             System.setOut(new PrintStream(new java.io.FileOutputStream(java.io.FileDescriptor.out), true, StandardCharsets.UTF_8));
         }
-        assertThat(buffer.toString(StandardCharsets.UTF_8)).contains("s SATISFIABLE").contains("v x=");
+        assertThat(buffer.toString(StandardCharsets.UTF_8)).contains("s SATISFIABLE").contains("v <instantiation><list> x </list>");
     }
 
     // ---- satisfaction chain -------------------------------------------------------------------------------------
@@ -58,13 +61,13 @@ class Xcsp3ProblemRunnerTest {
         ConstraintSatisfactionProblem csp = ConstraintSatisfactionProblem.builder()
                 .variableDomain(x, IntRangeDomain.of(1, 3))
                 .build();
-        Xcsp3Instance instance = new Xcsp3Instance(csp, null, false);
+        Xcsp3Instance instance = new Xcsp3Instance(csp, null, false, Set.of("x"));
 
         ByteArrayOutputStream buffer = new ByteArrayOutputStream();
         Xcsp3ProblemRunner.solve(instance, Cancellation.NEVER, SolverListener.NONE, printStreamInto(buffer));
 
         String output = buffer.toString(StandardCharsets.UTF_8);
-        assertThat(output).contains("s SATISFIABLE").contains("v x=").contains("c stats: Statistics(");
+        assertThat(output).contains("s SATISFIABLE").contains("v <instantiation><list> x </list>").contains("c stats: Statistics(");
     }
 
     @Test void satisfaction_infeasibleProblem_reportsUnsatisfiable() {
@@ -74,7 +77,7 @@ class Xcsp3ProblemRunnerTest {
                 .notEqualsConstraint(x, 1)
                 .notEqualsConstraint(x, 2)
                 .build();
-        Xcsp3Instance instance = new Xcsp3Instance(csp, null, false);
+        Xcsp3Instance instance = new Xcsp3Instance(csp, null, false, Set.of("x"));
 
         ByteArrayOutputStream buffer = new ByteArrayOutputStream();
         Xcsp3ProblemRunner.solve(instance, Cancellation.NEVER, SolverListener.NONE, printStreamInto(buffer));
@@ -100,7 +103,8 @@ class Xcsp3ProblemRunnerTest {
                 builder = builder.notEqualsConstraint(vars.get(i), vars.get(j));
             }
         }
-        Xcsp3Instance instance = new Xcsp3Instance(builder.build(), null, false);
+        Xcsp3Instance instance = new Xcsp3Instance(builder.build(), null, false,
+                vars.stream().map(Variable::getName).collect(Collectors.toCollection(LinkedHashSet::new)));
         Cancellation cancellation = new Cancellation();
         SolverListener cancelOnFirstNode = new SolverListener() {
             @Override
@@ -125,13 +129,15 @@ class Xcsp3ProblemRunnerTest {
                 .variableDomain(x, IntRangeDomain.of(1, 3))
                 .build();
         LinearObjective objective = LinearObjective.builder().coefficient(x, 1.0).build();
-        Xcsp3Instance instance = new Xcsp3Instance(csp, objective, false);
+        Xcsp3Instance instance = new Xcsp3Instance(csp, objective, false, Set.of("x"));
 
         ByteArrayOutputStream buffer = new ByteArrayOutputStream();
         Xcsp3ProblemRunner.solve(instance, Cancellation.NEVER, SolverListener.NONE, printStreamInto(buffer));
 
         String output = buffer.toString(StandardCharsets.UTF_8);
-        assertThat(output).contains("o 1").contains("s OPTIMUM FOUND").contains("v x=1").contains("c stats: Statistics(");
+        assertThat(output).contains("o 1").contains("s OPTIMUM FOUND")
+                .contains("v <instantiation><list> x </list><values> 1 </values></instantiation>")
+                .contains("c stats: Statistics(");
     }
 
     @Test void optimization_infeasibleProblem_reportsUnsatisfiable() {
@@ -142,7 +148,7 @@ class Xcsp3ProblemRunnerTest {
                 .notEqualsConstraint(x, 2)
                 .build();
         LinearObjective objective = LinearObjective.builder().coefficient(x, 1.0).build();
-        Xcsp3Instance instance = new Xcsp3Instance(csp, objective, false);
+        Xcsp3Instance instance = new Xcsp3Instance(csp, objective, false, Set.of("x"));
 
         ByteArrayOutputStream buffer = new ByteArrayOutputStream();
         Xcsp3ProblemRunner.solve(instance, Cancellation.NEVER, SolverListener.NONE, printStreamInto(buffer));
@@ -158,7 +164,7 @@ class Xcsp3ProblemRunnerTest {
                 .variableDomain(x, IntRangeDomain.of(1, 3))
                 .build();
         LinearObjective objective = LinearObjective.builder().coefficient(x, 1.0).build();
-        Xcsp3Instance instance = new Xcsp3Instance(csp, objective, false);
+        Xcsp3Instance instance = new Xcsp3Instance(csp, objective, false, Set.of("x"));
         Cancellation cancellation = new Cancellation();
         cancellation.cancel();
 
@@ -178,7 +184,7 @@ class Xcsp3ProblemRunnerTest {
                 .variableDomain(x, IntRangeDomain.of(1, 3))
                 .build();
         LinearObjective objective = LinearObjective.builder().coefficient(x, 1.0).build();
-        Xcsp3Instance instance = new Xcsp3Instance(csp, objective, false);
+        Xcsp3Instance instance = new Xcsp3Instance(csp, objective, false, Set.of("x"));
         Cancellation cancellation = new Cancellation();
         SolverListener cancelOnFirstIncumbent = new SolverListener() {
             @Override
@@ -202,11 +208,12 @@ class Xcsp3ProblemRunnerTest {
                 .variableDomain(x, IntRangeDomain.of(1, 3))
                 .build();
         LinearObjective objective = LinearObjective.builder().coefficient(x, -1.0).build();
-        Xcsp3Instance instance = new Xcsp3Instance(csp, objective, true);
+        Xcsp3Instance instance = new Xcsp3Instance(csp, objective, true, Set.of("x"));
 
         ByteArrayOutputStream buffer = new ByteArrayOutputStream();
         Xcsp3ProblemRunner.solve(instance, Cancellation.NEVER, SolverListener.NONE, printStreamInto(buffer));
 
-        assertThat(buffer.toString(StandardCharsets.UTF_8)).contains("o 3").contains("v x=3");
+        assertThat(buffer.toString(StandardCharsets.UTF_8)).contains("o 3")
+                .contains("v <instantiation><list> x </list><values> 3 </values></instantiation>");
     }
 }
