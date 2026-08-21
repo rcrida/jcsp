@@ -133,6 +133,7 @@ final class Xcsp3CallbackHandler implements XCallbacks2 {
     private @Nullable ToDoubleFunction<Assignment> objective;
     private boolean maximize;
     private @Nullable XReification currentReification;
+    private int declaredConstraintCount;
 
     Xcsp3CallbackHandler() {
         // By default xcsp3-tools "recognizes" simple intension/count/sum/etc. shapes and routes
@@ -151,7 +152,8 @@ final class Xcsp3CallbackHandler implements XCallbacks2 {
     Xcsp3Instance toInstance() {
         Set<String> declaredVariableNames = new LinkedHashSet<>(variablesByName.keySet());
         declaredVariableNames.addAll(symbolicVariablesByName.keySet());
-        return new Xcsp3Instance(builder.build(), objective, maximize, Collections.unmodifiableSet(declaredVariableNames));
+        return new Xcsp3Instance(builder.build(), objective, maximize,
+                Collections.unmodifiableSet(declaredVariableNames), declaredConstraintCount);
     }
 
     // ---- Reification ------------------------------------------------------------------------------------------
@@ -165,10 +167,16 @@ final class Xcsp3CallbackHandler implements XCallbacks2 {
      * #buildCtrIntension} and the coefficient-less {@link #buildCtrSum(String, XVarInteger[],
      * Condition)}) check {@link #currentReification} and route through {@link #addOrReify} instead
      * of adding directly, without every other {@code buildCtrXxx} method needing to know
-     * reification exists at all.
+     * reification exists at all. Also the one place to count XCSP3's own constraint elements
+     * ({@link #declaredConstraintCount}, exposed via {@link Xcsp3Instance}): a {@code group}/{@code
+     * slide} is already expanded into repeated ordinary constraints by {@code xcsp3-tools}' default
+     * {@code loadGroup}/{@code loadSlide} before this method ever sees them (see this class's own
+     * top-level Javadoc), so this still counts one XCSP3 constraint per expanded instance, not
+     * (undercounting) one per {@code group}/{@code slide} element.
      */
     @Override
     public void loadCtr(XCtr c) {
+        declaredConstraintCount++;
         XReification previous = currentReification;
         currentReification = c.reification;
         try {

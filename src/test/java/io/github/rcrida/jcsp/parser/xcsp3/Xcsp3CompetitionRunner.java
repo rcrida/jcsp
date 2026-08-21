@@ -41,6 +41,11 @@ import java.util.stream.Stream;
  * assignment that violates the instance's own constraints), not just a performance regression.
  * {@code SolutionChecker} can only validate a claimed solution, so a {@code s UNSATISFIABLE}
  * result is reported {@code "-"} (skipped) in the Check column rather than confirmed or refuted.
+ * Each row's Model column (see {@link #modelInfo}) also reports variable/constraint counts both as
+ * the source XCSP3 file itself declares them and as the parsed {@code
+ * ConstraintSatisfactionProblem} ends up with -- the gap between the two is every synthetic
+ * variable/constraint {@link Xcsp3CallbackHandler} adds internally (reification indicators, {@code
+ * addIff}'s fresh indicators, etc.).
  */
 public final class Xcsp3CompetitionRunner {
 
@@ -80,12 +85,12 @@ public final class Xcsp3CompetitionRunner {
         try (Stream<Path> files = Files.list(directory)) {
             instances = files.filter(Xcsp3CompetitionRunner::isXcsp3Instance).sorted().toList();
         }
-        out.printf("%-40s %-10s %-20s %-12s %s%n", "Instance", "Time(s)", "Result", "Check", "Statistics");
+        out.printf("%-40s %-10s %-20s %-12s %-24s %s%n", "Instance", "Time(s)", "Result", "Check", "Model (xcsp3->csp)", "Statistics");
         out.println("-".repeat(90));
         int solved = 0, unknown = 0, failed = 0, checkMismatches = 0;
         for (Path instance : instances) {
             Result result = runOne(instance, timeLimitSeconds);
-            out.printf("%-40s %-10.2f %-20s %-12s %s%n", instanceName(instance), result.elapsedSeconds(), result.summary(), result.crossCheck(), result.statsLine());
+            out.printf("%-40s %-10.2f %-20s %-12s %-24s %s%n", instanceName(instance), result.elapsedSeconds(), result.summary(), result.crossCheck(), result.model(), result.statsLine());
             switch (category(result.summary())) {
                 case SOLVED -> solved++;
                 case UNKNOWN -> unknown++;
@@ -107,7 +112,7 @@ public final class Xcsp3CompetitionRunner {
         return name.endsWith(".xml") || name.endsWith(".xml.lzma");
     }
 
-    private record Result(double elapsedSeconds, String summary, String statsLine, String crossCheck) {}
+    private record Result(double elapsedSeconds, String summary, String statsLine, String crossCheck, String model) {}
 
     private enum Category {SOLVED, UNKNOWN, FAILED}
 
@@ -138,6 +143,8 @@ public final class Xcsp3CompetitionRunner {
      * plus a minimal {@link ProcessBuilder} repro comparing default vs. suppressed child logging.
      */
     private static Result runOne(Path instance, long timeLimitSeconds) throws IOException, InterruptedException {
+        String model = modelInfo(instance);
+
         String javaBin = System.getProperty("java.home") + File.separator + "bin" + File.separator + "java";
         String classpath = System.getProperty("java.class.path");
         ProcessBuilder builder = new ProcessBuilder(
@@ -151,11 +158,38 @@ public final class Xcsp3CompetitionRunner {
         double elapsedSeconds = (System.nanoTime() - startNanos) / 1_000_000_000.0;
         if (!finished) {
             process.destroyForcibly();
-            return new Result(elapsedSeconds, "HUNG (killed after " + elapsedSeconds + "s)", "(no stats -- process killed)", "-");
+            return new Result(elapsedSeconds, "HUNG (killed after " + elapsedSeconds + "s)", "(no stats -- process killed)", "-", model);
         }
         String output = new String(process.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
         String summary = firstResultLine(output);
-        return new Result(elapsedSeconds, summary, statsLine(output), crossCheck(instance, summary, output));
+        return new Result(elapsedSeconds, summary, statsLine(output), crossCheck(instance, summary, output), model);
+    }
+
+    /**
+     * Parses {@code instance} directly in this process -- separately from the {@link
+     * Xcsp3ProblemRunner} child process spawned for the timed solve below, and not counted against
+     * {@code timeLimitSeconds} -- purely to report model size: how many variables/constraints the
+     * source XCSP3 file itself declares ({@link Xcsp3Instance#declaredVariableNames()}/{@link
+     * Xcsp3Instance#declaredConstraintCount()}) versus how many the parsed {@link
+     * io.github.rcrida.jcsp.ConstraintSatisfactionProblem} actually ends up with ({@link
+     * io.github.rcrida.jcsp.ConstraintSatisfactionProblem#getVariableDomains()}/{@link
+     * io.github.rcrida.jcsp.ConstraintSatisfactionProblem#getConstraints()}) -- the gap between the
+     * two is every synthetic variable/constraint {@link Xcsp3CallbackHandler} adds internally
+     * (reification indicators, {@code addIff}'s fresh indicators, etc.). A parse failure here (e.g.
+     * {@link UnsupportedXcsp3ConstraintException} for a construct this parser doesn't map) is
+     * reported inline rather than propagated -- the child process below independently re-parses the
+     * same file and reports its own failure via {@link #firstResultLine}, so this method failing
+     * shouldn't abort the whole batch.
+     */
+    private static String modelInfo(Path instance) {
+        try {
+            Xcsp3Instance parsed = Xcsp3Parser.parse(instance);
+            return "%dv/%dc -> %dv/%dc".formatted(
+                    parsed.declaredVariableNames().size(), parsed.declaredConstraintCount(),
+                    parsed.csp().getVariableDomains().size(), parsed.csp().getConstraints().size());
+        } catch (Exception e) {
+            return "PARSE ERROR";
+        }
     }
 
     /**

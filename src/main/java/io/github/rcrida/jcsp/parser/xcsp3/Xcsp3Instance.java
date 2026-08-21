@@ -29,7 +29,18 @@ import java.util.function.ToDoubleFunction;
  * <instantiation>} format (e.g. for {@code org.xcsp.parser.callbacks.SolutionChecker}) must
  * restrict itself to this set -- a synthetic variable's name has no counterpart in the original
  * file for the checker to resolve.
+ * <p>
+ * {@link #declaredConstraintCount} is {@link #declaredVariableNames}'s constraint-side sibling: how
+ * many {@code <...>} constraint elements the source file itself specifies, counted post {@code
+ * group}/{@code slide} expansion (one XCSP3 constraint per expanded instance, not one per
+ * templating element -- see {@link Xcsp3CallbackHandler#loadCtr}), but before any of {@link
+ * Xcsp3CallbackHandler}'s own synthetic constraints (reification bridges, {@code addIff}'s extra
+ * equality, etc.). Unlike {@link #declaredVariableNames}, this is a plain count, not a name set --
+ * one XCSP3 constraint doesn't correspond 1:1 with one built {@link
+ * io.github.rcrida.jcsp.constraints.Constraint} object even before any synthetic ones are added
+ * (e.g. {@code allDifferentMatrix} decomposes into several {@code AllDiffConstraint}s), so there's
+ * no stable per-constraint identity to track the way there is for a variable's own name.
  */
 public record Xcsp3Instance(ConstraintSatisfactionProblem csp, @Nullable ToDoubleFunction<Assignment> objective,
-                             boolean maximize, Set<String> declaredVariableNames) {
+                             boolean maximize, Set<String> declaredVariableNames, int declaredConstraintCount) {
 }

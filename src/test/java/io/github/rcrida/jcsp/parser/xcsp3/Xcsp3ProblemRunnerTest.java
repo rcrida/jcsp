@@ -61,7 +61,7 @@ class Xcsp3ProblemRunnerTest {
         ConstraintSatisfactionProblem csp = ConstraintSatisfactionProblem.builder()
                 .variableDomain(x, IntRangeDomain.of(1, 3))
                 .build();
-        Xcsp3Instance instance = new Xcsp3Instance(csp, null, false, Set.of("x"));
+        Xcsp3Instance instance = new Xcsp3Instance(csp, null, false, Set.of("x"), 0);
 
         ByteArrayOutputStream buffer = new ByteArrayOutputStream();
         Xcsp3ProblemRunner.solve(instance, Cancellation.NEVER, SolverListener.NONE, printStreamInto(buffer));
@@ -77,7 +77,7 @@ class Xcsp3ProblemRunnerTest {
                 .notEqualsConstraint(x, 1)
                 .notEqualsConstraint(x, 2)
                 .build();
-        Xcsp3Instance instance = new Xcsp3Instance(csp, null, false, Set.of("x"));
+        Xcsp3Instance instance = new Xcsp3Instance(csp, null, false, Set.of("x"), 0);
 
         ByteArrayOutputStream buffer = new ByteArrayOutputStream();
         Xcsp3ProblemRunner.solve(instance, Cancellation.NEVER, SolverListener.NONE, printStreamInto(buffer));
@@ -104,7 +104,7 @@ class Xcsp3ProblemRunnerTest {
             }
         }
         Xcsp3Instance instance = new Xcsp3Instance(builder.build(), null, false,
-                vars.stream().map(Variable::getName).collect(Collectors.toCollection(LinkedHashSet::new)));
+                vars.stream().map(Variable::getName).collect(Collectors.toCollection(LinkedHashSet::new)), 0);
         Cancellation cancellation = new Cancellation();
         SolverListener cancelOnFirstNode = new SolverListener() {
             @Override
@@ -129,7 +129,7 @@ class Xcsp3ProblemRunnerTest {
                 .variableDomain(x, IntRangeDomain.of(1, 3))
                 .build();
         LinearObjective objective = LinearObjective.builder().coefficient(x, 1.0).build();
-        Xcsp3Instance instance = new Xcsp3Instance(csp, objective, false, Set.of("x"));
+        Xcsp3Instance instance = new Xcsp3Instance(csp, objective, false, Set.of("x"), 0);
 
         ByteArrayOutputStream buffer = new ByteArrayOutputStream();
         Xcsp3ProblemRunner.solve(instance, Cancellation.NEVER, SolverListener.NONE, printStreamInto(buffer));
@@ -148,7 +148,7 @@ class Xcsp3ProblemRunnerTest {
                 .notEqualsConstraint(x, 2)
                 .build();
         LinearObjective objective = LinearObjective.builder().coefficient(x, 1.0).build();
-        Xcsp3Instance instance = new Xcsp3Instance(csp, objective, false, Set.of("x"));
+        Xcsp3Instance instance = new Xcsp3Instance(csp, objective, false, Set.of("x"), 0);
 
         ByteArrayOutputStream buffer = new ByteArrayOutputStream();
         Xcsp3ProblemRunner.solve(instance, Cancellation.NEVER, SolverListener.NONE, printStreamInto(buffer));
@@ -164,7 +164,7 @@ class Xcsp3ProblemRunnerTest {
                 .variableDomain(x, IntRangeDomain.of(1, 3))
                 .build();
         LinearObjective objective = LinearObjective.builder().coefficient(x, 1.0).build();
-        Xcsp3Instance instance = new Xcsp3Instance(csp, objective, false, Set.of("x"));
+        Xcsp3Instance instance = new Xcsp3Instance(csp, objective, false, Set.of("x"), 0);
         Cancellation cancellation = new Cancellation();
         cancellation.cancel();
 
@@ -184,7 +184,7 @@ class Xcsp3ProblemRunnerTest {
                 .variableDomain(x, IntRangeDomain.of(1, 3))
                 .build();
         LinearObjective objective = LinearObjective.builder().coefficient(x, 1.0).build();
-        Xcsp3Instance instance = new Xcsp3Instance(csp, objective, false, Set.of("x"));
+        Xcsp3Instance instance = new Xcsp3Instance(csp, objective, false, Set.of("x"), 0);
         Cancellation cancellation = new Cancellation();
         SolverListener cancelOnFirstIncumbent = new SolverListener() {
             @Override
@@ -208,7 +208,7 @@ class Xcsp3ProblemRunnerTest {
                 .variableDomain(x, IntRangeDomain.of(1, 3))
                 .build();
         LinearObjective objective = LinearObjective.builder().coefficient(x, -1.0).build();
-        Xcsp3Instance instance = new Xcsp3Instance(csp, objective, true, Set.of("x"));
+        Xcsp3Instance instance = new Xcsp3Instance(csp, objective, true, Set.of("x"), 0);
 
         ByteArrayOutputStream buffer = new ByteArrayOutputStream();
         Xcsp3ProblemRunner.solve(instance, Cancellation.NEVER, SolverListener.NONE, printStreamInto(buffer));
