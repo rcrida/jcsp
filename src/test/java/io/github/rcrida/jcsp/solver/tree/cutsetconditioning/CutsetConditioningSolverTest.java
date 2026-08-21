@@ -6,8 +6,10 @@ import io.github.rcrida.jcsp.assignments.Assignment;
 import io.github.rcrida.jcsp.constraints.nary.PredicateConstraint;
 import io.github.rcrida.jcsp.domains.Domain;
 import io.github.rcrida.jcsp.domains.IntRangeDomain;
+import io.github.rcrida.jcsp.solver.Cancellation;
 import io.github.rcrida.jcsp.solver.EmptyTest;
 import io.github.rcrida.jcsp.solver.Solver;
+import io.github.rcrida.jcsp.solver.SolverCancelledException;
 import io.github.rcrida.jcsp.variables.Variable;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -220,6 +222,37 @@ public class CutsetConditioningSolverTest {
         val assignment = Assignment.of(Map.of(a, 1, b, 2, c, 3));
         when(cycleCutsetSolver.getSolution(csp)).thenReturn(Optional.of(assignment));
         assertThat(cutsetConditioningSolver.getSolution(csp)).contains(assignment);
+    }
+
+    @Test
+    void getSolutions_cancelledBeforeCutsetEnumeration_truncatesSilently() {
+        val cutset = ConstraintSatisfactionProblem.builder()
+                .variableDomain(C, DOMAIN)
+                .build();
+        val cutsetAssignment = Assignment.builder().value(C, 1).build();
+        doReturn(Stream.of(cutsetAssignment)).when(treeSolver).getSolutions(cutset);
+
+        Cancellation cancellation = new Cancellation();
+        cancellation.cancel();
+        val cancellable = CutsetConditioningSolver.builder()
+                .inner(cycleCutsetSolver).treeSolver(treeSolver).cancellation(cancellation).build();
+        assertThat(cancellable.getSolutions(CUTSET_CONDITIONING_PROBLEM)).isEmpty();
+    }
+
+    @Test
+    void getSolution_cancelledWithNoSolutionFound_throwsSolverCancelledException() {
+        val cutset = ConstraintSatisfactionProblem.builder()
+                .variableDomain(C, DOMAIN)
+                .build();
+        val cutsetAssignment = Assignment.builder().value(C, 1).build();
+        doReturn(Stream.of(cutsetAssignment)).when(treeSolver).getSolutions(cutset);
+
+        Cancellation cancellation = new Cancellation();
+        cancellation.cancel();
+        val cancellable = CutsetConditioningSolver.builder()
+                .inner(cycleCutsetSolver).treeSolver(treeSolver).cancellation(cancellation).build();
+        assertThatThrownBy(() -> cancellable.getSolution(CUTSET_CONDITIONING_PROBLEM))
+                .isInstanceOf(SolverCancelledException.class);
     }
 
     @Test

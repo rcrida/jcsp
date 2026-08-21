@@ -46,11 +46,13 @@ Two things came up while scoping this:
   propagator within the round ("between propagators"), throwing `SolverCancelledException` (built
   from `statistics`) the moment it's detected.
 - **`SolverCancelledException` mirrors `LimitExceededException`'s exact existing asymmetry**: it is
-  thrown *only* from `DomWdegLubySearch.getSolution()`'s Luby-restart-driven single-solution search
-  — the one call path in the whole chain with a genuinely distinct single-result algorithm of its
-  own, rather than one defined purely as consuming `getSolutions()`'s stream (`BranchAndBoundSolver`,
+  thrown *only* from a call path with a genuinely distinct single-result algorithm of its own,
+  rather than one defined purely as consuming `getSolutions()`'s stream (`BranchAndBoundSolver`,
   `SetBranchingSolver`, and generic `Solver`/`SolverDecorator` defaults all just `findFirst()`/
-  `reduce()` over the stream). Every other path — both chains' `getSolutions()`,
+  `reduce()` over the stream) — at the time of this decision, that meant only
+  `DomWdegLubySearch.getSolution()`'s Luby-restart-driven single-solution search;
+  `CutsetConditioningSolver.getSolution()` turned out to be a second such path, missed here and
+  fixed later (see Consequences). Every other path — both chains' `getSolutions()`,
   `BranchAndBoundSolver.getSolution()`, `PropagationFixpointSolver`, `SetBranchingSolver` — stops
   silently instead, `catch`ing `SolverCancelledException` around whatever call into
   `FixpointPropagation`/`inferOrExplain` might throw it and converting to their own existing
@@ -142,3 +144,20 @@ Two things came up while scoping this:
   abstraction this project's own conventions warn against) and giving `SolverCancelledException` a
   shared base class with `LimitExceededException` (the duplication is ~10 lines between two already
   small, independently-readable classes).
+- **Follow-up (real bug, found via `Xcsp3CompetitionRunner` on `ColouredQueens-07.xml.lzma`,
+  bundled as a regression instance)**: `CutsetConditioningSolver` — a genuine third decomposition
+  decorator alongside `DomWdegLubySearch`/`BranchAndBoundSolver`, with its own `getSolution()`
+  override implementing real cutset-assignment-enumeration search rather than
+  `getSolutions().findFirst()` — was missed entirely when `Cancellation` was threaded through this
+  chain, so it had no field for it and no check anywhere. For a constraint graph whose cutset
+  conditioning turns out far more expensive than `isComplexityDecreased` estimated (confirmed via
+  thread dump: every `ForkJoinPool` worker genuinely busy, not deadlocked), the combinatorial
+  (cutset assignment × tree attempt) space can be enormous even though each individual step is
+  cheap — and since `getInner()` (the one path that *was* cancellation-aware) is never reached at a
+  decomposition level that keeps finding a further cutset, no caller-supplied budget could stop it.
+  Fixed by giving `CutsetConditioningSolver` its own `cancellation`/`statistics` fields (wired the
+  same way every other decorator's are, in `Solver.Factory`): `getSolutions()` truncates its
+  cutset-assignment stream silently via `Stream#takeWhile`, matching the stream contract everywhere
+  else; `getSolution()` throws `SolverCancelledException` once cancellation is detected and no
+  solution was found — extending this ADR's stated exception scope (see Decision) to a second
+  call path, not revising the underlying design.

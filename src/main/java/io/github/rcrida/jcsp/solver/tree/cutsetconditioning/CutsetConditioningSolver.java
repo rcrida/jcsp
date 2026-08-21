@@ -1,15 +1,19 @@
 package io.github.rcrida.jcsp.solver.tree.cutsetconditioning;
 
+import lombok.Builder;
 import lombok.EqualsAndHashCode;
 import lombok.experimental.SuperBuilder;
 import lombok.extern.slf4j.Slf4j;
 import lombok.val;
 import io.github.rcrida.jcsp.ConstraintSatisfactionProblem;
 import io.github.rcrida.jcsp.assignments.Assignment;
+import io.github.rcrida.jcsp.assignments.Statistics;
 import io.github.rcrida.jcsp.constraints.Constraint;
 import io.github.rcrida.jcsp.domains.DiscreteDomain;
 import io.github.rcrida.jcsp.domains.Domain;
+import io.github.rcrida.jcsp.solver.Cancellation;
 import io.github.rcrida.jcsp.solver.Solver;
+import io.github.rcrida.jcsp.solver.SolverCancelledException;
 import io.github.rcrida.jcsp.solver.SolverDecorator;
 import io.github.rcrida.jcsp.variables.Variable;
 import org.jspecify.annotations.NonNull;
@@ -37,6 +41,8 @@ import java.util.stream.Stream;
 @EqualsAndHashCode(callSuper = true)
 public class CutsetConditioningSolver extends SolverDecorator {
     @NonNull Solver treeSolver;
+    @Builder.Default @NonNull Cancellation cancellation = Cancellation.NEVER;
+    @Builder.Default @NonNull Statistics statistics = new Statistics();
 
     /**
      * Represents the decomposition of a CSP into a cycle cutset and tree for the purpose of solving using cutset conditioning.
@@ -93,25 +99,48 @@ public class CutsetConditioningSolver extends SolverDecorator {
         }
         return decomposeCsp(csp)
                 .map(decomposition -> getSolutions(decomposition.cycleCutset)
+                        .takeWhile(cutsetAssignment -> !cancellation.isCancelled())
                         .flatMap(cutsetAssignment -> decomposition.constrainTree(cutsetAssignment).stream()
                                 .flatMap(treeSolver::getSolutions)
                                 .map(cutsetAssignment::merge)))
                 .orElseGet(() -> getInner().getSolutions(csp));
     }
 
+    /**
+     * The cutset-solution enumeration below (recursively decomposing, then trying every cutset
+     * assignment against {@link #treeSolver} until one extends to a full solution) is this
+     * decorator's own search algorithm -- not simply {@code getSolutions().findFirst()} -- so, like
+     * {@link io.github.rcrida.jcsp.solver.DomWdegLubySearch#getSolution}, it needs its own {@link
+     * #cancellation} check rather than relying solely on {@code getInner()}'s inner search to
+     * notice a cancellation: for a constraint graph whose cutset conditioning turns out far more
+     * expensive than {@link #isComplexityDecreased} estimated, the combinatorial (cutset assignment
+     * x tree attempt) space can be enormous even though every individual step is cheap, and {@code
+     * getInner()} is never reached at this level at all when {@link #decomposeCsp} keeps finding a
+     * further decomposition. {@link #getSolutions(ConstraintSatisfactionProblem)} above truncates
+     * silently via {@link Stream#takeWhile}, matching {@link Stream}'s own contract elsewhere in
+     * this codebase; this method instead throws {@link SolverCancelledException} once cancellation
+     * is detected and no solution was found, the same distinguishing signal {@link
+     * io.github.rcrida.jcsp.solver.DomWdegLubySearch#getSolution} gives its own caller, so a cancelled
+     * search isn't misreported as genuine UNSAT.
+     */
     @Override
     public Optional<Assignment> getSolution(@NonNull ConstraintSatisfactionProblem csp) {
         if (csp.isTree()) {
             return treeSolver.getSolution(csp);
         }
-        return decomposeCsp(csp)
+        Optional<Assignment> solution = decomposeCsp(csp)
                 .map(decomposition -> getSolutions(decomposition.cycleCutset)
+                        .takeWhile(cutsetAssignment -> !cancellation.isCancelled())
                         .parallel()
                         .flatMap(cutsetAssignment -> decomposition.constrainTree(cutsetAssignment).stream()
                                 .flatMap(treeSolver::getSolutions)
                                 .map(cutsetAssignment::merge))
                         .findAny())
                 .orElseGet(() -> getInner().getSolution(csp));
+        if (solution.isEmpty() && cancellation.isCancelled()) {
+            throw new SolverCancelledException(statistics);
+        }
+        return solution;
     }
 
     /**

@@ -216,6 +216,8 @@ public interface Solver {
                     val cutsetConditioningSolver = CutsetConditioningSolver.builder()
                             .inner(domWdegLubySearch)
                             .treeSolver(treeSolver)
+                            .cancellation(cancellation)
+                            .statistics(config.getStatistics())
                             .build();
                     return TreeDecompositionSolver.builder()
                             .inner(cutsetConditioningSolver)
