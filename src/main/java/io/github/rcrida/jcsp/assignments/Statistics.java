@@ -2,11 +2,12 @@ package io.github.rcrida.jcsp.assignments;
 
 import lombok.Value;
 
-import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
 
 /**
- * Search statistics accumulated during a solve. Counters are thread-safe ({@link AtomicInteger})
- * and shared across all {@link Assignment} objects derived from the same root via
+ * Search statistics accumulated during a solve. Counters are thread-safe ({@link AtomicLong} --
+ * switched from {@code AtomicInteger} after a real run overflowed it) and shared across all
+ * {@link Assignment} objects derived from the same root via
  * {@link Assignment#withValue}, so a single instance reflects the full cost of a search.
  *
  * <ul>
@@ -36,13 +37,13 @@ import java.util.concurrent.atomic.AtomicInteger;
  */
 @Value
 public class Statistics {
-    AtomicInteger nodesExplored = new AtomicInteger();
-    AtomicInteger constraintChecks = new AtomicInteger();
-    AtomicInteger backtracks = new AtomicInteger();
-    AtomicInteger restarts = new AtomicInteger();
-    AtomicInteger steps = new AtomicInteger();
-    AtomicInteger nogoodsLearned = new AtomicInteger();
-    AtomicInteger nogoodRejections = new AtomicInteger();
+    AtomicLong nodesExplored = new AtomicLong();
+    AtomicLong constraintChecks = new AtomicLong();
+    AtomicLong backtracks = new AtomicLong();
+    AtomicLong restarts = new AtomicLong();
+    AtomicLong steps = new AtomicLong();
+    AtomicLong nogoodsLearned = new AtomicLong();
+    AtomicLong nogoodRejections = new AtomicLong();
 
     public void incrementNodesExplored() {
         nodesExplored.incrementAndGet();
