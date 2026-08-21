@@ -518,6 +518,30 @@ public class ConstraintSatisfactionProblemTest {
     }
 
     @Test
+    void builder_valueDisjunctionConstraint() {
+        Variable<Integer> a = VARIABLE_FACTORY.create("A");
+        Variable<Integer> b = VARIABLE_FACTORY.create("B");
+        val csp = ConstraintSatisfactionProblem.builder()
+                .variableDomain(a, IntRangeDomain.of(0, 3))
+                .variableDomain(b, IntRangeDomain.of(0, 3))
+                .valueDisjunctionConstraint(Map.of(a, 1, b, 2))
+                .build();
+        assertThat(csp.getConstraints()).hasSize(1);
+    }
+
+    @Test
+    void builder_valueConjunctionConstraint() {
+        Variable<Integer> a = VARIABLE_FACTORY.create("A");
+        Variable<Integer> b = VARIABLE_FACTORY.create("B");
+        val csp = ConstraintSatisfactionProblem.builder()
+                .variableDomain(a, IntRangeDomain.of(0, 3))
+                .variableDomain(b, IntRangeDomain.of(0, 3))
+                .valueConjunctionConstraint(Map.of(a, 1, b, 2), Operator.EQ)
+                .build();
+        assertThat(csp.getConstraints()).hasSize(1);
+    }
+
+    @Test
     void equals_distinguishesCspsWithSameVariablesButDifferentConstraints() {
         Variable<Integer> a = VARIABLE_FACTORY.create("A");
         Variable<Integer> b = VARIABLE_FACTORY.create("B");

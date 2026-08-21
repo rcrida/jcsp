@@ -74,6 +74,8 @@ import io.github.rcrida.jcsp.constraints.nary.ProductVariableConstraint;
 import io.github.rcrida.jcsp.constraints.nary.NaryConflictTuplesConstraint;
 import io.github.rcrida.jcsp.constraints.nary.NaryStarredTuplesConstraint;
 import io.github.rcrida.jcsp.constraints.nary.NaryTuplesConstraint;
+import io.github.rcrida.jcsp.constraints.nary.ValueConjunctionConstraint;
+import io.github.rcrida.jcsp.constraints.nary.ValueDisjunctionConstraint;
 import io.github.rcrida.jcsp.constraints.nary.SumBoundConstraint;
 import io.github.rcrida.jcsp.constraints.nary.SumVariableConstraint;
 import io.github.rcrida.jcsp.constraints.nary.AtMostOneConstraint;
@@ -1636,6 +1638,35 @@ public class ConstraintSatisfactionProblem {
          */
         public ConstraintSatisfactionProblemBuilder conflictTuplesConstraint(@NonNull Set<Assignment> conflicts) {
             return this.constraint(NaryConflictTuplesConstraint.of(conflicts));
+        }
+
+        /**
+         * {@code OR(v1 == target1, ..., vn == targetn)}: satisfied once at least one variable
+         * equals its own designated target value. Generalizes {@link #atLeastNConstraint}'s
+         * {@code n=1} case from a uniform "is true" check over {@code Variable<Boolean>} to a
+         * per-variable target value over any {@code T}.
+         *
+         * @param literals each variable's own required target value; at least one must hold
+         * @return the builder
+         */
+        public <T> ConstraintSatisfactionProblemBuilder valueDisjunctionConstraint(@NonNull Map<Variable<T>, T> literals) {
+            return this.constraint(ValueDisjunctionConstraint.of(literals));
+        }
+
+        /**
+         * {@code AND(v1 <op> target1, ..., vn <op> targetn)}, the positive dual of {@link
+         * #nogood}'s {@code OR(x_i != v_i)}: satisfied only when every literal holds, so unlike
+         * {@link #valueDisjunctionConstraint}'s OR-shape, a single violated literal disproves the
+         * whole conjunction immediately without waiting for full assignment. Only {@link
+         * Operator#EQ}/{@link Operator#NEQ} propagate incrementally; the four ordering operators
+         * are checked only once every cited variable is assigned.
+         *
+         * @param literals each variable's own required relation to its target value
+         * @param operator the relation every literal must satisfy ({@code EQ}/{@code NEQ} propagate)
+         * @return the builder
+         */
+        public <T> ConstraintSatisfactionProblemBuilder valueConjunctionConstraint(@NonNull Map<Variable<T>, T> literals, @NonNull Operator operator) {
+            return this.constraint(ValueConjunctionConstraint.of(literals, operator));
         }
 
         /**

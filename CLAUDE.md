@@ -184,7 +184,12 @@ csp.globalCardinalityConstraint(Set.of(v1, v2, v3), Map.of(a, 2, b, 1))
 csp.nValueConstraint(Set.of(v1, v2, v3), count)     // count == number of distinct values taken by v1,v2,v3; count is a variable, so it can be minimized
 csp.binPackingConstraint(bin, weights, capacities)  // sum(weights[i] : bin[i]==b) <= capacities[b] for every bin b; pair with nValueConstraint over `bin` to minimize bins used
 csp.cumulativeConstraint(starts, durations, resources, limit)  // resource scheduling
+csp.disjunctiveConstraint(starts, durations)                   // unary-resource scheduling (no two tasks overlap); real edge-finding, stronger than cumulativeConstraint(limit=1)
 csp.tuplesConstraint(Set.of(Assignment.of(...), ...))          // extensional (table)
+csp.starredTuplesConstraint(Set.of(Map.of(v1, 1, v2, NaryStarredTuplesConstraint.STAR), ...))  // tuplesConstraint sibling with wildcard ("don't care") positions
+csp.conflictTuplesConstraint(Set.of(Assignment.of(...), ...))  // tuplesConstraint's negative sibling: forbidden combinations, everything else allowed
+csp.valueDisjunctionConstraint(Map.of(v1, 1, v2, 2))           // v1==1 OR v2==2; at least one variable equals its own target value
+csp.valueConjunctionConstraint(Map.of(v1, 1, v2, 2), Operator.EQ)  // v1==1 AND v2==2; also NEQ; every variable must meet its own target
 csp.increasingConstraint(List.of(v1, v2, v3))      // v1 <= v2 <= v3; AC3 decomposition
 csp.decreasingConstraint(List.of(v1, v2, v3))      // v1 >= v2 >= v3; AC3 decomposition
 csp.orderedConstraint(List.of(v1, v2, v3), Operator.LT)  // v1 < v2 < v3; any of LT/LEQ/GEQ/GT chosen at runtime
