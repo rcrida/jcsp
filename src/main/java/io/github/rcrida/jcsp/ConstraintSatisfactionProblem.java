@@ -332,11 +332,21 @@ public class ConstraintSatisfactionProblem {
      * immediately before use (see {@link NogoodStore#byVariable}'s own javadoc). The fast path only
      * compares {@code newNogoods} (matching {@link #withNogoods(Set)}'s existing semantics), since
      * {@code index} never changes reference independently of the store it came from.
+     * <p>
+     * Calls the constructor directly with {@code constraintGraph.getConstraints()} passed straight
+     * through as {@code constraints} — the same reason {@link #withDomain}/{@link #withDomains} do
+     * (see their own Javadoc): {@code toBuilder().build()} would force the {@code @Singular}
+     * builder to rebuild {@code constraints} into a fresh {@link Set}, defeating the constructor's
+     * reference-equality fast path and falling back to a full {@code equals} (hashing every
+     * structural constraint, e.g. a large {@link io.github.rcrida.jcsp.constraints.nary.NaryTuplesConstraint}
+     * table) on essentially every node that just learned a nogood. Confirmed via JFR profiling of
+     * a real XCSP3 instance ({@code Steiner3-08.xml.lzma}) where this was found to dominate search
+     * wall-clock time.
      */
     public ConstraintSatisfactionProblem withNogoods(@NonNull Set<NogoodConstraint> newNogoods,
             @Nullable Map<Variable<?>, Set<NogoodConstraint>> index) {
         if (newNogoods == this.nogoods) return this;
-        return toBuilder().nogoods(newNogoods).nogoodsByVariable(index).build();
+        return new ConstraintSatisfactionProblem(variableDomains, constraintGraph.getConstraints(), constraintGraph, newNogoods, nogoodMergeCache, index);
     }
 
     /**
