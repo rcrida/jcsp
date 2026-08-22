@@ -12,6 +12,7 @@ import org.jspecify.annotations.Nullable;
 
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Random;
@@ -58,6 +59,20 @@ import java.util.Set;
  */
 public class DomWdegVariableSelector implements UnassignedVariableSelector {
 
+    /**
+     * Keyed by object identity, not {@link Constraint#equals}/{@link Constraint#hashCode}: the
+     * constraint objects populating this map are fixed at construction and the exact same
+     * references are looked up throughout the life of the selector (structural constraints never
+     * get rebuilt mid-search -- only nogoods are added, tracked separately and never indexed
+     * here), so identity is not just adequate but the actually-intended semantics for this
+     * per-instance bookkeeping. Matters because {@link #ratio} calls {@link Map#getOrDefault} once
+     * per active constraint per unassigned variable per node -- for a constraint whose {@code
+     * hashCode}/{@code equals} isn't {@code O(1)} (e.g. {@link
+     * io.github.rcrida.jcsp.constraints.nary.NaryTuplesConstraint} over a large table), a plain
+     * {@link HashMap} recomputes that cost on every single lookup. Confirmed via JFR profiling of
+     * a real XCSP3 instance ({@code Steiner3-08.xml.lzma}, 36 table constraints averaging 80,640
+     * tuples each) where this was found to dominate search wall-clock time.
+     */
     private final Map<Constraint, Long> weights;
     private final Map<Variable<?>, List<Constraint>> constraintsByVariable;
     private @Nullable Random tieBreakRandom;
@@ -72,7 +87,7 @@ public class DomWdegVariableSelector implements UnassignedVariableSelector {
      * the filter exists for direct/test construction with a nogood already present.
      */
     public DomWdegVariableSelector(@NonNull Set<Constraint> constraints) {
-        weights = new HashMap<>(constraints.size() * 2);
+        weights = new IdentityHashMap<>(constraints.size() * 2);
         constraintsByVariable = new HashMap<>();
         for (Constraint c : constraints) {
             if (c instanceof NogoodConstraint) continue;
