@@ -52,6 +52,7 @@ import io.github.rcrida.jcsp.constraints.nary.MaxVariableConstraint;
 import io.github.rcrida.jcsp.constraints.nary.MinConstraint;
 import io.github.rcrida.jcsp.constraints.nary.MinVariableConstraint;
 import io.github.rcrida.jcsp.constraints.nary.NaryElementConstraint;
+import io.github.rcrida.jcsp.constraints.nary.NotAllEqualConstraint;
 import io.github.rcrida.jcsp.constraints.nary.NValueConstraint;
 import io.github.rcrida.jcsp.constraints.nary.PartitionConstraint;
 import io.github.rcrida.jcsp.constraints.nary.ProductConstraint;
@@ -163,6 +164,7 @@ public class FixpointPropagation {
             FixpointConsistency.of(GlobalCardinalityConstraint.class),
             FixpointConsistency.of(GlobalCardinalityVariableConstraint.class),
             FixpointConsistency.of(NValueConstraint.class),
+            FixpointConsistency.of(NotAllEqualConstraint.class),
             FixpointConsistency.of(LexConstraint.class),
             FixpointConsistency.of(MaxConstraint.class),
             FixpointConsistency.of(MaxVariableConstraint.class),

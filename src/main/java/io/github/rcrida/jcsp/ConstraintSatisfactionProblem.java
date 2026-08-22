@@ -65,6 +65,7 @@ import io.github.rcrida.jcsp.constraints.nary.GroundNogoodConstraint;
 import io.github.rcrida.jcsp.constraints.nary.NaryElementConstraint;
 import io.github.rcrida.jcsp.constraints.nary.NValueConstraint;
 import io.github.rcrida.jcsp.constraints.nary.NogoodConstraint;
+import io.github.rcrida.jcsp.constraints.nary.NotAllEqualConstraint;
 import io.github.rcrida.jcsp.constraints.nary.PartitionConstraint;
 import io.github.rcrida.jcsp.constraints.nary.RangeNogoodConstraint;
 import io.github.rcrida.jcsp.constraints.nary.ValueSetNogoodConstraint;
@@ -1580,6 +1581,19 @@ public class ConstraintSatisfactionProblem {
          */
         public <T> ConstraintSatisfactionProblemBuilder nValueConstraint(@NonNull Set<Variable<T>> variables, @NonNull Variable<Integer> count) {
             return this.constraint(NValueConstraint.of(variables, count));
+        }
+
+        /**
+         * Create a NotAllEqual constraint: {@code variables} must not all take the same value.
+         * The specialised, fully arc-consistent case of {@link #nValueConstraint} fixed to "more
+         * than one distinct value" — prefer this over {@code nValueConstraint} plus a {@code
+         * count > 1} comparator whenever the count itself isn't otherwise needed.
+         *
+         * @param variables to be constrained (at least 2)
+         * @return the builder
+         */
+        public <T> ConstraintSatisfactionProblemBuilder notAllEqualConstraint(@NonNull Set<Variable<T>> variables) {
+            return this.constraint(NotAllEqualConstraint.of(variables));
         }
 
         /**

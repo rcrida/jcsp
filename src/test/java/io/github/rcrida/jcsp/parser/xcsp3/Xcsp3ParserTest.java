@@ -943,6 +943,26 @@ class Xcsp3ParserTest {
                 .isInstanceOf(UnsupportedXcsp3ConstraintException.class);
     }
 
+    @Test void nValuesWithGreaterThanOneCondition_routesToNotAllEqualConstraint() throws IOException {
+        Xcsp3Instance instance = parseXml(
+                "<var id=\"x1\"> 1..2 </var><var id=\"x2\"> 1..2 </var><var id=\"x3\"> 1..2 </var>",
+                "<nValues><list> x1 x2 x3 </list><condition> (gt,1) </condition></nValues>");
+        Set<Assignment> solutions = solutions(instance.csp());
+        // 2^3 = 8 combinations minus the 2 all-same ones (1,1,1) and (2,2,2)
+        assertThat(solutions).hasSize(6);
+        for (Assignment a : solutions) {
+            int x1 = digitOf(a, "x1"), x2 = digitOf(a, "x2"), x3 = digitOf(a, "x3");
+            assertThat(x1 == x2 && x2 == x3).isFalse();
+        }
+    }
+
+    @Test void nValuesWithGreaterThanTwoCondition_fallsBackToNValueConstraint() throws IOException {
+        Xcsp3Instance instance = parseXml(
+                "<var id=\"x1\"> 1..3 </var><var id=\"x2\"> 1..3 </var><var id=\"x3\"> 1..3 </var>",
+                "<nValues><list> x1 x2 x3 </list><condition> (gt,2) </condition></nValues>");
+        assertThat(solutions(instance.csp())).isNotEmpty();
+    }
+
     // ---- cardinality (global cardinality constraint) ---------------------------------------------------------
 
     @Test void cardinalityFixedOccurs_buildsGlobalCardinalityConstraint() throws IOException {

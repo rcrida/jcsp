@@ -36,6 +36,8 @@ import io.github.rcrida.jcsp.constraints.nary.NaryElementConstraint;
 import io.github.rcrida.jcsp.constraints.nary.NaryConflictTuplesConstraint;
 import io.github.rcrida.jcsp.constraints.nary.NaryStarredTuplesConstraint;
 import io.github.rcrida.jcsp.constraints.nary.NaryTuplesConstraint;
+import io.github.rcrida.jcsp.constraints.nary.NotAllEqualConstraint;
+import io.github.rcrida.jcsp.constraints.nary.NValueConstraint;
 import io.github.rcrida.jcsp.constraints.nary.OrderedConstraint;
 import io.github.rcrida.jcsp.constraints.nary.ReifiedConstraint;
 import io.github.rcrida.jcsp.constraints.nary.PredicateConstraint;
@@ -1073,16 +1075,26 @@ final class Xcsp3CallbackHandler implements XCallbacks2 {
     }
 
     /**
-     * {@code nValueConstraint}'s {@code count} parameter is always a genuine {@link
-     * Variable}, so a fresh auxiliary variable carries the distinct-value count regardless of
-     * whether {@code condition} names one itself; the condition is then applied to that auxiliary
-     * via {@link io.github.rcrida.jcsp.constraints.Operator}-based comparison, the same two-step
-     * shape {@link #shiftVariable} uses for an index shift. {@code nValueConstraint} itself (the
+     * A {@code (gt,1)} condition -- "more than one distinct value" -- is exactly {@code
+     * notAllEqualConstraint(vars)}: routed there directly, since {@link NotAllEqualConstraint} is
+     * fully arc-consistent for this case and needs neither the auxiliary count variable nor {@link
+     * NValueConstraint}'s general bounds-consistency machinery (see that class's own Javadoc,
+     * added after profiling {@code Ramsey-12.xml.lzma}, whose triangle constraints are exactly
+     * this shape). Every other condition falls back to the general path: {@code
+     * nValueConstraint}'s {@code count} parameter is always a genuine {@link Variable}, so a fresh
+     * auxiliary variable carries the distinct-value count regardless of whether {@code condition}
+     * names one itself; the condition is then applied to that auxiliary via {@link
+     * io.github.rcrida.jcsp.constraints.Operator}-based comparison, the same two-step shape {@link
+     * #shiftVariable} uses for an index shift. {@code nValueConstraint} itself (the
      * {@code count}-to-distinct-values link) is always added directly, never reified -- only the
      * condition <em>comparing</em> {@code count} is a meaningful thing to reify ({@code b <-> count
      * <op> k}); the link itself is a definition, not a proposition with a truth value of its own.
      */
     void applyNValuesCondition(Set<Variable<Integer>> vars, Condition condition, String id) {
+        if (condition instanceof ConditionVal val && mapOperator(val.operator) == Operator.GT && val.k == 1) {
+            addOrReify(NotAllEqualConstraint.of(vars), id);
+            return;
+        }
         Variable<Integer> count = Variable.Factory.INSTANCE.create(id + "$nvalues");
         builder.variableDomain(count, IntRangeDomain.of(1, vars.size()));
         builder.nValueConstraint(vars, count);
