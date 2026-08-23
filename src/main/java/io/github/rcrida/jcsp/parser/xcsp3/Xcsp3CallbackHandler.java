@@ -21,6 +21,7 @@ import io.github.rcrida.jcsp.constraints.nary.CircuitConstraint;
 import io.github.rcrida.jcsp.constraints.nary.CountConstraint;
 import io.github.rcrida.jcsp.constraints.nary.CountVariableConstraint;
 import io.github.rcrida.jcsp.constraints.nary.CumulativeConstraint;
+import io.github.rcrida.jcsp.constraints.nary.CumulativeVariableConstraint;
 import io.github.rcrida.jcsp.constraints.nary.DiffnVariableConstraint;
 import io.github.rcrida.jcsp.constraints.nary.DisjunctiveConstraint;
 import io.github.rcrida.jcsp.constraints.nary.DistinctVectorsConstraint;
@@ -1383,6 +1384,24 @@ final class Xcsp3CallbackHandler implements XCallbacks2 {
      * all). Maps onto {@link DiffnVariableConstraint}. Only exactly 2 dimensions are supported --
      * {@link DiffnVariableConstraint} has no higher-dimensional generalisation, and XCSP3's
      * {@code noOverlap} technically permits any dimensionality.
+     * <p>
+     * Additionally posts two <em>redundant</em> {@link CumulativeVariableConstraint}s -- one per
+     * axis projection (Beldiceanu/Carlsson-style: treat the x-axis as "time", each rectangle's
+     * width as duration and height as resource demand, and vice versa for the y-axis) -- since
+     * {@link DiffnVariableConstraint} only reasons pairwise and structurally cannot catch a group
+     * of three or more rectangles that collectively overload a shared strip even when no pair's
+     * compulsory parts conflict (see {@link CumulativeVariableConstraint}'s own Javadoc for why
+     * that's a real gap, confirmed via profiling {@code StripPacking-C1P1.xml.lzma}: a fixed
+     * seed/node-budget comparison found the redundant projections cut wall-clock time by roughly
+     * a third at the same node count, via far fewer nogood-rejection cycles -- conflicts get
+     * caught directly by the new propagators' own bounds reasoning instead of being rediscovered
+     * later by a previously-learned nogood). Sound regardless of the instance: since diffn already
+     * guarantees non-overlap, any rectangles sharing an x-slice are necessarily non-overlapping in
+     * y, so their combined heights can never exceed the total y-span any rectangle could ever
+     * occupy -- {@code capacityY = max_i(y_max[i] + h_max[i]) - min_i(y_min[i])} is therefore
+     * always a valid (if not always tight) capacity for the x-axis projection, derived purely from
+     * domains already parsed at this point, with no XML recognition of a "container" needed
+     * (symmetrically for {@code capacityX}).
      */
     @Override
     public void buildCtrNoOverlap(String id, XVarInteger[][] origins, XVarInteger[][] lengths, boolean zeroIgnored) {
@@ -1393,7 +1412,41 @@ final class Xcsp3CallbackHandler implements XCallbacks2 {
         List<Variable<? extends Number>> ys = Arrays.stream(origins).<Variable<? extends Number>>map(row -> variableFor(row[1])).toList();
         List<Variable<? extends Number>> ws = Arrays.stream(lengths).<Variable<? extends Number>>map(row -> variableFor(row[0])).toList();
         List<Variable<? extends Number>> hs = Arrays.stream(lengths).<Variable<? extends Number>>map(row -> variableFor(row[1])).toList();
-        addOrReify(DiffnVariableConstraint.of(xs, ys, ws, hs), id);
+
+        double capacityY = axisCapacity(origins, lengths, 1, 1);
+        double capacityX = axisCapacity(origins, lengths, 0, 0);
+        CumulativeVariableConstraint xProjection = CumulativeVariableConstraint.of(
+                List.copyOf(xs), List.copyOf(ws), List.copyOf(hs), capacityY);
+        CumulativeVariableConstraint yProjection = CumulativeVariableConstraint.of(
+                List.copyOf(ys), List.copyOf(hs), List.copyOf(ws), capacityX);
+
+        if (currentReification == null) {
+            builder.constraint(DiffnVariableConstraint.of(xs, ys, ws, hs));
+            builder.constraint(xProjection);
+            builder.constraint(yProjection);
+            return;
+        }
+        Set<Constraint> conjuncts = new LinkedHashSet<>();
+        conjuncts.add(DiffnVariableConstraint.of(xs, ys, ws, hs));
+        conjuncts.add(xProjection);
+        conjuncts.add(yProjection);
+        addOrReify(AndConstraint.of(conjuncts), id);
+    }
+
+    /**
+     * {@code max_i(origins[i][originIdx].max + lengths[i][lengthIdx].max) - min_i(origins[i][originIdx].min)}
+     * -- see {@link #buildCtrNoOverlap}'s own Javadoc for what this bounds and why it's sound.
+     */
+    private double axisCapacity(XVarInteger[][] origins, XVarInteger[][] lengths, int originIdx, int lengthIdx) {
+        double maxReach = Double.NEGATIVE_INFINITY;
+        double minStart = Double.POSITIVE_INFINITY;
+        for (int i = 0; i < origins.length; i++) {
+            int[] originBounds = boundsByName.get(origins[i][originIdx].id());
+            int[] lengthBounds = boundsByName.get(lengths[i][lengthIdx].id());
+            maxReach = Math.max(maxReach, originBounds[1] + lengthBounds[1]);
+            minStart = Math.min(minStart, originBounds[0]);
+        }
+        return maxReach - minStart;
     }
 
     // ---- ordered / lex --------------------------------------------------------------------------------------
