@@ -14,12 +14,16 @@ import lombok.experimental.SuperBuilder;
 import org.jspecify.annotations.NonNull;
 
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.stream.IntStream;
 
 /**
  * An n-ary constraint that bounds resource usage over time: at every instant, the sum of
@@ -34,7 +38,11 @@ import java.util.Set;
  * propagator: it identifies each task's <em>compulsory part</em> (the interval that must
  * be occupied regardless of the final start time), builds a mandatory-resource profile via
  * an event-based step function, and tightens each start-time domain to exclude positions
- * that would exceed the capacity.
+ * that would exceed the capacity. It additionally runs {@link #energyOverload}, an
+ * energy-weighted overload check (a real strengthening: it catches a group of tasks that
+ * collectively overload a shared window even when no <em>pair</em> of their compulsory parts
+ * individually conflicts) — see that method's own Javadoc for exactly what it does and
+ * doesn't cover relative to full cumulative edge-finding.
  * <p>
  * Equivalent to MiniZinc's {@code cumulative(start, duration, resource, limit)} constraint.
  */
@@ -125,12 +133,18 @@ public class CumulativeConstraint extends NaryConstraint implements Propagatable
         }
         List<double[]> events = buildEvents(est, lst);
 
-        // Global overload check
+        // Global overload check (timetabling: compulsory-part events only)
         double running = 0;
         for (double[] e : events) {
             running += e[1];
             if (running > limit) return Optional.empty();
         }
+
+        // Energy overload check: catches collective overloads across a group of tasks that no
+        // pair's compulsory parts individually conflict on -- see energyOverload's own Javadoc.
+        double[] lct = new double[n];
+        for (int i = 0; i < n; i++) lct[i] = lst[i] + durations.get(i);
+        if (energyOverload(est, lct).isPresent()) return Optional.empty();
 
         // Tighten each task's start window
         Map<Variable<?>, Domain<?>> updated = new HashMap<>();
@@ -171,6 +185,73 @@ public class CumulativeConstraint extends NaryConstraint implements Propagatable
             return cmp != 0 ? cmp : Double.compare(a[1], b[1]); // releases before claims at same time
         });
         return events;
+    }
+
+    /**
+     * Direct task-interval enumeration of the cumulative <em>overload</em> rule -- the
+     * energy-weighted generalisation of {@link DisjunctiveConstraint#edgeFind}'s overload check,
+     * not its bound-tightening edge-finding rule (see below for why that half is deliberately not
+     * attempted here). For a task set {@code Θ} built from tasks whose current bounds place them
+     * entirely inside a shared window (every {@code k∈Θ} has {@code est[k] >= est(Θ)} and
+     * {@code lct[k] <= lct(Θ)}, where {@code est(Θ)}/{@code lct(Θ)} are Θ's own running min/max as
+     * it grows), each such task is necessarily scheduled entirely within {@code [est(Θ), lct(Θ))}
+     * regardless of where exactly within its own window it lands. Θ's tasks therefore collectively
+     * require {@code energy(Θ) = Σ duration[k]*resource[k]} somewhere inside a window of capacity
+     * {@code limit*(lct(Θ)-est(Θ))} -- exceeding it is a direct infeasibility. This is a real
+     * strengthening over {@link #propagate}'s existing timetabling check: it catches a group of
+     * tasks that collectively overload a shared window even when no <em>pair</em> of their
+     * compulsory parts individually conflicts (timetabling's own blind spot). Reduces exactly to
+     * {@link DisjunctiveConstraint#edgeFind}'s overload rule when every {@code resource} and
+     * {@code limit} is {@code 1}.
+     * <p>
+     * Same {@code O(n³)} task-interval enumeration style as {@link DisjunctiveConstraint#edgeFind}
+     * (not the optimised {@code O(n)}/{@code O(n log n)} sweep formulations in the literature —
+     * same tradeoff {@code DisjunctiveConstraint} already made, revisit only if profiling on a
+     * real instance shows this enumeration itself as the bottleneck): outer loop fixes an
+     * {@code est} threshold, inner loop grows {@code Θ} by increasing {@code lct} among tasks
+     * meeting that threshold.
+     * <p>
+     * Deliberately does <em>not</em> attempt the bound-tightening half of cumulative edge-finding
+     * (pushing an external task {@code j}'s {@code est} the way {@link
+     * DisjunctiveConstraint#edgeFind} does for the disjunctive case): that rule's standard proof
+     * relies on {@code j} either finishing entirely before {@code Θ}'s window or starting entirely
+     * after it, which is exact only when no two tasks can ever coexist on the resource (the
+     * disjunctive special case, {@code limit=1}) -- in general cumulative scheduling {@code j} can
+     * legitimately overlap {@code Θ}'s window as long as combined usage stays under {@code limit},
+     * so that argument doesn't carry over without a separately, carefully re-derived (or
+     * faithfully ported, algorithm-and-all) theorem. Left as explicit future work rather than
+     * risking a plausible-looking but unsound port.
+     *
+     * @return the task indices of an overloaded {@code Θ}, or {@link Optional#empty()} if none is found
+     */
+    private Optional<Set<Integer>> energyOverload(double[] est, double[] lct) {
+        int n = est.length;
+        Integer[] estOrder = IntStream.range(0, n).boxed().toArray(Integer[]::new);
+        Arrays.sort(estOrder, Comparator.comparingDouble(i -> est[i]));
+
+        for (int ii = 0; ii < n; ii++) {
+            double threshold = est[estOrder[ii]];
+            List<Integer> candidates = new ArrayList<>();
+            for (int k = 0; k < n; k++) {
+                if (est[k] >= threshold) candidates.add(k);
+            }
+            candidates.sort(Comparator.comparingDouble(k -> lct[k]));
+
+            double sumEnergy = 0;
+            double maxLct = Double.NEGATIVE_INFINITY;
+            double minEst = Double.POSITIVE_INFINITY;
+            List<Integer> thetaSoFar = new ArrayList<>();
+            for (int k : candidates) {
+                sumEnergy += durations.get(k) * resources.get(k);
+                maxLct = Math.max(maxLct, lct[k]);
+                minEst = Math.min(minEst, est[k]);
+                thetaSoFar.add(k);
+                if (sumEnergy > limit * (maxLct - minEst)) {
+                    return Optional.of(new LinkedHashSet<>(thetaSoFar));
+                }
+            }
+        }
+        return Optional.empty();
     }
 
     /** The tightened start-time window computed for one task, or {@code feasible=false} when none exists. */
@@ -256,6 +337,8 @@ public class CumulativeConstraint extends NaryConstraint implements Propagatable
      * <ul>
      *   <li><b>Global overload</b>: every task with a non-empty compulsory part contributed an
      *       event to the running-sum check, so all of them are cited together.</li>
+     *   <li><b>Energy overload</b> ({@link #energyOverload}): every task in the overloaded
+     *       task-interval {@code Θ} it reports.</li>
      *   <li><b>Per-task exclusive-profile failure</b> (task {@code i} has no feasible start left):
      *       task {@code i} itself, plus every <em>other</em> task with a non-empty compulsory part
      *       (exactly the tasks whose events built the exclusive profile {@code i} was checked
@@ -288,6 +371,15 @@ public class CumulativeConstraint extends NaryConstraint implements Propagatable
             if (running > limit) {
                 return GroundNogoodConstraint.fromReason(Propagatable.allSingletonReason(compulsoryVars, domains));
             }
+        }
+
+        double[] lct = new double[n];
+        for (int i = 0; i < n; i++) lct[i] = lst[i] + durations.get(i);
+        Optional<Set<Integer>> overloadedTheta = energyOverload(est, lct);
+        if (overloadedTheta.isPresent()) {
+            Set<Variable<?>> culprits = new LinkedHashSet<>();
+            for (int idx : overloadedTheta.get()) culprits.add(starts.get(idx));
+            return GroundNogoodConstraint.fromReason(Propagatable.allSingletonReason(culprits, domains));
         }
 
         for (int i = 0; i < n; i++) {

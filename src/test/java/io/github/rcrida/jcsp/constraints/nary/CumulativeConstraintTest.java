@@ -166,6 +166,67 @@ public class CumulativeConstraintTest {
         assertThat(result.get()).isEmpty();
     }
 
+    // --- energyOverload ---
+
+    @Test
+    void propagate_energyOverload_threeTasksNoCompulsoryPart_infeasible() {
+        // 3 tasks, each duration=3 resource=2, domain [0,3] (width 3 == duration, so NONE has a
+        // compulsory part: lst=3 is not < compEnd=est+dur=3). buildEvents() is therefore empty and
+        // the pre-existing timetabling checks (global overload, per-task exclusive profile) are
+        // all no-ops on their own -- this scenario is only ever caught by the new energy check:
+        // Θ = all 3 tasks has est(Θ)=0, lct(Θ)=6, energy(Θ)=3*(3*2)=18 > limit*(lct-est)=2*6=12.
+        Variable<Integer> t1 = F.create("et1");
+        Variable<Integer> t2 = F.create("et2");
+        Variable<Integer> t3 = F.create("et3");
+        var c = CumulativeConstraint.of(List.of(t1, t2, t3), List.of(3, 3, 3), List.of(2, 2, 2), 2);
+        var domains = Map.<Variable<?>, io.github.rcrida.jcsp.domains.Domain<?>>of(
+                t1, IntRangeDomain.of(0, 3),
+                t2, IntRangeDomain.of(0, 3),
+                t3, IntRangeDomain.of(0, 3));
+        assertThat(c.propagate(domains)).isEmpty();
+    }
+
+    @Test
+    void propagate_energyAtCapacityBoundary_feasible() {
+        // Same shape as above but limit=3: energy(Θ)=18, capacity=3*6=18 -- not strictly exceeded,
+        // so feasible. Confirms the strict-inequality boundary and that the check doesn't
+        // over-trigger.
+        Variable<Integer> t1 = F.create("bt1");
+        Variable<Integer> t2 = F.create("bt2");
+        Variable<Integer> t3 = F.create("bt3");
+        var c = CumulativeConstraint.of(List.of(t1, t2, t3), List.of(3, 3, 3), List.of(2, 2, 2), 3);
+        var domains = Map.<Variable<?>, io.github.rcrida.jcsp.domains.Domain<?>>of(
+                t1, IntRangeDomain.of(0, 3),
+                t2, IntRangeDomain.of(0, 3),
+                t3, IntRangeDomain.of(0, 3));
+        var result = c.propagate(domains);
+        assertThat(result).isPresent();
+        assertThat(result.get()).isEmpty();
+    }
+
+    @Test
+    void explainInfeasible_energyOverload_notSingleton_returnsEmpty() {
+        // Same domains as propagate_energyOverload_threeTasksNoCompulsoryPart_infeasible. None of
+        // the 3 tasks is singleton, so allSingletonReason can't cite them -- and this isn't just
+        // this particular test's limitation: if all 3 *were* singleton, every task would trivially
+        // have a compulsory part (a singleton domain always does, since lst==est<est+dur whenever
+        // dur>0), which the pre-existing global-overload check would already have caught earlier in
+        // this same method (a fully-determined energy overload always shows up as a point-in-time
+        // capacity breach too, by pigeonhole) -- so this new check can only ever be the *deciding*
+        // factor when it has genuine domain slack to reason about, meaning its own citation
+        // branch can only ever reach this empty, sound-but-conservative outcome in practice.
+        Variable<Integer> t1 = F.create("net1");
+        Variable<Integer> t2 = F.create("net2");
+        Variable<Integer> t3 = F.create("net3");
+        var c = CumulativeConstraint.of(List.of(t1, t2, t3), List.of(3, 3, 3), List.of(2, 2, 2), 2);
+        var domains = Map.<Variable<?>, io.github.rcrida.jcsp.domains.Domain<?>>of(
+                t1, IntRangeDomain.of(0, 3),
+                t2, IntRangeDomain.of(0, 3),
+                t3, IntRangeDomain.of(0, 3));
+        assertThat(c.propagate(domains)).isEmpty();
+        assertThat(c.explainInfeasible(domains)).isEmpty();
+    }
+
     // --- explainInfeasible ---
 
     @Test
