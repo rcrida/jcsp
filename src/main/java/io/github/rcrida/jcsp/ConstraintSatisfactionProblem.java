@@ -44,6 +44,7 @@ import io.github.rcrida.jcsp.constraints.nary.RegularConstraint;
 import io.github.rcrida.jcsp.constraints.nary.AtLeastNConstraint;
 import io.github.rcrida.jcsp.constraints.nary.AtMostNConstraint;
 import io.github.rcrida.jcsp.constraints.nary.CumulativeConstraint;
+import io.github.rcrida.jcsp.constraints.nary.CumulativeVariableConstraint;
 import io.github.rcrida.jcsp.constraints.nary.DisjunctiveConstraint;
 import io.github.rcrida.jcsp.constraints.nary.CountConstraint;
 import io.github.rcrida.jcsp.constraints.nary.CountVariableConstraint;
@@ -893,6 +894,28 @@ public class ConstraintSatisfactionProblem {
                 @NonNull List<Double> resources,
                 double limit) {
             return this.constraint(CumulativeConstraint.of(starts, durations, resources, limit));
+        }
+
+        /**
+         * Create a cumulative scheduling constraint whose durations and resource requirements are
+         * themselves decision variables rather than fixed constants — the variable-size sibling of
+         * {@link #cumulativeConstraint(List, List, List, int)} (a same-named overload isn't possible:
+         * {@code List<Integer>} and {@code List<Variable<?>>} erase to the same raw {@code List}).
+         * {@code limit} stays a fixed constant. See {@link CumulativeVariableConstraint}'s own
+         * Javadoc for what this does and doesn't propagate.
+         *
+         * @param starts    start-time variables (one per task)
+         * @param durations task duration variables
+         * @param resources resource-requirement variables
+         * @param limit     maximum total resource usage at any instant
+         * @return the builder
+         */
+        public ConstraintSatisfactionProblemBuilder cumulativeVariableConstraint(
+                @NonNull List<Variable<?>> starts,
+                @NonNull List<Variable<?>> durations,
+                @NonNull List<Variable<?>> resources,
+                double limit) {
+            return this.constraint(CumulativeVariableConstraint.of(starts, durations, resources, limit));
         }
 
         /**
