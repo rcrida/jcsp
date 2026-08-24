@@ -8,6 +8,7 @@ import io.github.rcrida.jcsp.domains.IntervalDomain;
 import io.github.rcrida.jcsp.variables.Variable;
 import org.junit.jupiter.api.Test;
 
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -190,5 +191,83 @@ public class BisectionConditioningSolverTest {
                 .build();
 
         assertThat(bisection.getSolutions(csp).toList()).isNotEmpty();
+    }
+
+    // ── lowerBound dispatch: LinearObjective → intervalLowerBound ─
+
+    @Test
+    void linearObjective_positiveCoefficient_usesDomainMinAsBound() {
+        // minimize x, x in [0,10]: intervalLowerBound = 1.0 * min(0) = 0.0. Seeding an incumbent
+        // already <= that (-1.0) must prune the whole residual in one check, before any bisection --
+        // exercises lowerBound's true (LinearObjective) branch and termLowerBound's
+        // coefficient >= 0 branch together.
+        Variable<Double> x = F.create("lo_pos_x");
+        var csp = ConstraintSatisfactionProblem.builder()
+                .variableDomain(x, IntervalDomain.of(0.0, 10.0))
+                .build();
+        Map<Variable<? extends Number>, Double> coeffs = new HashMap<>();
+        coeffs.put(x, 1.0);
+        LinearObjective objective = LinearObjective.builder().coefficients(coeffs).build();
+        BisectionConditioningSolver bisection = BisectionConditioningSolver.builder()
+                .inner(SINGLETON_EXTRACTOR)
+                .epsilon(1e-3)
+                .objective(objective)
+                .build();
+
+        assertThat(bisection.getSolutions(csp, -1.0).toList()).isEmpty();
+    }
+
+    @Test
+    void linearObjective_negativeCoefficient_usesDomainMaxAsBound() {
+        // minimize -x (== maximize x), x in [0,10]: the correct interval bound uses the domain
+        // MAX (coefficient < 0), giving -1.0*10 = -10.0. Seeding incumbent=-5.0 must NOT prune
+        // immediately (-10.0 >= -5.0 is false), so the search proceeds and eventually finds x near
+        // 10 improving on -5.0. If termLowerBound wrongly used the min (0.0) here instead, the bound
+        // would be 0.0 >= -5.0 (true) and incorrectly prune everything, returning an empty result --
+        // this test fails loudly in that case, catching the min/max selection getting inverted.
+        Variable<Double> x = F.create("lo_neg_x");
+        var csp = ConstraintSatisfactionProblem.builder()
+                .variableDomain(x, IntervalDomain.of(0.0, 10.0))
+                .build();
+        Map<Variable<? extends Number>, Double> coeffs = new HashMap<>();
+        coeffs.put(x, -1.0);
+        LinearObjective objective = LinearObjective.builder().coefficients(coeffs).build();
+        BisectionConditioningSolver bisection = BisectionConditioningSolver.builder()
+                .inner(SINGLETON_EXTRACTOR)
+                .epsilon(1e-3)
+                .objective(objective)
+                .build();
+
+        var solutions = bisection.getSolutions(csp, -5.0).toList();
+        assertThat(solutions).isNotEmpty();
+        double best = (Double) solutions.getLast().getValue(x).orElseThrow();
+        assertThat(best).isGreaterThan(9.9);
+    }
+
+    @Test
+    void linearObjective_singletonVariable_contributesExactValueNotMinOrMax() {
+        // x is already singleton (5.0), y is open [0,10]. intervalLowerBound = 1.0*5.0 (x's exact
+        // value, via termLowerBound's isSingleton branch) + 1.0*0.0 (y's min) = 5.0. Seeding an
+        // incumbent of 4.0 (< 5.0) must prune immediately -- if the singleton branch were skipped in
+        // favour of treating x like any other BoundedDomain, the bound would still coincidentally be
+        // 5.0 here (min==max==5.0 for a singleton), so this also implicitly confirms isSingleton() is
+        // checked before the unconditional BoundedDomain cast, not after.
+        Variable<Double> x = F.create("lo_singleton_x");
+        Variable<Double> y = F.create("lo_singleton_y");
+        var csp = ConstraintSatisfactionProblem.builder()
+                .variableDomain(x, IntervalDomain.of(5.0, 5.0))
+                .variableDomain(y, IntervalDomain.of(0.0, 10.0))
+                .build();
+        Map<Variable<? extends Number>, Double> coeffs = new HashMap<>();
+        coeffs.put(x, 1.0);
+        coeffs.put(y, 1.0);
+        LinearObjective objective = LinearObjective.builder().coefficients(coeffs).build();
+        BisectionConditioningSolver bisection = BisectionConditioningSolver.builder()
+                .inner(SINGLETON_EXTRACTOR)
+                .epsilon(1e-3)
+                .objective(objective)
+                .build();
+
+        assertThat(bisection.getSolutions(csp, 4.0).toList()).isEmpty();
     }
 }

@@ -9,6 +9,7 @@ import io.github.rcrida.jcsp.constraints.nary.LinearVariableConstraint;
 import io.github.rcrida.jcsp.constraints.nary.SumBoundConstraint;
 import io.github.rcrida.jcsp.constraints.nary.SumVariableConstraint;
 import io.github.rcrida.jcsp.domains.BoundedDomain;
+import io.github.rcrida.jcsp.domains.Domain;
 import io.github.rcrida.jcsp.domains.IntervalDomain;
 import io.github.rcrida.jcsp.variables.Variable;
 import lombok.EqualsAndHashCode;
@@ -36,9 +37,11 @@ import java.util.stream.Stream;
  * bisection and returns them in improving objective order (each strictly better than the previous).
  *
  * <p>{@link #allFeasible} threads a shared {@code incumbent} through its recursion and prunes a
- * subtree immediately once {@link #objective} evaluated against a <em>partial</em> {@link Assignment}
- * of whichever variables are currently singleton (see {@link #partialAssignmentLowerBound}) already
- * meets or exceeds it -- mirroring {@link BranchAndBoundSolver#search}'s own
+ * subtree immediately once {@link #lowerBound} -- {@link #intervalLowerBound}'s interval-arithmetic
+ * bound over every open {@link BoundedDomain} variable's own current range when {@link #objective}
+ * is a {@link LinearObjective}, or {@link #partialAssignmentLowerBound}'s weaker "only variables
+ * already singleton" fallback otherwise -- already meets or exceeds it -- mirroring {@link
+ * BranchAndBoundSolver#search}'s own
  * {@code objective.applyAsDouble(assignment) >= incumbent[0]} check, and relying on the same
  * pre-existing contract ({@link Solver.Factory#createSolver(ConstraintSatisfactionProblem,
  * ToDoubleFunction)}'s objective "must return a lower bound on the cost of any completion of a
@@ -96,7 +99,7 @@ public class BisectionConditioningSolver extends SolverDecorator {
     }
 
     private Stream<Assignment> allFeasible(@NonNull ConstraintSatisfactionProblem csp, double[] incumbent) {
-        if (partialAssignmentLowerBound(csp) >= incumbent[0]) {
+        if (lowerBound(csp) >= incumbent[0]) {
             return Stream.empty();
         }
         val target = findWidestBounded(csp);
@@ -129,6 +132,22 @@ public class BisectionConditioningSolver extends SolverDecorator {
     }
 
     /**
+     * A valid lower bound on any completion of {@code csp}. When {@link #objective} is a {@link
+     * LinearObjective}, uses {@link #intervalLowerBound} -- interval arithmetic over every open
+     * {@link BoundedDomain} variable's own current bounds, not just variables already singleton --
+     * since that bound is strictly tighter (it can never be looser: a singleton is the degenerate
+     * case of an interval whose min equals its max) and is what {@link #allFeasible}'s incumbent
+     * pruning actually needs to cut a branch before every variable in it happens to have collapsed.
+     * Falls back to {@link #partialAssignmentLowerBound} for an opaque {@link ToDoubleFunction} that
+     * can't be introspected for per-variable coefficients.
+     */
+    private double lowerBound(ConstraintSatisfactionProblem csp) {
+        return objective instanceof LinearObjective linearObjective
+                ? intervalLowerBound(csp, linearObjective)
+                : partialAssignmentLowerBound(csp);
+    }
+
+    /**
      * A valid lower bound on any completion of {@code csp}: {@link #objective} evaluated against a
      * partial {@link Assignment} of only the variables that are currently singleton, relying on the
      * same "unassigned contributes nothing yet" convention {@link BranchAndBoundSolver} already
@@ -139,6 +158,34 @@ public class BisectionConditioningSolver extends SolverDecorator {
                 .filter(e -> e.getValue().isSingleton())
                 .collect(Collectors.toMap(Map.Entry::getKey, e -> e.getValue().singleValue().orElseThrow()));
         return objective.applyAsDouble(Assignment.of(values));
+    }
+
+    /**
+     * A lower bound on {@code linearObjective} over {@code csp}'s current domains, sound for any
+     * coefficient sign: each term contributes {@code coefficient * domain.min} when the coefficient
+     * is non-negative or {@code coefficient * domain.max} otherwise -- whichever extreme of the
+     * variable's own current range minimises that term -- summed with the objective's constant.
+     * Unlike {@link #partialAssignmentLowerBound}, this reads every referenced variable's current
+     * {@link Domain} (via {@link #termLowerBound}) rather than skipping every variable that isn't
+     * yet singleton, so it tightens incrementally as {@link #allFeasible}'s bisection narrows each
+     * variable's bounds, not just at the moment a variable collapses to a point.
+     */
+    private double intervalLowerBound(ConstraintSatisfactionProblem csp, LinearObjective linearObjective) {
+        double total = linearObjective.getConstant();
+        for (var entry : linearObjective.getCoefficients().entrySet()) {
+            total += termLowerBound(csp, entry.getKey(), entry.getValue());
+        }
+        return total;
+    }
+
+    private <N extends Number> double termLowerBound(ConstraintSatisfactionProblem csp, Variable<N> variable, double coefficient) {
+        Domain<N> domain = csp.getDomain(variable);
+        if (domain.isSingleton()) {
+            return coefficient * domain.singleValue().orElseThrow().doubleValue();
+        }
+        BoundedDomain<N> bounded = (BoundedDomain<N>) domain;
+        double bound = coefficient >= 0 ? bounded.getMin().doubleValue() : bounded.getMax().doubleValue();
+        return coefficient * bound;
     }
 
     @Nullable
