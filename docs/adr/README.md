@@ -74,3 +74,4 @@ section instead.
 | [0018](0018-disjunctive-edge-finding-propagator.md) | Disjunctive edge-finding propagator | Accepted |
 | [0019](0019-fixpointconsistency-per-object-dirty-tracking.md) | Per-object dirty tracking in FixpointConsistency | Accepted |
 | [0020](0020-assignment-relaxation-for-gcc-linked-tables.md) | Assignment-style LP relaxation for GlobalCardinalityConstraint-linked tables | Implemented |
+| [0021](0021-bitset-indexed-gac-for-table-constraints.md) | Bitset-indexed GAC for NaryTuplesConstraint | Implemented |
