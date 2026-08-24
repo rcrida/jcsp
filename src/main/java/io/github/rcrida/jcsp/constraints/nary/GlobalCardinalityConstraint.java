@@ -4,6 +4,7 @@ import io.github.rcrida.jcsp.consistency.Propagatable;
 import io.github.rcrida.jcsp.domains.Domain;
 import io.github.rcrida.jcsp.variables.Variable;
 import lombok.EqualsAndHashCode;
+import lombok.Getter;
 import lombok.Singular;
 import lombok.experimental.SuperBuilder;
 import org.jspecify.annotations.NonNull;
@@ -64,7 +65,7 @@ public class GlobalCardinalityConstraint<T> extends UniformNaryConstraint<T> imp
         }
     }
 
-    @Singular private final Map<T, OccurrenceRange> cardinalityRanges;
+    @Getter @Singular private final Map<T, OccurrenceRange> cardinalityRanges;
 
     public static <T> GlobalCardinalityConstraint<T> of(@NonNull Set<Variable<T>> variables,
                                                         @NonNull Map<T, Integer> cardinalities) {

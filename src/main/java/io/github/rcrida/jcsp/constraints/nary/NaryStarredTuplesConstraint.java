@@ -6,6 +6,7 @@ import io.github.rcrida.jcsp.domains.DiscreteDomain;
 import io.github.rcrida.jcsp.domains.Domain;
 import io.github.rcrida.jcsp.variables.Variable;
 import lombok.EqualsAndHashCode;
+import lombok.Getter;
 import lombok.Singular;
 import lombok.experimental.SuperBuilder;
 import org.jspecify.annotations.NonNull;
@@ -44,7 +45,7 @@ public class NaryStarredTuplesConstraint extends NaryConstraint implements Propa
      */
     public static final Object STAR = new Object();
 
-    @Singular Set<Map<Variable<?>, Object>> tuples;
+    @Getter @Singular Set<Map<Variable<?>, Object>> tuples;
 
     public static NaryStarredTuplesConstraint of(@NonNull Set<Map<Variable<?>, Object>> tuples) {
         assert !tuples.isEmpty() : "tuples must not be empty";
