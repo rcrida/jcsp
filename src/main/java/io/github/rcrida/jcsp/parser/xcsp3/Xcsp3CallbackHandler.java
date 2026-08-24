@@ -133,6 +133,7 @@ final class Xcsp3CallbackHandler implements XCallbacks2 {
     private final Map<String, Variable<Integer>> shiftedVariables = new LinkedHashMap<>();
     private final Map<String, Variable<Boolean>> booleanIndicators = new LinkedHashMap<>();
     private final Map<Integer, Variable<Integer>> constantVariables = new LinkedHashMap<>();
+    private final Map<Set<Variable<Integer>>, List<PendingCount>> pendingSingleValueCounts = new LinkedHashMap<>();
     private @Nullable ToDoubleFunction<Assignment> objective;
     private boolean maximize;
     private @Nullable XReification currentReification;
@@ -153,6 +154,7 @@ final class Xcsp3CallbackHandler implements XCallbacks2 {
     }
 
     Xcsp3Instance toInstance() {
+        flushPendingSingleValueCounts();
         Set<String> declaredVariableNames = new LinkedHashSet<>(variablesByName.keySet());
         declaredVariableNames.addAll(symbolicVariablesByName.keySet());
         return new Xcsp3Instance(builder.build(), objective, maximize,
@@ -1049,7 +1051,12 @@ final class Xcsp3CallbackHandler implements XCallbacks2 {
             Operator operator = mapOperator(val.operator);
             int n = (int) val.k;
             if (values.length == 1) {
-                addOrReify(CountConstraint.of(vars, values[0], operator, n), id);
+                if (currentReification == null) {
+                    pendingSingleValueCounts.computeIfAbsent(vars, key -> new ArrayList<>())
+                            .add(new PendingCount(values[0], operator, n));
+                } else {
+                    addOrReify(CountConstraint.of(vars, values[0], operator, n), id);
+                }
             } else {
                 Set<Integer> valueSet = Arrays.stream(values).boxed().collect(Collectors.toCollection(LinkedHashSet::new));
                 addOrReify(AmongConstraint.of(vars, valueSet, operator, n), id);
@@ -1066,6 +1073,88 @@ final class Xcsp3CallbackHandler implements XCallbacks2 {
         } else {
             throw new UnsupportedXcsp3ConstraintException("Unsupported count condition: " + id);
         }
+    }
+
+    /** One buffered unreified single-value {@code <count>} constraint, keyed by its shared list in {@link #pendingSingleValueCounts}. */
+    private record PendingCount(int value, Operator operator, int n) {
+    }
+
+    /**
+     * Consolidates every group of {@link #pendingSingleValueCounts} sharing the same list into one
+     * {@link GlobalCardinalityConstraint}, when every entry's operator/bound translates cleanly to
+     * an occurrence range and no two entries target the same value -- trading N independent {@link
+     * CountConstraint}s' purely local counting for Régin's flow-based GAC over the whole group.
+     * XCSP3's own {@code <group>} templating of several single-value {@code count(list, v) <op> n}
+     * constraints over the same {@code list} (one per tracked value, e.g. an "each value used at
+     * most once" requirement) is exactly this shape -- see {@code PrizeCollecting-15-3-5-0.xml.lzma}
+     * in the competition corpus, whose 15 separate {@code (leq,1)} counts over the same successor
+     * list this was added for. A group with only one entry, or one that can't be translated (a
+     * duplicate value, or an operator/bound with no single-range equivalent -- see {@link
+     * #toOccurrenceRange}), falls back to exactly the individual {@link CountConstraint}(s) {@link
+     * #buildCtrCount} would have added directly; this never changes what's satisfiable, only how
+     * strongly it propagates.
+     */
+    private void flushPendingSingleValueCounts() {
+        pendingSingleValueCounts.forEach((vars, specs) -> {
+            if (specs.size() > 1) {
+                Map<Integer, GlobalCardinalityConstraint.OccurrenceRange> ranges = new LinkedHashMap<>();
+                boolean consolidatable = true;
+                for (PendingCount spec : specs) {
+                    Optional<GlobalCardinalityConstraint.OccurrenceRange> range =
+                            toOccurrenceRange(spec.operator(), spec.n(), vars.size());
+                    if (range.isEmpty() || ranges.containsKey(spec.value())) {
+                        consolidatable = false;
+                        break;
+                    }
+                    ranges.put(spec.value(), range.get());
+                }
+                if (consolidatable) {
+                    builder.constraint(GlobalCardinalityConstraint.ofRange(vars, ranges));
+                    return;
+                }
+            }
+            specs.forEach(spec -> builder.constraint(CountConstraint.of(vars, spec.value(), spec.operator(), spec.n())));
+        });
+    }
+
+    /**
+     * Translates {@code count(list, value) <op> n} into the equivalent {@link
+     * GlobalCardinalityConstraint.OccurrenceRange}, or {@link Optional#empty()} when {@code
+     * operator} has no single-range equivalent ({@code NEQ}, since "not equal to n" isn't an
+     * interval unless {@code n} is 0 or {@code groupSize}) or the translated bound is infeasible on
+     * its own (e.g. {@code (lt,0)}, an unreachable "count &lt; 0").
+     */
+    private static Optional<GlobalCardinalityConstraint.OccurrenceRange> toOccurrenceRange(
+            Operator operator, int n, int groupSize) {
+        int min;
+        int max;
+        switch (operator) {
+            case EQ -> {
+                min = n;
+                max = n;
+            }
+            case LEQ -> {
+                min = 0;
+                max = n;
+            }
+            case LT -> {
+                min = 0;
+                max = n - 1;
+            }
+            case GEQ -> {
+                min = n;
+                max = groupSize;
+            }
+            case GT -> {
+                min = n + 1;
+                max = groupSize;
+            }
+            default -> {
+                return Optional.empty();
+            }
+        }
+        if (min > max) return Optional.empty();
+        return Optional.of(new GlobalCardinalityConstraint.OccurrenceRange(min, max));
     }
 
     // ---- nValues --------------------------------------------------------------------------------------------

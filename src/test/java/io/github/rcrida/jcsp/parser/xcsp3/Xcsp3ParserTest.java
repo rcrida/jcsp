@@ -4,6 +4,8 @@ import io.github.rcrida.jcsp.ConstraintSatisfactionProblem;
 import io.github.rcrida.jcsp.assignments.Assignment;
 import io.github.rcrida.jcsp.constraints.binary.BinaryComparatorConstraint;
 import io.github.rcrida.jcsp.constraints.binary.BinaryOffsetConstraint;
+import io.github.rcrida.jcsp.constraints.nary.CountConstraint;
+import io.github.rcrida.jcsp.constraints.nary.GlobalCardinalityConstraint;
 import io.github.rcrida.jcsp.constraints.nary.MinVariableConstraint;
 import io.github.rcrida.jcsp.constraints.nary.PredicateConstraint;
 import io.github.rcrida.jcsp.constraints.nary.ProductVariableConstraint;
@@ -918,6 +920,96 @@ class Xcsp3ParserTest {
                 "<var id=\"x\"> 0..2 </var><var id=\"y\"> 0..2 </var><var id=\"z\"> 0..2 </var>",
                 "<count><list> x y z </list><values> 1 </values><condition> (in,1..3) </condition></count>"))
                 .isInstanceOf(UnsupportedXcsp3ConstraintException.class);
+    }
+
+    @Test void countMultipleSingleValueGroupsSameList_consolidatesIntoGlobalCardinalityConstraint() throws IOException {
+        Xcsp3Instance instance = parseXml(
+                "<var id=\"x\"> 0..2 </var><var id=\"y\"> 0..2 </var><var id=\"z\"> 0..2 </var>",
+                "<count><list> x y z </list><values> 0 </values><condition> (le,1) </condition></count>"
+                        + "<count><list> x y z </list><values> 1 </values><condition> (le,1) </condition></count>"
+                        + "<count><list> x y z </list><values> 2 </values><condition> (le,1) </condition></count>");
+        assertThat(instance.csp().getConstraints().stream().filter(c -> c instanceof GlobalCardinalityConstraint).count())
+                .isEqualTo(1);
+        assertThat(instance.csp().getConstraints().stream().filter(c -> c instanceof CountConstraint).count())
+                .isEqualTo(0);
+        Set<Assignment> solutions = solutions(instance.csp());
+        assertThat(solutions).isNotEmpty();
+        for (Assignment a : solutions) {
+            // each of 0,1,2 used at most once across x,y,z -- with 3 vars and 3 values this forces a permutation
+            assertThat(Set.of(digitOf(a, "x"), digitOf(a, "y"), digitOf(a, "z"))).hasSize(3);
+        }
+    }
+
+    @Test void countSingleValueGroupsWithEqAndGtOperators_consolidatesWithCorrectRanges() throws IOException {
+        Xcsp3Instance instance = parseXml(
+                "<var id=\"x\"> 0..2 </var><var id=\"y\"> 0..2 </var><var id=\"z\"> 0..2 </var>",
+                "<count><list> x y z </list><values> 0 </values><condition> (eq,1) </condition></count>"
+                        + "<count><list> x y z </list><values> 1 </values><condition> (gt,0) </condition></count>");
+        assertThat(instance.csp().getConstraints().stream().filter(c -> c instanceof GlobalCardinalityConstraint).count())
+                .isEqualTo(1);
+        assertThat(instance.csp().getConstraints().stream().filter(c -> c instanceof CountConstraint).count())
+                .isEqualTo(0);
+        Set<Assignment> solutions = solutions(instance.csp());
+        assertThat(solutions).isNotEmpty();
+        for (Assignment a : solutions) {
+            List<Integer> digits = Stream.of(digitOf(a, "x"), digitOf(a, "y"), digitOf(a, "z")).toList();
+            assertThat(digits.stream().filter(v -> v == 0).count()).as("solution=%s", a).isEqualTo(1);
+            assertThat(digits.stream().filter(v -> v == 1).count()).as("solution=%s", a).isGreaterThan(0);
+        }
+    }
+
+    @Test void countSingleValueGroupsOneReified_reifiedEntryNotConsolidated() throws IOException {
+        Xcsp3Instance instance = parseXml(
+                "<var id=\"x\"> 0..2 </var><var id=\"y\"> 0..2 </var><var id=\"z\"> 0..2 </var><var id=\"b\"> 0..1 </var>",
+                "<count><list> x y z </list><values> 0 </values><condition> (le,1) </condition></count>"
+                        + "<count reifiedBy=\"b\"><list> x y z </list><values> 1 </values><condition> (le,1) </condition></count>");
+        assertThat(instance.csp().getConstraints().stream().filter(c -> c instanceof GlobalCardinalityConstraint).count())
+                .isEqualTo(0);
+        assertThat(instance.csp().getConstraints().stream().filter(c -> c instanceof CountConstraint).count())
+                .isEqualTo(1);
+        for (Assignment a : solutions(instance.csp())) {
+            long actual = Stream.of(digitOf(a, "x"), digitOf(a, "y"), digitOf(a, "z")).filter(v -> v == 1).count();
+            assertThat(digitOf(a, "b") == 1).as("count=%d, b=%d", actual, digitOf(a, "b")).isEqualTo(actual <= 1);
+        }
+        assertThat(solutions(instance.csp())).isNotEmpty();
+    }
+
+    @Test void countSingleValueGroupsWithIncompatibleOperator_fallsBackToIndividualCounts() throws IOException {
+        Xcsp3Instance instance = parseXml(
+                "<var id=\"x\"> 0..2 </var><var id=\"y\"> 0..2 </var><var id=\"z\"> 0..2 </var>",
+                "<count><list> x y z </list><values> 0 </values><condition> (le,1) </condition></count>"
+                        + "<count><list> x y z </list><values> 1 </values><condition> (ne,2) </condition></count>");
+        assertThat(instance.csp().getConstraints().stream().filter(c -> c instanceof GlobalCardinalityConstraint).count())
+                .isEqualTo(0);
+        assertThat(instance.csp().getConstraints().stream().filter(c -> c instanceof CountConstraint).count())
+                .isEqualTo(2);
+        assertThat(solutions(instance.csp())).isNotEmpty();
+    }
+
+    @Test void countSingleValueGroupsWithDuplicateValue_fallsBackToIndividualCounts() throws IOException {
+        Xcsp3Instance instance = parseXml(
+                "<var id=\"x\"> 0..2 </var><var id=\"y\"> 0..2 </var><var id=\"z\"> 0..2 </var>",
+                "<count><list> x y z </list><values> 0 </values><condition> (le,1) </condition></count>"
+                        + "<count><list> x y z </list><values> 0 </values><condition> (ge,0) </condition></count>");
+        assertThat(instance.csp().getConstraints().stream().filter(c -> c instanceof GlobalCardinalityConstraint).count())
+                .isEqualTo(0);
+        assertThat(instance.csp().getConstraints().stream().filter(c -> c instanceof CountConstraint).count())
+                .isEqualTo(2);
+        assertThat(solutions(instance.csp())).isNotEmpty();
+    }
+
+    @Test void countSingleValueGroupWithUnsatisfiableTranslatedBound_fallsBackToIndividualCounts() throws IOException {
+        Xcsp3Instance instance = parseXml(
+                "<var id=\"x\"> 0..2 </var><var id=\"y\"> 0..2 </var><var id=\"z\"> 0..2 </var>",
+                "<count><list> x y z </list><values> 0 </values><condition> (lt,0) </condition></count>"
+                        + "<count><list> x y z </list><values> 1 </values><condition> (le,1) </condition></count>");
+        assertThat(instance.csp().getConstraints().stream().filter(c -> c instanceof GlobalCardinalityConstraint).count())
+                .isEqualTo(0);
+        assertThat(instance.csp().getConstraints().stream().filter(c -> c instanceof CountConstraint).count())
+                .isEqualTo(2);
+        // (lt,0) on its own forbids every value of x/y/z equalling 0 zero-or-more times, which is
+        // vacuously unreachable as a "count < 0" -- unsatisfiable regardless of consolidation.
+        assertThat(solutions(instance.csp())).isEmpty();
     }
 
     // ---- nValues --------------------------------------------------------------------------------------------
