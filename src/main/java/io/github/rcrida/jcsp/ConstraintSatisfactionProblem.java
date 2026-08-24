@@ -105,8 +105,10 @@ import org.jspecify.annotations.Nullable;
 import java.math.BigInteger;
 import java.util.ArrayDeque;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -603,13 +605,52 @@ public class ConstraintSatisfactionProblem {
      * Decomposes the current problem into independent sub-problems if it has more than one
      * connected component. Returns {@link Optional#empty()} when the problem is fully connected,
      * avoiding the cost of reconstructing a CSP that is equivalent to this one.
+     * <p>
+     * Equivalent to {@link #decomposeSubproblems(Predicate)} with a predicate accepting every
+     * variable, but uses {@link #getNeighbours()}'s cached adjacency directly rather than
+     * recomputing it fresh -- this overload is called by
+     * {@link io.github.rcrida.jcsp.solver.IndependentSubproblemSolver} for every distinct CSP the
+     * satisfaction chain's search encounters, so it keeps the original,
+     * already-cached fast path rather than paying {@link #computeRestrictedNeighbours}'s fresh scan
+     * cost on a hot path.
      *
      * @return the set of independent sub-problems, or empty if the problem cannot be decomposed
      */
     @NonNull
     public Optional<Set<ConstraintSatisfactionProblem>> decomposeSubproblems() {
         val neighbours = getNeighbours();
-        val allVariables = neighbours.keySet();
+        return decomposeSubproblems(neighbours.keySet(), neighbours);
+    }
+
+    /**
+     * Generalises {@link #decomposeSubproblems()}: two variables are only connected when
+     * {@code countsForConnectivity} accepts both of them <em>and</em> some constraint references
+     * both -- a constraint touching one counted variable alongside any number of variables
+     * {@code countsForConnectivity} rejects contributes no edge, so a rejected variable (e.g. one
+     * already resolved to a singleton) never bridges two otherwise-independent counted variables
+     * into a single component the way it would under {@link #getNeighbours()}'s whole-graph
+     * adjacency. Added for {@link io.github.rcrida.jcsp.solver.BisectionConditioningSolver}, whose
+     * residual CSP is typically dominated by already-singleton discrete variables threading through
+     * every constraint -- decomposing via the unrestricted overload would rarely find more than one
+     * component there, even when the still-open continuous variables are themselves only weakly,
+     * independently coupled.
+     * <p>
+     * Every rejected variable actually referenced by a component's own constraints (e.g. an
+     * already-singleton variable a {@code sumConstraint} needs alongside a counted one) is still
+     * included in that component's sub-CSP -- only <em>connectivity</em> is restricted, not which
+     * variables/constraints end up in the resulting sub-CSPs.
+     */
+    @NonNull
+    public Optional<Set<ConstraintSatisfactionProblem>> decomposeSubproblems(@NonNull Predicate<Variable<?>> countsForConnectivity) {
+        val connectedVariables = getVariableDomains().keySet().stream()
+                .filter(countsForConnectivity)
+                .collect(Collectors.toCollection(LinkedHashSet::new));
+        return decomposeSubproblems(connectedVariables, computeRestrictedNeighbours(connectedVariables));
+    }
+
+    @NonNull
+    private Optional<Set<ConstraintSatisfactionProblem>> decomposeSubproblems(
+            @NonNull Set<Variable<?>> allVariables, @NonNull Map<Variable<?>, Set<Variable<?>>> neighbours) {
         if (allVariables.isEmpty()) return Optional.empty();
 
         // First pass: cheap BFS to detect whether more than one component exists.
@@ -627,26 +668,62 @@ public class ConstraintSatisfactionProblem {
         }
         if (visited.size() == allVariables.size()) return Optional.empty();
 
-        // Second pass: build sub-CSPs for each component.
+        // Second pass: build sub-CSPs for each component. componentConstraints/componentVariables
+        // are accumulated in plain collections first (rather than incrementally building a
+        // ConstraintSatisfactionProblemBuilder as variables are polled) so that every variable any
+        // component constraint actually references -- including one countsForConnectivity rejected,
+        // for the predicate overload -- can be folded in with one final pass, after the component's
+        // full constraint set is already known.
         val unassignedVariables = new HashSet<>(allVariables);
         val subproblems = new HashSet<ConstraintSatisfactionProblem>();
         while (!unassignedVariables.isEmpty()) {
-            val subCsp = ConstraintSatisfactionProblem.builder();
+            val componentConstraints = new HashSet<Constraint>();
+            val componentVariables = new HashSet<Variable<?>>();
             val queue = new ArrayDeque<Variable<?>>();
             addUnassignedVariable(queue, unassignedVariables.iterator().next(), unassignedVariables);
             while (!queue.isEmpty()) {
                 val variable = queue.poll();
-                subCsp.variableDomainEntry(variable, getDomain(variable));
-                subCsp.constraints(getConstraints().stream()
+                componentVariables.add(variable);
+                getConstraints().stream()
                         .filter(c -> c.getVariables().contains(variable))
-                        .collect(Collectors.toSet()));
+                        .forEach(componentConstraints::add);
                 neighbours.get(variable).stream()
                         .filter(unassignedVariables::contains)
                         .forEach(neighbour -> addUnassignedVariable(queue, neighbour, unassignedVariables));
             }
+            componentConstraints.forEach(c -> componentVariables.addAll(c.getVariables()));
+            val subCsp = ConstraintSatisfactionProblem.builder();
+            componentVariables.forEach(v -> subCsp.variableDomainEntry(v, getDomain(v)));
+            subCsp.constraints(componentConstraints);
             subproblems.add(subCsp.build());
         }
         return Optional.of(subproblems);
+    }
+
+    /**
+     * The {@code countsForConnectivity}-restricted analogue of {@link ConstraintGraph}'s own
+     * {@code computeNeighbours}: an edge between two variables in {@code connectedVariables} exists
+     * only when some constraint's own variable set contains both of them, ignoring any other
+     * variable that constraint also touches. Unlike {@link #getNeighbours()}, not cached -- only
+     * called from the predicate overload above, which {@link
+     * io.github.rcrida.jcsp.solver.BisectionConditioningSolver} invokes at most once per
+     * discrete-complete branch-and-bound leaf, not once per search node the way the cached,
+     * unrestricted adjacency is.
+     */
+    @NonNull
+    private Map<Variable<?>, Set<Variable<?>>> computeRestrictedNeighbours(@NonNull Set<Variable<?>> connectedVariables) {
+        val result = new HashMap<Variable<?>, Set<Variable<?>>>();
+        connectedVariables.forEach(v -> result.put(v, new HashSet<>()));
+        for (Constraint c : getConstraints()) {
+            val touching = c.getVariables().stream().filter(connectedVariables::contains).toList();
+            if (touching.size() < 2) continue;
+            for (Variable<?> a : touching) {
+                for (Variable<?> b : touching) {
+                    if (a != b) result.get(a).add(b);
+                }
+            }
+        }
+        return result;
     }
 
     private void addUnassignedVariable(@NonNull Queue<Variable<?>> queue, @NonNull Variable<?> variable, @NonNull Set<Variable<?>> unassignedVariables) {

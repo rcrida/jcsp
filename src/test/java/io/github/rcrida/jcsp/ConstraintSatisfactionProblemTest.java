@@ -171,6 +171,59 @@ public class ConstraintSatisfactionProblemTest {
     }
 
     @Test
+    void decomposeSubproblems_predicate_bridgeVariableRejected_findsIndependentComponents() {
+        // d bridges {x1,x2} and {x3,x4} into one connected component in the *unrestricted* graph
+        // (x2-x1-d-x3-x4). Excluding d from connectivity reveals the two groups are otherwise
+        // independent -- the scenario BisectionConditioningSolver needs (an already-singleton
+        // variable threading two constraints shouldn't force everything into one component).
+        Variable<Integer> d = VARIABLE_FACTORY.create("bridge");
+        Variable<Integer> x1 = VARIABLE_FACTORY.create("x1");
+        Variable<Integer> x2 = VARIABLE_FACTORY.create("x2");
+        Variable<Integer> x3 = VARIABLE_FACTORY.create("x3");
+        Variable<Integer> x4 = VARIABLE_FACTORY.create("x4");
+        val csp = ConstraintSatisfactionProblem.builder()
+                .variableDomain(d, domain)
+                .variableDomain(x1, domain)
+                .variableDomain(x2, domain)
+                .variableDomain(x3, domain)
+                .variableDomain(x4, domain)
+                .notEqualsConstraint(x1, d)
+                .notEqualsConstraint(x3, d)
+                .notEqualsConstraint(x1, x2)
+                .notEqualsConstraint(x3, x4)
+                .build();
+
+        assertThat(csp.decomposeSubproblems()).isEmpty();
+
+        var restricted = csp.decomposeSubproblems(v -> !v.equals(d));
+        assertThat(restricted).isPresent();
+        assertThat(restricted.get()).hasSize(2);
+        // Connectivity excludes d, but each component's own constraints still reference it, so it's
+        // still included (duplicated) in every sub-CSP that needs it -- only connectivity, not
+        // sub-CSP membership, is restricted.
+        assertThat(restricted.get()).allSatisfy(sub -> assertThat(sub.getVariableDomains()).containsKey(d));
+    }
+
+    @Test
+    void decomposeSubproblems_predicate_rejectsEverything_returnsEmpty() {
+        Variable<Integer> a = VARIABLE_FACTORY.create("predicate_reject_a");
+        val csp = ConstraintSatisfactionProblem.builder().variableDomain(a, domain).build();
+        assertThat(csp.decomposeSubproblems(v -> false)).isEmpty();
+    }
+
+    @Test
+    void decomposeSubproblems_predicate_acceptedVariablesStillOneComponent_returnsEmpty() {
+        Variable<Integer> a = VARIABLE_FACTORY.create("predicate_connected_a");
+        Variable<Integer> b = VARIABLE_FACTORY.create("predicate_connected_b");
+        val csp = ConstraintSatisfactionProblem.builder()
+                .variableDomain(a, domain)
+                .variableDomain(b, domain)
+                .notEqualsConstraint(a, b)
+                .build();
+        assertThat(csp.decomposeSubproblems(v -> true)).isEmpty();
+    }
+
+    @Test
     void isCyclic() {
         Variable<Integer> a = VARIABLE_FACTORY.create("A");
         Variable<Integer> b = VARIABLE_FACTORY.create("B");

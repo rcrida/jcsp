@@ -270,4 +270,161 @@ public class BisectionConditioningSolverTest {
 
         assertThat(bisection.getSolutions(csp, 4.0).toList()).isEmpty();
     }
+
+    // ── Decomposition into independent components (objective is a LinearObjective) ─
+
+    @Test
+    void linearObjective_decomposesIntoIndependentComponents_improvingOrderPreserved() {
+        // x,y in [0,10], no constraint linking them at all -- decomposeSubproblems finds two
+        // trivial single-variable components. Minimizing x+y (positive coefficients) converges
+        // each independently toward 0, and the combined stream must still satisfy this class's own
+        // "each element strictly better than the previous" contract even though the underlying
+        // cross-product has no natural global sort order of its own -- the shared incumbent filter
+        // is what recovers it regardless of visiting order.
+        Variable<Double> x = F.create("decomp_x");
+        Variable<Double> y = F.create("decomp_y");
+        var csp = ConstraintSatisfactionProblem.builder()
+                .variableDomain(x, IntervalDomain.of(0.0, 10.0))
+                .variableDomain(y, IntervalDomain.of(0.0, 10.0))
+                .build();
+        Map<Variable<? extends Number>, Double> coeffs = new HashMap<>();
+        coeffs.put(x, 1.0);
+        coeffs.put(y, 1.0);
+        LinearObjective objective = LinearObjective.builder().coefficients(coeffs).build();
+        BisectionConditioningSolver bisection = BisectionConditioningSolver.builder()
+                .inner(SINGLETON_EXTRACTOR)
+                .epsilon(1e-3)
+                .objective(objective)
+                .build();
+
+        var solutions = bisection.getSolutions(csp).toList();
+
+        assertThat(solutions).isNotEmpty();
+        for (int i = 1; i < solutions.size(); i++) {
+            assertThat(objective.applyAsDouble(solutions.get(i)))
+                    .isLessThan(objective.applyAsDouble(solutions.get(i - 1)));
+        }
+        var best = solutions.getLast();
+        assertThat((Double) best.getValue(x).orElseThrow()).isCloseTo(0.0, within(0.01));
+        assertThat((Double) best.getValue(y).orElseThrow()).isCloseTo(0.0, within(0.01));
+    }
+
+    @Test
+    void linearObjective_pinnedDiscreteBridge_stillDecomposesContinuousResidual() {
+        // d is an already-pinned discrete "bridge" touching both x and y via constraints, but x
+        // and y have no constraint directly between them. Under the unrestricted
+        // decomposeSubproblems(), d would connect x and y into one component; the predicate this
+        // class uses (open BoundedDomain only) ignores d for connectivity, so x and y should still
+        // decompose independently -- the real production shape (BranchAndBoundSolver's residual is
+        // typically dominated by already-singleton discrete variables threading every constraint).
+        Variable<Double> x = F.create("bridge_x");
+        Variable<Double> y = F.create("bridge_y");
+        Variable<Integer> d = F.create("bridge_d");
+        var csp = ConstraintSatisfactionProblem.builder()
+                .variableDomain(x, IntervalDomain.of(0.0, 10.0))
+                .variableDomain(y, IntervalDomain.of(0.0, 10.0))
+                .variableDomain(d, IntRangeDomain.of(3, 3))
+                .predicateConstraint(Set.of(x, d), a -> true)
+                .predicateConstraint(Set.of(y, d), a -> true)
+                .build();
+        Map<Variable<? extends Number>, Double> coeffs = new HashMap<>();
+        coeffs.put(x, 1.0);
+        coeffs.put(y, 1.0);
+        LinearObjective objective = LinearObjective.builder().coefficients(coeffs).build();
+        BisectionConditioningSolver bisection = BisectionConditioningSolver.builder()
+                .inner(SINGLETON_EXTRACTOR)
+                .epsilon(1e-3)
+                .objective(objective)
+                .build();
+
+        var solution = bisection.getSolution(csp);
+
+        assertThat(solution).isPresent();
+        assertThat((Double) solution.get().getValue(x).orElseThrow()).isCloseTo(0.0, within(0.01));
+        assertThat((Double) solution.get().getValue(y).orElseThrow()).isCloseTo(0.0, within(0.01));
+        assertThat(solution.get().getValue(d)).contains(3);
+    }
+
+    @Test
+    void linearObjective_decomposableResidual_seededIncumbentAlreadyBeaten_prunesBeforeDecomposing() {
+        // intervalLowerBound at the root = 1.0*0 + 1.0*0 = 0.0 (both domain minimums). Seeding an
+        // incumbent already <= that must prune inside decomposedSolutions itself, before any
+        // component-splitting or bisection work happens.
+        Variable<Double> x = F.create("decomp_seed_x");
+        Variable<Double> y = F.create("decomp_seed_y");
+        var csp = ConstraintSatisfactionProblem.builder()
+                .variableDomain(x, IntervalDomain.of(0.0, 10.0))
+                .variableDomain(y, IntervalDomain.of(0.0, 10.0))
+                .build();
+        Map<Variable<? extends Number>, Double> coeffs = new HashMap<>();
+        coeffs.put(x, 1.0);
+        coeffs.put(y, 1.0);
+        LinearObjective objective = LinearObjective.builder().coefficients(coeffs).build();
+        BisectionConditioningSolver bisection = BisectionConditioningSolver.builder()
+                .inner(SINGLETON_EXTRACTOR)
+                .epsilon(1e-3)
+                .objective(objective)
+                .build();
+
+        assertThat(bisection.getSolutions(csp, -1.0).toList()).isEmpty();
+    }
+
+    @Test
+    void linearObjective_alreadySingletonBoundedVariable_excludedFromConnectivityPredicate() {
+        // y is already a singleton BoundedDomain -- unlike the pinned-discrete bridge test above
+        // (whose excluded variable isn't a BoundedDomain at all), this exercises
+        // decomposedSolutions' own connectivity predicate's isSingleton()==true branch specifically:
+        // a BoundedDomain variable that's already resolved is excluded from decomposition the same
+        // way, but for a different reason than not being a BoundedDomain in the first place.
+        Variable<Double> x = F.create("singleton_open_x");
+        Variable<Double> y = F.create("singleton_open_y");
+        var csp = ConstraintSatisfactionProblem.builder()
+                .variableDomain(x, IntervalDomain.of(0.0, 10.0))
+                .variableDomain(y, IntervalDomain.of(5.0, 5.0))
+                .build();
+        Map<Variable<? extends Number>, Double> coeffs = new HashMap<>();
+        coeffs.put(x, 1.0);
+        coeffs.put(y, 1.0);
+        LinearObjective objective = LinearObjective.builder().coefficients(coeffs).build();
+        BisectionConditioningSolver bisection = BisectionConditioningSolver.builder()
+                .inner(SINGLETON_EXTRACTOR)
+                .epsilon(1e-3)
+                .objective(objective)
+                .build();
+
+        var solution = bisection.getSolution(csp);
+
+        assertThat(solution).isPresent();
+        assertThat((Double) solution.get().getValue(x).orElseThrow()).isCloseTo(0.0, within(0.01));
+        assertThat(solution.get().getValue(y)).contains(5.0);
+    }
+
+    @Test
+    void linearObjective_connectedResidual_notDecomposable_fallsBackToAllFeasible() {
+        // x,y linked by a real constraint -- decomposeSubproblems finds only one component, so
+        // decomposedSolutions must return Optional.empty() and getSolutions falls through to the
+        // ordinary allFeasible recursion, unaffected by decomposition existing at all.
+        Variable<Double> x = F.create("connected_x");
+        Variable<Double> y = F.create("connected_y");
+        var csp = ConstraintSatisfactionProblem.builder()
+                .variableDomain(x, IntervalDomain.of(0.0, 10.0))
+                .variableDomain(y, IntervalDomain.of(0.0, 10.0))
+                .sumConstraint(Set.of(x, y), Operator.EQ, 7.0)
+                .build();
+        Map<Variable<? extends Number>, Double> coeffs = new HashMap<>();
+        coeffs.put(x, 1.0);
+        LinearObjective objective = LinearObjective.builder().coefficients(coeffs).build();
+        BisectionConditioningSolver bisection = BisectionConditioningSolver.builder()
+                .inner(SINGLETON_EXTRACTOR)
+                .epsilon(1e-3)
+                .objective(objective)
+                .build();
+
+        var solution = bisection.getSolution(csp);
+
+        assertThat(solution).isPresent();
+        double xVal = (Double) solution.get().getValue(x).orElseThrow();
+        double yVal = (Double) solution.get().getValue(y).orElseThrow();
+        assertThat(xVal + yVal).isCloseTo(7.0, within(1e-2));
+    }
 }

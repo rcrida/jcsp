@@ -9,6 +9,7 @@ import io.github.rcrida.jcsp.variables.Variable;
 import org.junit.jupiter.api.Test;
 
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
@@ -83,5 +84,47 @@ public class ContinuousOptimizationTest {
         // sqrt(20) -- 0.02 comfortably covers the observed ~0.012 offset either side.
         assertThat(xVal).isCloseTo(Math.sqrt(20.0), within(0.02));
         assertThat(yVal).isCloseTo(Math.sqrt(20.0), within(0.02));
+    }
+
+    /**
+     * Two structurally-independent copies of the productConstraint residual above -- {@code (x1,y1)}
+     * and {@code (x2,y2)} share no constraint at all. Before {@link
+     * io.github.rcrida.jcsp.ConstraintSatisfactionProblem#decomposeSubproblems(java.util.function.Predicate)}
+     * was wired into {@link io.github.rcrida.jcsp.solver.BisectionConditioningSolver}, this shape
+     * didn't finish within tens of seconds even at this small a domain width, because {@code
+     * findWidestBounded} bisects across the combined 4-variable residual as a single tree regardless
+     * of the two pairs' independence. Decomposed, this resolves in well under a second per pair.
+     */
+    @Test
+    void productConstraintResidual_twoIndependentPairs_decomposesAndResolves() {
+        Variable<Double> x1 = F.create("prod2_x1");
+        Variable<Double> y1 = F.create("prod2_y1");
+        Variable<Double> x2 = F.create("prod2_x2");
+        Variable<Double> y2 = F.create("prod2_y2");
+        var csp = ConstraintSatisfactionProblem.builder()
+                .variableDomain(x1, IntervalDomain.of(4.0, 6.0))
+                .variableDomain(y1, IntervalDomain.of(4.0, 6.0))
+                .variableDomain(x2, IntervalDomain.of(4.0, 6.0))
+                .variableDomain(y2, IntervalDomain.of(4.0, 6.0))
+                .productConstraint(Set.of(x1, y1), Operator.GEQ, 20.0)
+                .productConstraint(Set.of(x2, y2), Operator.GEQ, 20.0)
+                .build();
+        Map<Variable<? extends Number>, Double> coeffs = new HashMap<>();
+        coeffs.put(x1, 1.0);
+        coeffs.put(y1, 1.0);
+        coeffs.put(x2, 1.0);
+        coeffs.put(y2, 1.0);
+        LinearObjective objective = LinearObjective.builder().coefficients(coeffs).build();
+
+        var solution = Solver.Factory.INSTANCE.createSolver(csp, objective).getSolution();
+
+        assertThat(solution).isPresent();
+        for (var pair : List.of(Map.entry(x1, y1), Map.entry(x2, y2))) {
+            double xVal = (Double) solution.get().getValue(pair.getKey()).orElseThrow();
+            double yVal = (Double) solution.get().getValue(pair.getValue()).orElseThrow();
+            assertThat(xVal * yVal).isGreaterThanOrEqualTo(20.0 - 1e-6);
+            assertThat(xVal).isCloseTo(Math.sqrt(20.0), within(0.02));
+            assertThat(yVal).isCloseTo(Math.sqrt(20.0), within(0.02));
+        }
     }
 }

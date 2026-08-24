@@ -84,7 +84,64 @@ public class BisectionConditioningSolver extends SolverDecorator {
         if (target == null) {
             return getInner().getSolutions(csp);
         }
-        return allFeasible(csp, new double[]{incumbentSeed});
+        return decomposedSolutions(csp, incumbentSeed).orElseGet(() -> allFeasible(csp, new double[]{incumbentSeed}));
+    }
+
+    /**
+     * When {@link #objective} is a {@link LinearObjective} and {@code csp}'s still-open {@link
+     * BoundedDomain} variables split into independent components (see {@link
+     * io.github.rcrida.jcsp.ConstraintSatisfactionProblem#decomposeSubproblems(java.util.function.Predicate)}),
+     * solves each component's own residual independently and combines them -- avoiding {@link
+     * #allFeasible}'s single combined tree, whose size is exponential in the <em>total</em> open
+     * variable count even when several of those variables have no constraint coupling them to each
+     * other at all (a common shape for {@link BranchAndBoundSolver#resolveContinuousResidual}: many
+     * already-singleton discrete variables threading every constraint, with the still-open
+     * continuous ones only weakly, independently coupled through them). {@link Optional#empty()}
+     * means "not decomposable" (or the objective isn't a {@link LinearObjective}), signalling the
+     * caller to fall back to {@link #allFeasible} unchanged.
+     * <p>
+     * Each component's own stream is obtained via a fresh, unseeded ({@link Double#MAX_VALUE})
+     * recursive call to this same method, then combined via the same {@link LazyList}-backed
+     * cross-product {@link IndependentSubproblemSolver#getSolutions} already uses (safe to reuse
+     * here: {@link Assignment#merge} is safe across two assignments with disjoint variable sets,
+     * which independent components are by construction) -- {@code LinearObjective#applyAsDouble}
+     * already treats a coefficient variable absent from an assignment as contributing {@code 0}, so
+     * no per-component objective splitting is needed: the same, full {@link #objective} is handed to
+     * every component's own recursive solve unchanged. Running the combined stream through the exact
+     * incumbent filter {@link #allFeasible} uses (seeded with {@code incumbentSeed}, not {@link
+     * Double#MAX_VALUE}) is what recovers this class's own "each element strictly better than the
+     * previous" contract despite the cross-product's own visiting order having no relationship to
+     * combined objective value -- the same reasoning: a filter admitting only strict improvements
+     * over a monotonically-ratcheting incumbent produces a strictly-improving output regardless of
+     * the order candidates are offered to it in.
+     */
+    private Optional<Stream<Assignment>> decomposedSolutions(@NonNull ConstraintSatisfactionProblem csp, double incumbentSeed) {
+        if (!(objective instanceof LinearObjective)) {
+            return Optional.empty();
+        }
+        if (lowerBound(csp) >= incumbentSeed) {
+            return Optional.of(Stream.empty());
+        }
+        val components = csp.decomposeSubproblems(v -> csp.getDomain(v) instanceof BoundedDomain<?> bd && !bd.isSingleton());
+        if (components.isEmpty()) {
+            return Optional.empty();
+        }
+        log.debug("Residual decomposes into {} independent components", components.get().size());
+
+        double[] incumbent = {incumbentSeed};
+        Stream<Assignment> combined = components.get().stream()
+                .map(sub -> new LazyList<>(getSolutions(sub, Double.MAX_VALUE)))
+                .reduce((ll1, ll2) -> new LazyList<>(ll1.stream().flatMap(a1 -> ll2.stream().map(a1::merge))))
+                .map(LazyList::stream)
+                .orElse(Stream.empty());
+        return Optional.of(combined.filter(candidate -> {
+            double cost = objective.applyAsDouble(candidate);
+            if (cost < incumbent[0]) {
+                incumbent[0] = cost;
+                return true;
+            }
+            return false;
+        }));
     }
 
     /**
@@ -168,11 +225,21 @@ public class BisectionConditioningSolver extends SolverDecorator {
      * Unlike {@link #partialAssignmentLowerBound}, this reads every referenced variable's current
      * {@link Domain} (via {@link #termLowerBound}) rather than skipping every variable that isn't
      * yet singleton, so it tightens incrementally as {@link #allFeasible}'s bisection narrows each
-     * variable's bounds, not just at the moment a variable collapses to a point.
+     * variable's bounds, not just at the moment a variable collapses to a point. A coefficient
+     * variable {@code csp} doesn't itself contain is skipped, mirroring {@code LinearObjective}'s own
+     * "absent contributes 0" convention -- real for {@link #decomposedSolutions}'s per-component
+     * calls, where {@code linearObjective} is deliberately the full, unrestricted objective but
+     * {@code csp} only ever contains one component's own variables; {@link
+     * ConstraintSatisfactionProblem#getDomain} throws rather than returning empty for a variable it
+     * doesn't contain, so this can't just delegate to {@link #termLowerBound} unconditionally the way
+     * it originally did.
      */
     private double intervalLowerBound(ConstraintSatisfactionProblem csp, LinearObjective linearObjective) {
         double total = linearObjective.getConstant();
         for (var entry : linearObjective.getCoefficients().entrySet()) {
+            if (!csp.getVariableDomains().containsKey(entry.getKey())) {
+                continue;
+            }
             total += termLowerBound(csp, entry.getKey(), entry.getValue());
         }
         return total;
