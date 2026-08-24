@@ -4,6 +4,7 @@ import io.github.rcrida.jcsp.consistency.Propagatable;
 import io.github.rcrida.jcsp.domains.DiscreteDomain;
 import io.github.rcrida.jcsp.domains.Domain;
 import io.github.rcrida.jcsp.variables.Variable;
+import lombok.EqualsAndHashCode;
 import lombok.experimental.SuperBuilder;
 import org.jspecify.annotations.NonNull;
 
@@ -23,6 +24,7 @@ import java.util.Optional;
  * AC3-compatible binary decomposition into pairwise not-both-true constraints.
  */
 @SuperBuilder
+@EqualsAndHashCode(callSuper = true)
 public class AtMostNConstraint extends UniformNaryConstraint<Boolean> implements Propagatable {
     private final int n;
 

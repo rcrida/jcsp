@@ -56,4 +56,30 @@ public class PredicateConstraintTest {
     void testToString() {
         assertThat(predicateConstraint.toString()).isEqualTo("<(variable1, variable2), predicate>");
     }
+
+    @Test
+    void equals_distinctPredicatesOverSameVariables_areNotEqual() {
+        // Two PredicateConstraints sharing a variable set but backed by genuinely different
+        // predicates must never compare equal -- otherwise a Set<Constraint> silently collapses
+        // one away (a real bug found via RoomMate-sr0050-int.xml.lzma, whose XCSP3 <group>-templated
+        // "no blocking pair"/"reciprocal pick" intension rules produced exactly this shape: distinct
+        // rules over the same (x[i], x[j]) pair). Built fresh here (not reusing setUp()'s
+        // predicateConstraint/predicate) so this test's intent doesn't depend on those fixtures
+        // staying shaped this way.
+        Set<Variable<Object>> variables = Set.of(variable1, variable2);
+        Predicate<Assignment> firstPredicate = a -> true;
+        Predicate<Assignment> secondPredicate = a -> false;
+        var first = PredicateConstraint.builder().variables(variables).predicate(firstPredicate).build();
+        var second = PredicateConstraint.builder().variables(variables).predicate(secondPredicate).build();
+        assertThat(first).isNotEqualTo(second);
+    }
+
+    @Test
+    void equals_samePredicateInstanceOverSameVariables_areEqual() {
+        Set<Variable<Object>> variables = Set.of(variable1, variable2);
+        Predicate<Assignment> sharedPredicate = a -> true;
+        var first = PredicateConstraint.builder().variables(variables).predicate(sharedPredicate).build();
+        var second = PredicateConstraint.builder().variables(variables).predicate(sharedPredicate).build();
+        assertThat(first).isEqualTo(second);
+    }
 }

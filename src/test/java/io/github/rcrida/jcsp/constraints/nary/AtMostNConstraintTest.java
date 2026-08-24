@@ -143,4 +143,16 @@ public class AtMostNConstraintTest {
         assertThat(result.isInfeasible()).isTrue();
         assertThat(result.reason()).isEqualTo(GroundNogoodConstraint.of(Map.of(a, true, b, true)));
     }
+
+    @Test
+    void equals_sameVariablesDifferentN_areNotEqual() {
+        // Two AtMostNConstraints sharing a variable set but with different thresholds must never
+        // compare equal -- otherwise a Set<Constraint> silently collapses one away. Built fresh here
+        // (not reusing setUp()'s constraint2/constraint3) so this test's intent doesn't depend on
+        // those fixtures staying shaped this way.
+        Set<Variable<Boolean>> variables = Set.of(v1, v2, v3, v4);
+        var atMost2 = AtMostNConstraint.builder().variables(variables).n(2).build();
+        var atMost3 = AtMostNConstraint.builder().variables(variables).n(3).build();
+        assertThat(atMost2).isNotEqualTo(atMost3);
+    }
 }

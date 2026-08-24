@@ -163,4 +163,16 @@ public class AtLeastNConstraintTest {
         assertThat(result.isInfeasible()).isTrue();
         assertThat(result.reason()).isNull();
     }
+
+    @Test
+    void equals_sameVariablesDifferentN_areNotEqual() {
+        // Two AtLeastNConstraints sharing a variable set but with different thresholds must never
+        // compare equal -- otherwise a Set<Constraint> silently collapses one away. Built fresh here
+        // (not reusing setUp()'s constraint2/constraint3) so this test's intent doesn't depend on
+        // those fixtures staying shaped this way.
+        Set<Variable<Boolean>> variables = Set.of(v1, v2, v3, v4);
+        var atLeast2 = AtLeastNConstraint.builder().variables(variables).n(2).build();
+        var atLeast3 = AtLeastNConstraint.builder().variables(variables).n(3).build();
+        assertThat(atLeast2).isNotEqualTo(atLeast3);
+    }
 }

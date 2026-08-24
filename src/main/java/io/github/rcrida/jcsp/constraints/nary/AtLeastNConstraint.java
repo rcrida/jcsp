@@ -4,6 +4,7 @@ import io.github.rcrida.jcsp.consistency.Propagatable;
 import io.github.rcrida.jcsp.domains.DiscreteDomain;
 import io.github.rcrida.jcsp.domains.Domain;
 import io.github.rcrida.jcsp.variables.Variable;
+import lombok.EqualsAndHashCode;
 import lombok.experimental.SuperBuilder;
 import org.jspecify.annotations.NonNull;
 
@@ -24,6 +25,7 @@ import java.util.Optional;
  * than {@code n} are {@code true}.
  */
 @SuperBuilder
+@EqualsAndHashCode(callSuper = true)
 public class AtLeastNConstraint extends UniformNaryConstraint<Boolean> implements Propagatable {
     private final int n;
 
