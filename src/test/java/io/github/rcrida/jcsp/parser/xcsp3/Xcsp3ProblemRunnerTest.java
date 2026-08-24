@@ -16,6 +16,7 @@ import java.io.PrintStream;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
@@ -198,6 +199,45 @@ class Xcsp3ProblemRunnerTest {
 
         String output = buffer.toString(StandardCharsets.UTF_8);
         assertThat(output).contains("s SATISFIABLE").doesNotContain("OPTIMUM");
+    }
+
+    @Test void optimization_multipleImprovingSolutions_printsOneOLinePerIncumbentAsFound() {
+        // allDiffConstraint over 3 variables/3 values forces genuine combinatorial search (the LP
+        // relaxation can't see AllDiff at all, so its bound is loose and B&B must branch through
+        // several complete permutations before proving the true minimum) -- a real scenario where
+        // more than one improving solution is found along the way, not just an instant jump to
+        // the optimum. Verified generically against a listener's own incumbent count/order, rather
+        // than a hardcoded expected count, so this doesn't couple to search-heuristic internals.
+        Variable<Integer> a = F.create("a");
+        Variable<Integer> b = F.create("b");
+        Variable<Integer> c = F.create("c");
+        ConstraintSatisfactionProblem csp = ConstraintSatisfactionProblem.builder()
+                .variableDomain(a, IntRangeDomain.of(0, 2))
+                .variableDomain(b, IntRangeDomain.of(0, 2))
+                .variableDomain(c, IntRangeDomain.of(0, 2))
+                .allDiffConstraint(Set.of(a, b, c))
+                .build();
+        LinearObjective objective = LinearObjective.builder().coefficient(a, 1.0).coefficient(b, 2.0).coefficient(c, 3.0).build();
+        Xcsp3Instance instance = new Xcsp3Instance(csp, objective, false, Set.of("a", "b", "c"), 0);
+        List<Double> incumbentCosts = new ArrayList<>();
+        SolverListener listener = new SolverListener() {
+            @Override
+            public void onIncumbentImproved(Assignment solution, double cost) {
+                incumbentCosts.add(cost);
+            }
+        };
+
+        ByteArrayOutputStream buffer = new ByteArrayOutputStream();
+        Xcsp3ProblemRunner.solve(instance, Cancellation.NEVER, listener, printStreamInto(buffer));
+
+        List<String> oLines = buffer.toString(StandardCharsets.UTF_8).lines().filter(line -> line.startsWith("o ")).toList();
+        assertThat(incumbentCosts).as("this scenario should force more than one improving solution").hasSizeGreaterThan(1);
+        assertThat(oLines).hasSize(incumbentCosts.size());
+        for (int i = 0; i < oLines.size(); i++) {
+            assertThat(oLines.get(i)).isEqualTo("o " + Math.round(incumbentCosts.get(i)));
+        }
+        List<String> lines = buffer.toString(StandardCharsets.UTF_8).lines().toList();
+        assertThat(lines.indexOf(oLines.get(oLines.size() - 1))).isLessThan(lines.indexOf("s OPTIMUM FOUND"));
     }
 
     @Test void optimization_maximizeObjective_reportsBoundInOriginalXcsp3Sense() {
