@@ -29,6 +29,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicReference;
 
 /**
  * Builds and solves a joint LP relaxation over a {@link ConstraintSatisfactionProblem}'s linear
@@ -238,6 +239,46 @@ public final class LpModelBuilder {
     }
 
     /**
+     * The purely structural half of {@link #findAssignmentLinkages}: which constraints in a
+     * problem's constraint set (a graph-level property, independent of current domains) are
+     * {@link GlobalCardinalityConstraint}s versus table constraints. Cached per distinct {@code
+     * source} reference via {@link ConstraintSatisfactionProblem#computeAuxiliaryCacheIfAbsent},
+     * mirroring {@code FixpointConsistency#filterCache}'s identical reference-equality pattern: a
+     * cache hit (the overwhelmingly common case -- every {@link #solve} call within one search node
+     * shares the same reference, and so does every node between nogood-learning events) skips
+     * re-scanning the whole constraint set from scratch, while any reference change (a genuinely
+     * different problem, or a fresh nogood) always falls back to a correct, fresh scan. Found via
+     * JFR profiling {@code Fastfood-ff10.xml.lzma} (215 table constraints, zero {@link
+     * GlobalCardinalityConstraint}s): the unconditional scan-and-classify was a measurable per-node
+     * cost purely to discover, on every single node, that there was nothing to do.
+     */
+    private record ConstraintClassification(
+            Set<Constraint> source, List<GlobalCardinalityConstraint<?>> gccs, List<Constraint> tables) {
+    }
+
+    private static ConstraintClassification classifyConstraints(ConstraintSatisfactionProblem csp) {
+        AtomicReference<ConstraintClassification> holder =
+                csp.computeAuxiliaryCacheIfAbsent(LpModelBuilder.class, ignored -> new AtomicReference<>());
+        Set<Constraint> source = csp.getConstraints();
+        ConstraintClassification cached = holder.get();
+        if (cached != null && cached.source() == source) {
+            return cached;
+        }
+        List<GlobalCardinalityConstraint<?>> gccs = new ArrayList<>();
+        List<Constraint> tables = new ArrayList<>();
+        for (Constraint constraint : source) {
+            if (constraint instanceof GlobalCardinalityConstraint<?> gcc) {
+                gccs.add(gcc);
+            } else if (constraint instanceof NaryTuplesConstraint || constraint instanceof NaryStarredTuplesConstraint) {
+                tables.add(constraint);
+            }
+        }
+        ConstraintClassification fresh = new ConstraintClassification(source, gccs, tables);
+        holder.set(fresh);
+        return fresh;
+    }
+
+    /**
      * Finds every {@link GlobalCardinalityConstraint} in {@code csp} that has at least one qualifying
      * table linkage (see {@link #functionalLookup}) into {@code objective}'s own coefficient
      * variables -- the shape {@link #addAssignmentRelaxationRows} needs to build a real assignment
@@ -245,21 +286,13 @@ public final class LpModelBuilder {
      * majority of CSPs that have no {@link GlobalCardinalityConstraint} or no table constraint at all.
      */
     private static List<AssignmentLinkage> findAssignmentLinkages(ConstraintSatisfactionProblem csp, LinearObjective objective) {
-        List<GlobalCardinalityConstraint<?>> gccs = new ArrayList<>();
-        List<Constraint> tables = new ArrayList<>();
-        for (Constraint constraint : csp.getConstraints()) {
-            if (constraint instanceof GlobalCardinalityConstraint<?> gcc) {
-                gccs.add(gcc);
-            } else if (constraint instanceof NaryTuplesConstraint || constraint instanceof NaryStarredTuplesConstraint) {
-                tables.add(constraint);
-            }
-        }
-        if (gccs.isEmpty() || tables.isEmpty()) return List.of();
+        ConstraintClassification classified = classifyConstraints(csp);
+        if (classified.gccs().isEmpty() || classified.tables().isEmpty()) return List.of();
 
         List<AssignmentLinkage> linkages = new ArrayList<>();
-        for (GlobalCardinalityConstraint<?> gcc : gccs) {
+        for (GlobalCardinalityConstraint<?> gcc : classified.gccs()) {
             List<TableLinkage> tableLinkages = new ArrayList<>();
-            for (Constraint table : tables) {
+            for (Constraint table : classified.tables()) {
                 Set<Variable<?>> shared = new LinkedHashSet<>(table.getVariables());
                 shared.retainAll(gcc.getVariables());
                 if (shared.size() != 1) continue;

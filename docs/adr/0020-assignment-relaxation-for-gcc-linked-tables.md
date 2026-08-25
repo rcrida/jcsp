@@ -98,11 +98,21 @@ unconditional safety net rather than relying on that requirement holding for eve
   the first cross-package reads of any of these three fields, needed for `LpModelBuilder` (a
   different package) to build the relaxation.
 - Applies automatically to any `BranchAndBoundSolver` search with a `LinearObjective`; the two early
-  exits (`gccs.isEmpty()`, `tables.isEmpty()`) make the detection pass cheap for the overwhelming
-  majority of optimization problems that have no `GlobalCardinalityConstraint` at all, and the
-  per-table checks (shared-variable count, function-of-`key`, objective relevance, scale cap) make it
-  a safe no-op rather than a slowdown for the rest. Verified via the full bundled XCSP3 competition
-  corpus (`Xcsp3CompetitionRunner`) with zero regressions and zero new `SolutionChecker` mismatches.
+  exits (`gccs.isEmpty()`, `tables.isEmpty()`) make the detection pass a safe no-op rather than a
+  slowdown for problems with no `GlobalCardinalityConstraint` at all. Verified via the full bundled
+  XCSP3 competition corpus (`Xcsp3CompetitionRunner`) with zero regressions and zero new
+  `SolutionChecker` mismatches.
+  **Correction (found via JFR profiling `Fastfood-ff10.xml.lzma`, 215 table constraints, zero GCCs,
+  after this ADR shipped):** the original claim that those early exits made the pass "cheap" was
+  wrong for instances with many constraints — reaching either exit still requires classifying every
+  constraint in `csp.getConstraints()` first, which is real, unavoidable per-call work regardless of
+  what the exits find. Since `findAssignmentLinkages` runs fresh on every `LpModelBuilder.solve` call
+  (once per B&B node), this classification was being redone from scratch every single node even when
+  its result never changes. Fixed by caching the classification per constraint-set reference
+  (`LpModelBuilder#classifyConstraints`, mirroring `FixpointConsistency#filterCache`'s identical
+  reference-equality pattern) — confirmed via before/after JFR comparison on the same instance:
+  `findAssignmentLinkages`'s own inclusive sample count dropped from 72/2521 to 2/2513 (~97%), with
+  no change in solution quality or corpus regression results.
 - On the motivating instance itself: nodes explored for the same 60s budget dropped further (from
   ~157K with only the `CountConstraint`-consolidation fix, to ~138K with both fixes combined — about
   21.5% below the pre-fix baseline of ~175K), but the instance's ~10^47 search space still doesn't
