@@ -260,7 +260,7 @@ public class ConstraintSatisfactionProblem {
             this.constraintGraph = constraintGraph;
         } else {
             validateConstraints(variableDomains, constraints);
-            this.constraintGraph = new ConstraintGraph(constraints, variableDomains.keySet());
+            this.constraintGraph = new ConstraintGraph(constraints, variableDomains);
         }
         this.nogoods = nogoods == null ? Set.of() : nogoods;
         assert this.nogoods.stream().flatMap(n -> n.getVariables().stream()).allMatch(variableDomains::containsKey)
@@ -529,6 +529,17 @@ public class ConstraintSatisfactionProblem {
      */
     public <T> T computeAuxiliaryCacheIfAbsent(@NonNull Object key, @NonNull Function<ConstraintSatisfactionProblem, T> compute) {
         return constraintGraph.computeAuxiliaryCacheIfAbsent(key, graph -> compute.apply(this));
+    }
+
+    /**
+     * The variable domains this problem's underlying {@link ConstraintGraph} was originally built
+     * with -- see {@link ConstraintGraph#declaredDomains}'s own Javadoc for why this is a safe
+     * closed superset of every value any of {@code this} problem's variables will ever hold for the
+     * rest of its lineage, unlike {@link #variableDomains} (this problem's own current,
+     * possibly-narrowed domains).
+     */
+    public Map<Variable<?>, Domain<?>> getDeclaredDomains() {
+        return constraintGraph.getDeclaredDomains();
     }
 
     public Set<Constraint> getConstraints() {

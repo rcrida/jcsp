@@ -201,7 +201,10 @@ public class FixpointPropagation {
             // loop repeats until a whole round makes no further progress, so this is a pure ordering
             // choice -- every propagator here is prune-only, so the final result doesn't depend on
             // position -- confirmed empirically on the XCSP3 Taillard job-shop corpus (~1.7-1.9x
-            // fewer wall-clock ms for an identical node count under a fixed node budget).
+            // fewer wall-clock ms for an identical node count under a fixed node budget). See
+            // docs/adr/0022-bitset-and-residue-arc-consistency-ac3bitrm.md for AC3BitRm, a benchmarked
+            // alternative not wired in here by default (it only wins when a constraint's own
+            // isSatisfiedByArcValues is expensive to evaluate, not for typical cheap comparisons).
             AC3.INSTANCE,
             // Also last, for the same "let cheaper/narrowing propagators run first" reasoning as AC3
             // above. Originally sat right after the four cheapest unary/binary bound propagators
@@ -272,10 +275,10 @@ public class FixpointPropagation {
 
     /**
      * {@link NogoodFixpointConsistency#INSTANCE} and {@link AC3#INSTANCE} are singletons checked by
-     * identity; every other {@link #PROPAGATORS} entry is a {@link FixpointConsistency} targeting
-     * one constraint type. {@code nogoodLearningEnabled} alone would incorrectly drop nogoods a
-     * caller pre-seeded on {@code csp} before ever starting a solve with learning disabled, so
-     * {@link NogoodFixpointConsistency}'s own applicability additionally checks {@code
+     * identity; every other {@link #PROPAGATORS} entry is a {@link FixpointConsistency}
+     * targeting one constraint type. {@code nogoodLearningEnabled} alone would incorrectly drop
+     * nogoods a caller pre-seeded on {@code csp} before ever starting a solve with learning
+     * disabled, so {@link NogoodFixpointConsistency}'s own applicability additionally checks {@code
      * csp.getNogoods()} directly -- included whenever learning is on <em>or</em> the problem already
      * carries nogoods to propagate. The final branch falls back to {@code true} ("assume
      * applicable") for anything that isn't one of the two singletons or a {@link

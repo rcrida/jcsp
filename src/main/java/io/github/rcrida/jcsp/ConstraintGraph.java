@@ -7,6 +7,7 @@ import lombok.val;
 import io.github.rcrida.jcsp.constraints.BinaryDecomposable;
 import io.github.rcrida.jcsp.constraints.Constraint;
 import io.github.rcrida.jcsp.constraints.binary.BinaryConstraint;
+import io.github.rcrida.jcsp.domains.Domain;
 import io.github.rcrida.jcsp.variables.Variable;
 import org.jspecify.annotations.NonNull;
 
@@ -26,7 +27,7 @@ import java.util.stream.Stream;
  * avoiding redundant recomputation during solving.
  */
 @Value
-@ToString(exclude = {"neighbours", "allBinaryConstraints", "auxiliaryCache"})
+@ToString(exclude = {"neighbours", "allBinaryConstraints", "auxiliaryCache", "declaredDomains"})
 class ConstraintGraph {
     Set<Constraint> constraints;
     boolean isCyclic;
@@ -57,14 +58,37 @@ class ConstraintGraph {
      */
     @EqualsAndHashCode.Exclude
     Map<Object, Object> auxiliaryCache = new ConcurrentHashMap<>();
+    /**
+     * The variable domains this graph was originally built with -- captured once, only when a
+     * fresh {@link ConstraintGraph} is actually constructed (never on reuse via {@link
+     * ConstraintSatisfactionProblem#toBuilder()}/{@code withDomain}/{@code withDomains}, which pass
+     * an existing graph straight through instead of building a new one). Since every domain-only
+     * update from that point on narrows an existing domain and never re-adds a value (see {@link
+     * ConstraintSatisfactionProblem}'s constructor Javadoc), this is a safe closed superset of every
+     * value any of this graph's variables will ever hold for the rest of that graph's lineage --
+     * unlike "whichever domains happen to be live the first time some propagator's own cache gets
+     * built against this graph", which is not reliably the widest state (e.g. {@link
+     * io.github.rcrida.jcsp.consistency.arc.MAC#apply} narrows its target variable to a singleton
+     * <em>before</em> ever touching this graph, so a propagator whose own cache is first populated
+     * from inside a bare {@code MAC}/{@code DomWdegLubySearch} call -- bypassing {@code
+     * PropagationFixpointSolver}'s own whole-problem preprocessing pass -- would otherwise only ever
+     * see whatever single value got assigned first). Added for {@link
+     * io.github.rcrida.jcsp.consistency.arc.AC3BitRm}'s own per-variable value-index cache, which
+     * needs exactly this guarantee; exposed publicly via {@link
+     * ConstraintSatisfactionProblem#getDeclaredDomains()} since this class itself is package-private.
+     */
+    @EqualsAndHashCode.Exclude
+    Map<Variable<?>, Domain<?>> declaredDomains;
 
     @SuppressWarnings("unchecked")
     <T> T computeAuxiliaryCacheIfAbsent(Object key, Function<ConstraintGraph, T> compute) {
         return (T) auxiliaryCache.computeIfAbsent(key, k -> compute.apply(this));
     }
 
-    ConstraintGraph(@NonNull Set<Constraint> constraints, @NonNull Set<Variable<?>> variables) {
+    ConstraintGraph(@NonNull Set<Constraint> constraints, @NonNull Map<Variable<?>, Domain<?>> variableDomains) {
         this.constraints = constraints;
+        this.declaredDomains = variableDomains;
+        Set<Variable<?>> variables = variableDomains.keySet();
         this.neighbours = computeNeighbours(constraints, variables);
         this.allBinaryConstraints = computeAllBinaryConstraints(constraints);
         val visited = new HashSet<Variable<?>>();

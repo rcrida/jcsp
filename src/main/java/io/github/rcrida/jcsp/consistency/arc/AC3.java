@@ -207,8 +207,12 @@ public class AC3 implements ConstraintConsistency {
      * sufficiently dense/cyclic binary-constraint graph re-trigger the same neighbour-requeue
      * forever. Confirmed as a genuine hang, not just a slowdown: a 12-variable complete-graph binary
      * CSP with an unlucky tightness never returned, while 10 variables solved in 42ms.
+     * <p>
+     * Package-private, not {@code private}: {@link AC3BitRm} reuses this directly as its own
+     * fallback for an (arc, constraint) pair whose endpoints aren't both {@link DiscreteDomain} at
+     * its bit-index cache's build time, rather than duplicating this same naive scan.
      */
-    private static Optional<DiscreteDomain<?>> revise(Map<Variable<?>, Domain<?>> domains, Arc arc, BinaryConstraint<?, ?> constraint) {
+    static Optional<DiscreteDomain<?>> revise(Map<Variable<?>, Domain<?>> domains, Arc arc, BinaryConstraint<?, ?> constraint) {
         if (!(domains.get(arc.getFrom()) instanceof DiscreteDomain<?> D_i)) return Optional.empty();
         if (!(domains.get(arc.getTo()) instanceof DiscreteDomain<?> D_j)) return Optional.empty();
         // D_i/D_j are read via asCollection(), not toList() or a Stream pipeline: profiling found

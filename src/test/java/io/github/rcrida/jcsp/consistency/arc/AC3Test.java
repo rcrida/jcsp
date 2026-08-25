@@ -222,6 +222,40 @@ public class AC3Test {
     }
 
     @Test
+    void applyWithReason_twoArgOverload_delegatesToApplyQueueWithReason() {
+        val redOnly = new EnumDomain<>(EnumSet.of(RED));
+        val problem = ConstraintSatisfactionProblem.builder()
+                .variableDomain(WA, redOnly)
+                .variableDomain(NT, redOnly)
+                .notEqualsConstraint(WA, NT)
+                .build();
+        assertThat(AC3.INSTANCE.applyWithReason(problem, null).isInfeasible()).isTrue();
+    }
+
+    @Test
+    void applyQueueWithReason_narrowsWithoutWipeout_requeuesOtherNeighbours() {
+        // a-b-c chain: revising arc(b, c) narrows b (to {1}, not wiped), which must requeue b's
+        // other neighbour arc(a, b) rather than stopping at the first narrowing -- exercises
+        // applyQueueWithReason's own "narrowed, not wiped" branch directly. applyQueue's parallel
+        // branch is already covered elsewhere (e.g. applyYEqualsX2), but applyQueueWithReason is a
+        // separate traversal with its own copy of this logic.
+        Variable<Integer> a = Variable.Factory.INSTANCE.create("a_requeue");
+        Variable<Integer> b = Variable.Factory.INSTANCE.create("b_requeue");
+        Variable<Integer> c = Variable.Factory.INSTANCE.create("c_requeue");
+        val problem = ConstraintSatisfactionProblem.builder()
+                .variableDomain(a, IntRangeDomain.of(1, 3))
+                .variableDomain(b, IntRangeDomain.of(1, 3))
+                .variableDomain(c, IntRangeDomain.of(1, 1))
+                .notEqualsConstraint(a, b)
+                .comparatorConstraint(b, Operator.LEQ, c)
+                .build();
+        assertThat(AC3.INSTANCE.explainConflict(problem)).isEmpty();
+        val result = AC3.INSTANCE.apply(problem).get();
+        assertThat(((DiscreteDomain<Integer>) result.getDomain(b)).toList()).containsExactly(1);
+        assertThat(((DiscreteDomain<Integer>) result.getDomain(a)).toList()).containsExactlyInAnyOrder(2, 3);
+    }
+
+    @Test
     void inconsistent() {
         val domain = IntRangeDomain.of(0, 10);
         val tuples = List.of(
