@@ -51,15 +51,10 @@ public class AC3 implements ConstraintConsistency {
     }
 
     private ArcIndex buildArcIndex(ConstraintSatisfactionProblem problem) {
-        Set<BinaryConstraint<?, ?>> source = problem.getAllBinaryConstraints();
-        Set<Arc> allArcs = source.stream().flatMap(BinaryConstraint::getArcs).collect(Collectors.toUnmodifiableSet());
-        Map<Arc, List<BinaryConstraint<?, ?>>> arcConstraints = source.stream()
-                .flatMap(binaryConstraint -> binaryConstraint.getArcs()
-                        .map(arc -> new AbstractMap.SimpleEntry<>(arc, binaryConstraint)))
-                .collect(Collectors.groupingBy(Map.Entry::getKey, Collectors.mapping(Map.Entry::getValue, Collectors.toUnmodifiableList())));
+        Map<Arc, List<BinaryConstraint<?, ?>>> arcConstraints = problem.getAllBinaryArcConstraints();
         Map<Variable<?>, List<Arc>> arcsByTarget = arcConstraints.keySet().stream()
                 .collect(Collectors.groupingBy(Arc::getTo, Collectors.toUnmodifiableList()));
-        return new ArcIndex(allArcs, arcConstraints, arcsByTarget);
+        return new ArcIndex(arcConstraints.keySet(), arcConstraints, arcsByTarget);
     }
 
     @Override

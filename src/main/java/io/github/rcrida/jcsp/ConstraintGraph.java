@@ -1,5 +1,6 @@
 package io.github.rcrida.jcsp;
 
+import io.github.rcrida.jcsp.consistency.arc.Arc;
 import lombok.EqualsAndHashCode;
 import lombok.ToString;
 import lombok.Value;
@@ -11,8 +12,10 @@ import io.github.rcrida.jcsp.domains.Domain;
 import io.github.rcrida.jcsp.variables.Variable;
 import org.jspecify.annotations.NonNull;
 
+import java.util.AbstractMap;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
@@ -27,7 +30,7 @@ import java.util.stream.Stream;
  * avoiding redundant recomputation during solving.
  */
 @Value
-@ToString(exclude = {"neighbours", "allBinaryConstraints", "auxiliaryCache", "declaredDomains"})
+@ToString(exclude = {"neighbours", "allBinaryConstraints", "allBinaryArcConstraints", "auxiliaryCache", "declaredDomains"})
 class ConstraintGraph {
     Set<Constraint> constraints;
     boolean isCyclic;
@@ -41,6 +44,10 @@ class ConstraintGraph {
      * as additional binary constraints. Ignores n-ary constraints that aren't decomposable.
      */
     @EqualsAndHashCode.Exclude Set<BinaryConstraint<?, ?>> allBinaryConstraints;
+    /**
+     * A map containing all binary constraints associated with each arc.
+     */
+    @EqualsAndHashCode.Exclude Map<Arc, List<BinaryConstraint<?, ?>>> allBinaryArcConstraints;
     /**
      * Generic per-structure memoization slot for any propagation algorithm (e.g. {@link io.github.rcrida.jcsp.consistency.arc.AC3}'s own
      * arc/constraint index) that wants to cache a derived value keyed only by this graph's
@@ -91,6 +98,7 @@ class ConstraintGraph {
         Set<Variable<?>> variables = variableDomains.keySet();
         this.neighbours = computeNeighbours(constraints, variables);
         this.allBinaryConstraints = computeAllBinaryConstraints(constraints);
+        this.allBinaryArcConstraints = computeAllBinaryArcConstraints(this.allBinaryConstraints);
         val visited = new HashSet<Variable<?>>();
         if (this.neighbours.isEmpty()) {
             this.isCyclic = false;
@@ -107,6 +115,10 @@ class ConstraintGraph {
      */
     boolean isTree() {
         return !isCyclic && isFullyConnected;
+    }
+
+    Set<Arc> getAllBinaryArcs() {
+        return allBinaryArcConstraints.keySet();
     }
 
     private static boolean isCyclicFrom(Variable<?> src, Variable<?> parent, Map<Variable<?>, Set<Variable<?>>> neighbours, Set<Variable<?>> visited) {
@@ -154,5 +166,17 @@ class ConstraintGraph {
                 .toList();
         return Stream.concat(binaryConstraints.stream(), inferredBinaryConstraints.stream())
                 .collect(Collectors.toUnmodifiableSet());
+    }
+
+    private static Map<Arc, List<BinaryConstraint<?, ?>>> computeAllBinaryArcConstraints(Set<BinaryConstraint<?, ?>> allBinaryConstraints) {
+        Map<Arc, List<BinaryConstraint<?, ?>>> grouped = allBinaryConstraints.stream()
+                .flatMap(binaryConstraint -> getArcStream(binaryConstraint)
+                        .map(arc -> new AbstractMap.SimpleEntry<>(arc, binaryConstraint)))
+                .collect(Collectors.groupingBy(Map.Entry::getKey, Collectors.mapping(Map.Entry::getValue, Collectors.toUnmodifiableList())));
+        return Map.copyOf(grouped);
+    }
+
+    private static @NonNull Stream<Arc> getArcStream(BinaryConstraint<?, ?> bc) {
+        return Stream.of(Arc.of(bc.getLeft(), bc.getRight()), Arc.of(bc.getRight(), bc.getLeft()));
     }
 }

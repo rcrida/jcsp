@@ -143,16 +143,12 @@ public class AC3BitRm implements ConstraintConsistency {
     }
 
     private BitIndex buildBitIndex(ConstraintSatisfactionProblem problem) {
-        Set<BinaryConstraint<?, ?>> source = problem.getAllBinaryConstraints();
         // Grouped via a plain (equality-based) HashMap first, deliberately not IdentityHashMap:
-        // BinaryConstraint#getArcs() builds a fresh Arc.of(...) per call, so when two different
-        // constraints share the same (from, to) pair, each contributes its own .equals()-but-not-==
-        // Arc instance -- grouping by identity here would wrongly split them into separate keys
-        // instead of consolidating them under one canonical arc.
-        Map<Arc, List<BinaryConstraint<?, ?>>> groupedByEquality = source.stream()
-                .flatMap(binaryConstraint -> binaryConstraint.getArcs()
-                        .map(arc -> new AbstractMap.SimpleEntry<>(arc, binaryConstraint)))
-                .collect(Collectors.groupingBy(Map.Entry::getKey, Collectors.mapping(Map.Entry::getValue, Collectors.toUnmodifiableList())));
+        // ConstraintGraph#getArcStream builds a fresh Arc.of(...) per binary constraint, so when two
+        // different constraints share the same (from, to) pair, each contributes its own
+        // .equals()-but-not-== Arc instance -- grouping by identity here would wrongly split them
+        // into separate keys instead of consolidating them under one canonical arc.
+        Map<Arc, List<BinaryConstraint<?, ?>>> groupedByEquality = problem.getAllBinaryArcConstraints();
         // Now that grouping has consolidated down to exactly one canonical Arc instance per (from,
         // to) pair, every map below can safely key on that instance by identity -- see this class's
         // own top-level Javadoc for why that's sound (not just an unverified assumption) and faster.

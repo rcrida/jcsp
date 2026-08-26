@@ -5,7 +5,6 @@ import io.github.rcrida.jcsp.assignments.Assignment;
 import io.github.rcrida.jcsp.assignments.NogoodStore;
 import io.github.rcrida.jcsp.assignments.SolverLimits;
 import io.github.rcrida.jcsp.assignments.Statistics;
-import io.github.rcrida.jcsp.constraints.binary.BinaryConstraint;
 import io.github.rcrida.jcsp.constraints.nary.GroundNogoodConstraint;
 import io.github.rcrida.jcsp.consistency.ConsistencyResult;
 import io.github.rcrida.jcsp.consistency.ConstraintConsistency;
@@ -292,8 +291,7 @@ public class AC3BitRmBenchmark {
     }
 
     private static Set<Arc> macQueue(ConstraintSatisfactionProblem problem, Variable<?> variable, Assignment assignment) {
-        return problem.getAllBinaryConstraints().stream()
-                .flatMap(BinaryConstraint::getArcs)
+        return problem.getAllBinaryArcs().stream()
                 .filter(arc -> arc.getTo().equals(variable))
                 .filter(arc -> assignment.getValue(arc.getFrom()).isEmpty())
                 .collect(Collectors.toSet());

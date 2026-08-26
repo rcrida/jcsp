@@ -5,7 +5,6 @@ import io.github.rcrida.jcsp.ConstraintSatisfactionProblem;
 import io.github.rcrida.jcsp.assignments.Assignment;
 import io.github.rcrida.jcsp.consistency.ConsistencyResult;
 import io.github.rcrida.jcsp.consistency.Inference;
-import io.github.rcrida.jcsp.constraints.binary.BinaryConstraint;
 import io.github.rcrida.jcsp.domains.ObjectSingletonDomain;
 import io.github.rcrida.jcsp.variables.Variable;
 
@@ -36,8 +35,7 @@ public class MAC implements Inference {
     @SuppressWarnings("unchecked")
     public Optional<ConstraintSatisfactionProblem> apply(ConstraintSatisfactionProblem problem, Variable<?> variable, Assignment assignment) {
         val value = assignment.getValue(variable).orElseThrow();
-        val variableConstraints = problem.getAllBinaryConstraints().stream()
-                .flatMap(BinaryConstraint::getArcs)
+        val variableConstraints = problem.getAllBinaryArcs().stream()
                 .filter(arc -> isBinaryConstraintToX_i(arc, variable))
                 .filter(arc -> isNotAlreadyAssignedX_j(assignment, arc))
                 .collect(Collectors.toSet());
@@ -57,8 +55,7 @@ public class MAC implements Inference {
     @SuppressWarnings("unchecked")
     public ConsistencyResult applyWithReason(ConstraintSatisfactionProblem problem, Variable<?> variable, Assignment assignment) {
         val value = assignment.getValue(variable).orElseThrow();
-        val variableConstraints = problem.getAllBinaryConstraints().stream()
-                .flatMap(BinaryConstraint::getArcs)
+        val variableConstraints = problem.getAllBinaryArcs().stream()
                 .filter(arc -> isBinaryConstraintToX_i(arc, variable))
                 .filter(arc -> isNotAlreadyAssignedX_j(assignment, arc))
                 .collect(Collectors.toSet());

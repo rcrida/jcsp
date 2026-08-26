@@ -1,5 +1,6 @@
 package io.github.rcrida.jcsp;
 
+import io.github.rcrida.jcsp.consistency.arc.Arc;
 import lombok.AccessLevel;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -513,6 +514,20 @@ public class ConstraintSatisfactionProblem {
      */
     public Set<BinaryConstraint<?, ?>> getAllBinaryConstraints() {
         return constraintGraph.getAllBinaryConstraints();
+    }
+
+    /**
+     * A set of all binary arcs applicable to this problem.
+     */
+    public Set<Arc> getAllBinaryArcs() {
+        return constraintGraph.getAllBinaryArcs();
+    }
+
+    /**
+     * A map containing all binary constraints associated with each arc.
+     */
+    public Map<Arc, List<BinaryConstraint<?, ?>>> getAllBinaryArcConstraints() {
+        return constraintGraph.getAllBinaryArcConstraints();
     }
 
     /**
