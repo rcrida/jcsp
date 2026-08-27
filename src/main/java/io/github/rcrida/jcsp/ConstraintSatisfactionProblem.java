@@ -21,6 +21,7 @@ import io.github.rcrida.jcsp.constraints.LogicOperator;
 import io.github.rcrida.jcsp.constraints.binary.BinaryConstraint;
 import io.github.rcrida.jcsp.constraints.binary.BinaryElementConstraint;
 import io.github.rcrida.jcsp.constraints.binary.AbsoluteDifferenceConstraint;
+import io.github.rcrida.jcsp.constraints.nary.AbsoluteDifferenceVariableConstraint;
 import io.github.rcrida.jcsp.constraints.binary.DivisionConstraint;
 import io.github.rcrida.jcsp.constraints.binary.BinaryOffsetConstraint;
 import io.github.rcrida.jcsp.constraints.binary.BinaryPredicateConstraint;
@@ -182,7 +183,7 @@ public class ConstraintSatisfactionProblem {
      * {@link NogoodConstraint} implementation needs its own entry here too.
      */
     private static final Set<Class<? extends Constraint>> CONTINUOUS_COMPATIBLE_CONSTRAINTS =
-            Set.of(SumBoundConstraint.class, SumVariableConstraint.class, LinearBoundConstraint.class, LinearVariableConstraint.class, UnaryComparatorConstraint.class, BinaryComparatorConstraint.class, BinaryOffsetConstraint.class, AbsoluteDifferenceConstraint.class, DivisionConstraint.class, LexConstraint.class, CumulativeConstraint.class, MaxConstraint.class, MaxVariableConstraint.class, MinConstraint.class, MinVariableConstraint.class, ProductConstraint.class, DiffnConstraint.class, GroundNogoodConstraint.class, RangeNogoodConstraint.class, ValueSetNogoodConstraint.class, IncreasingConstraint.class, DecreasingConstraint.class, UnaryPredicateConstraint.class, BinaryPredicateConstraint.class, PredicateConstraint.class, ReifiedConstraint.class, ImplicationConstraint.class, AndConstraint.class, NaryElementConstraint.class);
+            Set.of(SumBoundConstraint.class, SumVariableConstraint.class, LinearBoundConstraint.class, LinearVariableConstraint.class, UnaryComparatorConstraint.class, BinaryComparatorConstraint.class, BinaryOffsetConstraint.class, AbsoluteDifferenceConstraint.class, AbsoluteDifferenceVariableConstraint.class, DivisionConstraint.class, LexConstraint.class, CumulativeConstraint.class, MaxConstraint.class, MaxVariableConstraint.class, MinConstraint.class, MinVariableConstraint.class, ProductConstraint.class, DiffnConstraint.class, GroundNogoodConstraint.class, RangeNogoodConstraint.class, ValueSetNogoodConstraint.class, IncreasingConstraint.class, DecreasingConstraint.class, UnaryPredicateConstraint.class, BinaryPredicateConstraint.class, PredicateConstraint.class, ReifiedConstraint.class, ImplicationConstraint.class, AndConstraint.class, NaryElementConstraint.class);
 
     /**
      * Constraint types that support {@link io.github.rcrida.jcsp.domains.SetBoundedDomain} (e.g.
@@ -1360,6 +1361,20 @@ public class ConstraintSatisfactionProblem {
          */
         public <N extends Number> ConstraintSatisfactionProblemBuilder absoluteDifferenceConstraint(@NonNull Variable<N> left, @NonNull Variable<N> right, @NonNull Operator operator, @NonNull N bound) {
             return this.constraint(AbsoluteDifferenceConstraint.of(left, right, operator, bound));
+        }
+
+        /**
+         * Create a binary constraint on numerical variables enforcing {@code |left - right| op target},
+         * where the right-hand side is itself a variable rather than a fixed bound.
+         *
+         * @param left     the first variable
+         * @param right    the second variable
+         * @param operator the comparison operator applied to the absolute difference
+         * @param target   the variable to compare the absolute difference against
+         * @return the builder
+         */
+        public <N extends Number> ConstraintSatisfactionProblemBuilder absoluteDifferenceConstraint(@NonNull Variable<N> left, @NonNull Variable<N> right, @NonNull Operator operator, @NonNull Variable<N> target) {
+            return this.constraint(AbsoluteDifferenceVariableConstraint.of(left, right, operator, target));
         }
 
         /**

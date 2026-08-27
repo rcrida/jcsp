@@ -6,10 +6,12 @@ import io.github.rcrida.jcsp.assignments.Assignment;
 import io.github.rcrida.jcsp.constraints.Constraint;
 import io.github.rcrida.jcsp.constraints.LogicOperator;
 import io.github.rcrida.jcsp.constraints.Operator;
+import io.github.rcrida.jcsp.constraints.binary.AbsoluteDifferenceConstraint;
 import io.github.rcrida.jcsp.constraints.binary.BinaryComparatorConstraint;
 import io.github.rcrida.jcsp.constraints.binary.BinaryElementConstraint;
 import io.github.rcrida.jcsp.constraints.binary.BinaryNotEqualsConstraint;
 import io.github.rcrida.jcsp.constraints.binary.BinaryOffsetConstraint;
+import io.github.rcrida.jcsp.constraints.nary.AbsoluteDifferenceVariableConstraint;
 import io.github.rcrida.jcsp.constraints.nary.AllDiffConstraint;
 import io.github.rcrida.jcsp.constraints.nary.AllEqualConstraint;
 import io.github.rcrida.jcsp.constraints.nary.AmongConstraint;
@@ -140,6 +142,7 @@ final class Xcsp3CallbackHandler implements XCallbacks2 {
     private final Map<String, Variable<Integer>> shiftedVariables = new LinkedHashMap<>();
     private final Map<String, Variable<Boolean>> booleanIndicators = new LinkedHashMap<>();
     private final Map<Integer, Variable<Integer>> constantVariables = new LinkedHashMap<>();
+    private final Map<String, Variable<Integer>> distanceAuxiliaries = new LinkedHashMap<>();
     private final Map<Set<Variable<Integer>>, List<PendingCount>> pendingSingleValueCounts = new LinkedHashMap<>();
     private @Nullable ToDoubleFunction<Assignment> objective;
     private boolean maximize;
@@ -348,6 +351,39 @@ final class Xcsp3CallbackHandler implements XCallbacks2 {
         });
     }
 
+    /**
+     * Fresh variable holding {@code |a - b|}, linked via an unconditional {@link
+     * AbsoluteDifferenceVariableConstraint} (added directly against {@link #builder}, the same
+     * "definitional, never itself the loaded constraint" treatment {@link #booleanIndicatorFor}
+     * gives its own bridge). Memoized by {@code a}/{@code b}'s own name pair, keyed in whichever
+     * order they're passed -- no defensive sort-normalization needed, since {@code xcsp3-tools}'
+     * canonizer already normalizes a {@code dist(...)} node's two operands into one stable order
+     * (confirmed via a real probe: {@code dist(b,a)} always parses identically to {@code
+     * dist(a,b)}, by variable id, regardless of declaration or write order), so {@code dist(a,b)}
+     * and {@code dist(b,a)} written anywhere in the same instance always reach this method with
+     * {@code a}/{@code b} already in the same relative order -- naturally reusing one auxiliary
+     * and one link constraint, the same amortization {@link #shiftVariable}/{@link
+     * #constantVariable} already give their own repeated-occurrence case. Added specifically for
+     * XCSP3's {@code ne(dist(a,b), dist(c,d))} shape, where the same {@code dist(...)}
+     * sub-expression commonly recurs across many sibling clauses (e.g. a Costas-array or
+     * Golomb-ruler style "every pairwise distance is distinct" encoding). The auxiliary's own
+     * domain is seeded as {@code [0, maxDiff]} -- {@code maxDiff} the largest {@code |a - b|}
+     * achievable from {@code a}/{@code b}'s own declared bounds -- a safe superset that {@link
+     * AbsoluteDifferenceVariableConstraint}'s own propagation narrows further from there.
+     */
+    private Variable<Integer> distanceAuxiliary(Variable<Integer> a, Variable<Integer> b) {
+        String key = a.getName() + "$dist$" + b.getName();
+        return distanceAuxiliaries.computeIfAbsent(key, name -> {
+            int[] aBounds = boundsByName.get(a.getName());
+            int[] bBounds = boundsByName.get(b.getName());
+            int maxDiff = Math.max(Math.abs(aBounds[1] - bBounds[0]), Math.abs(aBounds[0] - bBounds[1]));
+            Variable<Integer> aux = Variable.Factory.INSTANCE.create(name);
+            builder.variableDomain(aux, IntRangeDomain.of(0, maxDiff));
+            builder.constraint(AbsoluteDifferenceVariableConstraint.of(a, b, Operator.EQ, aux));
+            return aux;
+        });
+    }
+
     // ---- Operator mapping -----------------------------------------------------------------------
 
     private static Operator mapOperator(TypeConditionOperatorRel operator) {
@@ -390,9 +426,16 @@ final class Xcsp3CallbackHandler implements XCallbacks2 {
             addIff(iffOperands.get(), id);
             return;
         }
+        Optional<DistancePairOperands> distancePair = recognizeDistancePairComparison(tree);
+        if (distancePair.isPresent()) {
+            addOrReify(BinaryComparatorConstraint.of(
+                    distancePair.get().auxLeft(), distancePair.get().operator(), distancePair.get().auxRight()), id);
+            return;
+        }
         addOrReify(recognizeBinaryRelation(tree)
                 .or(() -> recognizeBooleanProductChannel(tree))
                 .or(() -> recognizeProductOfPair(tree))
+                .or(() -> recognizeDistanceOfPair(tree))
                 .or(() -> recognizeOrOfLiterals(tree))
                 .or(() -> recognizeSumOrLinear(tree))
                 .orElseGet(() -> genericIntensionConstraint(list, tree)), id);
@@ -497,6 +540,91 @@ final class Xcsp3CallbackHandler implements XCallbacks2 {
                 .map(Object::toString)
                 .sorted()
                 .collect(Collectors.joining("$", "$iff" + side + "$", ""));
+    }
+
+    private record DistancePairOperands(Variable<Integer> auxLeft, Operator operator, Variable<Integer> auxRight) {}
+
+    private record DistancePairOperand(Variable<Integer> a, Variable<Integer> b) {}
+
+    /**
+     * Recognizes {@code A op B} where both {@code A} and {@code B} are a two-variable {@code
+     * dist(...)} node -- e.g. {@code ne(dist(a,b), dist(c,d))} -- and routes it onto {@link
+     * BinaryComparatorConstraint} over two fresh {@code |x - y|} auxiliaries (see {@link
+     * #distanceAuxiliary}) instead of the generic {@link PredicateConstraint}. Dispatched directly
+     * from {@link #buildCtrIntension}, before the main {@code .or()} chain, the same way {@link
+     * #recognizeIffOperands}/{@link #addIff} are: unlike every chain-recognizer method (which
+     * returns a single, side-effect-free {@link Constraint} for {@link #addOrReify} to add or
+     * reify), this one needs to add two <em>unconditional</em> auxiliary-linking constraints
+     * directly against {@link #builder} first (the same "definitional, never itself the loaded
+     * constraint" treatment {@link #addIff}'s own indicators get) -- only the derived {@code
+     * auxLeft <op> auxRight} relation is what {@link #buildCtrIntension} then routes through {@link
+     * #addOrReify}, so reifying the whole thing still reifies only the comparison, not the (always
+     * true) auxiliary definitions.
+     * <p>
+     * By far the most common {@code dist}-based shape in the bundled XCSP3 competition corpus (a
+     * single instance, a Costas-array-style "every pairwise distance is distinct" encoding,
+     * contributes hundreds of {@code ne(dist(...),dist(...))} clauses alone) -- previously falling
+     * all the way to the generic, unpropagated {@link PredicateConstraint}. Recognition failure on
+     * either side (one side isn't a two-variable {@code dist(...)}, or its own operands aren't
+     * plain variables) is always safe, just less propagated, falling through to {@link
+     * #recognizeDistanceOfPair}/{@link #genericIntensionConstraint} unchanged.
+     */
+    private Optional<DistancePairOperands> recognizeDistancePairComparison(XNodeParent<XVarInteger> tree) {
+        Operator operator = intensionRelationalOperator(tree.getType());
+        if (operator == null || tree.sons.length != 2) return Optional.empty();
+        Optional<DistancePairOperand> left = asDistancePairOperand(tree.sons[0]);
+        if (left.isEmpty()) return Optional.empty();
+        Optional<DistancePairOperand> right = asDistancePairOperand(tree.sons[1]);
+        if (right.isEmpty()) return Optional.empty();
+
+        Variable<Integer> auxLeft = distanceAuxiliary(left.get().a(), left.get().b());
+        Variable<Integer> auxRight = distanceAuxiliary(right.get().a(), right.get().b());
+        return Optional.of(new DistancePairOperands(auxLeft, operator, auxRight));
+    }
+
+    private Optional<DistancePairOperand> asDistancePairOperand(XNode<XVarInteger> node) {
+        if (!(node instanceof XNodeParent<XVarInteger> distNode)
+                || distNode.getType() != TypeExpr.DIST || distNode.sons.length != 2) {
+            return Optional.empty();
+        }
+        Optional<Variable<Integer>> a = asVariable(distNode.sons[0]);
+        if (a.isEmpty()) return Optional.empty();
+        Optional<Variable<Integer>> b = asVariable(distNode.sons[1]);
+        if (b.isEmpty()) return Optional.empty();
+        return Optional.of(new DistancePairOperand(a.get(), b.get()));
+    }
+
+    /**
+     * Recognizes {@code A op B} where one side is a two-variable {@code dist(a,b)} node and the
+     * other a plain variable or constant -- e.g. {@code eq(dist(a,b), c)} -- and routes it onto
+     * {@link AbsoluteDifferenceVariableConstraint} (variable target) or the already-existing {@link
+     * AbsoluteDifferenceConstraint} (constant target) instead of the generic {@link
+     * PredicateConstraint}. Unlike {@link #recognizeDistancePairComparison}, this is a plain
+     * chain-recognizer (no auxiliary variables needed -- the comparison's own right-hand side
+     * already <em>is</em> the target/bound). Same operand-order restriction as every other {@code
+     * dist}/{@code mul}/{@code add} recognizer in this class: {@code xcsp3-tools}' canonizer always
+     * places the compound {@code dist(...)} node first against a plain variable/constant target
+     * (confirmed via the same corpus scan that motivated this method), so a defensive reverse-order
+     * check would be permanently dead code.
+     */
+    private Optional<Constraint> recognizeDistanceOfPair(XNodeParent<XVarInteger> tree) {
+        Operator operator = intensionRelationalOperator(tree.getType());
+        if (operator == null || tree.sons.length != 2) return Optional.empty();
+        if (!(tree.sons[0] instanceof XNodeParent<XVarInteger> distNode)
+                || distNode.getType() != TypeExpr.DIST || distNode.sons.length != 2) {
+            return Optional.empty();
+        }
+        Optional<Variable<Integer>> a = asVariable(distNode.sons[0]);
+        if (a.isEmpty()) return Optional.empty();
+        Optional<Variable<Integer>> b = asVariable(distNode.sons[1]);
+        if (b.isEmpty()) return Optional.empty();
+
+        Optional<Variable<Integer>> target = asVariable(tree.sons[1]);
+        if (target.isPresent()) {
+            return Optional.of(AbsoluteDifferenceVariableConstraint.of(a.get(), b.get(), operator, target.get()));
+        }
+        return asConstant(tree.sons[1])
+                .map(constant -> AbsoluteDifferenceConstraint.of(a.get(), b.get(), operator, constant));
     }
 
     /**

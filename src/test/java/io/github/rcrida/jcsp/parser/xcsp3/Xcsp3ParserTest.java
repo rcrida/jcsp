@@ -2,8 +2,10 @@ package io.github.rcrida.jcsp.parser.xcsp3;
 
 import io.github.rcrida.jcsp.ConstraintSatisfactionProblem;
 import io.github.rcrida.jcsp.assignments.Assignment;
+import io.github.rcrida.jcsp.constraints.binary.AbsoluteDifferenceConstraint;
 import io.github.rcrida.jcsp.constraints.binary.BinaryComparatorConstraint;
 import io.github.rcrida.jcsp.constraints.binary.BinaryOffsetConstraint;
+import io.github.rcrida.jcsp.constraints.nary.AbsoluteDifferenceVariableConstraint;
 import io.github.rcrida.jcsp.constraints.nary.CountConstraint;
 import io.github.rcrida.jcsp.constraints.nary.GlobalCardinalityConstraint;
 import io.github.rcrida.jcsp.constraints.nary.LinearBoundConstraint;
@@ -537,6 +539,149 @@ class Xcsp3ParserTest {
         for (Assignment a : found) {
             int x = digitOf(a, "x"), y = digitOf(a, "y"), t = digitOf(a, "t"), b = digitOf(a, "b");
             assertThat(b == 1).as("x=%d, y=%d, t=%d, b=%d", x, y, t, b).isEqualTo(t == x * y);
+        }
+    }
+
+    // ---- intension dist(...) recognition (AbsoluteDifferenceVariableConstraint/AbsoluteDifferenceConstraint) -------
+
+    @Test void intensionDistanceOfPair_variableTarget_routesThroughAbsoluteDifferenceVariableConstraint() throws IOException {
+        Xcsp3Instance instance = parseXml(
+                "<var id=\"x\"> 1..5 </var><var id=\"y\"> 1..5 </var><var id=\"t\"> 0..4 </var>",
+                "<intension> eq(dist(x,y),t) </intension>");
+        assertThat(instance.csp().getConstraints().iterator().next()).isInstanceOf(AbsoluteDifferenceVariableConstraint.class);
+        Set<Assignment> found = solutions(instance.csp());
+        assertThat(found).isNotEmpty();
+        for (Assignment a : found) {
+            assertThat(digitOf(a, "t")).isEqualTo(Math.abs(digitOf(a, "x") - digitOf(a, "y")));
+        }
+    }
+
+    @Test void intensionDistanceOfPair_constantTarget_routesThroughAbsoluteDifferenceConstraint() throws IOException {
+        Xcsp3Instance instance = parseXml(
+                "<var id=\"x\"> 1..5 </var><var id=\"y\"> 1..5 </var>",
+                "<intension> ne(dist(x,y),3) </intension>");
+        assertThat(instance.csp().getConstraints().iterator().next()).isInstanceOf(AbsoluteDifferenceConstraint.class);
+        Set<Assignment> found = solutions(instance.csp());
+        assertThat(found).isNotEmpty();
+        for (Assignment a : found) {
+            assertThat(Math.abs(digitOf(a, "x") - digitOf(a, "y"))).isNotEqualTo(3);
+        }
+    }
+
+    @Test void intensionDistanceOfPair_operandNotVariable_fallsBackToPredicateConstraint() throws IOException {
+        // dist(add(x,1),y): the dist node's first operand is itself a compound expression, not a
+        // bare variable -- exercises asVariable(distNode.sons[0]).isEmpty() specifically.
+        Xcsp3Instance instance = parseXml(
+                "<var id=\"x\"> 1..3 </var><var id=\"y\"> 1..5 </var><var id=\"t\"> 0..4 </var>",
+                "<intension> eq(dist(add(x,1),y),t) </intension>");
+        assertThat(instance.csp().getConstraints().iterator().next()).isInstanceOf(PredicateConstraint.class);
+        Set<Assignment> found = solutions(instance.csp());
+        assertThat(found).isNotEmpty();
+        for (Assignment a : found) {
+            assertThat(digitOf(a, "t")).isEqualTo(Math.abs(digitOf(a, "x") + 1 - digitOf(a, "y")));
+        }
+    }
+
+    @Test void intensionDistancePairComparison_routesThroughBinaryComparatorConstraintOverAuxiliaries() throws IOException {
+        Xcsp3Instance instance = parseXml(
+                "<var id=\"a\"> 1..4 </var><var id=\"b\"> 1..4 </var><var id=\"c\"> 1..4 </var><var id=\"d\"> 1..4 </var>",
+                "<intension> ne(dist(a,b),dist(c,d)) </intension>");
+        // Two auxiliary-linking AbsoluteDifferenceVariableConstraints plus the comparator over them.
+        assertThat(instance.csp().getConstraints()).hasSize(3);
+        assertThat(instance.csp().getConstraints()).filteredOn(c -> c instanceof AbsoluteDifferenceVariableConstraint<?>).hasSize(2);
+        assertThat(instance.csp().getConstraints()).anyMatch(c -> c instanceof BinaryComparatorConstraint<?>);
+        Set<Assignment> found = solutions(instance.csp());
+        assertThat(found).isNotEmpty();
+        for (Assignment a : found) {
+            int distAb = Math.abs(digitOf(a, "a") - digitOf(a, "b"));
+            int distCd = Math.abs(digitOf(a, "c") - digitOf(a, "d"));
+            assertThat(distAb).isNotEqualTo(distCd);
+        }
+    }
+
+    @Test void intensionDistancePairComparison_secondDistOperandNotVariable_fallsBackToPredicateConstraint() throws IOException {
+        // ne(dist(a,5),dist(c,d)): the left dist node's *second* operand is a bare constant, not a
+        // variable -- confirmed via a real probe that xcsp3-tools' canonizer keeps a variable-vs-
+        // constant dist(...) in that order (unlike a variable-vs-compound dist(...), which gets
+        // reordered compound-first) -- exercises asVariable(distNode.sons[1]).isEmpty() specifically,
+        // distinct from intensionDistanceOfPair_operandNotVariable's rejection on the first operand.
+        Xcsp3Instance instance = parseXml(
+                "<var id=\"a\"> 1..3 </var><var id=\"c\"> 1..3 </var><var id=\"d\"> 1..3 </var>",
+                "<intension> ne(dist(a,5),dist(c,d)) </intension>");
+        assertThat(instance.csp().getConstraints().iterator().next()).isInstanceOf(PredicateConstraint.class);
+        Set<Assignment> found = solutions(instance.csp());
+        assertThat(found).isNotEmpty();
+        for (Assignment a : found) {
+            int distLeft = Math.abs(digitOf(a, "a") - 5);
+            int distRight = Math.abs(digitOf(a, "c") - digitOf(a, "d"));
+            assertThat(distLeft).isNotEqualTo(distRight);
+        }
+    }
+
+    @Test void intensionDistanceThreeOperands_fallsBackToPredicateConstraint() throws IOException {
+        // dist(a,b,c): a 3-operand dist node -- exercises both asDistancePairOperand's and
+        // recognizeDistanceOfPair's own distNode.sons.length != 2 rejection (this same tree reaches
+        // both, in sequence, since recognizeDistancePairComparison is tried first on every tree).
+        Xcsp3Instance instance = parseXml(
+                "<var id=\"a\"> 1..3 </var><var id=\"b\"> 1..3 </var><var id=\"c\"> 1..3 </var>",
+                "<intension> eq(dist(a,b,c),1) </intension>");
+        assertThat(instance.csp().getConstraints().iterator().next()).isInstanceOf(PredicateConstraint.class);
+        Set<Assignment> found = solutions(instance.csp());
+        assertThat(found).isNotEmpty();
+    }
+
+    @Test void intensionDistancePairComparison_repeatedSubexpression_reusesSameAuxiliary() throws IOException {
+        // ne(dist(a,b),dist(a,c)) and ne(dist(a,b),dist(c,d)): dist(a,b) recurs across both
+        // constraints -- should share one auxiliary/link constraint rather than building a
+        // redundant copy per occurrence (the same amortization shiftVariable/constantVariable
+        // already give). Three distinct dist(...) sub-expressions overall (dist(a,b), dist(a,c),
+        // dist(c,d)) -> exactly 3 AbsoluteDifferenceVariableConstraint objects, not 4.
+        Xcsp3Instance instance = parseXml(
+                "<var id=\"a\"> 1..4 </var><var id=\"b\"> 1..4 </var><var id=\"c\"> 1..4 </var><var id=\"d\"> 1..4 </var>",
+                "<intension> ne(dist(a,b),dist(a,c)) </intension>"
+                        + "<intension> ne(dist(a,b),dist(c,d)) </intension>");
+        assertThat(instance.csp().getConstraints()).filteredOn(c -> c instanceof AbsoluteDifferenceVariableConstraint<?>).hasSize(3);
+    }
+
+    @Test void intensionDistancePairComparison_rightOperandNotDist_fallsBackToPredicateConstraint() throws IOException {
+        // ne(dist(a,b),add(c,d)): the right side isn't a dist(...) node at all, so
+        // recognizeDistancePairComparison declines, and recognizeDistanceOfPair also declines
+        // (add(c,d) is neither a variable nor a constant) -- falls all the way to PredicateConstraint.
+        Xcsp3Instance instance = parseXml(
+                "<var id=\"a\"> 1..3 </var><var id=\"b\"> 1..3 </var><var id=\"c\"> 1..3 </var><var id=\"d\"> 1..3 </var>",
+                "<intension> ne(dist(a,b),add(c,d)) </intension>");
+        assertThat(instance.csp().getConstraints().iterator().next()).isInstanceOf(PredicateConstraint.class);
+        Set<Assignment> found = solutions(instance.csp());
+        assertThat(found).isNotEmpty();
+        for (Assignment a : found) {
+            assertThat(Math.abs(digitOf(a, "a") - digitOf(a, "b"))).isNotEqualTo(digitOf(a, "c") + digitOf(a, "d"));
+        }
+    }
+
+    @Test void intensionDistanceOfPair_reified_indicatorTracksConstraintTruthValue() throws IOException {
+        Xcsp3Instance instance = parseXml(
+                "<var id=\"x\"> 1..3 </var><var id=\"y\"> 1..3 </var><var id=\"t\"> 0..2 </var><var id=\"b\"> 0..1 </var>",
+                "<intension reifiedBy=\"b\"> eq(dist(x,y),t) </intension>");
+        Set<Assignment> found = solutions(instance.csp());
+        assertThat(found).isNotEmpty();
+        for (Assignment a : found) {
+            int x = digitOf(a, "x"), y = digitOf(a, "y"), t = digitOf(a, "t"), b = digitOf(a, "b");
+            assertThat(b == 1).as("x=%d, y=%d, t=%d, b=%d", x, y, t, b).isEqualTo(t == Math.abs(x - y));
+        }
+    }
+
+    @Test void intensionDistancePairComparison_reified_indicatorTracksConstraintTruthValue() throws IOException {
+        Xcsp3Instance instance = parseXml(
+                "<var id=\"a\"> 1..3 </var><var id=\"b\"> 1..3 </var><var id=\"c\"> 1..3 </var>"
+                        + "<var id=\"d\"> 1..3 </var><var id=\"r\"> 0..1 </var>",
+                "<intension reifiedBy=\"r\"> ne(dist(a,b),dist(c,d)) </intension>");
+        Set<Assignment> found = solutions(instance.csp());
+        assertThat(found).isNotEmpty();
+        for (Assignment asg : found) {
+            int distAb = Math.abs(digitOf(asg, "a") - digitOf(asg, "b"));
+            int distCd = Math.abs(digitOf(asg, "c") - digitOf(asg, "d"));
+            int r = digitOf(asg, "r");
+            assertThat(r == 1).as("distAb=%d, distCd=%d, r=%d", distAb, distCd, r).isEqualTo(distAb != distCd);
         }
     }
 

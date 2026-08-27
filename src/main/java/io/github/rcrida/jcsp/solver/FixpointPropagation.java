@@ -13,6 +13,7 @@ import io.github.rcrida.jcsp.consistency.arc.AC3;
 import io.github.rcrida.jcsp.solver.listener.PropagationListener;
 import io.github.rcrida.jcsp.solver.listener.SolverListener;
 import io.github.rcrida.jcsp.constraints.binary.AbsoluteDifferenceConstraint;
+import io.github.rcrida.jcsp.constraints.nary.AbsoluteDifferenceVariableConstraint;
 import io.github.rcrida.jcsp.constraints.binary.BinaryComparatorConstraint;
 import io.github.rcrida.jcsp.constraints.binary.BinaryOffsetConstraint;
 import io.github.rcrida.jcsp.constraints.binary.DivisionConstraint;
@@ -141,6 +142,7 @@ public class FixpointPropagation {
             FixpointConsistency.of(BinaryComparatorConstraint.class),
             FixpointConsistency.of(BinaryOffsetConstraint.class),
             FixpointConsistency.of(AbsoluteDifferenceConstraint.class),
+            FixpointConsistency.of(AbsoluteDifferenceVariableConstraint.class),
             FixpointConsistency.of(AllDiffConstraint.class),
             FixpointConsistency.of(AllEqualConstraint.class),
             FixpointConsistency.of(DistinctVectorsConstraint.class),

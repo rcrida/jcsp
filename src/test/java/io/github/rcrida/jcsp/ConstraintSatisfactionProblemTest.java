@@ -367,6 +367,20 @@ public class ConstraintSatisfactionProblemTest {
     }
 
     @Test
+    void builder_absoluteDifferenceConstraintWithVariableTarget() {
+        Variable<Integer> a = VARIABLE_FACTORY.create("A");
+        Variable<Integer> b = VARIABLE_FACTORY.create("B");
+        Variable<Integer> target = VARIABLE_FACTORY.create("target");
+        val csp = ConstraintSatisfactionProblem.builder()
+                .variableDomain(a, IntRangeDomain.of(0, 10))
+                .variableDomain(b, IntRangeDomain.of(0, 10))
+                .variableDomain(target, IntRangeDomain.of(0, 10))
+                .absoluteDifferenceConstraint(a, b, Operator.EQ, target)
+                .build();
+        assertThat(csp.getConstraints()).hasSize(1);
+    }
+
+    @Test
     void builder_linearConstraintWithVariableTarget() {
         Variable<Integer> a = VARIABLE_FACTORY.create("A");
         Variable<Integer> b = VARIABLE_FACTORY.create("B");
