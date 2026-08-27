@@ -10,6 +10,7 @@ import io.github.rcrida.jcsp.constraints.nary.LinearBoundConstraint;
 import io.github.rcrida.jcsp.constraints.nary.LinearVariableConstraint;
 import io.github.rcrida.jcsp.constraints.nary.MinVariableConstraint;
 import io.github.rcrida.jcsp.constraints.nary.PredicateConstraint;
+import io.github.rcrida.jcsp.constraints.nary.ProductConstraint;
 import io.github.rcrida.jcsp.constraints.nary.ProductVariableConstraint;
 import io.github.rcrida.jcsp.constraints.nary.RelationLogicConstraint;
 import io.github.rcrida.jcsp.constraints.nary.SumBoundConstraint;
@@ -337,14 +338,16 @@ class Xcsp3ParserTest {
         }
     }
 
-    @Test void intensionBooleanProductChannel_secondOperandNonBooleanDomain_fallsBackToPredicateConstraint() throws IOException {
+    @Test void intensionBooleanProductChannel_secondOperandNonBooleanDomain_fallsThroughToProductOfPair() throws IOException {
         // y's domain is 0..2, not confined to {0,1} -- a*b == min(a,b) doesn't hold in general there
-        // (e.g. min(2,3)=2 but 2*3=6), so recognition must decline even though the tree shape
-        // (eq(mul(var,var),var)) matches exactly.
+        // (e.g. min(2,3)=2 but 2*3=6), so recognizeBooleanProductChannel must decline even though the
+        // tree shape (eq(mul(var,var),var)) matches exactly. Falls through to the more general
+        // recognizeProductOfPair instead of all the way to PredicateConstraint, since the shape still
+        // matches "mul(var,var) op var".
         Xcsp3Instance instance = parseXml(
                 "<var id=\"x\"> 0 1 </var><var id=\"y\"> 0..2 </var><var id=\"t\"> 0..2 </var>",
                 "<intension> eq(mul(x,y),t) </intension>");
-        assertThat(instance.csp().getConstraints().iterator().next()).isInstanceOf(PredicateConstraint.class);
+        assertThat(instance.csp().getConstraints().iterator().next()).isInstanceOf(ProductVariableConstraint.class);
         Set<Assignment> found = solutions(instance.csp());
         assertThat(found).isNotEmpty();
         for (Assignment a : found) {
@@ -352,13 +355,13 @@ class Xcsp3ParserTest {
         }
     }
 
-    @Test void intensionBooleanProductChannel_firstOperandNonBooleanDomain_fallsBackToPredicateConstraint() throws IOException {
+    @Test void intensionBooleanProductChannel_firstOperandNonBooleanDomain_fallsThroughToProductOfPair() throws IOException {
         // Same as above with the roles reversed -- x (the mul node's first operand) is the
         // non-boolean side this time, exercising isBooleanDomain(a) rather than isBooleanDomain(b).
         Xcsp3Instance instance = parseXml(
                 "<var id=\"x\"> 0..2 </var><var id=\"y\"> 0 1 </var><var id=\"t\"> 0..2 </var>",
                 "<intension> eq(mul(x,y),t) </intension>");
-        assertThat(instance.csp().getConstraints().iterator().next()).isInstanceOf(PredicateConstraint.class);
+        assertThat(instance.csp().getConstraints().iterator().next()).isInstanceOf(ProductVariableConstraint.class);
         Set<Assignment> found = solutions(instance.csp());
         assertThat(found).isNotEmpty();
         for (Assignment a : found) {
@@ -366,14 +369,14 @@ class Xcsp3ParserTest {
         }
     }
 
-    @Test void intensionBooleanProductChannel_operandDomainNotStartingAtZero_fallsBackToPredicateConstraint() throws IOException {
+    @Test void intensionBooleanProductChannel_operandDomainNotStartingAtZero_fallsThroughToProductOfPair() throws IOException {
         // x's domain is {1,2} -- bounds[0] != 0, so isBooleanDomain's first comparison short-circuits
         // to false without needing to check the upper bound too (distinct from the 0..2 case above,
         // whose lower bound is 0 but whose upper bound is what fails).
         Xcsp3Instance instance = parseXml(
                 "<var id=\"x\"> 1 2 </var><var id=\"y\"> 0 1 </var><var id=\"t\"> 0..2 </var>",
                 "<intension> eq(mul(x,y),t) </intension>");
-        assertThat(instance.csp().getConstraints().iterator().next()).isInstanceOf(PredicateConstraint.class);
+        assertThat(instance.csp().getConstraints().iterator().next()).isInstanceOf(ProductVariableConstraint.class);
         Set<Assignment> found = solutions(instance.csp());
         assertThat(found).isNotEmpty();
         for (Assignment a : found) {
@@ -408,6 +411,132 @@ class Xcsp3ParserTest {
         assertThat(found).isNotEmpty();
         for (Assignment a : found) {
             assertThat(digitOf(a, "t")).isEqualTo(digitOf(a, "x") * digitOf(a, "y") * digitOf(a, "z"));
+        }
+    }
+
+    // ---- intension mul(...) recognition (ProductVariableConstraint/ProductConstraint) -------------
+
+    @Test void intensionProductOfPair_variableTarget_routesThroughProductVariableConstraint() throws IOException {
+        // x,y not confined to {0,1} -- recognizeBooleanProductChannel's own identity doesn't apply
+        // here -- and the target is a plain variable: the general-domain generalization this method
+        // exists for.
+        Xcsp3Instance instance = parseXml(
+                "<var id=\"x\"> 1..4 </var><var id=\"y\"> 1..4 </var><var id=\"t\"> 1..16 </var>",
+                "<intension> eq(mul(x,y),t) </intension>");
+        assertThat(instance.csp().getConstraints().iterator().next()).isInstanceOf(ProductVariableConstraint.class);
+        Set<Assignment> found = solutions(instance.csp());
+        assertThat(found).isNotEmpty();
+        for (Assignment a : found) {
+            assertThat(digitOf(a, "t")).isEqualTo(digitOf(a, "x") * digitOf(a, "y"));
+        }
+    }
+
+    @Test void intensionProductOfPair_constantTarget_routesThroughProductConstraint() throws IOException {
+        // le(mul(x,y),12): target is a fixed constant, not a variable -- exercises the
+        // asConstant(tree.sons[1]) branch, and LEQ instead of EQ.
+        Xcsp3Instance instance = parseXml(
+                "<var id=\"x\"> 1..4 </var><var id=\"y\"> 1..4 </var>",
+                "<intension> le(mul(x,y),12) </intension>");
+        assertThat(instance.csp().getConstraints().iterator().next()).isInstanceOf(ProductConstraint.class);
+        Set<Assignment> found = solutions(instance.csp());
+        assertThat(found).isNotEmpty();
+        for (Assignment a : found) {
+            assertThat(digitOf(a, "x") * digitOf(a, "y")).isLessThanOrEqualTo(12);
+        }
+    }
+
+    @Test void intensionProductOfPair_neOperator_declinedFallsBackToPredicateConstraint() throws IOException {
+        // ne(mul(x,y),z): NEQ isn't one of ProductVariableConstraint/ProductConstraint's own
+        // propagating operators (EQ/LEQ/GEQ, mirroring their own PROPAGATING_OPERATORS), so
+        // recognition must decline even though the tree shape otherwise matches exactly.
+        Xcsp3Instance instance = parseXml(
+                "<var id=\"x\"> 1..3 </var><var id=\"y\"> 1..3 </var><var id=\"z\"> 1..9 </var>",
+                "<intension> ne(mul(x,y),z) </intension>");
+        assertThat(instance.csp().getConstraints().iterator().next()).isInstanceOf(PredicateConstraint.class);
+        Set<Assignment> found = solutions(instance.csp());
+        assertThat(found).isNotEmpty();
+        for (Assignment a : found) {
+            assertThat(digitOf(a, "z")).isNotEqualTo(digitOf(a, "x") * digitOf(a, "y"));
+        }
+    }
+
+    @Test void intensionProductOfPairNaryEquality_sonsLengthGuardDeclines() throws IOException {
+        // eq(mul(x,y),z,w): a 3-operand top-level eq (XCSP3's eq is a generalized n-ary allEqual,
+        // the same generalization intensionIffOperandNaryEquality exercises for
+        // recognizeGroundEquality) -- exercises this method's own tree.sons.length != 2 rejection
+        // specifically, distinct from mulNode.sons.length (the boolean-channel siblings' own
+        // threeOperandMul test).
+        Xcsp3Instance instance = parseXml(
+                "<var id=\"x\"> 1..3 </var><var id=\"y\"> 1..3 </var>"
+                        + "<var id=\"z\"> 1..9 </var><var id=\"w\"> 1..9 </var>",
+                "<intension> eq(mul(x,y),z,w) </intension>");
+        assertThat(instance.csp().getConstraints().iterator().next()).isInstanceOf(PredicateConstraint.class);
+        Set<Assignment> found = solutions(instance.csp());
+        assertThat(found).isNotEmpty();
+        for (Assignment a : found) {
+            int product = digitOf(a, "x") * digitOf(a, "y");
+            assertThat(product == digitOf(a, "z") && digitOf(a, "z") == digitOf(a, "w")).isTrue();
+        }
+    }
+
+    @Test void intensionProductOfPairSecondMulOperandNotVariable_declines() throws IOException {
+        // eq(mul(x,add(y,1)),z): the mul node's second operand is itself a compound expression, not
+        // a bare variable -- exercises asVariable(mulNode.sons[1]).isEmpty() specifically, distinct
+        // from the first-operand case recognizeBooleanProductChannel's own
+        // mulOperandIsCompoundExpression test already covers.
+        Xcsp3Instance instance = parseXml(
+                "<var id=\"x\"> 1..3 </var><var id=\"y\"> 1..3 </var><var id=\"z\"> 1..12 </var>",
+                "<intension> eq(mul(x,add(y,1)),z) </intension>");
+        assertThat(instance.csp().getConstraints().iterator().next()).isInstanceOf(PredicateConstraint.class);
+        Set<Assignment> found = solutions(instance.csp());
+        assertThat(found).isNotEmpty();
+        for (Assignment a : found) {
+            assertThat(digitOf(a, "z")).isEqualTo(digitOf(a, "x") * (digitOf(a, "y") + 1));
+        }
+    }
+
+    @Test void intensionProductOfPairSelfProduct_fallsBackToPredicateConstraint() throws IOException {
+        // eq(mul(x,x),y) -- a genuine self-product ("x squared"). ProductVariableConstraint#of
+        // takes a Set<Variable<N>>, which can't represent one variable used twice as a factor, so
+        // recognition must decline rather than crash. A real regression test: found via the full
+        // XCSP3 competition corpus (LowAutocorrelation-015.xml.lzma), where an earlier, unguarded
+        // version of this method threw IllegalArgumentException: duplicate element from Set.of(a, a).
+        Xcsp3Instance instance = parseXml(
+                "<var id=\"x\"> 1..4 </var><var id=\"y\"> 1..16 </var>",
+                "<intension> eq(mul(x,x),y) </intension>");
+        assertThat(instance.csp().getConstraints().iterator().next()).isInstanceOf(PredicateConstraint.class);
+        Set<Assignment> found = solutions(instance.csp());
+        assertThat(found).isNotEmpty();
+        for (Assignment a : found) {
+            assertThat(digitOf(a, "y")).isEqualTo(digitOf(a, "x") * digitOf(a, "x"));
+        }
+    }
+
+    @Test void intensionProductOfPairTargetNeitherVariableNorConstant_declines() throws IOException {
+        // eq(mul(x,y),add(z,w)): the right-hand side is itself a compound expression -- neither a
+        // bare variable nor a constant -- exercises asConstant(tree.sons[1]).isEmpty() after
+        // asVariable(tree.sons[1]) has already failed.
+        Xcsp3Instance instance = parseXml(
+                "<var id=\"x\"> 1..3 </var><var id=\"y\"> 1..3 </var>"
+                        + "<var id=\"z\"> 1..4 </var><var id=\"w\"> 1..4 </var>",
+                "<intension> eq(mul(x,y),add(z,w)) </intension>");
+        assertThat(instance.csp().getConstraints().iterator().next()).isInstanceOf(PredicateConstraint.class);
+        Set<Assignment> found = solutions(instance.csp());
+        assertThat(found).isNotEmpty();
+        for (Assignment a : found) {
+            assertThat(digitOf(a, "x") * digitOf(a, "y")).isEqualTo(digitOf(a, "z") + digitOf(a, "w"));
+        }
+    }
+
+    @Test void intensionProductOfPair_reified_indicatorTracksConstraintTruthValue() throws IOException {
+        Xcsp3Instance instance = parseXml(
+                "<var id=\"x\"> 1..3 </var><var id=\"y\"> 1..3 </var><var id=\"t\"> 1..9 </var><var id=\"b\"> 0..1 </var>",
+                "<intension reifiedBy=\"b\"> eq(mul(x,y),t) </intension>");
+        Set<Assignment> found = solutions(instance.csp());
+        assertThat(found).isNotEmpty();
+        for (Assignment a : found) {
+            int x = digitOf(a, "x"), y = digitOf(a, "y"), t = digitOf(a, "t"), b = digitOf(a, "b");
+            assertThat(b == 1).as("x=%d, y=%d, t=%d, b=%d", x, y, t, b).isEqualTo(t == x * y);
         }
     }
 

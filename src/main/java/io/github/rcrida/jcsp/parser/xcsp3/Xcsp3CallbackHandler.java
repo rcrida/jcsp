@@ -43,6 +43,7 @@ import io.github.rcrida.jcsp.constraints.nary.NValueConstraint;
 import io.github.rcrida.jcsp.constraints.nary.OrderedConstraint;
 import io.github.rcrida.jcsp.constraints.nary.ReifiedConstraint;
 import io.github.rcrida.jcsp.constraints.nary.PredicateConstraint;
+import io.github.rcrida.jcsp.constraints.nary.ProductConstraint;
 import io.github.rcrida.jcsp.constraints.nary.ProductVariableConstraint;
 import io.github.rcrida.jcsp.constraints.nary.RegularConstraint;
 import io.github.rcrida.jcsp.constraints.nary.RelationLogicConstraint;
@@ -91,6 +92,7 @@ import org.xcsp.parser.entries.XVariables.XVarSymbolic;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.EnumSet;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -390,6 +392,7 @@ final class Xcsp3CallbackHandler implements XCallbacks2 {
         }
         addOrReify(recognizeBinaryRelation(tree)
                 .or(() -> recognizeBooleanProductChannel(tree))
+                .or(() -> recognizeProductOfPair(tree))
                 .or(() -> recognizeOrOfLiterals(tree))
                 .or(() -> recognizeSumOrLinear(tree))
                 .orElseGet(() -> genericIntensionConstraint(list, tree)), id);
@@ -520,7 +523,14 @@ final class Xcsp3CallbackHandler implements XCallbacks2 {
      * {@code {0,1}} -- the identity doesn't hold for general integer domains (e.g. {@code min(2,3)
      * = 2} but {@code 2*3 = 6}) -- so recognition failure here is always safe, just less
      * propagated, never incorrect, the same contract {@link #recognizeBinaryRelation}'s own doc
-     * states.
+     * states. Also declines a self-product ({@code a} and {@code b} the same variable, e.g. {@code
+     * eq(mul(x,x),y)}) -- {@link MinVariableConstraint#of} takes a {@code Set<Variable<N>>}, which
+     * can't represent one variable used twice as a factor (confirmed via a real corpus instance,
+     * {@code LowAutocorrelation-015.xml.lzma}: an unguarded {@code Set.of(a, b)} throws {@code
+     * IllegalArgumentException: duplicate element} the moment {@code a.equals(b)}) -- this is a
+     * limitation of the {@code Set}-based factors representation itself, shared by every public
+     * {@code productConstraint} entry point, not something worth working around just for this one
+     * recognizer.
      */
     private Optional<Constraint> recognizeBooleanProductChannel(XNodeParent<XVarInteger> tree) {
         if (tree.getType() != TypeExpr.EQ || tree.sons.length != 2) return Optional.empty();
@@ -531,7 +541,8 @@ final class Xcsp3CallbackHandler implements XCallbacks2 {
         Optional<Variable<Integer>> a = asVariable(mulNode.sons[0]);
         Optional<Variable<Integer>> b = asVariable(mulNode.sons[1]);
         Optional<Variable<Integer>> target = asVariable(tree.sons[1]);
-        if (a.isEmpty() || b.isEmpty() || target.isEmpty() || !isBooleanDomain(a.get()) || !isBooleanDomain(b.get())) {
+        if (a.isEmpty() || b.isEmpty() || target.isEmpty() || a.get().equals(b.get())
+                || !isBooleanDomain(a.get()) || !isBooleanDomain(b.get())) {
             return Optional.empty();
         }
         return Optional.of(MinVariableConstraint.of(Set.of(a.get(), b.get()), Operator.EQ, target.get()));
@@ -549,6 +560,66 @@ final class Xcsp3CallbackHandler implements XCallbacks2 {
     // them up a second time by variable would be redundant).
     private static boolean isBooleanBounds(int[] bounds) {
         return bounds[0] == 0 && bounds[1] == 1;
+    }
+
+    /**
+     * The general-domain generalization of {@link #recognizeBooleanProductChannel}'s own {@code
+     * eq(mul(a,b), X)} shape: recognizes {@code A op B} where one operand is a two-variable {@code
+     * mul(a,b)} and the other is a plain variable or constant, for {@code EQ}/{@code LEQ}/{@code
+     * GEQ} -- the same {@code PROPAGATING_OPERATORS} set {@link ProductConstraint}/{@link
+     * ProductVariableConstraint} themselves only narrow for (see their own Javadoc); recognizing
+     * {@code LT}/{@code GT}/{@code NEQ} here would gain nothing over falling through to {@link
+     * #genericIntensionConstraint}, since their own {@code propagate} is a no-op for those
+     * regardless. Routes to {@link ProductVariableConstraint} (variable target) or {@link
+     * ProductConstraint} (constant target) instead of the generic {@link PredicateConstraint}.
+     * <p>
+     * Tried only after {@link #recognizeBooleanProductChannel} in {@link #buildCtrIntension}'s
+     * chain, so a boolean-domain {@code EQ} pair still takes that method's tighter {@link
+     * MinVariableConstraint} identity first. This method's own propagation is a strictly weaker
+     * no-op whenever a factor's domain minimum isn't strictly positive -- every {@code {0,1}}
+     * domain included, per {@link ProductConstraint}'s own restriction -- so falling through here
+     * for a boolean pair {@link #recognizeBooleanProductChannel} already declined (a non-{@code
+     * EQ} operator) is still always safe, just less propagated, never incorrect.
+     * <p>
+     * Same operand-order restriction as {@link #recognizeBooleanProductChannel}, confirmed by the
+     * same empirical probe: {@code mul}'s two variable operands always precede a bare
+     * variable/constant target in {@code xcsp3-tools}' canonical ordering. Also declines a
+     * self-product ({@code a} and {@code b} the same variable, e.g. {@code eq(mul(x,x),y)}) for
+     * the same reason {@link #recognizeBooleanProductChannel} does -- {@link
+     * ProductVariableConstraint#of}/{@link ProductConstraint#of} both take a {@code
+     * Set<Variable<N>>}, which can't represent one variable used twice as a factor; confirmed via
+     * a real corpus instance ({@code LowAutocorrelation-015.xml.lzma}) that this shape actually
+     * occurs, throwing {@code IllegalArgumentException: duplicate element} from an unguarded
+     * {@code Set.of(a, b)} before this check was added.
+     */
+    private static final Set<Operator> PRODUCT_OF_PAIR_OPERATORS = EnumSet.of(Operator.EQ, Operator.LEQ, Operator.GEQ);
+
+    private Optional<Constraint> recognizeProductOfPair(XNodeParent<XVarInteger> tree) {
+        Operator operator = intensionRelationalOperator(tree.getType());
+        if (!PRODUCT_OF_PAIR_OPERATORS.contains(operator)) {
+            return Optional.empty();
+        }
+        if (tree.sons.length != 2) {
+            return Optional.empty();
+        }
+        if (!(tree.sons[0] instanceof XNodeParent<XVarInteger> mulNode) || mulNode.getType() != TypeExpr.MUL) {
+            return Optional.empty();
+        }
+        if (mulNode.sons.length != 2) {
+            return Optional.empty();
+        }
+        Optional<Variable<Integer>> a = asVariable(mulNode.sons[0]);
+        if (a.isEmpty()) return Optional.empty();
+        Optional<Variable<Integer>> b = asVariable(mulNode.sons[1]);
+        if (b.isEmpty()) return Optional.empty();
+        if (a.get().equals(b.get())) return Optional.empty();
+
+        Optional<Variable<Integer>> target = asVariable(tree.sons[1]);
+        if (target.isPresent()) {
+            return Optional.of(ProductVariableConstraint.of(Set.of(a.get(), b.get()), operator, target.get()));
+        }
+        return asConstant(tree.sons[1])
+                .map(constant -> ProductConstraint.of(Set.of(a.get(), b.get()), operator, constant));
     }
 
     /**
