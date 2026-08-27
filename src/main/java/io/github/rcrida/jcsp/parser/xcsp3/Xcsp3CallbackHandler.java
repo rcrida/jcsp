@@ -624,12 +624,15 @@ final class Xcsp3CallbackHandler implements XCallbacks2 {
 
     /**
      * Recognizes {@code or(A, B)} where both {@code A} and {@code B} are a bare {@code eq}/{@code
-     * ne} literal -- variable-vs-constant or variable-vs-variable, via {@link #recognizeLiteral} --
-     * and routes it onto {@link RelationLogicConstraint} instead of the generic {@link
-     * PredicateConstraint}. Confirmed empirically against the bundled XCSP3 competition corpus: every
-     * real {@code or} intension node has exactly two children (never more), and just over half of
-     * them are this exact "two literals" shape -- previously the single largest source of
-     * unpropagated intension in that corpus. Recognition failure on either side (a nested/compound
+     * ne}/{@code le}/{@code lt} literal -- variable-vs-constant or variable-vs-variable, via {@link
+     * #recognizeLiteral} -- and routes it onto {@link RelationLogicConstraint} instead of the
+     * generic {@link PredicateConstraint}. Confirmed empirically against the bundled XCSP3
+     * competition corpus: every real {@code or} intension node has exactly two children (never
+     * more). Ordering literals ({@code le}/{@code lt}) were added after the original {@code
+     * eq}/{@code ne}-only version, for a single instance ({@code RoomMate-sr0050-int.xml.lzma})
+     * alone contributing 2,450 {@code or(le(...),le(...))} clauses (a preference-ranking encoding) --
+     * previously, together with the original {@code eq}/{@code ne} shape, the single largest source
+     * of unpropagated intension in that corpus. Recognition failure on either side (a nested/compound
      * child, e.g. {@code and(...)} or a {@code dist}-based relation) is always safe, just less
      * propagated, falling through to {@link #genericIntensionConstraint} unchanged.
      */
@@ -642,19 +645,34 @@ final class Xcsp3CallbackHandler implements XCallbacks2 {
         return Optional.of(RelationLogicConstraint.of(left.get(), LogicOperator.OR, right.get()));
     }
 
+    private static final Set<Operator> LITERAL_OPERATORS =
+            EnumSet.of(Operator.EQ, Operator.NEQ, Operator.LEQ, Operator.LT);
+
     /**
-     * Matches a bare {@code eq(var, X)}/{@code ne(var, X)} where {@code X} is either a constant or
-     * another plain variable -- {@link RelationLogicConstraint.ValueLiteral}/{@link
+     * Matches a bare {@code eq}/{@code ne}/{@code le}/{@code lt} between a variable and either a
+     * constant or another variable -- {@link RelationLogicConstraint.ValueLiteral}/{@link
      * RelationLogicConstraint.VariableLiteral} respectively. Only checks {@code (var, X)} operand
      * order, not the reverse, the same as {@link #recognizeGroundEquality}'s own asymmetric shape
      * and for the same confirmed reason: {@code xcsp3-tools}' canonizer always reorders a bare
-     * {@code eq}/{@code ne} to put the variable first (re-confirmed empirically for a literal
-     * nested inside {@code or(...)} specifically, not just at an intension's own root), so a
-     * defensive constant/variable-first check on the left side would be permanently dead code.
+     * {@code eq}/{@code ne}/{@code le} to put the variable first (re-confirmed empirically for a
+     * literal nested inside {@code or(...)} specifically, not just at an intension's own root), so
+     * a defensive constant/variable-first check on the left side would be permanently dead code.
+     * {@code ge}/{@code gt} are deliberately excluded from {@link #LITERAL_OPERATORS}: confirmed via
+     * the same probe that the canonizer always rewrites them into {@code le}/{@code lt} first --
+     * against a constant, with the constant and variable operands <em>swapped</em> (e.g. {@code
+     * ge(x,5)} becomes {@code le(5,x)}, not {@code le(x,5)}), the one asymmetry real {@code
+     * eq}/{@code ne}/{@code le}/{@code lt} literals never have -- and the bundled competition corpus
+     * has zero {@code or(...)} nodes exercising that swapped shape (confirmed via a full-corpus
+     * scan), so recognizing it isn't worth the extra branch; declining is always safe, just less
+     * propagated, falling through to {@link #genericIntensionConstraint}. {@code lt} only ever
+     * survives against another <em>variable</em> operand this way, not a constant -- {@code
+     * lt(x,5)} canonicalizes to {@code le(x,4)} -- but that's transparent here: whichever of the two
+     * (rare, real) canonical forms a given literal takes, this method still only needs to check
+     * {@code (var, X)} order once operator/arity already match.
      */
     private Optional<RelationLogicConstraint.Literal> recognizeLiteral(XNode<XVarInteger> node) {
         Operator operator = intensionRelationalOperator(node.getType());
-        if ((operator != Operator.EQ && operator != Operator.NEQ) || node.sons.length != 2) {
+        if (!LITERAL_OPERATORS.contains(operator) || node.sons.length != 2) {
             return Optional.empty();
         }
         Optional<Variable<Integer>> leftVar = asVariable(node.sons[0]);

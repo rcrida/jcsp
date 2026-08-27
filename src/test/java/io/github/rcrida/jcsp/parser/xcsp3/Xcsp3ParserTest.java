@@ -581,6 +581,51 @@ class Xcsp3ParserTest {
         }
     }
 
+    @Test void intensionOrLeqValueLiterals_routesThroughRelationLogicConstraint() throws IOException {
+        // or(le(x,1), le(y,1)): both children are bare le-vs-constant literals -- the shape
+        // RoomMate-sr0050-int.xml.lzma's 2,450 preference-ranking clauses actually take.
+        Xcsp3Instance instance = parseXml(
+                "<var id=\"x\"> 0..3 </var><var id=\"y\"> 0..3 </var>",
+                "<intension> or(le(x,1),le(y,1)) </intension>");
+        assertThat(instance.csp().getConstraints().iterator().next()).isInstanceOf(RelationLogicConstraint.class);
+        Set<Assignment> found = solutions(instance.csp());
+        assertThat(found).isNotEmpty();
+        for (Assignment a : found) {
+            assertThat(digitOf(a, "x") <= 1 || digitOf(a, "y") <= 1).isTrue();
+        }
+    }
+
+    @Test void intensionOrLtVariableLiterals_routesThroughRelationLogicConstraint() throws IOException {
+        // or(lt(p,q), eq(z,1)): lt survives uncanonicalized between two plain variables (only a
+        // variable-vs-constant lt gets folded into le by the canonizer).
+        Xcsp3Instance instance = parseXml(
+                "<var id=\"p\"> 0..3 </var><var id=\"q\"> 0..3 </var><var id=\"z\"> 0..1 </var>",
+                "<intension> or(lt(p,q),eq(z,1)) </intension>");
+        assertThat(instance.csp().getConstraints().iterator().next()).isInstanceOf(RelationLogicConstraint.class);
+        Set<Assignment> found = solutions(instance.csp());
+        assertThat(found).isNotEmpty();
+        for (Assignment a : found) {
+            assertThat(digitOf(a, "p") < digitOf(a, "q") || digitOf(a, "z") == 1).isTrue();
+        }
+    }
+
+    @Test void intensionOrGeOperand_fallsBackToPredicateConstraint() throws IOException {
+        // or(ge(x,2), eq(y,1)): ge(x,2) canonicalizes to le(2,x) -- constant first, variable second,
+        // the one operand order recognizeLiteral doesn't check (confirmed via a real probe: no
+        // bundled competition instance's or(...) node ever takes this shape) -- so recognition
+        // declines via leftVar.isEmpty() (2 isn't a variable), distinct from
+        // intensionOrNonVariableLiteralOperand's decline (a genuine two-variable compound).
+        Xcsp3Instance instance = parseXml(
+                "<var id=\"x\"> 0..3 </var><var id=\"y\"> 0..1 </var>",
+                "<intension> or(ge(x,2),eq(y,1)) </intension>");
+        assertThat(instance.csp().getConstraints().iterator().next()).isInstanceOf(PredicateConstraint.class);
+        Set<Assignment> found = solutions(instance.csp());
+        assertThat(found).isNotEmpty();
+        for (Assignment a : found) {
+            assertThat(digitOf(a, "x") >= 2 || digitOf(a, "y") == 1).isTrue();
+        }
+    }
+
     @Test void intensionOrNestedChild_fallsBackToPredicateConstraint() throws IOException {
         // or(and(eq(x,1),eq(y,2)), eq(z,3)): the left child is a compound and(...), not a bare
         // eq/ne literal -- recognition must decline and fall through to genericIntensionConstraint.

@@ -12,7 +12,6 @@ import org.junit.jupiter.api.Test;
 import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class RelationLogicConstraintTest {
     static final Variable.Factory F = Variable.Factory.INSTANCE;
@@ -20,22 +19,6 @@ class RelationLogicConstraintTest {
     static final Domain<Integer> ZERO_ONLY = ZERO_ONE.toBuilder().delete(1).build();
     static final Domain<Integer> ONE_ONLY = ZERO_ONE.toBuilder().delete(0).build();
     static final DiscreteDomain<Integer> ONE_TO_THREE = IntRangeDomain.of(1, 3);
-
-    // --- construction ---
-
-    @Test
-    void valueLiteral_nonEqNeqOperator_throws() {
-        Variable<Integer> a = F.create("a");
-        assertThatThrownBy(() -> new RelationLogicConstraint.ValueLiteral(a, Operator.LT, 1))
-                .isInstanceOf(AssertionError.class);
-    }
-
-    @Test
-    void variableLiteral_nonEqNeqOperator_throws() {
-        Variable<Integer> a = F.create("a"), b = F.create("b");
-        assertThatThrownBy(() -> new RelationLogicConstraint.VariableLiteral(a, Operator.LT, b))
-                .isInstanceOf(AssertionError.class);
-    }
 
     // --- Literal.negate() ---
 
@@ -53,6 +36,42 @@ class RelationLogicConstraintTest {
         var literal = new RelationLogicConstraint.VariableLiteral(a, Operator.EQ, b);
         assertThat(literal.negate()).isEqualTo(new RelationLogicConstraint.VariableLiteral(a, Operator.NEQ, b));
         assertThat(literal.negate().negate()).isEqualTo(literal);
+    }
+
+    // --- Literal.negate() for ordering operators (delegates to Operator#reversed) ---
+
+    @Test
+    void valueLiteral_negate_orderingOperator_delegatesToOperatorReversed() {
+        Variable<Integer> a = F.create("a");
+        var literal = new RelationLogicConstraint.ValueLiteral(a, Operator.LT, 5);
+        assertThat(literal.negate()).isEqualTo(new RelationLogicConstraint.ValueLiteral(a, Operator.GEQ, 5));
+        assertThat(literal.negate().negate()).isEqualTo(literal);
+    }
+
+    @Test
+    void variableLiteral_negate_orderingOperator_delegatesToOperatorReversed() {
+        Variable<Integer> a = F.create("a"), b = F.create("b");
+        var literal = new RelationLogicConstraint.VariableLiteral(a, Operator.GT, b);
+        assertThat(literal.negate()).isEqualTo(new RelationLogicConstraint.VariableLiteral(a, Operator.LEQ, b));
+        assertThat(literal.negate().negate()).isEqualTo(literal);
+    }
+
+    // --- Literal.holds() for ordering operators ---
+
+    @Test
+    void valueLiteral_holds_orderingOperator() {
+        Variable<Integer> a = F.create("a");
+        var lt = new RelationLogicConstraint.ValueLiteral(a, Operator.LT, 5);
+        assertThat(lt.holds(Assignment.of(Map.of(a, 3)))).isTrue();
+        assertThat(lt.holds(Assignment.of(Map.of(a, 5)))).isFalse();
+    }
+
+    @Test
+    void variableLiteral_holds_orderingOperator() {
+        Variable<Integer> a = F.create("a"), b = F.create("b");
+        var geq = new RelationLogicConstraint.VariableLiteral(a, Operator.GEQ, b);
+        assertThat(geq.holds(Assignment.of(Map.of(a, 3, b, 3)))).isTrue();
+        assertThat(geq.holds(Assignment.of(Map.of(a, 2, b, 3)))).isFalse();
     }
 
     // --- isSatisfiedBy() ---
@@ -137,6 +156,177 @@ class RelationLogicConstraintTest {
                 new RelationLogicConstraint.ValueLiteral(b, Operator.NEQ, 2));
         var result = constraint.propagate(Map.of(a, ONE_ONLY, b, IntRangeDomain.of(2, 2)));
         assertThat(result).contains(Map.of());
+    }
+
+    // --- classify()/force(): ValueLiteral ordering operators -------------------------------------
+    // Each test pairs the ordering literal under test (as OR's right side) with a control left
+    // literal (a == 1 against a's domain {0}, always FALSIFIED), so propagate()'s OR-driven
+    // reasoning reveals classify's outcome for the right side: Map.of() for SATISFIED (both
+    // decided, OR already true), Optional.empty() for FALSIFIED (both decided, OR false), and a
+    // real forced/narrowed domain for UNDETERMINED (left decided forces right to hold).
+
+    @Test
+    void classify_valueLiteralLt_allSatisfy_noOp() {
+        // x in {1,2,3}, x < 4: every value satisfies -> SATISFIED.
+        Variable<Integer> a = F.create("a"), x = F.create("x");
+        var constraint = RelationLogicConstraint.of(
+                new RelationLogicConstraint.ValueLiteral(a, Operator.EQ, 1), LogicOperator.OR,
+                new RelationLogicConstraint.ValueLiteral(x, Operator.LT, 4));
+        assertThat(constraint.propagate(Map.of(a, ZERO_ONLY, x, ONE_TO_THREE))).contains(Map.of());
+    }
+
+    @Test
+    void classify_valueLiteralLt_noneSatisfy_infeasible() {
+        // x in {1,2,3}, x < 1: no value satisfies -> FALSIFIED, and OR(false,false) is infeasible.
+        Variable<Integer> a = F.create("a"), x = F.create("x");
+        var constraint = RelationLogicConstraint.of(
+                new RelationLogicConstraint.ValueLiteral(a, Operator.EQ, 1), LogicOperator.OR,
+                new RelationLogicConstraint.ValueLiteral(x, Operator.LT, 1));
+        assertThat(constraint.propagate(Map.of(a, ZERO_ONLY, x, ONE_TO_THREE))).isEmpty();
+    }
+
+    @Test
+    void force_valueLiteralLt_undetermined_narrowsToSatisfyingValues() {
+        // x in {1,2,3}, x < 2: mixed -> UNDETERMINED, forced true -> keep only {1}.
+        Variable<Integer> a = F.create("a"), x = F.create("x");
+        var constraint = RelationLogicConstraint.of(
+                new RelationLogicConstraint.ValueLiteral(a, Operator.EQ, 1), LogicOperator.OR,
+                new RelationLogicConstraint.ValueLiteral(x, Operator.LT, 2));
+        var result = constraint.propagate(Map.of(a, ZERO_ONLY, x, ONE_TO_THREE));
+        assertThat(result).isPresent();
+        assertThat(result.get()).containsOnlyKeys(x);
+        assertThat(result.get().get(x)).isEqualTo(IntRangeDomain.of(1, 1));
+    }
+
+    @Test
+    void classify_valueLiteralLeq_boundaryAllSatisfy_noOp() {
+        // x in {1,2,3}, x <= 3: every value satisfies (boundary case, distinct from LT) -> SATISFIED.
+        Variable<Integer> a = F.create("a"), x = F.create("x");
+        var constraint = RelationLogicConstraint.of(
+                new RelationLogicConstraint.ValueLiteral(a, Operator.EQ, 1), LogicOperator.OR,
+                new RelationLogicConstraint.ValueLiteral(x, Operator.LEQ, 3));
+        assertThat(constraint.propagate(Map.of(a, ZERO_ONLY, x, ONE_TO_THREE))).contains(Map.of());
+    }
+
+    @Test
+    void force_valueLiteralLeq_undetermined_narrowsToSatisfyingValues() {
+        // x in {1,2,3}, x <= 2: mixed -> forced true -> keep {1,2}, delete 3.
+        Variable<Integer> a = F.create("a"), x = F.create("x");
+        var constraint = RelationLogicConstraint.of(
+                new RelationLogicConstraint.ValueLiteral(a, Operator.EQ, 1), LogicOperator.OR,
+                new RelationLogicConstraint.ValueLiteral(x, Operator.LEQ, 2));
+        var result = constraint.propagate(Map.of(a, ZERO_ONLY, x, ONE_TO_THREE));
+        assertThat(result).isPresent();
+        assertThat(result.get().get(x)).isEqualTo(IntRangeDomain.of(1, 2));
+    }
+
+    @Test
+    void classify_valueLiteralGt_noneSatisfy_infeasible() {
+        // x in {1,2,3}, x > 3: no value satisfies -> FALSIFIED.
+        Variable<Integer> a = F.create("a"), x = F.create("x");
+        var constraint = RelationLogicConstraint.of(
+                new RelationLogicConstraint.ValueLiteral(a, Operator.EQ, 1), LogicOperator.OR,
+                new RelationLogicConstraint.ValueLiteral(x, Operator.GT, 3));
+        assertThat(constraint.propagate(Map.of(a, ZERO_ONLY, x, ONE_TO_THREE))).isEmpty();
+    }
+
+    @Test
+    void force_valueLiteralGt_undetermined_narrowsToSatisfyingValues() {
+        // x in {1,2,3}, x > 2: mixed -> forced true -> keep {3}.
+        Variable<Integer> a = F.create("a"), x = F.create("x");
+        var constraint = RelationLogicConstraint.of(
+                new RelationLogicConstraint.ValueLiteral(a, Operator.EQ, 1), LogicOperator.OR,
+                new RelationLogicConstraint.ValueLiteral(x, Operator.GT, 2));
+        var result = constraint.propagate(Map.of(a, ZERO_ONLY, x, ONE_TO_THREE));
+        assertThat(result).isPresent();
+        assertThat(result.get().get(x)).isEqualTo(IntRangeDomain.of(3, 3));
+    }
+
+    @Test
+    void classify_valueLiteralGeq_boundaryAllSatisfy_noOp() {
+        // x in {1,2,3}, x >= 1: every value satisfies (boundary case, distinct from GT) -> SATISFIED.
+        Variable<Integer> a = F.create("a"), x = F.create("x");
+        var constraint = RelationLogicConstraint.of(
+                new RelationLogicConstraint.ValueLiteral(a, Operator.EQ, 1), LogicOperator.OR,
+                new RelationLogicConstraint.ValueLiteral(x, Operator.GEQ, 1));
+        assertThat(constraint.propagate(Map.of(a, ZERO_ONLY, x, ONE_TO_THREE))).contains(Map.of());
+    }
+
+    @Test
+    void force_valueLiteralGeq_undetermined_narrowsToSatisfyingValues() {
+        // x in {1,2,3}, x >= 2: mixed -> forced true -> keep {2,3}, delete 1.
+        Variable<Integer> a = F.create("a"), x = F.create("x");
+        var constraint = RelationLogicConstraint.of(
+                new RelationLogicConstraint.ValueLiteral(a, Operator.EQ, 1), LogicOperator.OR,
+                new RelationLogicConstraint.ValueLiteral(x, Operator.GEQ, 2));
+        var result = constraint.propagate(Map.of(a, ZERO_ONLY, x, ONE_TO_THREE));
+        assertThat(result).isPresent();
+        assertThat(result.get().get(x)).isEqualTo(IntRangeDomain.of(2, 3));
+    }
+
+    // --- classify()/force(): VariableLiteral ordering operators -----------------------------------
+
+    @Test
+    void classify_variableLiteralLt_allSatisfy_noOp() {
+        // p in {1,2}, q in {5,7}: pMax(2) < qMin(5) -> every pairing satisfies -> SATISFIED.
+        Variable<Integer> a = F.create("a"), p = F.create("p"), q = F.create("q");
+        var constraint = RelationLogicConstraint.of(
+                new RelationLogicConstraint.ValueLiteral(a, Operator.EQ, 1), LogicOperator.OR,
+                new RelationLogicConstraint.VariableLiteral(p, Operator.LT, q));
+        var result = constraint.propagate(Map.of(a, ZERO_ONLY, p, IntRangeDomain.of(1, 2), q, IntRangeDomain.of(5, 7)));
+        assertThat(result).contains(Map.of());
+    }
+
+    @Test
+    void classify_variableLiteralLt_noneSatisfy_infeasible() {
+        // p in {5,7}, q in {1,3}: pMin(5) >= qMax(3) -> no pairing satisfies -> FALSIFIED.
+        Variable<Integer> a = F.create("a"), p = F.create("p"), q = F.create("q");
+        var constraint = RelationLogicConstraint.of(
+                new RelationLogicConstraint.ValueLiteral(a, Operator.EQ, 1), LogicOperator.OR,
+                new RelationLogicConstraint.VariableLiteral(p, Operator.LT, q));
+        assertThat(constraint.propagate(Map.of(a, ZERO_ONLY, p, IntRangeDomain.of(5, 7), q, IntRangeDomain.of(1, 3))))
+                .isEmpty();
+    }
+
+    @Test
+    void force_variableLiteralLt_undetermined_narrowsBothSides() {
+        // p in {1..9}, q in {0..8}: mixed -> forced p < q. p keeps l with l < qMax(8) -> loses {8,9}.
+        // q keeps r with pMin(1) < r -> loses {0,1} (1 itself has no support: nothing in p is < 1).
+        Variable<Integer> a = F.create("a"), p = F.create("p"), q = F.create("q");
+        var constraint = RelationLogicConstraint.of(
+                new RelationLogicConstraint.ValueLiteral(a, Operator.EQ, 1), LogicOperator.OR,
+                new RelationLogicConstraint.VariableLiteral(p, Operator.LT, q));
+        var result = constraint.propagate(Map.of(a, ZERO_ONLY, p, IntRangeDomain.of(1, 9), q, IntRangeDomain.of(0, 8)));
+        assertThat(result).isPresent();
+        assertThat(result.get()).containsOnlyKeys(p, q);
+        assertThat(result.get().get(p)).isEqualTo(IntRangeDomain.of(1, 7));
+        assertThat(result.get().get(q)).isEqualTo(IntRangeDomain.of(0, 8).toBuilder().delete(0).delete(1).build());
+    }
+
+    @Test
+    void classify_variableLiteralGt_allSatisfy_noOp() {
+        // p in {5,7}, q in {1,3}: pMin(5) > qMax(3) -> every pairing satisfies -> SATISFIED.
+        Variable<Integer> a = F.create("a"), p = F.create("p"), q = F.create("q");
+        var constraint = RelationLogicConstraint.of(
+                new RelationLogicConstraint.ValueLiteral(a, Operator.EQ, 1), LogicOperator.OR,
+                new RelationLogicConstraint.VariableLiteral(p, Operator.GT, q));
+        var result = constraint.propagate(Map.of(a, ZERO_ONLY, p, IntRangeDomain.of(5, 7), q, IntRangeDomain.of(1, 3)));
+        assertThat(result).contains(Map.of());
+    }
+
+    @Test
+    void force_variableLiteralGt_undetermined_narrowsBothSides() {
+        // p in {0..8}, q in {1..9}: mixed -> forced p > q. p keeps l with l > qMin(1) -> loses {0,1}.
+        // q keeps r with pMax(8) > r -> loses {8,9} (8 itself has no support: nothing in p is > 8).
+        Variable<Integer> a = F.create("a"), p = F.create("p"), q = F.create("q");
+        var constraint = RelationLogicConstraint.of(
+                new RelationLogicConstraint.ValueLiteral(a, Operator.EQ, 1), LogicOperator.OR,
+                new RelationLogicConstraint.VariableLiteral(p, Operator.GT, q));
+        var result = constraint.propagate(Map.of(a, ZERO_ONLY, p, IntRangeDomain.of(0, 8), q, IntRangeDomain.of(1, 9)));
+        assertThat(result).isPresent();
+        assertThat(result.get()).containsOnlyKeys(p, q);
+        assertThat(result.get().get(p)).isEqualTo(IntRangeDomain.of(2, 8));
+        assertThat(result.get().get(q)).isEqualTo(IntRangeDomain.of(1, 9).toBuilder().delete(8).delete(9).build());
     }
 
     // --- propagate(): both literals decided ---
