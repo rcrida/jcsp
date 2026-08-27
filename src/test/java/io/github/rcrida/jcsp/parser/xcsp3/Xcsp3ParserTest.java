@@ -9,6 +9,7 @@ import io.github.rcrida.jcsp.constraints.nary.GlobalCardinalityConstraint;
 import io.github.rcrida.jcsp.constraints.nary.MinVariableConstraint;
 import io.github.rcrida.jcsp.constraints.nary.PredicateConstraint;
 import io.github.rcrida.jcsp.constraints.nary.ProductVariableConstraint;
+import io.github.rcrida.jcsp.constraints.nary.RelationLogicConstraint;
 import io.github.rcrida.jcsp.constraints.unary.UnaryPredicateConstraint;
 import io.github.rcrida.jcsp.solver.Solver;
 import io.github.rcrida.jcsp.variables.Variable;
@@ -403,6 +404,124 @@ class Xcsp3ParserTest {
         assertThat(found).isNotEmpty();
         for (Assignment a : found) {
             assertThat(digitOf(a, "t")).isEqualTo(digitOf(a, "x") * digitOf(a, "y") * digitOf(a, "z"));
+        }
+    }
+
+    // ---- intension or(...) recognition (RelationLogicConstraint) ----------------------------------------------------
+
+    @Test void intensionOrOfValueLiterals_routesThroughRelationLogicConstraint() throws IOException {
+        // or(ne(x,1), eq(y,2)): both children are bare eq/ne-vs-constant literals -- exercises the
+        // mixed EQ/NEQ case rather than falling back to PredicateConstraint.
+        Xcsp3Instance instance = parseXml(
+                "<var id=\"x\"> 0..2 </var><var id=\"y\"> 0..2 </var>",
+                "<intension> or(ne(x,1),eq(y,2)) </intension>");
+        assertThat(instance.csp().getConstraints().iterator().next()).isInstanceOf(RelationLogicConstraint.class);
+        Set<Assignment> found = solutions(instance.csp());
+        assertThat(found).isNotEmpty();
+        for (Assignment a : found) {
+            assertThat(digitOf(a, "x") != 1 || digitOf(a, "y") == 2).isTrue();
+        }
+    }
+
+    @Test void intensionOrOfVariableLiterals_routesThroughRelationLogicConstraint() throws IOException {
+        // or(ne(x,y), eq(z,w)): both children are bare eq/ne-vs-variable literals.
+        Xcsp3Instance instance = parseXml(
+                "<var id=\"x\"> 0..2 </var><var id=\"y\"> 0..2 </var><var id=\"z\"> 0..2 </var><var id=\"w\"> 0..2 </var>",
+                "<intension> or(ne(x,y),eq(z,w)) </intension>");
+        assertThat(instance.csp().getConstraints().iterator().next()).isInstanceOf(RelationLogicConstraint.class);
+        Set<Assignment> found = solutions(instance.csp());
+        assertThat(found).isNotEmpty();
+        for (Assignment a : found) {
+            assertThat(digitOf(a, "x") != digitOf(a, "y") || digitOf(a, "z") == digitOf(a, "w")).isTrue();
+        }
+    }
+
+    @Test void intensionOrMixedValueAndVariableLiteral_routesThroughRelationLogicConstraint() throws IOException {
+        Xcsp3Instance instance = parseXml(
+                "<var id=\"x\"> 0..2 </var><var id=\"y\"> 0..2 </var><var id=\"z\"> 0..2 </var>",
+                "<intension> or(eq(x,1),ne(y,z)) </intension>");
+        assertThat(instance.csp().getConstraints().iterator().next()).isInstanceOf(RelationLogicConstraint.class);
+        Set<Assignment> found = solutions(instance.csp());
+        assertThat(found).isNotEmpty();
+        for (Assignment a : found) {
+            assertThat(digitOf(a, "x") == 1 || digitOf(a, "y") != digitOf(a, "z")).isTrue();
+        }
+    }
+
+    @Test void intensionOrNestedChild_fallsBackToPredicateConstraint() throws IOException {
+        // or(and(eq(x,1),eq(y,2)), eq(z,3)): the left child is a compound and(...), not a bare
+        // eq/ne literal -- recognition must decline and fall through to genericIntensionConstraint.
+        Xcsp3Instance instance = parseXml(
+                "<var id=\"x\"> 0..2 </var><var id=\"y\"> 0..2 </var><var id=\"z\"> 0..3 </var>",
+                "<intension> or(and(eq(x,1),eq(y,2)),eq(z,3)) </intension>");
+        assertThat(instance.csp().getConstraints().iterator().next()).isInstanceOf(PredicateConstraint.class);
+        Set<Assignment> found = solutions(instance.csp());
+        assertThat(found).isNotEmpty();
+        for (Assignment a : found) {
+            boolean left = digitOf(a, "x") == 1 && digitOf(a, "y") == 2;
+            assertThat(left || digitOf(a, "z") == 3).isTrue();
+        }
+    }
+
+    @Test void intensionOrNonVariableLiteralOperand_fallsBackToPredicateConstraint() throws IOException {
+        // or(eq(add(x,y),5), eq(z,2)): the left child is a bare eq (arity 2, EQ operator), but
+        // add(x,y) sums two distinct variables -- unlike add(var,const), which xcsp3-tools' own
+        // canonizer folds directly into a var-vs-constant equality (eq(add(x,1),5) becomes eq(x,4)
+        // before this code ever sees it, confirmed empirically), a two-variable sum survives as a
+        // genuine compound expression -- recognizeLiteral's own leftVar.isEmpty() guard declines
+        // here, distinct from intensionOrNestedChild's rejection at the "not even an eq/ne node" check.
+        Xcsp3Instance instance = parseXml(
+                "<var id=\"x\"> 0..3 </var><var id=\"y\"> 0..3 </var><var id=\"z\"> 0..3 </var>",
+                "<intension> or(eq(add(x,y),5),eq(z,2)) </intension>");
+        assertThat(instance.csp().getConstraints().iterator().next()).isInstanceOf(PredicateConstraint.class);
+        Set<Assignment> found = solutions(instance.csp());
+        assertThat(found).isNotEmpty();
+        for (Assignment a : found) {
+            assertThat(digitOf(a, "x") + digitOf(a, "y") == 5 || digitOf(a, "z") == 2).isTrue();
+        }
+    }
+
+    @Test void intensionOrChainedEqualityOperand_fallsBackToPredicateConstraint() throws IOException {
+        // or(eq(x,y,z), eq(w,1)): the left child is an n-ary (3-operand) equality, not the arity-2
+        // shape recognizeLiteral's own node.sons.length != 2 guard requires -- distinct from
+        // intensionOrThreeOperands' rejection, which has three operands directly under or(...)
+        // itself rather than inside one of its two children.
+        Xcsp3Instance instance = parseXml(
+                "<var id=\"x\"> 0..2 </var><var id=\"y\"> 0..2 </var><var id=\"z\"> 0..2 </var><var id=\"w\"> 0..1 </var>",
+                "<intension> or(eq(x,y,z),eq(w,1)) </intension>");
+        assertThat(instance.csp().getConstraints().iterator().next()).isInstanceOf(PredicateConstraint.class);
+        Set<Assignment> found = solutions(instance.csp());
+        assertThat(found).isNotEmpty();
+        for (Assignment a : found) {
+            boolean allEqual = digitOf(a, "x") == digitOf(a, "y") && digitOf(a, "y") == digitOf(a, "z");
+            assertThat(allEqual || digitOf(a, "w") == 1).isTrue();
+        }
+    }
+
+    @Test void intensionOrThreeOperands_fallsBackToPredicateConstraint() throws IOException {
+        // A 3-operand or(...) isn't the two-child shape this recognizer matches.
+        Xcsp3Instance instance = parseXml(
+                "<var id=\"x\"> 0..3 </var><var id=\"y\"> 0..3 </var><var id=\"z\"> 0..3 </var>",
+                "<intension> or(eq(x,1),eq(y,2),eq(z,3)) </intension>");
+        assertThat(instance.csp().getConstraints().iterator().next()).isInstanceOf(PredicateConstraint.class);
+        Set<Assignment> found = solutions(instance.csp());
+        assertThat(found).isNotEmpty();
+        for (Assignment a : found) {
+            assertThat(digitOf(a, "x") == 1 || digitOf(a, "y") == 2 || digitOf(a, "z") == 3).isTrue();
+        }
+    }
+
+    @Test void intensionOrReified_indicatorTracksConstraintTruthValue() throws IOException {
+        Xcsp3Instance instance = parseXml(
+                "<var id=\"x\"> 0..2 </var><var id=\"y\"> 0..2 </var><var id=\"b\"> 0..1 </var>",
+                "<intension reifiedBy=\"b\"> or(eq(x,1),eq(y,2)) </intension>");
+        Set<Assignment> found = solutions(instance.csp());
+        assertThat(found).isNotEmpty();
+        for (Assignment a : found) {
+            int x = digitOf(a, "x");
+            int y = digitOf(a, "y");
+            int b = digitOf(a, "b");
+            assertThat(b == 1).as("x=%d, y=%d, b=%d", x, y, b).isEqualTo(x == 1 || y == 2);
         }
     }
 

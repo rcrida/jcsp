@@ -4,6 +4,7 @@ import io.github.rcrida.jcsp.ConstraintSatisfactionProblem;
 import io.github.rcrida.jcsp.ConstraintSatisfactionProblem.ConstraintSatisfactionProblemBuilder;
 import io.github.rcrida.jcsp.assignments.Assignment;
 import io.github.rcrida.jcsp.constraints.Constraint;
+import io.github.rcrida.jcsp.constraints.LogicOperator;
 import io.github.rcrida.jcsp.constraints.Operator;
 import io.github.rcrida.jcsp.constraints.binary.BinaryComparatorConstraint;
 import io.github.rcrida.jcsp.constraints.binary.BinaryElementConstraint;
@@ -44,6 +45,7 @@ import io.github.rcrida.jcsp.constraints.nary.ReifiedConstraint;
 import io.github.rcrida.jcsp.constraints.nary.PredicateConstraint;
 import io.github.rcrida.jcsp.constraints.nary.ProductVariableConstraint;
 import io.github.rcrida.jcsp.constraints.nary.RegularConstraint;
+import io.github.rcrida.jcsp.constraints.nary.RelationLogicConstraint;
 import io.github.rcrida.jcsp.constraints.nary.SumBoundConstraint;
 import io.github.rcrida.jcsp.constraints.nary.ValueConjunctionConstraint;
 import io.github.rcrida.jcsp.constraints.nary.ValueDisjunctionConstraint;
@@ -385,6 +387,7 @@ final class Xcsp3CallbackHandler implements XCallbacks2 {
         }
         addOrReify(recognizeBinaryRelation(tree)
                 .or(() -> recognizeBooleanProductChannel(tree))
+                .or(() -> recognizeOrOfLiterals(tree))
                 .orElseGet(() -> genericIntensionConstraint(list, tree)), id);
     }
 
@@ -542,6 +545,51 @@ final class Xcsp3CallbackHandler implements XCallbacks2 {
     // them up a second time by variable would be redundant).
     private static boolean isBooleanBounds(int[] bounds) {
         return bounds[0] == 0 && bounds[1] == 1;
+    }
+
+    /**
+     * Recognizes {@code or(A, B)} where both {@code A} and {@code B} are a bare {@code eq}/{@code
+     * ne} literal -- variable-vs-constant or variable-vs-variable, via {@link #recognizeLiteral} --
+     * and routes it onto {@link RelationLogicConstraint} instead of the generic {@link
+     * PredicateConstraint}. Confirmed empirically against the bundled XCSP3 competition corpus: every
+     * real {@code or} intension node has exactly two children (never more), and just over half of
+     * them are this exact "two literals" shape -- previously the single largest source of
+     * unpropagated intension in that corpus. Recognition failure on either side (a nested/compound
+     * child, e.g. {@code and(...)} or a {@code dist}-based relation) is always safe, just less
+     * propagated, falling through to {@link #genericIntensionConstraint} unchanged.
+     */
+    private Optional<Constraint> recognizeOrOfLiterals(XNodeParent<XVarInteger> tree) {
+        if (tree.getType() != TypeExpr.OR || tree.sons.length != 2) return Optional.empty();
+        Optional<RelationLogicConstraint.Literal> left = recognizeLiteral(tree.sons[0]);
+        if (left.isEmpty()) return Optional.empty();
+        Optional<RelationLogicConstraint.Literal> right = recognizeLiteral(tree.sons[1]);
+        if (right.isEmpty()) return Optional.empty();
+        return Optional.of(RelationLogicConstraint.of(left.get(), LogicOperator.OR, right.get()));
+    }
+
+    /**
+     * Matches a bare {@code eq(var, X)}/{@code ne(var, X)} where {@code X} is either a constant or
+     * another plain variable -- {@link RelationLogicConstraint.ValueLiteral}/{@link
+     * RelationLogicConstraint.VariableLiteral} respectively. Only checks {@code (var, X)} operand
+     * order, not the reverse, the same as {@link #recognizeGroundEquality}'s own asymmetric shape
+     * and for the same confirmed reason: {@code xcsp3-tools}' canonizer always reorders a bare
+     * {@code eq}/{@code ne} to put the variable first (re-confirmed empirically for a literal
+     * nested inside {@code or(...)} specifically, not just at an intension's own root), so a
+     * defensive constant/variable-first check on the left side would be permanently dead code.
+     */
+    private Optional<RelationLogicConstraint.Literal> recognizeLiteral(XNode<XVarInteger> node) {
+        Operator operator = intensionRelationalOperator(node.getType());
+        if ((operator != Operator.EQ && operator != Operator.NEQ) || node.sons.length != 2) {
+            return Optional.empty();
+        }
+        Optional<Variable<Integer>> leftVar = asVariable(node.sons[0]);
+        if (leftVar.isEmpty()) return Optional.empty();
+        Optional<Variable<Integer>> rightVar = asVariable(node.sons[1]);
+        if (rightVar.isPresent()) {
+            return Optional.of(new RelationLogicConstraint.VariableLiteral(leftVar.get(), operator, rightVar.get()));
+        }
+        return asConstant(node.sons[1])
+                .map(constant -> new RelationLogicConstraint.ValueLiteral(leftVar.get(), operator, constant));
     }
 
     /**

@@ -63,6 +63,7 @@ import io.github.rcrida.jcsp.constraints.nary.NaryStarredTuplesConstraint;
 import io.github.rcrida.jcsp.constraints.nary.NaryTuplesConstraint;
 import io.github.rcrida.jcsp.constraints.nary.RegularConstraint;
 import io.github.rcrida.jcsp.constraints.nary.ReifiedConstraint;
+import io.github.rcrida.jcsp.constraints.nary.RelationLogicConstraint;
 import io.github.rcrida.jcsp.constraints.nary.SumBoundConstraint;
 import io.github.rcrida.jcsp.constraints.nary.SumVariableConstraint;
 import io.github.rcrida.jcsp.constraints.nary.ValueConjunctionConstraint;
@@ -157,6 +158,7 @@ public class FixpointPropagation {
             FixpointConsistency.of(AtLeastNConstraint.class),
             FixpointConsistency.of(ValueDisjunctionConstraint.class),
             FixpointConsistency.of(ValueConjunctionConstraint.class),
+            FixpointConsistency.of(RelationLogicConstraint.class),
             FixpointConsistency.of(AtMostNConstraint.class),
             FixpointConsistency.of(AtMostOneConstraint.class),
             FixpointConsistency.of(BinPackingConstraint.class),
