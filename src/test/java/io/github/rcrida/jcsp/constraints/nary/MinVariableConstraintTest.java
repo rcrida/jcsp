@@ -176,6 +176,95 @@ public class MinVariableConstraintTest {
         assertThat(MinVariableConstraint.of(Set.of(a, b), Operator.EQ, t).propagate(domains)).isEmpty();
     }
 
+    // --- propagate: EQ full GAC (coverage pruning beyond bounds consistency) ---
+
+    @Test void propagate_eq_discreteDomain_coverageFiltersUnsupportedTargetValue() {
+        // a,b both even-valued {2,4,6}; target {3,4,5}: 3 and 5 are within [mLo,mHi]=[2,6] so plain
+        // bounds consistency would keep them, but neither is literally achievable by any variable
+        // (both only ever produce even minima) -- only 4 survives coverage filtering. a/b's shared
+        // value 2 also drops out (target's own domain never reached that low to begin with, 3
+        // being its min) -- the same clip plain bounds consistency's lower pass would apply too,
+        // just via target's true achievable-coverage min (4) rather than its raw domain min (3).
+        Variable<Integer> a = F.create("a_mnv_cov1"), b = F.create("b_mnv_cov1"), t = F.create("t_mnv_cov1");
+        var domains = Map.<Variable<?>, Domain<?>>of(
+                a, DiscreteDomain.of(2, 4, 6), b, DiscreteDomain.of(2, 4, 6), t, DiscreteDomain.of(3, 4, 5));
+        var result = MinVariableConstraint.of(Set.of(a, b), Operator.EQ, t).propagate(domains).orElseThrow();
+        assertThat(result.get(t)).isEqualTo(DiscreteDomain.of(4));
+        assertThat(result.get(a)).isEqualTo(DiscreteDomain.of(4, 6));
+        assertThat(result.get(b)).isEqualTo(DiscreteDomain.of(4, 6));
+    }
+
+    @Test void propagate_eq_discreteDomain_coverageFiltersUnsupportedVariableValue() {
+        // a={1,5,8}, b={7,8} (b can never drop below 7); t={1,8}. a=5 would force min(a,b)=5
+        // (b>=7>5), but 5 is not in t's domain -- unsupported, even though 5 >= mLo=1 so plain
+        // bounds consistency (which only clips a's min up to t's own min, 1) would never remove it.
+        Variable<Integer> a = F.create("a_mnv_cov2"), b = F.create("b_mnv_cov2"), t = F.create("t_mnv_cov2");
+        var domains = Map.<Variable<?>, Domain<?>>of(
+                a, DiscreteDomain.of(1, 5, 8), b, DiscreteDomain.of(7, 8), t, DiscreteDomain.of(1, 8));
+        var result = MinVariableConstraint.of(Set.of(a, b), Operator.EQ, t).propagate(domains).orElseThrow();
+        assertThat(result.get(a)).isEqualTo(DiscreteDomain.of(1, 8));
+        assertThat(result).doesNotContainKey(b);
+        assertThat(result).doesNotContainKey(t);
+    }
+
+    @Test void propagate_eq_discreteDomain_coverage_multipleCoverersNoForcing() {
+        // Both a and b contain the shared bottom value 1 (each one's own domain minimum) -- neither
+        // is the "sole" coverer, so neither narrows beyond t's own membership; every existing value
+        // in both stays supported.
+        Variable<Integer> a = F.create("a_mnv_cov3"), b = F.create("b_mnv_cov3"), t = F.create("t_mnv_cov3");
+        var domains = Map.<Variable<?>, Domain<?>>of(
+                a, DiscreteDomain.of(1, 9), b, DiscreteDomain.of(1, 2), t, DiscreteDomain.of(1));
+        var result = MinVariableConstraint.of(Set.of(a, b), Operator.EQ, t).propagate(domains).orElseThrow();
+        assertThat(result).isEmpty();
+    }
+
+    @Test void propagate_eq_discreteDomain_coverage_soleCovererWithNoOtherReacher_onlyTargetValueSurvives() {
+        // a={1,8} is the sole coverer of 1, and no other variable can reach ANY tSet value once a
+        // is excluded (b's domain {9} doesn't intersect tSet={1} at all) -- a's threshold rises to
+        // POSITIVE_INFINITY (mirrored via the min(x)=-max(-x) transform), leaving only a's own
+        // direct membership in tSet (value 1) supported.
+        Variable<Integer> a = F.create("a_mnv_cov4"), b = F.create("b_mnv_cov4"), t = F.create("t_mnv_cov4");
+        var domains = Map.<Variable<?>, Domain<?>>of(
+                a, DiscreteDomain.of(1, 8), b, DiscreteDomain.of(9), t, DiscreteDomain.of(1));
+        var result = MinVariableConstraint.of(Set.of(a, b), Operator.EQ, t).propagate(domains).orElseThrow();
+        assertThat(result.get(a)).isEqualTo(DiscreteDomain.of(1));
+        assertThat(result).doesNotContainKey(b);
+        assertThat(result).doesNotContainKey(t);
+    }
+
+    @Test void propagate_eq_maxedVariableContinuous_skipsCoveragePath_usesBoundsConsistency() {
+        // T is discrete but X is continuous -- not every domain is discrete, so this stays on the
+        // old bounds-only path (a distinct sub-branch from the target-continuous case every other
+        // IntervalDomain-based EQ test above already exercises).
+        Variable<Double> x = F.create("x_mnv_cov5"), y = F.create("y_mnv_cov5"), t = F.create("t_mnv_cov5");
+        var domains = Map.<Variable<?>, Domain<?>>of(
+                x, IntervalDomain.of(3, 10), y, IntervalDomain.of(4, 9), t, DiscreteDomain.of(0.0, 3.0, 20.0));
+        var result = MinVariableConstraint.of(Set.of(x, y), Operator.EQ, t).propagate(domains).orElseThrow();
+        assertThat(result.get(t)).isEqualTo(DiscreteDomain.of(3.0));
+    }
+
+    @Test void propagate_eq_maxedVariableContinuous_boundsOnlyPath_discreteGapForcesEmpty() {
+        // Mirrors propagate_eq_discreteDomain_infeasible_noValueEqualsTarget, but with the second
+        // mined variable continuous so the whole call stays on the old bounds-only path (a's own
+        // domain still has a gap at 4): upper-clip forces a's tracked min down to t's bound (4),
+        // then the sole-reacher lower-force pass tries to narrow a to exactly [4,4] -- empty, since
+        // 4 isn't actually present in a's discrete domain.
+        Variable<Double> a = F.create("a_mnv_cov6"), x = F.create("x_mnv_cov6"), t = F.create("t_mnv_cov6");
+        var domains = Map.<Variable<?>, Domain<?>>of(
+                a, DiscreteDomain.of(2.0, 3.0, 5.0, 6.0), x, IntervalDomain.of(5, 8), t, DiscreteDomain.of(4.0));
+        assertThat(MinVariableConstraint.of(Set.of(a, x), Operator.EQ, t).propagate(domains)).isEmpty();
+    }
+
+    @Test void propagate_eq_discreteDomain_coverage_infeasible_emptyAchievableTargetSet() {
+        // a,b both even-valued {2,4,6}; target {3,5} -- bounds alone say feasible, but neither 3
+        // nor 5 is literally achievable as min(a,b) (both only ever produce even minima), so the
+        // achievable target set is empty.
+        Variable<Integer> a = F.create("a_mnv_cov7"), b = F.create("b_mnv_cov7"), t = F.create("t_mnv_cov7");
+        var domains = Map.<Variable<?>, Domain<?>>of(
+                a, DiscreteDomain.of(2, 4, 6), b, DiscreteDomain.of(2, 4, 6), t, DiscreteDomain.of(3, 5));
+        assertThat(MinVariableConstraint.of(Set.of(a, b), Operator.EQ, t).propagate(domains)).isEmpty();
+    }
+
     // --- propagateWithReasons() / explainInfeasible() ---
 
     @Test void propagateWithReasons_feasible_returnsEmptyReason() {
@@ -202,12 +291,27 @@ public class MinVariableConstraintTest {
                 a, IntervalDomain.of(0, 500), b, IntervalDomain.of(1, 3), t, IntervalDomain.of(1000, 1000))));
     }
 
-    @Test void explainInfeasible_gappedNonSingletonDomain_fallsThroughToEmpty() {
+    @Test void explainInfeasible_gappedNonSingletonDomain_citesExactValueSet() {
         Variable<Integer> a = F.create("a_mnv_r3"), b = F.create("b_mnv_r3"), t = F.create("t_mnv_r3");
         var domains = Map.<Variable<?>, Domain<?>>of(a, IntRangeDomain.of(0, 0), b, DiscreteDomain.of(1, 3), t, IntRangeDomain.of(1000, 1000));
         var result = MinVariableConstraint.of(Set.of(a, b), Operator.GEQ, t).propagateWithReasons(domains);
         assertThat(result.isInfeasible()).isTrue();
-        assertThat(result.reason()).isNull();
+        assertThat(result.reason()).isEqualTo(ValueSetNogoodConstraint.of(Map.of(
+                a, Set.of(0), b, Set.of(1, 3), t, Set.of(1000))));
+    }
+
+    @Test void explainInfeasible_eqCoverage_emptyAchievableTargetSet_citesExactValueSet() {
+        // Same scenario as propagate_eq_discreteDomain_coverage_infeasible_emptyAchievableTargetSet:
+        // bounds alone look feasible, so RangeNogoodConstraint#fromCurrentBounds can't explain this
+        // (and wouldn't be sound here even if it tried -- neither a nor b is gapless anyway). Must
+        // fall through to citing every variable's exact current value set instead of Optional.empty().
+        Variable<Integer> a = F.create("a_mnv_cov7r"), b = F.create("b_mnv_cov7r"), t = F.create("t_mnv_cov7r");
+        var domains = Map.<Variable<?>, Domain<?>>of(
+                a, DiscreteDomain.of(2, 4, 6), b, DiscreteDomain.of(2, 4, 6), t, DiscreteDomain.of(3, 5));
+        var result = MinVariableConstraint.of(Set.of(a, b), Operator.EQ, t).propagateWithReasons(domains);
+        assertThat(result.isInfeasible()).isTrue();
+        assertThat(result.reason()).isEqualTo(ValueSetNogoodConstraint.of(Map.of(
+                a, Set.of(2, 4, 6), b, Set.of(2, 4, 6), t, Set.of(3, 5))));
     }
 
     // --- ConstraintSatisfactionProblem.Builder#minConstraint(variable-target overload) ---

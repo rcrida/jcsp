@@ -4,6 +4,7 @@ import io.github.rcrida.jcsp.assignments.Assignment;
 import io.github.rcrida.jcsp.consistency.Propagatable;
 import io.github.rcrida.jcsp.constraints.NumericBounds;
 import io.github.rcrida.jcsp.constraints.Operator;
+import io.github.rcrida.jcsp.domains.DiscreteDomain;
 import io.github.rcrida.jcsp.domains.Domain;
 import io.github.rcrida.jcsp.variables.Variable;
 import lombok.EqualsAndHashCode;
@@ -97,6 +98,14 @@ public class MaxVariableConstraint<N extends Number> extends NaryConstraint impl
      * narrowing is provably never empty: {@code mLo <= mHi} always (the variable achieving {@code
      * mLo} also has its own maximum {@code >= mLo}, and that maximum is itself {@code <= mHi}), so
      * the new target range's bounds never cross.
+     * <p>
+     * When {@link #operator} is {@link Operator#EQ} and every one of {@link #maxedVariables} plus
+     * {@link #target} has a {@link DiscreteDomain} (no continuous {@link
+     * io.github.rcrida.jcsp.domains.BoundedDomain} variable involved), this delegates instead to
+     * {@link ExtremumPropagation#propagateEqCoverage} for genuine value-level generalized arc
+     * consistency — see that method's own Javadoc for why {@code EQ} specifically (unlike {@code
+     * LEQ}/{@code GEQ}) needs more than bounds reasoning to avoid an "achievable by bound but not
+     * literally present anywhere" gap.
      */
     @Override
     @SuppressWarnings("unchecked")
@@ -107,6 +116,10 @@ public class MaxVariableConstraint<N extends Number> extends NaryConstraint impl
 
         List<Variable<N>> vars = new ArrayList<>(maxedVariables);
         int n = vars.size();
+
+        if (ExtremumPropagation.eqCoverageEligible(operator, vars, target, domains)) {
+            return ExtremumPropagation.propagateEqCoverage(vars, target, domains, false);
+        }
         double[] mins = new double[n];
         double[] maxs = new double[n];
         for (int i = 0; i < n; i++) {
@@ -136,16 +149,21 @@ public class MaxVariableConstraint<N extends Number> extends NaryConstraint impl
     }
 
     /**
-     * Same shape as {@link SumVariableConstraint#explainInfeasible}: both of {@link #propagate}'s
-     * infeasibility checks ({@code mLo > tHi}, {@code mHi < tLo}) are derived purely from every
-     * cited variable's current bounding range, so {@link RangeNogoodConstraint#fromCurrentBounds}
-     * is always a sound explanation whenever every domain can be safely cited as a range; falls
-     * back to {@link Propagatable#allSingletonReason}'s fully collective ground reason otherwise.
+     * {@link #propagate}'s bounds-only infeasibility checks ({@code mLo > tHi}, {@code mHi < tLo})
+     * are derived purely from every cited variable's current bounding range, so {@link
+     * RangeNogoodConstraint#fromCurrentBounds} is always a sound explanation whenever every domain
+     * can be safely cited as a range (same shape as {@link SumVariableConstraint#explainInfeasible}).
+     * That citation isn't sound for the {@link ExtremumPropagation#propagateEqCoverage} path's own
+     * infeasibility, though (an empty achievable target set from a gapped discrete domain — bounds
+     * alone can look feasible there), so this falls back to {@link
+     * ValueSetNogoodConstraint#fromCurrentState}, which cites every variable's exact current value
+     * set (gaps and all) rather than a bounding range and is sound regardless of which of {@link
+     * #propagate}'s two paths actually detected the conflict.
      */
     @Override
     public Optional<NogoodConstraint> explainInfeasible(@NonNull Map<Variable<?>, Domain<?>> domains) {
         return RangeNogoodConstraint.fromCurrentBounds(getVariables(), domains)
-                .or(() -> GroundNogoodConstraint.fromReason(Propagatable.allSingletonReason(getVariables(), domains)));
+                .or(() -> ValueSetNogoodConstraint.fromCurrentState(getVariables(), domains));
     }
 
     @Override

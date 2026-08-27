@@ -205,6 +205,92 @@ public class MaxVariableConstraintTest {
         assertThat(MaxVariableConstraint.of(Set.of(a, b), Operator.EQ, t).propagate(domains)).isEmpty();
     }
 
+    // --- propagate: EQ full GAC (coverage pruning beyond bounds consistency) ---
+
+    @Test void propagate_eq_discreteDomain_coverageFiltersUnsupportedTargetValue() {
+        // a,b both even-valued {2,4,6}; target {3,4,5}: 3 and 5 are within [mLo,mHi]=[2,6] so plain
+        // bounds consistency would keep them, but neither is literally achievable by any variable
+        // (both only ever produce even maxima) -- only 4 survives coverage filtering. a/b's shared
+        // value 6 also drops out (target's own domain never reached that high to begin with, 5
+        // being its max) -- the same clip plain bounds consistency's upper pass would apply too,
+        // just via target's true achievable-coverage max (4) rather than its raw domain max (5).
+        Variable<Integer> a = F.create("a_mv_cov1"), b = F.create("b_mv_cov1"), t = F.create("t_mv_cov1");
+        var domains = Map.<Variable<?>, Domain<?>>of(
+                a, DiscreteDomain.of(2, 4, 6), b, DiscreteDomain.of(2, 4, 6), t, DiscreteDomain.of(3, 4, 5));
+        var result = MaxVariableConstraint.of(Set.of(a, b), Operator.EQ, t).propagate(domains).orElseThrow();
+        assertThat(result.get(t)).isEqualTo(DiscreteDomain.of(4));
+        assertThat(result.get(a)).isEqualTo(DiscreteDomain.of(2, 4));
+        assertThat(result.get(b)).isEqualTo(DiscreteDomain.of(2, 4));
+    }
+
+    @Test void propagate_eq_discreteDomain_coverageFiltersUnsupportedVariableValue() {
+        // a={2,5,9}, b={1,2} (b can never exceed 2); t={2,9}. a=5 would force max(a,b)=5 (b<=2<5),
+        // but 5 is not in t's domain -- unsupported, even though 5 <= mHi=9 so plain bounds
+        // consistency (which only clips a's max down to t's own max, 9) would never remove it.
+        Variable<Integer> a = F.create("a_mv_cov2"), b = F.create("b_mv_cov2"), t = F.create("t_mv_cov2");
+        var domains = Map.<Variable<?>, Domain<?>>of(
+                a, DiscreteDomain.of(2, 5, 9), b, DiscreteDomain.of(1, 2), t, DiscreteDomain.of(2, 9));
+        var result = MaxVariableConstraint.of(Set.of(a, b), Operator.EQ, t).propagate(domains).orElseThrow();
+        assertThat(result.get(a)).isEqualTo(DiscreteDomain.of(2, 9));
+        assertThat(result).doesNotContainKey(b);
+        assertThat(result).doesNotContainKey(t);
+    }
+
+    @Test void propagate_eq_discreteDomain_coverage_multipleCoverersNoForcing() {
+        // Both a and b contain the shared top value 9 -- neither is the "sole" coverer, so neither
+        // narrows beyond t's own membership; every existing value in both stays supported.
+        Variable<Integer> a = F.create("a_mv_cov3"), b = F.create("b_mv_cov3"), t = F.create("t_mv_cov3");
+        var domains = Map.<Variable<?>, Domain<?>>of(
+                a, DiscreteDomain.of(1, 9), b, DiscreteDomain.of(2, 9), t, DiscreteDomain.of(9));
+        var result = MaxVariableConstraint.of(Set.of(a, b), Operator.EQ, t).propagate(domains).orElseThrow();
+        assertThat(result).isEmpty();
+    }
+
+    @Test void propagate_eq_discreteDomain_coverage_soleCovererWithNoOtherReacher_onlyTargetValueSurvives() {
+        // a={2,9} is the sole coverer of 9, and no other variable can reach ANY tSet value once a
+        // is excluded (b's domain {1} doesn't intersect tSet={9} at all) -- a's threshold falls to
+        // NEGATIVE_INFINITY, leaving only a's own direct membership in tSet (value 9) supported.
+        Variable<Integer> a = F.create("a_mv_cov4"), b = F.create("b_mv_cov4"), t = F.create("t_mv_cov4");
+        var domains = Map.<Variable<?>, Domain<?>>of(
+                a, DiscreteDomain.of(2, 9), b, DiscreteDomain.of(1), t, DiscreteDomain.of(9));
+        var result = MaxVariableConstraint.of(Set.of(a, b), Operator.EQ, t).propagate(domains).orElseThrow();
+        assertThat(result.get(a)).isEqualTo(DiscreteDomain.of(9));
+        assertThat(result).doesNotContainKey(b);
+        assertThat(result).doesNotContainKey(t);
+    }
+
+    @Test void propagate_eq_maxedVariableContinuous_skipsCoveragePath_usesBoundsConsistency() {
+        // T is discrete but X is continuous -- still not every domain is discrete, so this stays
+        // on the old bounds-only path (a distinct sub-branch from the target-continuous case above).
+        Variable<Double> x = F.create("x_mv_cov5"), y = F.create("y_mv_cov5"), t = F.create("t_mv_cov5");
+        var domains = Map.<Variable<?>, Domain<?>>of(
+                x, IntervalDomain.of(3, 10), y, IntervalDomain.of(4, 8), t, DiscreteDomain.of(4.0, 10.0, 20.0));
+        var result = MaxVariableConstraint.of(Set.of(x, y), Operator.EQ, t).propagate(domains).orElseThrow();
+        assertThat(result.get(t)).isEqualTo(DiscreteDomain.of(4.0, 10.0));
+    }
+
+    @Test void propagate_eq_maxedVariableContinuous_boundsOnlyPath_discreteGapForcesEmpty() {
+        // Mirrors propagate_eq_discreteDomain_infeasible_noValueEqualsTarget, but with the second
+        // maxed variable continuous so the whole call stays on the old bounds-only path (a's own
+        // domain still has a gap at 3): upper-clip forces a's tracked max down to t's bound (3),
+        // then the sole-reacher lower-force pass tries to narrow a to exactly [3,3] -- empty, since
+        // 3 isn't actually present in a's discrete domain.
+        Variable<Double> a = F.create("a_mv_cov6"), x = F.create("x_mv_cov6"), t = F.create("t_mv_cov6");
+        var domains = Map.<Variable<?>, Domain<?>>of(
+                a, DiscreteDomain.of(0.0, 1.0, 2.0, 4.0), x, IntervalDomain.of(0, 2), t, DiscreteDomain.of(3.0));
+        assertThat(MaxVariableConstraint.of(Set.of(a, x), Operator.EQ, t).propagate(domains)).isEmpty();
+    }
+
+    @Test void propagate_eq_discreteDomain_coverage_infeasible_emptyAchievableTargetSet() {
+        // a,b both even-valued {2,4,6}; target {3,5} -- bounds alone say feasible (mLo=2<=tHi=5,
+        // mHi=6>=tLo=3), but neither 3 nor 5 is literally achievable by any variable (both only
+        // ever produce even maxima), so the achievable target set (tSet) is empty.
+        Variable<Integer> a = F.create("a_mv_cov7"), b = F.create("b_mv_cov7"), t = F.create("t_mv_cov7");
+        var domains = Map.<Variable<?>, Domain<?>>of(
+                a, DiscreteDomain.of(2, 4, 6), b, DiscreteDomain.of(2, 4, 6), t, DiscreteDomain.of(3, 5));
+        assertThat(MaxVariableConstraint.of(Set.of(a, b), Operator.EQ, t).propagate(domains)).isEmpty();
+    }
+
     // --- propagateWithReasons() / explainInfeasible() ---
 
     @Test void propagateWithReasons_feasible_returnsEmptyReason() {
@@ -231,11 +317,26 @@ public class MaxVariableConstraintTest {
                 a, IntervalDomain.of(500, 1000), b, IntervalDomain.of(1, 3), t, IntervalDomain.of(0, 0))));
     }
 
-    @Test void explainInfeasible_gappedNonSingletonDomain_fallsThroughToEmpty() {
+    @Test void explainInfeasible_gappedNonSingletonDomain_citesExactValueSet() {
         Variable<Integer> a = F.create("a_mv_r3"), b = F.create("b_mv_r3"), t = F.create("t_mv_r3");
         var domains = Map.<Variable<?>, Domain<?>>of(a, IntRangeDomain.of(1000, 1000), b, DiscreteDomain.of(1, 3), t, IntRangeDomain.of(0, 0));
         var result = MaxVariableConstraint.of(Set.of(a, b), Operator.LEQ, t).propagateWithReasons(domains);
         assertThat(result.isInfeasible()).isTrue();
-        assertThat(result.reason()).isNull();
+        assertThat(result.reason()).isEqualTo(ValueSetNogoodConstraint.of(Map.of(
+                a, Set.of(1000), b, Set.of(1, 3), t, Set.of(0))));
+    }
+
+    @Test void explainInfeasible_eqCoverage_emptyAchievableTargetSet_citesExactValueSet() {
+        // Same scenario as propagate_eq_discreteDomain_coverage_infeasible_emptyAchievableTargetSet:
+        // bounds alone look feasible, so RangeNogoodConstraint#fromCurrentBounds can't explain this
+        // (and wouldn't be sound here even if it tried -- neither a nor b is gapless anyway). Must
+        // fall through to citing every variable's exact current value set instead of Optional.empty().
+        Variable<Integer> a = F.create("a_mv_cov7r"), b = F.create("b_mv_cov7r"), t = F.create("t_mv_cov7r");
+        var domains = Map.<Variable<?>, Domain<?>>of(
+                a, DiscreteDomain.of(2, 4, 6), b, DiscreteDomain.of(2, 4, 6), t, DiscreteDomain.of(3, 5));
+        var result = MaxVariableConstraint.of(Set.of(a, b), Operator.EQ, t).propagateWithReasons(domains);
+        assertThat(result.isInfeasible()).isTrue();
+        assertThat(result.reason()).isEqualTo(ValueSetNogoodConstraint.of(Map.of(
+                a, Set.of(2, 4, 6), b, Set.of(2, 4, 6), t, Set.of(3, 5))));
     }
 }
