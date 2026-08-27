@@ -6,10 +6,14 @@ import io.github.rcrida.jcsp.constraints.binary.BinaryComparatorConstraint;
 import io.github.rcrida.jcsp.constraints.binary.BinaryOffsetConstraint;
 import io.github.rcrida.jcsp.constraints.nary.CountConstraint;
 import io.github.rcrida.jcsp.constraints.nary.GlobalCardinalityConstraint;
+import io.github.rcrida.jcsp.constraints.nary.LinearBoundConstraint;
+import io.github.rcrida.jcsp.constraints.nary.LinearVariableConstraint;
 import io.github.rcrida.jcsp.constraints.nary.MinVariableConstraint;
 import io.github.rcrida.jcsp.constraints.nary.PredicateConstraint;
 import io.github.rcrida.jcsp.constraints.nary.ProductVariableConstraint;
 import io.github.rcrida.jcsp.constraints.nary.RelationLogicConstraint;
+import io.github.rcrida.jcsp.constraints.nary.SumBoundConstraint;
+import io.github.rcrida.jcsp.constraints.nary.SumVariableConstraint;
 import io.github.rcrida.jcsp.constraints.unary.UnaryPredicateConstraint;
 import io.github.rcrida.jcsp.solver.Solver;
 import io.github.rcrida.jcsp.variables.Variable;
@@ -2394,16 +2398,18 @@ class Xcsp3ParserTest {
         }
     }
 
-    @Test void intensionAddOfVariableAndNestedExpression_fallsBackToPredicateConstraint() throws IOException {
+    @Test void intensionAddOfVariableAndNestedExpression_routesThroughLinearVariableConstraint() throws IOException {
         // add(x,mul(y,2)): xcsp3-tools' canonizer reorders add's own two operands by complexity,
         // same as it does for eq/ne's operands (see intensionBinaryOffsetWithEquals's own comment) --
         // the compound mul(y,2) canonicalizes to the front, the bare variable x to the back, so
         // asVariable(sons[0]) is absent (mul(...) isn't a plain variable) even though
-        // asConstant(sons[1]) does find a leaf (just not a LONG one).
+        // asConstant(sons[1]) does find a leaf (just not a LONG one) -- recognizeBinaryRelation
+        // still declines here, but recognizeSumOrLinear recognizes add's own two terms directly
+        // (x as a unit-coefficient term, mul(y,2) as a weighted one) into LinearVariableConstraint.
         Xcsp3Instance instance = parseXml(
                 "<var id=\"x\"> 0..3 </var><var id=\"y\"> 0..3 </var><var id=\"z\"> 0..9 </var>",
                 "<intension> eq(z,add(x,mul(y,2))) </intension>");
-        assertThat(instance.csp().getConstraints().iterator().next()).isInstanceOf(PredicateConstraint.class);
+        assertThat(instance.csp().getConstraints().iterator().next()).isInstanceOf(LinearVariableConstraint.class);
         Set<Assignment> solutions = solutions(instance.csp());
         assertThat(solutions).isNotEmpty();
         for (Assignment a : solutions) {
@@ -2411,13 +2417,15 @@ class Xcsp3ParserTest {
         }
     }
 
-    @Test void intensionAddOfTwoVariablesNoConstant_fallsBackToPredicateConstraint() throws IOException {
+    @Test void intensionAddOfTwoVariablesNoConstant_routesThroughSumVariableConstraint() throws IOException {
         // add(x,y) has two sons but neither is a constant, so it doesn't match the
-        // "var + constant" offset shape even though the add itself is binary.
+        // "var + constant" offset shape even though the add itself is binary --
+        // recognizeBinaryRelation still declines, but recognizeSumOrLinear recognizes both terms
+        // as unit-coefficient variables into SumVariableConstraint.
         Xcsp3Instance instance = parseXml(
                 "<var id=\"x\"> 0..3 </var><var id=\"y\"> 0..3 </var><var id=\"z\"> 0..9 </var>",
                 "<intension> eq(z,add(x,y)) </intension>");
-        assertThat(instance.csp().getConstraints().iterator().next()).isInstanceOf(PredicateConstraint.class);
+        assertThat(instance.csp().getConstraints().iterator().next()).isInstanceOf(SumVariableConstraint.class);
         Set<Assignment> solutions = solutions(instance.csp());
         assertThat(solutions).isNotEmpty();
         for (Assignment a : solutions) {
@@ -2425,19 +2433,121 @@ class Xcsp3ParserTest {
         }
     }
 
-    @Test void intensionAddOfTwoNestedExpressions_neitherOperandIsALeaf_fallsBackToPredicateConstraint() throws IOException {
+    @Test void intensionAddOfTwoNestedExpressions_neitherOperandIsALeaf_routesThroughLinearVariableConstraint() throws IOException {
         // add(mul(x,2),mul(y,3)): both operands are compound expressions, so the canonizer's
         // complexity-based reordering has no simpler leaf to demote to the back -- sons[1] stays a
         // non-leaf MUL node, which is what exercises asConstant's own "not a leaf at all" branch
-        // (distinct from intensionAddOfVariableAndNestedExpression's "leaf, but not LONG" case above).
+        // (distinct from intensionAddOfVariableAndNestedExpression's "leaf, but not LONG" case above) --
+        // recognizeBinaryRelation still declines, but recognizeSumOrLinear recognizes both weighted
+        // terms into LinearVariableConstraint.
         Xcsp3Instance instance = parseXml(
                 "<var id=\"x\"> 0..3 </var><var id=\"y\"> 0..3 </var><var id=\"z\"> 0..20 </var>",
                 "<intension> eq(z,add(mul(x,2),mul(y,3))) </intension>");
-        assertThat(instance.csp().getConstraints().iterator().next()).isInstanceOf(PredicateConstraint.class);
+        assertThat(instance.csp().getConstraints().iterator().next()).isInstanceOf(LinearVariableConstraint.class);
         Set<Assignment> solutions = solutions(instance.csp());
         assertThat(solutions).isNotEmpty();
         for (Assignment a : solutions) {
             assertThat(digitOf(a, "z")).isEqualTo(digitOf(a, "x") * 2 + digitOf(a, "y") * 3);
+        }
+    }
+
+    // ---- intension add(...) recognition (SumVariableConstraint/SumBoundConstraint/LinearVariableConstraint/LinearBoundConstraint) ----
+
+    @Test void intensionSumUnweighted_constantTarget_routesThroughSumBoundConstraint() throws IOException {
+        // le(add(x,y),20): every add term is a bare variable, target is a constant.
+        Xcsp3Instance instance = parseXml(
+                "<var id=\"x\"> 0..15 </var><var id=\"y\"> 0..15 </var>",
+                "<intension> le(add(x,y),20) </intension>");
+        assertThat(instance.csp().getConstraints().iterator().next()).isInstanceOf(SumBoundConstraint.class);
+        Set<Assignment> solutions = solutions(instance.csp());
+        assertThat(solutions).isNotEmpty();
+        for (Assignment a : solutions) {
+            assertThat(digitOf(a, "x") + digitOf(a, "y")).isLessThanOrEqualTo(20);
+        }
+    }
+
+    @Test void intensionSumWeighted_constantTarget_routesThroughLinearBoundConstraint() throws IOException {
+        // eq(add(mul(x,2),y),10): x is weighted, y is unit-coefficient, target is a constant.
+        Xcsp3Instance instance = parseXml(
+                "<var id=\"x\"> 0..5 </var><var id=\"y\"> 0..5 </var>",
+                "<intension> eq(add(mul(x,2),y),10) </intension>");
+        assertThat(instance.csp().getConstraints().iterator().next()).isInstanceOf(LinearBoundConstraint.class);
+        Set<Assignment> solutions = solutions(instance.csp());
+        assertThat(solutions).isNotEmpty();
+        for (Assignment a : solutions) {
+            assertThat(digitOf(a, "x") * 2 + digitOf(a, "y")).isEqualTo(10);
+        }
+    }
+
+    @Test void intensionSumThreeTerms_routesThroughSumVariableConstraint() throws IOException {
+        // add with more than two unit-coefficient terms generalizes the same way.
+        Xcsp3Instance instance = parseXml(
+                "<var id=\"x\"> 0..3 </var><var id=\"y\"> 0..3 </var><var id=\"w\"> 0..3 </var><var id=\"z\"> 0..9 </var>",
+                "<intension> eq(z,add(x,y,w)) </intension>");
+        assertThat(instance.csp().getConstraints().iterator().next()).isInstanceOf(SumVariableConstraint.class);
+        Set<Assignment> solutions = solutions(instance.csp());
+        assertThat(solutions).isNotEmpty();
+        for (Assignment a : solutions) {
+            assertThat(digitOf(a, "z")).isEqualTo(digitOf(a, "x") + digitOf(a, "y") + digitOf(a, "w"));
+        }
+    }
+
+    @Test void intensionSumReified_indicatorTracksConstraintTruthValue() throws IOException {
+        Xcsp3Instance instance = parseXml(
+                "<var id=\"x\"> 0..3 </var><var id=\"y\"> 0..3 </var><var id=\"z\"> 0..9 </var><var id=\"b\"> 0..1 </var>",
+                "<intension reifiedBy=\"b\"> eq(z,add(x,y)) </intension>");
+        Set<Assignment> found = solutions(instance.csp());
+        assertThat(found).isNotEmpty();
+        for (Assignment a : found) {
+            int x = digitOf(a, "x"), y = digitOf(a, "y"), z = digitOf(a, "z"), b = digitOf(a, "b");
+            assertThat(b == 1).as("x=%d, y=%d, z=%d, b=%d", x, y, z, b).isEqualTo(z == x + y);
+        }
+    }
+
+    @Test void intensionAddOfNonVariableTermAndVariable_fallsBackToPredicateConstraint() throws IOException {
+        // add(mul(x,y),z): one term is a product of two variables -- neither a bare variable nor
+        // a mul(var, constant) -- so the whole add is declined, not just that one term silently
+        // dropped.
+        Xcsp3Instance instance = parseXml(
+                "<var id=\"x\"> 1..3 </var><var id=\"y\"> 1..3 </var><var id=\"z\"> 1..3 </var><var id=\"w\"> 0..15 </var>",
+                "<intension> eq(w,add(mul(x,y),z)) </intension>");
+        assertThat(instance.csp().getConstraints().iterator().next()).isInstanceOf(PredicateConstraint.class);
+        Set<Assignment> solutions = solutions(instance.csp());
+        assertThat(solutions).isNotEmpty();
+        for (Assignment a : solutions) {
+            assertThat(digitOf(a, "w")).isEqualTo(digitOf(a, "x") * digitOf(a, "y") + digitOf(a, "z"));
+        }
+    }
+
+    @Test void intensionAddOfMulTermWithNonVariableFirstOperand_fallsBackToPredicateConstraint() throws IOException {
+        // add(mul(div(x,2),3),w): the mul term's own first operand is itself a compound
+        // expression (a different operator, div, so it can't get flattened together with the
+        // outer mul the way nested mul(mul(...)) terms can), not a bare variable -- exercises
+        // asVariable(term.sons[0]).isEmpty() specifically, distinct from
+        // intensionAddOfNonVariableTermAndVariable's rejection (a non-constant second operand)
+        // and intensionAddOfThreeArgMulTerm's rejection (wrong arity).
+        Xcsp3Instance instance = parseXml(
+                "<var id=\"x\"> 1..3 </var><var id=\"w\"> 0..3 </var><var id=\"v\"> 0..30 </var>",
+                "<intension> eq(v,add(mul(div(x,2),3),w)) </intension>");
+        assertThat(instance.csp().getConstraints().iterator().next()).isInstanceOf(PredicateConstraint.class);
+        Set<Assignment> solutions = solutions(instance.csp());
+        assertThat(solutions).isNotEmpty();
+        for (Assignment a : solutions) {
+            assertThat(digitOf(a, "v")).isEqualTo((digitOf(a, "x") / 2) * 3 + digitOf(a, "w"));
+        }
+    }
+
+    @Test void intensionAddOfThreeArgMulTerm_fallsBackToPredicateConstraint() throws IOException {
+        // add(mul(x,y,z),w): the mul term has three operands, not the two-term mul(var, constant)
+        // shape recognizeSumOrLinear's own term.sons.length == 2 guard requires.
+        Xcsp3Instance instance = parseXml(
+                "<var id=\"x\"> 1..3 </var><var id=\"y\"> 1..3 </var><var id=\"z\"> 1..3 </var><var id=\"w\"> 0..3 </var><var id=\"v\"> 0..30 </var>",
+                "<intension> eq(v,add(mul(x,y,z),w)) </intension>");
+        assertThat(instance.csp().getConstraints().iterator().next()).isInstanceOf(PredicateConstraint.class);
+        Set<Assignment> solutions = solutions(instance.csp());
+        assertThat(solutions).isNotEmpty();
+        for (Assignment a : solutions) {
+            assertThat(digitOf(a, "v")).isEqualTo(digitOf(a, "x") * digitOf(a, "y") * digitOf(a, "z") + digitOf(a, "w"));
         }
     }
 
