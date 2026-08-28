@@ -23,11 +23,12 @@ import java.util.Optional;
  * <p>
  * Implements {@link Propagatable} for both {@link BoundedDomain} (via {@code withBounds}) and
  * discrete domains (via {@link NumericBounds#narrow}, which deletes out-of-range values) --
- * {@code EQ}/{@code LEQ}/{@code LT}/{@code GEQ}/{@code GT} all narrow through the same
+ * {@link Operator#EQ}/{@link Operator#LEQ}/{@link Operator#LT}/{@link Operator#GEQ}/{@link
+ * Operator#GT} all narrow through the same
  * {@link NumericBounds#min}/{@link NumericBounds#max}/{@link NumericBounds#narrow} bounds-clipping
  * pass (matching {@link io.github.rcrida.jcsp.constraints.binary.AbsoluteDifferenceConstraint}'s
  * own dual-domain-kind treatment) since {@code [newMin, newMax]} still captures every one of them
- * as a half-open or closed range; {@code NEQ} instead deletes {@link #value} directly from a
+ * as a half-open or closed range; {@link Operator#NEQ} instead deletes {@link #value} directly from a
  * discrete domain (exact, not an approximation -- a single point can't be expressed as a
  * {@code [min,max]} clip) and is a no-op for {@link BoundedDomain}, where excluding one point from
  * a continuum isn't representable as a bound either. This used to rely entirely on {@link
