@@ -34,6 +34,30 @@ public class AndConstraintTest {
     static final UnaryValueConstraint<Integer> A_EQ_3 = UnaryValueConstraint.of(A, 3);
     static final UnaryValueConstraint<Integer> C_EQ_4 = UnaryValueConstraint.of(C, 4);
 
+    /**
+     * Minimal {@link Propagatable} conjunct that always signals infeasible without explaining why
+     * (relies entirely on {@link Propagatable}'s own default {@code explainInfeasible}, which
+     * returns {@link Optional#empty()}) -- isolates {@link AndConstraint}'s own {@code
+     * allSingletonReason} fallback from any real production constraint's own explanation quality,
+     * which every {@link Propagatable} constraint in this codebase now has (unlike when this test
+     * was first written, back when {@link UnaryComparatorConstraint} was still the one holdout).
+     */
+    private record AlwaysInfeasibleUnexplained(Variable<?> variable) implements Constraint, Propagatable {
+        @Override
+        public boolean isSatisfiedBy(Assignment a) { return false; }
+
+        @Override
+        public String getRelation() { return "always-infeasible"; }
+
+        @Override
+        public Set<Variable<?>> getVariables() { return Set.of(variable); }
+
+        @Override
+        public Optional<Map<Variable<?>, Domain<?>>> propagate(Map<Variable<?>, Domain<?>> domains) {
+            return Optional.empty();
+        }
+    }
+
     /** Minimal {@link Propagatable} conjunct whose {@link #isNecessarilySatisfied} always reports true. */
     private record AlwaysNecessary(Variable<?> variable) implements Constraint, Propagatable {
         @Override
@@ -202,7 +226,7 @@ public class AndConstraintTest {
 
     @Test
     void explainInfeasible_fallsBackToAllSingletonReasonWhenConjunctUnexplained() {
-        val and = AndConstraint.of(Set.of(UnaryComparatorConstraint.of(X, Operator.GEQ, 20.0)));
+        val and = AndConstraint.of(Set.of(new AlwaysInfeasibleUnexplained(X)));
         Map<Variable<?>, Domain<?>> domains = Map.of(X, IntervalDomain.of(5, 5));
         assertThat(and.explainInfeasible(domains))
                 .contains(GroundNogoodConstraint.of(Map.of(X, 5.0)));

@@ -26,15 +26,17 @@ import java.util.stream.Collectors;
  * DecreasingConstraint}'s two fixed directions into one runtime-chosen operator, rather than
  * needing a separate class per relation.
  * <p>
- * Built specifically to replace two places that used to assemble this same "several ground pins
- * must all hold" shape ad hoc out of weaker pieces: {@link
- * io.github.rcrida.jcsp.parser.xcsp3.Xcsp3CallbackHandler#buildCtrInstantiation}'s reified case
- * (previously {@code AndConstraint.of(Set.of(UnaryValueConstraint...))} — {@link AndConstraint}
- * skips any conjunct that isn't itself {@link Propagatable}, and {@code UnaryConstraint} isn't, so
- * that combination got zero incremental narrowing, only a final {@code isSatisfiedBy} check), and
- * a new {@code iff(eq(...), eq(...))} recognizer for XCSP3's {@code intension} construct (see
- * {@code Xcsp3CallbackHandler#recognizeGroundEquality}), where this is the reified body on each
- * side of the biconditional.
+ * Built specifically to replace {@link
+ * io.github.rcrida.jcsp.parser.xcsp3.Xcsp3CallbackHandler#buildCtrInstantiation}'s reified case,
+ * which used to assemble this same "several ground pins must all hold" shape ad hoc out of a
+ * weaker piece: previously {@code AndConstraint.of(Set.of(UnaryValueConstraint...))} — {@link
+ * AndConstraint} skips any conjunct that isn't itself {@link Propagatable}, and {@code
+ * UnaryConstraint} isn't, so that combination got zero incremental narrowing, only a final {@code
+ * isSatisfiedBy} check. {@code Xcsp3CallbackHandler#recognizeGroundRelation}'s own {@code
+ * iff(eq(...), eq(...))} recognizer used this class too when first added, but was later unified
+ * onto {@link io.github.rcrida.jcsp.constraints.unary.UnaryComparatorConstraint} for every
+ * operator it recognizes (including {@code EQ}/{@code NEQ}) once that class gained real discrete
+ * propagation and its own {@code explainInfeasible} — see its own Javadoc.
  */
 @SuperBuilder
 @EqualsAndHashCode(callSuper = true)

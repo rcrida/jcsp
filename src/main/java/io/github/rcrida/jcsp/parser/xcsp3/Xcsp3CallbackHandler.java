@@ -466,34 +466,56 @@ final class Xcsp3CallbackHandler implements XCallbacks2 {
     }
 
     private Optional<Constraint> recognizeRelation(XNode<XVarInteger> node) {
-        return recognizeBinaryRelation(node).or(() -> recognizeGroundEquality(node));
+        return recognizeBinaryRelation(node).or(() -> recognizeGroundRelation(node));
     }
 
     /**
-     * Matches a bare {@code eq(var, constant)}/{@code ne(var, constant)} -- no {@code add(...)}
-     * wrapper, the shape {@link #asVariablePlusConstant} doesn't cover. Only checks {@code (var,
-     * const)} operand order, not the reverse: confirmed empirically (a throwaway probe parsing
-     * {@code eq(1,x)}) that {@code xcsp3-tools}' canonizer always reorders a bare {@code eq}/{@code
-     * ne} to put the variable first, the same confirmed canonicalization {@link
-     * #recognizeBinaryRelation}'s own Javadoc already documents for {@code add}/{@code eq}/{@code
-     * ne} more generally -- a defensive constant-first check would be permanently dead code, per
-     * this codebase's general preference for trusting a confirmed framework guarantee (see {@link
-     * #asVariablePlusConstant}'s own precedent). Restricted to {@code EQ}/{@code NEQ}: {@link
-     * ValueConjunctionConstraint} only propagates those two (see its own Javadoc), so recognizing an
-     * ordering operator here would gain nothing over falling through to {@link
-     * #genericIntensionConstraint}.
+     * Matches a bare {@code eq}/{@code ne}/{@code le}/{@code lt} between a variable and a constant
+     * -- no {@code add(...)} wrapper, the shape {@link #asVariablePlusConstant} doesn't cover.
+     * Reuses {@link #LITERAL_OPERATORS} (the same operator set {@link #recognizeLiteral} accepts,
+     * below) -- {@code ge}/{@code gt} are excluded for the identical confirmed-canonizer reason
+     * documented there.
+     * <p>
+     * Checks <em>both</em> operand orders, unlike every other "ground" recognizer in this class
+     * ({@link #recognizeLiteral}): {@code eq}/{@code ne} are confirmed to always canonicalize
+     * variable-first (the guarantee those other methods rely on), but {@code le}/{@code lt} are
+     * not -- confirmed via a real corpus instance ({@code MagicSequence}-style {@code
+     * iff(le(0,p[i]),le(0,s[i]))} clauses): the constant genuinely stays first when that's how the
+     * relation's own direction was originally written (only a {@code ge}/{@code gt} rewrite forces
+     * a swap, and only because eliminating {@code ge}/{@code gt} requires one). A constant-first
+     * match reinterprets the relation from the variable's own perspective via {@link #flip}: {@code
+     * le(0, p[i])} ({@code 0 <= p[i]}) becomes {@code UnaryComparatorConstraint.of(p[i], GEQ, 0)}
+     * ({@code p[i] >= 0}) -- the same operand-swap {@link #recognizeBinaryRelation} already applies
+     * for its own {@code var op (var+const)} case.
+     * <p>
+     * Routes every operator through {@link UnaryComparatorConstraint} uniformly, {@code EQ}/{@code
+     * NEQ} included -- {@link UnaryComparatorConstraint} handles both exactly as well as {@link
+     * ValueConjunctionConstraint} once did for this single-literal case (real discrete narrowing
+     * and a real {@code explainInfeasible}, not just a {@link io.github.rcrida.jcsp.domains.BoundedDomain}
+     * clip), so there's no
+     * remaining reason to route two operators through a different, more general class than the
+     * other four. Added specifically to recognize {@code iff(le(...),le(...))} as {@link
+     * #recognizeIffOperands}' own two operands -- confirmed via the bundled competition corpus that
+     * this shape occurs 15 times, previously falling all the way to unpropagated {@link
+     * PredicateConstraint} since neither operand was a plain boolean variable nor an {@code
+     * EQ}/{@code NEQ} ground relation.
      */
-    private Optional<Constraint> recognizeGroundEquality(XNode<XVarInteger> node) {
+    private Optional<Constraint> recognizeGroundRelation(XNode<XVarInteger> node) {
         Operator operator = intensionRelationalOperator(node.getType());
-        if ((operator != Operator.EQ && operator != Operator.NEQ) || node.sons.length != 2) {
+        if (!LITERAL_OPERATORS.contains(operator) || node.sons.length != 2) {
             return Optional.empty();
         }
-        Optional<Variable<Integer>> variable = asVariable(node.sons[0]);
-        if (variable.isEmpty()) {
-            return Optional.empty();
+        Optional<Variable<Integer>> leftVar = asVariable(node.sons[0]);
+        if (leftVar.isPresent()) {
+            return asConstant(node.sons[1])
+                    .map(constant -> UnaryComparatorConstraint.of(leftVar.get(), operator, constant));
         }
-        return asConstant(node.sons[1])
-                .map(constant -> ValueConjunctionConstraint.of(Map.of(variable.get(), constant), operator));
+        Optional<Variable<Integer>> rightVar = asVariable(node.sons[1]);
+        if (rightVar.isPresent()) {
+            return asConstant(node.sons[0])
+                    .map(constant -> UnaryComparatorConstraint.of(rightVar.get(), flip(operator), constant));
+        }
+        return Optional.empty();
     }
 
     /**
@@ -780,11 +802,18 @@ final class Xcsp3CallbackHandler implements XCallbacks2 {
      * Matches a bare {@code eq}/{@code ne}/{@code le}/{@code lt} between a variable and either a
      * constant or another variable -- {@link RelationLogicConstraint.ValueLiteral}/{@link
      * RelationLogicConstraint.VariableLiteral} respectively. Only checks {@code (var, X)} operand
-     * order, not the reverse, the same as {@link #recognizeGroundEquality}'s own asymmetric shape
-     * and for the same confirmed reason: {@code xcsp3-tools}' canonizer always reorders a bare
-     * {@code eq}/{@code ne}/{@code le} to put the variable first (re-confirmed empirically for a
-     * literal nested inside {@code or(...)} specifically, not just at an intension's own root), so
-     * a defensive constant/variable-first check on the left side would be permanently dead code.
+     * order, not the reverse: for {@code eq}/{@code ne}, {@code xcsp3-tools}' canonizer genuinely
+     * always reorders a bare one to put the variable first (re-confirmed empirically for a literal
+     * nested inside {@code or(...)} specifically, not just at an intension's own root), so a
+     * defensive constant-first check for those two would be permanently dead code. {@code le}/
+     * {@code lt} aren't covered by that same canonizer guarantee -- {@link #recognizeGroundRelation}
+     * (used for {@code iff} operands, not {@code or(...)}) has to check both orders, since a real
+     * corpus instance has genuine constant-first {@code le} clauses -- but a full-corpus scan
+     * confirmed every real {@code or(...)} node specifically happens to use the variable-first form
+     * regardless, so checking only that order here is an empirically-justified simplification for
+     * this method's own narrower {@code or(...)} context, not a general claim about {@code le}/
+     * {@code lt} everywhere.
+     * <p>
      * {@code ge}/{@code gt} are deliberately excluded from {@link #LITERAL_OPERATORS}: confirmed via
      * the same probe that the canonizer always rewrites them into {@code le}/{@code lt} first --
      * against a constant, with the constant and variable operands <em>swapped</em> (e.g. {@code
@@ -841,7 +870,8 @@ final class Xcsp3CallbackHandler implements XCallbacks2 {
      * documents) that {@code xcsp3-tools}' canonizer always places the compound {@code add} first
      * against a plain variable/constant target, and always places a {@code mul} term's variable
      * operand before its constant one -- the same complexity-based reordering {@link
-     * #recognizeGroundEquality}/{@link #asVariablePlusConstant} already rely on. A defensive
+     * #recognizeGroundRelation}'s own {@code EQ}/{@code NEQ} handling and {@link
+     * #asVariablePlusConstant} already rely on. A defensive
      * reverse-order check on either would be permanently dead code.
      */
     private Optional<Constraint> recognizeSumOrLinear(XNodeParent<XVarInteger> tree) {

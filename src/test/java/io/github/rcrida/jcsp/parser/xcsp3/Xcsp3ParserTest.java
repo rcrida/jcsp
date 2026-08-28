@@ -133,10 +133,10 @@ class Xcsp3ParserTest {
         assertThat(solutions(instance.csp())).hasSize(2);
     }
 
-    @Test void intensionIffOfGroundEqualities_routesThroughReifiedValueConjunction() throws IOException {
+    @Test void intensionIffOfGroundEqualities_routesThroughReifiedUnaryComparator() throws IOException {
         // Mario-easy-4.xml.lzma's own shape: iff(eq(s,i), eq(g,0)) -- neither operand is a plain
         // boolean variable, so this doesn't match intensionIff_solutionsAllEqual's bare-variable
-        // case above; recognizeIffOperands/recognizeGroundEquality route it through a pair of
+        // case above; recognizeIffOperands/recognizeGroundRelation route it through a pair of
         // ReifiedConstraints instead of the generic (unpropagated) PredicateConstraint.
         // x==1 iff y==2, x,y in {0,1,2}: satisfying pairs are (0,0),(0,1),(1,2),(2,0),(2,1) --
         // x!=1 (2 choices) paired with each y!=2 (2 choices) = 4, plus x==1,y==2 = 1, total 5.
@@ -153,7 +153,7 @@ class Xcsp3ParserTest {
     }
 
     @Test void intensionIffOfGroundEqualities_neOperandRecognized() throws IOException {
-        // ne(x,1) iff eq(y,2), x,y in {0,1,2}: confirms recognizeGroundEquality's NEQ branch, not
+        // ne(x,1) iff eq(y,2), x,y in {0,1,2}: confirms recognizeGroundRelation's NEQ handling, not
         // just EQ. Hand-enumerated: x=0 (x!=1 true) needs y=2 -> (0,2); x=1 (x!=1 false) needs
         // y!=2 -> (1,0),(1,1); x=2 (x!=1 true) needs y=2 -> (2,2). 4 solutions total.
         Xcsp3Instance instance = parseXml(
@@ -202,8 +202,8 @@ class Xcsp3ParserTest {
     @Test void intensionIffOneSideUnrecognizable_fallsBackToGenericIntensionConstraint() throws IOException {
         // eq(add(y,z),3) has a compound add(y,z) expression as its left operand -- neither a bare
         // variable nor a bare constant, so both recognizeBinaryRelation (which needs var op var or
-        // var op (var+const), not var+var op const) and recognizeGroundEquality (which needs a bare
-        // variable) decline it. recognizeRelation must fail cleanly and fall through to the
+        // var op (var+const), not var+var op const) and recognizeGroundRelation (which needs a bare
+        // variable on at least one side) decline it. recognizeRelation must fail cleanly and fall through to the
         // pre-existing genericIntensionConstraint path, not throw or misbehave. Note: xcsp3-tools'
         // own canonizer reorders the iff's two top-level operands by complexity, putting this
         // (more complex) one at tree.sons[0] regardless of the order written here -- so this
@@ -228,7 +228,7 @@ class Xcsp3ParserTest {
         // the unrecognizable operand on the LEFT instead of the right -- recognizeIffOperands must
         // fail on tree.sons[0] specifically (not just tree.sons[1]) and still fall through cleanly.
         // eq(add(x,y),1) has a compound add(x,y) as its own left operand, so both
-        // recognizeBinaryRelation and recognizeGroundEquality decline it.
+        // recognizeBinaryRelation and recognizeGroundRelation decline it.
         Xcsp3Instance instance = parseXml(
                 "<var id=\"x\"> 0..2 </var><var id=\"y\"> 0..2 </var><var id=\"w\"> 0..1 </var>",
                 "<intension> iff(eq(add(x,y),1),eq(w,1)) </intension>");
@@ -242,11 +242,13 @@ class Xcsp3ParserTest {
         assertThat(solutions).hasSize(9); // (x,y,w) in {0..2}x{0..2}x{0..1}: verified by brute-force enumeration
     }
 
-    @Test void intensionIffOperandOrderingOperator_recognizeGroundEqualityDeclinesNonEqNeq() throws IOException {
+    @Test void intensionIffOperandOrderingOperator_secondOperandNotConstant_falls_backToGeneric() throws IOException {
         // lt(x,add(y,z)) as the iff's left operand: recognizeBinaryRelation declines (add(y,z) is
-        // var+var, not var+const), and recognizeGroundEquality also declines since its own operator
-        // guard only accepts EQ/NEQ, not LT -- exercises that guard's first disjunct as true
-        // (distinct from the sons.length disjunct exercised by the n-ary iff test below).
+        // var+var, not var+const), and recognizeGroundRelation's own operator guard now *accepts*
+        // LT (unlike before this method also handled ordering operators) but still declines here
+        // since add(y,z) isn't a bare constant either -- exercises the leftVar-present-but-
+        // asConstant-absent path specifically (distinct from the sons.length disjunct exercised by
+        // the n-ary iff test below).
         Xcsp3Instance instance = parseXml(
                 "<var id=\"x\"> 0..2 </var><var id=\"y\"> 0..2 </var><var id=\"z\"> 0..2 </var><var id=\"w\"> 0..1 </var>",
                 "<intension> iff(lt(x,add(y,z)),eq(w,1)) </intension>");
@@ -259,6 +261,59 @@ class Xcsp3ParserTest {
             assertThat(x < y + z).as("x=%d, y=%d, z=%d, w=%d", x, y, z, w).isEqualTo(w == 1);
         }
         assertThat(solutions).hasSize(27); // (x,y,z,w) in {0..2}^3x{0..1}: verified by brute-force enumeration
+    }
+
+    @Test void intensionIffOperandOrderingOperator_variableFirst_recognizedViaUnaryComparator() throws IOException {
+        // le(x,5) iff eq(y,1): variable-first ordering literal (e.g. as lt(x,6) canonicalizes to)
+        // -- exercises recognizeGroundRelation's leftVar.isPresent() branch with an ordering
+        // operator, routing through UnaryComparatorConstraint directly (no flip needed).
+        Xcsp3Instance instance = parseXml(
+                "<var id=\"x\"> 0..8 </var><var id=\"y\"> 0..2 </var>",
+                "<intension> iff(le(x,5),eq(y,1)) </intension>");
+        Set<Assignment> solutions = solutions(instance.csp());
+        for (Assignment a : solutions) {
+            int x = digitOf(a, "x");
+            int y = digitOf(a, "y");
+            assertThat(x <= 5).as("x=%d, y=%d", x, y).isEqualTo(y == 1);
+        }
+        assertThat(solutions).hasSize(12); // (x,y) in {0..8}x{0..2}: verified by brute-force enumeration
+    }
+
+    @Test void intensionIffOperandOrderingOperator_constantFirst_recognizedViaFlippedUnaryComparator() throws IOException {
+        // le(0,x) iff eq(y,1): the real corpus shape (e.g. MagicSequence-style
+        // iff(le(0,p[i]),le(0,s[i])) clauses) -- the constant stays first since xcsp3-tools'
+        // canonizer doesn't reorder a genuine le/lt the way it reorders eq/ne. Recognized via
+        // recognizeGroundRelation's rightVar.isPresent() branch, reinterpreted via flip(LEQ)=GEQ
+        // into UnaryComparatorConstraint.of(x, GEQ, 0).
+        Xcsp3Instance instance = parseXml(
+                "<var id=\"x\"> -3..5 </var><var id=\"y\"> 0..2 </var>",
+                "<intension> iff(le(0,x),eq(y,1)) </intension>");
+        Set<Assignment> solutions = solutions(instance.csp());
+        for (Assignment a : solutions) {
+            int x = digitOf(a, "x");
+            int y = digitOf(a, "y");
+            assertThat(x >= 0).as("x=%d, y=%d", x, y).isEqualTo(y == 1);
+        }
+        assertThat(solutions).hasSize(12); // (x,y) in {-3..5}x{0..2}: verified by brute-force enumeration
+    }
+
+    @Test void intensionIffOperandConstantFirst_rightVarPresentButLeftNotConstant_fallsBackToGeneric() throws IOException {
+        // le(add(a,b),x) iff eq(y,1): sons[0]=add(a,b) is neither a variable nor a constant, so
+        // leftVar is empty; sons[1]=x is a plain variable (rightVar present), but asConstant(sons[0])
+        // also fails since add(a,b) isn't a bare constant either -- exercises the
+        // rightVar-present-but-asConstant-absent path specifically.
+        Xcsp3Instance instance = parseXml(
+                "<var id=\"a\"> 0..2 </var><var id=\"b\"> 0..2 </var><var id=\"x\"> 0..4 </var><var id=\"y\"> 0..1 </var>",
+                "<intension> iff(le(add(a,b),x),eq(y,1)) </intension>");
+        Set<Assignment> solutions = solutions(instance.csp());
+        for (Assignment s : solutions) {
+            int a = digitOf(s, "a");
+            int b = digitOf(s, "b");
+            int x = digitOf(s, "x");
+            int y = digitOf(s, "y");
+            assertThat(a + b <= x).as("a=%d, b=%d, x=%d, y=%d", a, b, x, y).isEqualTo(y == 1);
+        }
+        assertThat(solutions).hasSize(45); // (a,b,x,y) in {0..2}x{0..2}x{0..4}x{0..1}: verified by brute-force enumeration
     }
 
     @Test void intensionIffOperandOnRightUnrecognizable_fallsBackToGenericIntensionConstraint() throws IOException {
@@ -280,14 +335,14 @@ class Xcsp3ParserTest {
         assertThat(solutions).hasSize(3); // (x,y) in {0..2}x{0,1}: verified by brute-force enumeration
     }
 
-    @Test void intensionIffOperandNaryEquality_recognizeGroundEqualitySonsLengthGuardDeclines() throws IOException {
+    @Test void intensionIffOperandNaryEquality_recognizeGroundRelationSonsLengthGuardDeclines() throws IOException {
         // eq(x,y,z) (n-ary equality, 3 operands) as the iff's left operand: recognizeBinaryRelation
-        // declines outright (its own guard also requires exactly 2 sons), and recognizeGroundEquality
+        // declines outright (its own guard also requires exactly 2 sons), and recognizeGroundRelation
         // declines too via its own node.sons.length != 2 check -- exercises that check's true outcome
         // specifically with operator already EQ/NEQ (distinct from
-        // intensionIffOperandOrderingOperator_recognizeGroundEqualityDeclinesNonEqNeq's ordering-operator
-        // case above, where the operator check alone already short-circuits before sons.length is
-        // even reached).
+        // intensionIffOperandOrderingOperator_secondOperandNotConstant_falls_backToGeneric's
+        // ordering-operator case above, where the operator itself is now accepted -- it's the
+        // second-operand-not-a-constant check that declines there instead).
         Xcsp3Instance instance = parseXml(
                 "<var id=\"x\"> 0..2 </var><var id=\"y\"> 0..2 </var><var id=\"z\"> 0..2 </var><var id=\"w\"> 0..1 </var>",
                 "<intension> iff(eq(x,y,z),eq(w,1)) </intension>");
@@ -465,7 +520,7 @@ class Xcsp3ParserTest {
     @Test void intensionProductOfPairNaryEquality_sonsLengthGuardDeclines() throws IOException {
         // eq(mul(x,y),z,w): a 3-operand top-level eq (XCSP3's eq is a generalized n-ary allEqual,
         // the same generalization intensionIffOperandNaryEquality exercises for
-        // recognizeGroundEquality) -- exercises this method's own tree.sons.length != 2 rejection
+        // recognizeGroundRelation) -- exercises this method's own tree.sons.length != 2 rejection
         // specifically, distinct from mulNode.sons.length (the boolean-channel siblings' own
         // threeOperandMul test).
         Xcsp3Instance instance = parseXml(

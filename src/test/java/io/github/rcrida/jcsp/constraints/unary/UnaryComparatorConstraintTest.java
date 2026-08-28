@@ -97,15 +97,31 @@ public class UnaryComparatorConstraintTest {
         assertThat(result).isEmpty();
     }
 
-    @Test void explainInfeasible_usesPropagatableDefault() {
-        // UnaryComparatorConstraint deliberately never overrides explainInfeasible (see CLAUDE.md
-        // / project memory: its infeasible path is unreachable during real search, since discrete
-        // violations are eliminated by NodeConsistency and bounded domains are fully resolved
-        // before search begins). This directly exercises the Propagatable interface's default
-        // implementation, which no other class in the codebase falls back to any more now that
-        // every other Propagatable constraint has its own override.
+    @Test void explainInfeasible_boundedDomain_citesCurrentBounds() {
+        // RangeNogoodConstraint#fromCurrentBounds works for any NumericDomain, IntervalDomain
+        // (BoundedDomain) included, not just discrete ones.
         var result = UnaryComparatorConstraint.of(DX, Operator.GEQ, 20.0).explainInfeasible(domains(0.0, 10.0));
-        assertThat(result).isEmpty();
+        assertThat(result).isPresent();
+        assertThat(result.get()).isEqualTo(io.github.rcrida.jcsp.constraints.nary.RangeNogoodConstraint.of(
+                Map.of(DX, IntervalDomain.of(0.0, 10.0))));
+    }
+
+    @Test void explainInfeasible_discreteDomain_citesCurrentBounds() {
+        var result = UnaryComparatorConstraint.of(X, Operator.GEQ, 10)
+                .explainInfeasible(Map.of(X, io.github.rcrida.jcsp.domains.IntRangeDomain.of(1, 5)));
+        assertThat(result).isPresent();
+        assertThat(result.get()).isEqualTo(io.github.rcrida.jcsp.constraints.nary.RangeNogoodConstraint.of(
+                Map.of(X, IntervalDomain.of(1, 5))));
+    }
+
+    @Test void explainInfeasible_gappedDiscreteDomain_citesExactValueSet() {
+        // {1,5} has a gap at 2,3,4 -- RangeNogoodConstraint's own gaplessness gate declines, falling
+        // through to ValueSetNogoodConstraint's exact citation instead.
+        var result = UnaryComparatorConstraint.of(X, Operator.GEQ, 10)
+                .explainInfeasible(Map.of(X, io.github.rcrida.jcsp.domains.DiscreteDomain.of(1, 5)));
+        assertThat(result).isPresent();
+        assertThat(result.get()).isEqualTo(io.github.rcrida.jcsp.constraints.nary.ValueSetNogoodConstraint.of(
+                Map.of(X, java.util.Set.of(1, 5))));
     }
 
     @Test void propagate_noChange_returnsEmptyMap() {
@@ -114,9 +130,80 @@ public class UnaryComparatorConstraintTest {
         assertThat(result.get()).isEmpty();
     }
 
-    @Test void propagate_discreteDomain_skipped() {
-        var result = UnaryComparatorConstraint.of(X, Operator.GEQ, 3).propagate(Map.of(X, io.github.rcrida.jcsp.domains.IntRangeDomain.of(1, 5)));
+    // --- propagate() tests for discrete domains ---
+
+    @Test void propagate_discreteDomain_geq_deletesBelowValue() {
+        var result = UnaryComparatorConstraint.of(X, Operator.GEQ, 3)
+                .propagate(Map.of(X, io.github.rcrida.jcsp.domains.IntRangeDomain.of(1, 5)));
+        assertThat(result).isPresent();
+        assertThat(((io.github.rcrida.jcsp.domains.DiscreteDomain<Integer>) result.get().get(X)).toList())
+                .containsExactly(3, 4, 5);
+    }
+
+    @Test void propagate_discreteDomain_leq_deletesAboveValue() {
+        var result = UnaryComparatorConstraint.of(X, Operator.LEQ, 3)
+                .propagate(Map.of(X, io.github.rcrida.jcsp.domains.IntRangeDomain.of(1, 5)));
+        assertThat(result).isPresent();
+        assertThat(((io.github.rcrida.jcsp.domains.DiscreteDomain<Integer>) result.get().get(X)).toList())
+                .containsExactly(1, 2, 3);
+    }
+
+    @Test void propagate_discreteDomain_eq_narrowsToSingleton() {
+        var result = UnaryComparatorConstraint.of(X, Operator.EQ, 3)
+                .propagate(Map.of(X, io.github.rcrida.jcsp.domains.IntRangeDomain.of(1, 5)));
+        assertThat(result).isPresent();
+        assertThat(((io.github.rcrida.jcsp.domains.DiscreteDomain<Integer>) result.get().get(X)).toList())
+                .containsExactly(3);
+    }
+
+    @Test void propagate_discreteDomain_eq_valueOutsideDomain_infeasible() {
+        var result = UnaryComparatorConstraint.of(X, Operator.EQ, 9)
+                .propagate(Map.of(X, io.github.rcrida.jcsp.domains.IntRangeDomain.of(1, 5)));
+        assertThat(result).isEmpty();
+    }
+
+    @Test void propagate_discreteDomain_eq_valueInGap_infeasible() {
+        // {1,5} has a gap at 2,3,4 -- value=3 sits numerically inside [1,5] (so newMin<=newMax holds,
+        // unlike the out-of-domain-entirely case above, which returns earlier via the newMin>newMax
+        // check) but isn't actually present, so narrowing to [3,3] empties the domain via
+        // NumericBounds#narrow itself -- exercises pruned.get().isEmpty() specifically.
+        var result = UnaryComparatorConstraint.of(X, Operator.EQ, 3)
+                .propagate(Map.of(X, io.github.rcrida.jcsp.domains.DiscreteDomain.of(1, 5)));
+        assertThat(result).isEmpty();
+    }
+
+    @Test void propagate_discreteDomain_geq_infeasible() {
+        var result = UnaryComparatorConstraint.of(X, Operator.GEQ, 10)
+                .propagate(Map.of(X, io.github.rcrida.jcsp.domains.IntRangeDomain.of(1, 5)));
+        assertThat(result).isEmpty();
+    }
+
+    @Test void propagate_discreteDomain_noChange_returnsEmptyMap() {
+        var result = UnaryComparatorConstraint.of(X, Operator.GEQ, 0)
+                .propagate(Map.of(X, io.github.rcrida.jcsp.domains.IntRangeDomain.of(1, 5)));
         assertThat(result).isPresent();
         assertThat(result.get()).isEmpty();
     }
+
+    @Test void propagate_discreteDomain_neq_deletesValue() {
+        var result = UnaryComparatorConstraint.of(X, Operator.NEQ, 3)
+                .propagate(Map.of(X, io.github.rcrida.jcsp.domains.IntRangeDomain.of(1, 5)));
+        assertThat(result).isPresent();
+        assertThat(((io.github.rcrida.jcsp.domains.DiscreteDomain<Integer>) result.get().get(X)).toList())
+                .containsExactly(1, 2, 4, 5);
+    }
+
+    @Test void propagate_discreteDomain_neq_valueNotPresent_noChange() {
+        var result = UnaryComparatorConstraint.of(X, Operator.NEQ, 9)
+                .propagate(Map.of(X, io.github.rcrida.jcsp.domains.IntRangeDomain.of(1, 5)));
+        assertThat(result).isPresent();
+        assertThat(result.get()).isEmpty();
+    }
+
+    @Test void propagate_discreteDomain_neq_singletonEqualToValue_infeasible() {
+        var result = UnaryComparatorConstraint.of(X, Operator.NEQ, 3)
+                .propagate(Map.of(X, io.github.rcrida.jcsp.domains.IntRangeDomain.of(3, 3)));
+        assertThat(result).isEmpty();
+    }
+
 }
