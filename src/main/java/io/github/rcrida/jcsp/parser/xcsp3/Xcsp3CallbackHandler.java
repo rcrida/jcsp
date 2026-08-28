@@ -56,9 +56,7 @@ import io.github.rcrida.jcsp.constraints.nary.SumVariableConstraint;
 import io.github.rcrida.jcsp.constraints.nary.ValueConjunctionConstraint;
 import io.github.rcrida.jcsp.constraints.nary.ValueDisjunctionConstraint;
 import io.github.rcrida.jcsp.constraints.unary.UnaryComparatorConstraint;
-import io.github.rcrida.jcsp.constraints.unary.UnaryNotEqualsConstraint;
 import io.github.rcrida.jcsp.constraints.unary.UnaryPredicateConstraint;
-import io.github.rcrida.jcsp.constraints.unary.UnaryValueConstraint;
 import io.github.rcrida.jcsp.domains.BooleanDomain;
 import io.github.rcrida.jcsp.domains.DiscreteDomain;
 import io.github.rcrida.jcsp.domains.Domain;
@@ -249,7 +247,7 @@ final class Xcsp3CallbackHandler implements XCallbacks2 {
         return booleanIndicators.computeIfAbsent(intVar.id(), name -> {
             Variable<Boolean> boolVar = Variable.Factory.INSTANCE.create(name + "$bool");
             builder.variableDomain(boolVar, BooleanDomain.INSTANCE);
-            builder.reifyConstraint(boolVar, UnaryValueConstraint.of(variablesByName.get(name), 1));
+            builder.reifyConstraint(boolVar, UnaryComparatorConstraint.of(variablesByName.get(name), Operator.EQ, 1));
             return boolVar;
         });
     }
@@ -922,8 +920,8 @@ final class Xcsp3CallbackHandler implements XCallbacks2 {
      * arithmetic, not reusable for strings without a genuinely separate evaluator). Each operand is
      * either a variable ({@link TypeExpr#VAR}) or a symbolic constant ({@link TypeExpr#SYMBOL});
      * routes to {@link BinaryComparatorConstraint}/{@link BinaryNotEqualsConstraint} for
-     * variable-vs-variable, {@link UnaryValueConstraint}/{@link UnaryNotEqualsConstraint} for
-     * variable-vs-constant (either operand order). Reification is never actually reachable here
+     * variable-vs-variable, {@link UnaryComparatorConstraint} (with {@link Operator#EQ}/{@link
+     * Operator#NEQ}) for variable-vs-constant (either operand order). Reification is never actually reachable here
      * despite the {@link #addOrReify} call below -- confirmed empirically -- since {@code
      * xcsp3-tools}' own {@code loadCtr} dispatch table has no entry routing a reified symbolic
      * {@code intension}/{@code allDifferent} to any {@code buildCtrXxx(XVarSymbolic...)} overload at
@@ -951,15 +949,13 @@ final class Xcsp3CallbackHandler implements XCallbacks2 {
                         : BinaryNotEqualsConstraint.of((Variable<String>) leftVar, (Variable<String>) rightVar), id);
             } else {
                 String rightVal = (String) right;
-                addOrReify(eq
-                        ? UnaryValueConstraint.of((Variable<String>) leftVar, rightVal)
-                        : UnaryNotEqualsConstraint.of((Variable<String>) leftVar, rightVal), id);
+                addOrReify(UnaryComparatorConstraint.of(
+                        (Variable<String>) leftVar, eq ? Operator.EQ : Operator.NEQ, rightVal), id);
             }
         } else if (right instanceof Variable<?> rightVar) {
             String leftVal = (String) left;
-            addOrReify(eq
-                    ? UnaryValueConstraint.of((Variable<String>) rightVar, leftVal)
-                    : UnaryNotEqualsConstraint.of((Variable<String>) rightVar, leftVal), id);
+            addOrReify(UnaryComparatorConstraint.of(
+                    (Variable<String>) rightVar, eq ? Operator.EQ : Operator.NEQ, leftVal), id);
         } else {
             throw new UnsupportedXcsp3ConstraintException("Symbolic intension requires at least one variable operand: " + id);
         }

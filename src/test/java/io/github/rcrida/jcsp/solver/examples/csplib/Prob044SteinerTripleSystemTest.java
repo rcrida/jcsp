@@ -48,7 +48,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  * {@code subsetConstraint}/{@code disjointConstraint} alone can't provide, since they only ever
  * force hard, unconditional membership/exclusion, never produce a boolean output. This motivated
  * adding {@link SetMembershipConstraint} (reified via {@code reifyConstraint}) as a genuinely new
- * constraint type: the set-CP analogue of {@code UnaryValueConstraint}, whitelisted for
+ * constraint type: the set-CP analogue of {@code UnaryComparatorConstraint}, whitelisted for
  * {@code SetBoundedDomain} variables specifically so it can be reified this way. Each triple's row
  * of 7 reified membership booleans is then lexicographically ordered against the next triple's row
  * via {@code lexConstraint} — {@link Boolean} is already {@link Comparable}, so (unlike

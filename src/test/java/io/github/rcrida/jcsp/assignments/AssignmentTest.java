@@ -14,6 +14,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.util.Map;
 import java.util.Set;
+import java.util.function.Predicate;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -120,7 +121,7 @@ public class AssignmentTest {
         val assignment = Assignment.of(Map.of(variable, value));
         val csp = ConstraintSatisfactionProblem.builder()
                 .variableDomain(variable, domain)
-                .notEqualsConstraint(variable, anotherValue)
+                .predicateConstraint(variable, (Predicate<Object>) v -> !v.equals(anotherValue))
                 .build();
         assignment.isConsistent(csp);
         assertThat(assignment.getStatistics().getConstraintChecks().get()).isEqualTo(1);
@@ -157,7 +158,7 @@ public class AssignmentTest {
         val assignment = Assignment.of(Map.of(variable, value));
         val csp = ConstraintSatisfactionProblem.builder()
                 .variableDomain(variable, domain)
-                .notEqualsConstraint(variable, value)
+                .predicateConstraint(variable, (Predicate<Object>) v -> !v.equals(value))
                 .build();
         assertThat(assignment.isComplete(csp)).isTrue();
         assertThat(assignment.isConsistent(csp)).isFalse();
@@ -169,7 +170,7 @@ public class AssignmentTest {
         val assignment = Assignment.of(Map.of(variable, value));
         val csp = ConstraintSatisfactionProblem.builder()
                 .variableDomain(variable, domain)
-                .notEqualsConstraint(variable, value)
+                .predicateConstraint(variable, (Predicate<Object>) v -> !v.equals(value))
                 .build();
         val theOnlyConstraint = csp.getConstraints().iterator().next();
         assertThat(assignment.isConsistentAmong(Set.of(theOnlyConstraint))).isFalse();
@@ -181,7 +182,7 @@ public class AssignmentTest {
         val assignment = Assignment.of(Map.of(variable, value));
         val csp = ConstraintSatisfactionProblem.builder()
                 .variableDomain(variable, domain)
-                .notEqualsConstraint(variable, value)
+                .predicateConstraint(variable, (Predicate<Object>) v -> !v.equals(value))
                 .build();
         val theOnlyConstraint = csp.getConstraints().iterator().next();
         assertThat(assignment.isConsistentAmong(Set.of(theOnlyConstraint))).isFalse();

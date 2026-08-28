@@ -7,7 +7,7 @@ import io.github.rcrida.jcsp.constraints.binary.BinaryOffsetConstraint;
 import io.github.rcrida.jcsp.constraints.Operator;
 import io.github.rcrida.jcsp.constraints.nary.GroundNogoodConstraint;
 import io.github.rcrida.jcsp.constraints.nary.NogoodConstraint;
-import io.github.rcrida.jcsp.constraints.unary.UnaryValueConstraint;
+import io.github.rcrida.jcsp.constraints.unary.UnaryComparatorConstraint;
 import io.github.rcrida.jcsp.domains.BooleanDomain;
 import io.github.rcrida.jcsp.domains.Domain;
 import io.github.rcrida.jcsp.domains.IntRangeDomain;
@@ -288,7 +288,7 @@ public class ConstraintSatisfactionProblemTest {
     }
 
     @Test
-    void exactlyOneConstraint_singleVariable_emitsUnaryValueConstraint() {
+    void exactlyOneConstraint_singleVariable_emitsUnaryComparatorConstraint() {
         Variable<Boolean> a = VARIABLE_FACTORY.create("A");
         val csp = ConstraintSatisfactionProblem.builder()
                 .variableDomain(a, BooleanDomain.INSTANCE)
@@ -296,7 +296,7 @@ public class ConstraintSatisfactionProblemTest {
                 .build();
         assertThat(csp.getConstraints()).hasSize(1);
         assertThat(csp.getConstraints().iterator().next())
-                .isInstanceOf(UnaryValueConstraint.class);
+                .isInstanceOf(UnaryComparatorConstraint.class);
     }
 
     @Test

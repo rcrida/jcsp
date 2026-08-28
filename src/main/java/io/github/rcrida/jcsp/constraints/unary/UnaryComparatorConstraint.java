@@ -1,7 +1,7 @@
 package io.github.rcrida.jcsp.constraints.unary;
 
 import io.github.rcrida.jcsp.consistency.Propagatable;
-import io.github.rcrida.jcsp.constraints.NumericBounds;
+import io.github.rcrida.jcsp.constraints.ComparableBounds;
 import io.github.rcrida.jcsp.constraints.Operator;
 import io.github.rcrida.jcsp.constraints.nary.NogoodConstraint;
 import io.github.rcrida.jcsp.constraints.nary.RangeNogoodConstraint;
@@ -18,14 +18,15 @@ import java.util.Map;
 import java.util.Optional;
 
 /**
- * Unary constraint that compares a number variable to a fixed value using an {@link Operator}.
- * Satisfied when {@code variable <op> value}, e.g. {@code x >= 3} or {@code x != 0}.
+ * Unary constraint that compares a variable to a fixed value using an {@link Operator}.
+ * Satisfied when {@code variable <op> value}, e.g. {@code x >= 3}, {@code x != 0}, or
+ * {@code colour == RED}.
  * <p>
  * Implements {@link Propagatable} for both {@link BoundedDomain} (via {@code withBounds}) and
- * discrete domains (via {@link NumericBounds#narrow}, which deletes out-of-range values) --
+ * discrete domains (via {@link ComparableBounds#narrow}, which deletes out-of-range values) --
  * {@link Operator#EQ}/{@link Operator#LEQ}/{@link Operator#LT}/{@link Operator#GEQ}/{@link
  * Operator#GT} all narrow through the same
- * {@link NumericBounds#min}/{@link NumericBounds#max}/{@link NumericBounds#narrow} bounds-clipping
+ * {@link ComparableBounds#min}/{@link ComparableBounds#max}/{@link ComparableBounds#narrow} bounds-clipping
  * pass (matching {@link io.github.rcrida.jcsp.constraints.binary.AbsoluteDifferenceConstraint}'s
  * own dual-domain-kind treatment) since {@code [newMin, newMax]} still captures every one of them
  * as a half-open or closed range; {@link Operator#NEQ} instead deletes {@link #value} directly from a
@@ -40,21 +41,30 @@ import java.util.Optional;
  * own preprocessing only scans top-level {@link UnaryConstraint}s, never one nested inside a
  * reification's body. Confirmed via {@code Xcsp3CallbackHandler#recognizeGroundRelation}, which
  * reifies this class as an {@code iff}/{@code or} operand over ordinary discrete XCSP3 variables.
+ * <p>
+ * Generic over any {@code T extends Comparable<T>} rather than {@link Number} -- {@link Operator}'s
+ * own {@code compare} already works over arbitrary {@link Object}/{@link Comparable}, and {@link
+ * ComparableBounds} gives the ordering operators real propagation for non-numeric types too (e.g.
+ * {@link String} for XCSP3 symbolic domains, or an enum), not just {@link Operator#EQ}/{@link
+ * Operator#NEQ}. This is also what {@code equalsConstraint}/{@code notEqualsConstraint} on {@link
+ * io.github.rcrida.jcsp.ConstraintSatisfactionProblem.ConstraintSatisfactionProblemBuilder} route
+ * through, replacing the former dedicated {@code UnaryValueConstraint}/{@code
+ * UnaryNotEqualsConstraint} classes.
  */
 @SuperBuilder
 @EqualsAndHashCode(callSuper = true)
-public class UnaryComparatorConstraint<N extends Number & Comparable<N>> extends UnaryConstraint<N> implements Propagatable {
-    @NonNull N value;
+public class UnaryComparatorConstraint<T extends Comparable<T>> extends UnaryConstraint<T> implements Propagatable {
+    @NonNull T value;
     @NonNull Operator operator;
 
-    public static <N extends Number & Comparable<N>> UnaryComparatorConstraint<N> of(
-            @NonNull Variable<N> variable, @NonNull Operator operator, @NonNull N value) {
-        return UnaryComparatorConstraint.<N>builder()
+    public static <T extends Comparable<T>> UnaryComparatorConstraint<T> of(
+            @NonNull Variable<T> variable, @NonNull Operator operator, @NonNull T value) {
+        return UnaryComparatorConstraint.<T>builder()
                 .variable(variable).operator(operator).value(value).build();
     }
 
     @Override
-    protected boolean checkValue(@NonNull N v) {
+    protected boolean checkValue(@NonNull T v) {
         return operator.compare(v, value);
     }
 
@@ -66,22 +76,23 @@ public class UnaryComparatorConstraint<N extends Number & Comparable<N>> extends
     @Override
     @SuppressWarnings("unchecked")
     public Optional<Map<Variable<?>, Domain<?>>> propagate(Map<Variable<?>, Domain<?>> domains) {
-        Domain<N> domain = (Domain<N>) domains.get(getVariable());
+        Domain<T> domain = (Domain<T>) domains.get(getVariable());
         if (operator == Operator.NEQ) {
-            if (!(domain instanceof DiscreteDomain<N> discrete) || !discrete.contains(value)) {
+            if (!(domain instanceof DiscreteDomain<T> discrete) || !discrete.contains(value)) {
                 return Optional.of(Map.of());
             }
-            DiscreteDomain<N> narrowed = discrete.toBuilder().delete(value).build();
+            DiscreteDomain<T> narrowed = discrete.toBuilder().delete(value).build();
             return narrowed.isEmpty() ? Optional.empty() : Optional.of(Map.of(getVariable(), narrowed));
         }
 
-        double lo = NumericBounds.min(domain);
-        double hi = NumericBounds.max(domain);
-        double v = value.doubleValue();
-        double newMin = (operator == Operator.GEQ || operator == Operator.GT || operator == Operator.EQ) ? Math.max(lo, v) : lo;
-        double newMax = (operator == Operator.LEQ || operator == Operator.LT || operator == Operator.EQ) ? Math.min(hi, v) : hi;
-        if (newMin > newMax) return Optional.empty();
-        Optional<Domain<N>> pruned = NumericBounds.narrow(domain, newMin, newMax);
+        T lo = ComparableBounds.min(domain);
+        T hi = ComparableBounds.max(domain);
+        T newMin = (operator == Operator.GEQ || operator == Operator.GT || operator == Operator.EQ)
+                ? (lo.compareTo(value) >= 0 ? lo : value) : lo;
+        T newMax = (operator == Operator.LEQ || operator == Operator.LT || operator == Operator.EQ)
+                ? (hi.compareTo(value) <= 0 ? hi : value) : hi;
+        if (newMin.compareTo(newMax) > 0) return Optional.empty();
+        Optional<Domain<T>> pruned = ComparableBounds.narrow(domain, newMin, newMax);
         if (pruned.isEmpty()) return Optional.of(Map.of());
         return pruned.get().isEmpty() ? Optional.empty() : Optional.of(Map.of(getVariable(), pruned.get()));
     }

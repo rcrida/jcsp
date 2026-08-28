@@ -1,5 +1,6 @@
 package io.github.rcrida.jcsp.constraints.nary;
 
+import io.github.rcrida.jcsp.constraints.ComparableBounds;
 import io.github.rcrida.jcsp.domains.BoundedDomain;
 import io.github.rcrida.jcsp.domains.DiscreteDomain;
 import io.github.rcrida.jcsp.domains.Domain;
@@ -8,10 +9,8 @@ import io.github.rcrida.jcsp.variables.Variable;
 
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 
 /**
  * Shared bounds-consistency computation for {@link IncreasingConstraint}/{@link DecreasingConstraint},
@@ -25,12 +24,12 @@ import java.util.Optional;
  * reversed variable list, since {@code v[0] >= v[1] >= ... >= v[n-1]} holds iff the reverse is
  * non-decreasing.
  * <p>
- * Works uniformly over {@link NumericDomain} (both {@link BoundedDomain} and discrete numeric
- * domains like {@link io.github.rcrida.jcsp.domains.IntRangeDomain} — {@code getMin}/{@code getMax} are {@code T}-typed here;
- * {@code withBounds} itself takes {@code double} — see {@link #narrow}) and any other {@link
- * DiscreteDomain} (via natural ordering and value deletion), so an ordering over non-numeric
- * {@link Comparable} types (e.g. {@link String} or enum variables) gets real propagation too, not
- * just numeric chains.
+ * Per-position min/max/narrow are delegated to {@link ComparableBounds} (works uniformly over
+ * {@link NumericDomain}, both {@link BoundedDomain} and discrete numeric domains like {@link
+ * io.github.rcrida.jcsp.domains.IntRangeDomain}, and any other {@link DiscreteDomain} via natural
+ * ordering and value deletion), so an ordering over non-numeric {@link Comparable} types (e.g.
+ * {@link String} or enum variables) gets real propagation too, not just numeric chains. This
+ * class's own contribution is purely the two-pass running floor/ceiling computation over a chain.
  */
 final class OrderingPropagation {
     private OrderingPropagation() {}
@@ -46,53 +45,6 @@ final class OrderingPropagation {
      */
     record ChainBounds<T extends Comparable<T>>(List<T> newMins, List<T> newMaxs, int[] minSource, int[] maxSource) {}
 
-    @SuppressWarnings("unchecked")
-    private static <T extends Comparable<T>> T min(Domain<T> domain) {
-        if (domain instanceof NumericDomain<?> numeric) return (T) numeric.getMin();
-        return ((DiscreteDomain<T>) domain).stream().min(Comparator.<T>naturalOrder()).orElseThrow();
-    }
-
-    @SuppressWarnings("unchecked")
-    private static <T extends Comparable<T>> T max(Domain<T> domain) {
-        if (domain instanceof NumericDomain<?> numeric) return (T) numeric.getMax();
-        return ((DiscreteDomain<T>) domain).stream().max(Comparator.<T>naturalOrder()).orElseThrow();
-    }
-
-    /**
-     * Narrows {@code domain} to {@code [newMin, newMax]}.
-     *
-     * @return {@link Optional#empty()} if the domain is unchanged, otherwise the narrowed
-     *         domain (which may itself be {@link Domain#isEmpty() empty}, signalling infeasibility)
-     */
-    @SuppressWarnings("unchecked")
-    static <T extends Comparable<T>> Optional<Domain<T>> narrow(Domain<T> domain, T newMin, T newMax) {
-        if (domain instanceof NumericDomain<?> numeric) {
-            T curMin = (T) numeric.getMin();
-            T curMax = (T) numeric.getMax();
-            T lo = curMin.compareTo(newMin) >= 0 ? curMin : newMin;
-            T hi = curMax.compareTo(newMax) <= 0 ? curMax : newMax;
-            if (lo.equals(curMin) && hi.equals(curMax)) return Optional.empty();
-            // This method's T is only known as Comparable<T> (matching Increasing/
-            // DecreasingConstraint's own bound), but withBounds takes double -- widening via Number
-            // is legal since Comparable is a non-final interface that Number subtypes (Integer,
-            // Double, ...) do implement, and every NumericDomain's actual values are one of those
-            // subtypes at runtime.
-            double newMinD = ((Number) lo).doubleValue();
-            double newMaxD = ((Number) hi).doubleValue();
-            return Optional.of((Domain<T>) numeric.withBounds(newMinD, newMaxD));
-        }
-
-        DiscreteDomain<T> discrete = (DiscreteDomain<T>) domain;
-        DiscreteDomain.Builder<T> builder = null;
-        for (T val : discrete.toList()) {
-            if (val.compareTo(newMin) < 0 || val.compareTo(newMax) > 0) {
-                if (builder == null) builder = discrete.toBuilder();
-                builder.delete(val);
-            }
-        }
-        return builder == null ? Optional.empty() : Optional.of(builder.build());
-    }
-
     /** Bounds consistency for a non-decreasing chain over {@code orderedVariables}, in order. */
     @SuppressWarnings("unchecked")
     static <T extends Comparable<T>> ChainBounds<T> nonDecreasingBounds(
@@ -102,8 +54,8 @@ final class OrderingPropagation {
         List<T> maxs = new ArrayList<>(n);
         for (Variable<T> v : orderedVariables) {
             Domain<T> d = (Domain<T>) domains.get(v);
-            mins.add(min(d));
-            maxs.add(max(d));
+            mins.add(ComparableBounds.min(d));
+            maxs.add(ComparableBounds.max(d));
         }
 
         List<T> newMins = new ArrayList<>(n);

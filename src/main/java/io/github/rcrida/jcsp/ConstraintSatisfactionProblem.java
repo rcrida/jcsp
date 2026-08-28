@@ -91,9 +91,7 @@ import io.github.rcrida.jcsp.constraints.nary.NaryConstraint;
 import io.github.rcrida.jcsp.constraints.nary.PredicateConstraint;
 import io.github.rcrida.jcsp.constraints.nary.ReifiedConstraint;
 import io.github.rcrida.jcsp.constraints.unary.UnaryComparatorConstraint;
-import io.github.rcrida.jcsp.constraints.unary.UnaryNotEqualsConstraint;
 import io.github.rcrida.jcsp.constraints.unary.UnaryPredicateConstraint;
-import io.github.rcrida.jcsp.constraints.unary.UnaryValueConstraint;
 import io.github.rcrida.jcsp.constraints.unary.SetMembershipConstraint;
 import io.github.rcrida.jcsp.domains.BooleanDomain;
 import io.github.rcrida.jcsp.domains.BoundedDomain;
@@ -852,8 +850,8 @@ public class ConstraintSatisfactionProblem {
          * @param value the value the variable must take
          * @return the builder
          */
-        public <T> ConstraintSatisfactionProblemBuilder equalsConstraint(@NonNull Variable<T> variable, @NonNull T value) {
-            return this.constraint(UnaryValueConstraint.of(variable, value));
+        public <T extends Comparable<T>> ConstraintSatisfactionProblemBuilder equalsConstraint(@NonNull Variable<T> variable, @NonNull T value) {
+            return this.constraint(UnaryComparatorConstraint.of(variable, Operator.EQ, value));
         }
 
         /**
@@ -874,8 +872,8 @@ public class ConstraintSatisfactionProblem {
          * @param value the value the variable must not take
          * @return the builder
          */
-        public <T> ConstraintSatisfactionProblemBuilder notEqualsConstraint(@NonNull Variable<T> variable, @NonNull T value) {
-            return this.constraint(UnaryNotEqualsConstraint.of(variable, value));
+        public <T extends Comparable<T>> ConstraintSatisfactionProblemBuilder notEqualsConstraint(@NonNull Variable<T> variable, @NonNull T value) {
+            return this.constraint(UnaryComparatorConstraint.of(variable, Operator.NEQ, value));
         }
 
         /**
@@ -1174,7 +1172,7 @@ public class ConstraintSatisfactionProblem {
          */
         public ConstraintSatisfactionProblemBuilder exactlyOneConstraint(@NonNull Set<Variable<Boolean>> variables) {
             if (variables.size() == 1) {
-                return this.constraint(UnaryValueConstraint.of(variables.iterator().next(), true));
+                return this.constraint(UnaryComparatorConstraint.of(variables.iterator().next(), Operator.EQ, true));
             }
             return this.constraint(ExactlyOneConstraint.builder().variables(variables).build());
         }
@@ -1922,7 +1920,7 @@ public class ConstraintSatisfactionProblem {
                 val curr = counters[i + 1];
                 val neg  = negations[i];
 
-                reifyConstraint(neg, UnaryNotEqualsConstraint.of(v, true));
+                reifyConstraint(neg, UnaryComparatorConstraint.of(v, Operator.NEQ, true));
 
                 impliesConstraint(v, BinaryOffsetConstraint.of(prev, 1, Operator.EQ, curr));
                 impliesConstraint(neg, BinaryEqualsConstraint.of(curr, prev));

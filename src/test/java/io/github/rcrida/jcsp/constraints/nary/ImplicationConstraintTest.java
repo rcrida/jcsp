@@ -4,7 +4,7 @@ import io.github.rcrida.jcsp.ConstraintSatisfactionProblem;
 import io.github.rcrida.jcsp.assignments.Assignment;
 import io.github.rcrida.jcsp.constraints.Operator;
 import io.github.rcrida.jcsp.constraints.unary.UnaryComparatorConstraint;
-import io.github.rcrida.jcsp.constraints.unary.UnaryValueConstraint;
+import io.github.rcrida.jcsp.constraints.unary.UnaryPredicateConstraint;
 import io.github.rcrida.jcsp.domains.BooleanDomain;
 import io.github.rcrida.jcsp.domains.Domain;
 import io.github.rcrida.jcsp.domains.IntRangeDomain;
@@ -23,8 +23,14 @@ public class ImplicationConstraintTest {
     static final Variable<Boolean> B = F.create("b");
     static final Variable<Integer> X = F.create("x");
 
-    static final UnaryValueConstraint<Integer> BODY =
-            UnaryValueConstraint.of(X, 3);
+    static final UnaryComparatorConstraint<Integer> BODY =
+            UnaryComparatorConstraint.of(X, Operator.EQ, 3);
+
+    // A genuinely non-Propagatable UnaryConstraint (UnaryComparatorConstraint above implements
+    // Propagatable), for tests that specifically exercise ImplicationConstraint#propagate's
+    // non-Propagatable-body fallback (bodyFullyDetermined/bodySatisfied direct checks).
+    static final UnaryPredicateConstraint<Integer> NON_PROPAGATABLE_BODY =
+            UnaryPredicateConstraint.of(X, v -> v == 3);
 
     static Assignment a(boolean b, int x) {
         return Assignment.builder().value(B, b).value(X, x).build();
@@ -110,14 +116,14 @@ public class ImplicationConstraintTest {
 
     @Test
     void propagate_indicatorTrue_nonPropagatableBody_fullyDeterminedUnsatisfied_infeasible() {
-        val ic = ImplicationConstraint.of(B, BODY);
+        val ic = ImplicationConstraint.of(B, NON_PROPAGATABLE_BODY);
         Map<Variable<?>, Domain<?>> domains = Map.of(B, TRUE, X, IntRangeDomain.of(4, 4));
         assertThat(ic.propagate(domains)).isEmpty();
     }
 
     @Test
     void propagate_indicatorTrue_nonPropagatableBody_fullyDeterminedSatisfied_noChange() {
-        val ic = ImplicationConstraint.of(B, BODY);
+        val ic = ImplicationConstraint.of(B, NON_PROPAGATABLE_BODY);
         Map<Variable<?>, Domain<?>> domains = Map.of(B, TRUE, X, IntRangeDomain.of(3, 3));
         val result = ic.propagate(domains);
         assertThat(result).isPresent();
@@ -126,7 +132,7 @@ public class ImplicationConstraintTest {
 
     @Test
     void propagate_indicatorTrue_nonPropagatableBody_notFullyDetermined_noChange() {
-        val ic = ImplicationConstraint.of(B, BODY);
+        val ic = ImplicationConstraint.of(B, NON_PROPAGATABLE_BODY);
         Map<Variable<?>, Domain<?>> domains = Map.of(B, TRUE, X, IntRangeDomain.of(1, 5));
         val result = ic.propagate(domains);
         assertThat(result).isPresent();
@@ -153,7 +159,7 @@ public class ImplicationConstraintTest {
 
     @Test
     void propagate_indicatorOpen_bodyNotDetermined_nonPropagatableBody_noChange() {
-        val ic = ImplicationConstraint.of(B, BODY);
+        val ic = ImplicationConstraint.of(B, NON_PROPAGATABLE_BODY);
         Map<Variable<?>, Domain<?>> domains = Map.of(B, BOTH, X, IntRangeDomain.of(1, 5));
         val result = ic.propagate(domains);
         assertThat(result).isPresent();

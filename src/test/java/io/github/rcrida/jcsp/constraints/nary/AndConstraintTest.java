@@ -7,7 +7,7 @@ import io.github.rcrida.jcsp.constraints.Constraint;
 import io.github.rcrida.jcsp.constraints.Operator;
 import io.github.rcrida.jcsp.constraints.binary.BinaryOffsetConstraint;
 import io.github.rcrida.jcsp.constraints.unary.UnaryComparatorConstraint;
-import io.github.rcrida.jcsp.constraints.unary.UnaryValueConstraint;
+import io.github.rcrida.jcsp.constraints.unary.UnaryPredicateConstraint;
 import io.github.rcrida.jcsp.domains.BooleanDomain;
 import io.github.rcrida.jcsp.domains.Domain;
 import io.github.rcrida.jcsp.domains.IntRangeDomain;
@@ -31,8 +31,19 @@ public class AndConstraintTest {
     static final Variable<Double> X = F.create("x");
     static final Variable<Double> Y = F.create("y");
 
-    static final UnaryValueConstraint<Integer> A_EQ_3 = UnaryValueConstraint.of(A, 3);
-    static final UnaryValueConstraint<Integer> C_EQ_4 = UnaryValueConstraint.of(C, 4);
+    static final UnaryComparatorConstraint<Integer> A_EQ_3 = UnaryComparatorConstraint.of(A, Operator.EQ, 3);
+    static final UnaryComparatorConstraint<Integer> C_EQ_4 = UnaryComparatorConstraint.of(C, Operator.EQ, 4);
+
+    /**
+     * A genuinely non-{@link Propagatable} {@link io.github.rcrida.jcsp.constraints.unary.UnaryConstraint} -- unlike {@link
+     * UnaryComparatorConstraint}, {@link UnaryPredicateConstraint} implements neither {@link
+     * Propagatable#propagate} nor {@link Propagatable#isNecessarilySatisfied}, so it exercises
+     * {@link AndConstraint}'s own non-{@code Propagatable}-conjunct fallback paths (skip during
+     * {@link AndConstraint#propagate}, {@code allSingletonReason}-based {@code isSatisfiedBy} check
+     * during {@link AndConstraint#isNecessarilySatisfied}).
+     */
+    static final UnaryPredicateConstraint<Integer> A_EQ_3_NON_PROPAGATABLE =
+            UnaryPredicateConstraint.of(A, v -> v == 3);
 
     /**
      * Minimal {@link Propagatable} conjunct that always signals infeasible without explaining why
@@ -199,7 +210,7 @@ public class AndConstraintTest {
 
     @Test
     void propagate_nonPropagatableConjunct_skippedWithoutError() {
-        val and = AndConstraint.of(Set.of(A_EQ_3));
+        val and = AndConstraint.of(Set.of(A_EQ_3_NON_PROPAGATABLE));
         Map<Variable<?>, Domain<?>> domains = Map.of(A, IntRangeDomain.of(1, 5));
         val result = and.propagate(domains);
         assertThat(result).isPresent();
@@ -248,19 +259,19 @@ public class AndConstraintTest {
 
     @Test
     void isNecessarilySatisfied_nonPropagatableFullyDeterminedSatisfied_true() {
-        val and = AndConstraint.of(Set.of(A_EQ_3));
+        val and = AndConstraint.of(Set.of(A_EQ_3_NON_PROPAGATABLE));
         assertThat(and.isNecessarilySatisfied(Map.of(A, IntRangeDomain.of(3, 3)))).isTrue();
     }
 
     @Test
     void isNecessarilySatisfied_nonPropagatableNotFullyDetermined_false() {
-        val and = AndConstraint.of(Set.of(A_EQ_3));
+        val and = AndConstraint.of(Set.of(A_EQ_3_NON_PROPAGATABLE));
         assertThat(and.isNecessarilySatisfied(Map.of(A, IntRangeDomain.of(1, 5)))).isFalse();
     }
 
     @Test
     void isNecessarilySatisfied_nonPropagatableFullyDeterminedButViolated_false() {
-        val and = AndConstraint.of(Set.of(A_EQ_3));
+        val and = AndConstraint.of(Set.of(A_EQ_3_NON_PROPAGATABLE));
         assertThat(and.isNecessarilySatisfied(Map.of(A, IntRangeDomain.of(4, 4)))).isFalse();
     }
 
@@ -271,7 +282,7 @@ public class AndConstraintTest {
         Variable<Boolean> indicator = F.create("ind");
         Variable<Integer> p = F.create("p");
         Variable<Integer> q = F.create("q");
-        val and = AndConstraint.of(Set.of(UnaryValueConstraint.of(p, 3), UnaryValueConstraint.of(q, 4)));
+        val and = AndConstraint.of(Set.of(UnaryComparatorConstraint.of(p, Operator.EQ, 3), UnaryComparatorConstraint.of(q, Operator.EQ, 4)));
         val csp = ConstraintSatisfactionProblem.builder()
                 .variableDomain(indicator, BooleanDomain.INSTANCE)
                 .variableDomain(p, IntRangeDomain.of(1, 5))

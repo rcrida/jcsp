@@ -3,7 +3,8 @@ import io.github.rcrida.jcsp.solver.Solver;
 
 import lombok.val;
 import io.github.rcrida.jcsp.ConstraintSatisfactionProblem;
-import io.github.rcrida.jcsp.constraints.unary.UnaryValueConstraint;
+import io.github.rcrida.jcsp.constraints.Operator;
+import io.github.rcrida.jcsp.constraints.unary.UnaryComparatorConstraint;
 import io.github.rcrida.jcsp.domains.BooleanDomain;
 import io.github.rcrida.jcsp.domains.EnumDomain;
 import io.github.rcrida.jcsp.variables.Variable;
@@ -46,9 +47,9 @@ public class ReificationTest {
             .notEqualsConstraint(A, B)
             .notEqualsConstraint(B, C)
             // Reify preferences
-            .reifyConstraint(R1, UnaryValueConstraint.of(A, Colour.RED))
-            .reifyConstraint(R2, UnaryValueConstraint.of(B, Colour.GREEN))
-            .reifyConstraint(R3, UnaryValueConstraint.of(C, Colour.BLUE))
+            .reifyConstraint(R1, UnaryComparatorConstraint.of(A, Operator.EQ, Colour.RED))
+            .reifyConstraint(R2, UnaryComparatorConstraint.of(B, Operator.EQ, Colour.GREEN))
+            .reifyConstraint(R3, UnaryComparatorConstraint.of(C, Operator.EQ, Colour.BLUE))
             // At least 2 of the 3 preferences must be satisfied
             .atLeastNConstraint(Set.of(R1, R2, R3), 2)
             .build();

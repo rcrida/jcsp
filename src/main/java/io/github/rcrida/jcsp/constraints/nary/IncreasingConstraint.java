@@ -3,6 +3,7 @@ package io.github.rcrida.jcsp.constraints.nary;
 import io.github.rcrida.jcsp.assignments.Assignment;
 import io.github.rcrida.jcsp.consistency.Propagatable;
 import io.github.rcrida.jcsp.constraints.BinaryDecomposable;
+import io.github.rcrida.jcsp.constraints.ComparableBounds;
 import io.github.rcrida.jcsp.constraints.Operator;
 import io.github.rcrida.jcsp.constraints.binary.BinaryComparatorConstraint;
 import io.github.rcrida.jcsp.constraints.binary.BinaryConstraint;
@@ -80,7 +81,7 @@ public class IncreasingConstraint<T extends Comparable<T>> extends NaryConstrain
             T newMax = bounds.newMaxs().get(i);
             if (newMin.compareTo(newMax) > 0) return Optional.empty();
             Domain<T> current = (Domain<T>) domains.get(orderedVariables.get(i));
-            var narrowed = OrderingPropagation.narrow(current, newMin, newMax);
+            var narrowed = ComparableBounds.narrow(current, newMin, newMax);
             if (narrowed.isPresent()) {
                 if (narrowed.get().isEmpty()) return Optional.empty();
                 updated.put(orderedVariables.get(i), narrowed.get());

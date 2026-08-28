@@ -17,7 +17,8 @@ import java.util.Set;
 
 /**
  * Unary constraint over a set variable: {@code element ∈ variable}. The set-CP analogue of
- * {@link UnaryValueConstraint} — instead of pinning a scalar variable to one ground value, this
+ * {@link UnaryComparatorConstraint} (with {@link io.github.rcrida.jcsp.constraints.Operator#EQ}) —
+ * instead of pinning a scalar variable to one ground value, this
  * pins one specific element's membership in a {@link SetBoundedDomain} variable. Its primary
  * purpose is to be reified ({@code indicator <-> element ∈ variable}), which is otherwise
  * impossible for a set variable: {@link io.github.rcrida.jcsp.constraints.binary.SubsetConstraint}/

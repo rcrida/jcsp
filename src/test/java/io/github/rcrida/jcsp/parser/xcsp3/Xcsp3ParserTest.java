@@ -2266,7 +2266,7 @@ class Xcsp3ParserTest {
     }
 
     @Test void instantiationReified_indicatorTracksConstraintTruthValue() throws IOException {
-        // Reified via AndConstraint: one UnaryValueConstraint per pinned variable, conjoined.
+        // Reified via ValueConjunctionConstraint: one literal per pinned variable, conjoined.
         Xcsp3Instance instance = parseXml(
                 "<var id=\"x\"> 0..5 </var><var id=\"b\"> 0..1 </var>",
                 "<instantiation reifiedBy=\"b\"><list> x </list><values> 2 </values></instantiation>");

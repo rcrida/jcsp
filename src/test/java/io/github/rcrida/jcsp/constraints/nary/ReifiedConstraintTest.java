@@ -6,7 +6,7 @@ import io.github.rcrida.jcsp.constraints.Operator;
 import io.github.rcrida.jcsp.constraints.binary.BinaryNotEqualsConstraint;
 import io.github.rcrida.jcsp.constraints.binary.BinaryReifiedUnaryConstraint;
 import io.github.rcrida.jcsp.constraints.unary.UnaryComparatorConstraint;
-import io.github.rcrida.jcsp.constraints.unary.UnaryValueConstraint;
+import io.github.rcrida.jcsp.constraints.unary.UnaryPredicateConstraint;
 import io.github.rcrida.jcsp.domains.BooleanDomain;
 import io.github.rcrida.jcsp.domains.Domain;
 import io.github.rcrida.jcsp.domains.IntRangeDomain;
@@ -27,8 +27,14 @@ public class ReifiedConstraintTest {
     static final Variable<Integer> Y = F.create("y");
 
     // body: x = 3
-    static final UnaryValueConstraint<Integer> BODY =
-            UnaryValueConstraint.of(X, 3);
+    static final UnaryComparatorConstraint<Integer> BODY =
+            UnaryComparatorConstraint.of(X, Operator.EQ, 3);
+
+    // A genuinely non-Propagatable UnaryConstraint (UnaryComparatorConstraint above implements
+    // Propagatable), for tests that specifically exercise ReifiedConstraint#propagate's
+    // non-Propagatable-body fallback (bodyFullyDetermined/bodySatisfied direct checks).
+    static final UnaryPredicateConstraint<Integer> NON_PROPAGATABLE_BODY =
+            UnaryPredicateConstraint.of(X, v -> v == 3);
 
     static Assignment a(boolean b, int x) {
         return Assignment.builder().value(B, b).value(X, x).build();
@@ -102,14 +108,14 @@ public class ReifiedConstraintTest {
 
     @Test
     void propagate_indicatorTrue_nonPropagatableBody_fullyDeterminedUnsatisfied_infeasible() {
-        val rc = ReifiedConstraint.of(B, BODY);
+        val rc = ReifiedConstraint.of(B, NON_PROPAGATABLE_BODY);
         Map<Variable<?>, Domain<?>> domains = Map.of(B, TRUE, X, IntRangeDomain.of(4, 4));
         assertThat(rc.propagate(domains)).isEmpty();
     }
 
     @Test
     void propagate_indicatorTrue_nonPropagatableBody_fullyDeterminedSatisfied_noChange() {
-        val rc = ReifiedConstraint.of(B, BODY);
+        val rc = ReifiedConstraint.of(B, NON_PROPAGATABLE_BODY);
         Map<Variable<?>, Domain<?>> domains = Map.of(B, TRUE, X, IntRangeDomain.of(3, 3));
         val result = rc.propagate(domains);
         assertThat(result).isPresent();
@@ -118,7 +124,7 @@ public class ReifiedConstraintTest {
 
     @Test
     void propagate_indicatorTrue_nonPropagatableBody_notFullyDetermined_noChange() {
-        val rc = ReifiedConstraint.of(B, BODY);
+        val rc = ReifiedConstraint.of(B, NON_PROPAGATABLE_BODY);
         Map<Variable<?>, Domain<?>> domains = Map.of(B, TRUE, X, IntRangeDomain.of(1, 5));
         val result = rc.propagate(domains);
         assertThat(result).isPresent();
@@ -161,7 +167,7 @@ public class ReifiedConstraintTest {
 
     @Test
     void propagate_indicatorOpen_bodyNotDetermined_nonPropagatableBody_noChange() {
-        val rc = ReifiedConstraint.of(B, BODY);
+        val rc = ReifiedConstraint.of(B, NON_PROPAGATABLE_BODY);
         Map<Variable<?>, Domain<?>> domains = Map.of(B, BOTH, X, IntRangeDomain.of(1, 5));
         val result = rc.propagate(domains);
         assertThat(result).isPresent();

@@ -6,7 +6,7 @@ import lombok.val;
 import io.github.rcrida.jcsp.ConstraintSatisfactionProblem;
 import io.github.rcrida.jcsp.assignments.Assignment;
 import io.github.rcrida.jcsp.constraints.Operator;
-import io.github.rcrida.jcsp.constraints.unary.UnaryValueConstraint;
+import io.github.rcrida.jcsp.constraints.unary.UnaryComparatorConstraint;
 import io.github.rcrida.jcsp.domains.BooleanDomain;
 import io.github.rcrida.jcsp.domains.IntRangeDomain;
 import io.github.rcrida.jcsp.variables.Variable;
@@ -143,8 +143,8 @@ public class Prob038SteelMillSlabDesignTest {
             for (int j = 0; j < NUM_SLABS; j++) {
                 builder.variableDomain(INDICATOR[i][j], BooleanDomain.INSTANCE);
                 builder.variableDomain(Y_INT[i][j], IntRangeDomain.of(0, 1));
-                builder.reifyConstraint(INDICATOR[i][j], UnaryValueConstraint.of(SB.get(i), j));
-                builder.reifyConstraint(INDICATOR[i][j], UnaryValueConstraint.of(Y_INT[i][j], 1));
+                builder.reifyConstraint(INDICATOR[i][j], UnaryComparatorConstraint.of(SB.get(i), Operator.EQ, j));
+                builder.reifyConstraint(INDICATOR[i][j], UnaryComparatorConstraint.of(Y_INT[i][j], Operator.EQ, 1));
             }
         }
 

@@ -1,6 +1,7 @@
 package io.github.rcrida.jcsp.constraints.binary;
 
-import io.github.rcrida.jcsp.constraints.unary.UnaryValueConstraint;
+import io.github.rcrida.jcsp.constraints.Operator;
+import io.github.rcrida.jcsp.constraints.unary.UnaryComparatorConstraint;
 import io.github.rcrida.jcsp.variables.Variable;
 import org.junit.jupiter.api.Test;
 
@@ -11,8 +12,8 @@ public class BinaryReifiedUnaryConstraintTest {
     static final Variable<Boolean> B = F.create("b");
     static final Variable<Integer> X = F.create("x");
 
-    static final UnaryValueConstraint<Integer> BODY =
-            UnaryValueConstraint.of(X, 3);
+    static final UnaryComparatorConstraint<Integer> BODY =
+            UnaryComparatorConstraint.of(X, Operator.EQ, 3);
 
     static final BinaryReifiedUnaryConstraint<Integer> CONSTRAINT =
             BinaryReifiedUnaryConstraint.of(B, BODY);

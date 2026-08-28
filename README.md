@@ -255,8 +255,8 @@ Pass `RestartRandomization.NONE` instead to disable this entirely and restore fu
 
 **Unary**
 ```java
-builder.equalsConstraint(v, value)                          // v == value
-builder.notEqualsConstraint(v, value)                       // v != value
+builder.equalsConstraint(v, value)                          // v == value  (value must be Comparable<T>)
+builder.notEqualsConstraint(v, value)                       // v != value  (value must be Comparable<T>)
 builder.predicateConstraint(v, predicate)                   // predicate.test(v)
 builder.comparatorConstraint(v, Operator.GEQ, value)        // v >= value  (Number types; also LT, GT, LEQ, EQ, NEQ)
 builder.setMembershipConstraint(s, element)                 // element ∈ s  (set variable — Variable<Set<E>>; reify for a boolean membership indicator)

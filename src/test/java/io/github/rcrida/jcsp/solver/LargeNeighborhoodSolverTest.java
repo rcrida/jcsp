@@ -164,7 +164,7 @@ public class LargeNeighborhoodSolverTest {
     void slotWithAllSingletonDomains_isExcludedFromNeighborhood() {
         // x1, x2 both have singleton domain {false} → ExactlyOne({x1,x2}) becomes empty after
         // filtering → excluded from the neighborhood entirely, so LNS can never relax it. (A
-        // single-variable set would get simplified by the builder into a UnaryValueConstraint
+        // single-variable set would get simplified by the builder into a UnaryComparatorConstraint
         // instead of a real ExactlyOneConstraint — see exactlyOneConstraint's Javadoc — so this
         // needs >=2 variables to actually reach extractSlots's empty-slot filter.)
         // ExactlyOne({y,z}) is still relaxed, but ExactlyOne({x1,x2}) is permanently violated
