@@ -209,4 +209,19 @@ class Xcsp3CallbackHandlerTest {
         assertThatThrownBy(() -> handler.buildCtrIntension("c0", new XVarSymbolic[0], tree))
                 .isInstanceOf(UnsupportedXcsp3ConstraintException.class);
     }
+
+    /**
+     * {@code eq(3,5)}-shaped: {@code tree.sons[0]} is a bare {@code LONG} leaf, not a compound
+     * {@code mul(...)} node. Confirmed unreachable through any real, parseable XCSP3 file -- see
+     * {@link Xcsp3CallbackHandler#recognizeBooleanProductChannel}'s own comment -- so this needs
+     * the same direct construction {@code buildCtrIntensionSymbolic_nonLeafOperand_throwsUnsupported}
+     * above uses.
+     */
+    @Test void recognizeBooleanProductChannel_firstOperandNotXNodeParent_declines() {
+        XNodeLeaf<XVarInteger> left = new XNodeLeaf<>(TypeExpr.LONG, 3L);
+        XNodeLeaf<XVarInteger> right = new XNodeLeaf<>(TypeExpr.LONG, 5L);
+        XNodeParent<XVarInteger> tree = new XNodeParent<>(TypeExpr.EQ, left, right);
+        Xcsp3CallbackHandler handler = new Xcsp3CallbackHandler();
+        assertThat(handler.recognizeBooleanProductChannel(tree)).isEmpty();
+    }
 }

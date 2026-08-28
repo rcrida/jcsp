@@ -17,6 +17,7 @@ import io.github.rcrida.jcsp.constraints.nary.ProductVariableConstraint;
 import io.github.rcrida.jcsp.constraints.nary.RelationLogicConstraint;
 import io.github.rcrida.jcsp.constraints.nary.SumBoundConstraint;
 import io.github.rcrida.jcsp.constraints.nary.SumVariableConstraint;
+import io.github.rcrida.jcsp.constraints.unary.UnaryComparatorConstraint;
 import io.github.rcrida.jcsp.constraints.unary.UnaryPredicateConstraint;
 import io.github.rcrida.jcsp.solver.Solver;
 import io.github.rcrida.jcsp.variables.Variable;
@@ -514,6 +515,29 @@ class Xcsp3ParserTest {
         assertThat(found).isNotEmpty();
         for (Assignment a : found) {
             assertThat(digitOf(a, "z")).isNotEqualTo(digitOf(a, "x") * digitOf(a, "y"));
+        }
+    }
+
+    @Test void intensionProductOfPairLeqOperand_leftOperandNotXNodeParent_declines() throws IOException {
+        // le(x,mul(y,z)): unlike eq (whose canonizer always reorders a compound operand ahead of a
+        // bare variable, confirmed empirically), le doesn't get complexity-reordered -- swapping its
+        // operands would require also flipping the operator, which the canonizer only does to
+        // eliminate ge/gt, not for plain complexity ordering -- so tree.sons[0] genuinely stays the
+        // bare variable x here. Exercises recognizeProductOfPair's own
+        // !(tree.sons[0] instanceof XNodeParent) branch specifically: since recognizeGroundRelation
+        // (added to the main chain to close the reified-single-variable gap) now intercepts every
+        // eq/ne/le/lt-vs-constant and recognizeBinaryRelation every var-vs-var shape, a leaf
+        // tree.sons[0] reaching this method at all had become otherwise unreachable for eq (compound
+        // always precedes a leaf there); le is the one operator where it still happens. The same
+        // tree also exercises recognizeDistanceOfPair's identical leaf-check further down the chain.
+        Xcsp3Instance instance = parseXml(
+                "<var id=\"x\"> 0..20 </var><var id=\"y\"> 0..5 </var><var id=\"z\"> 0..5 </var>",
+                "<intension> le(x,mul(y,z)) </intension>");
+        assertThat(instance.csp().getConstraints().iterator().next()).isInstanceOf(PredicateConstraint.class);
+        Set<Assignment> found = solutions(instance.csp());
+        assertThat(found).isNotEmpty();
+        for (Assignment a : found) {
+            assertThat(digitOf(a, "x")).isLessThanOrEqualTo(digitOf(a, "y") * digitOf(a, "z"));
         }
     }
 
@@ -2712,18 +2736,73 @@ class Xcsp3ParserTest {
     }
 
     @Test void intensionOverSingleVariable_routesThroughUnaryPredicateConstraint() throws IOException {
-        // eq(x,5): a bare variable-vs-constant relation, not variable-vs-variable or
-        // variable-vs-add(var,const), so recognizeBinaryRelation doesn't match -- but with only one
-        // variable in scope, genericIntensionConstraint routes it through UnaryPredicateConstraint
-        // (a real UnaryConstraint, eligible for NodeConsistency's own preprocessing) rather than
-        // the n-ary PredicateConstraint every other fallback case here uses.
+        // eq(mod(x,3),1): a genuine single-variable predicate that isn't a bare comparison against
+        // a constant (mod(x,3) is compound, not a bare variable), so neither recognizeBinaryRelation
+        // nor recognizeGroundRelation match -- with only one variable in scope,
+        // genericIntensionConstraint routes it through UnaryPredicateConstraint (a real
+        // UnaryConstraint, eligible for NodeConsistency's own preprocessing) rather than the n-ary
+        // PredicateConstraint every other fallback case here uses.
+        Xcsp3Instance instance = parseXml(
+                "<var id=\"x\"> 0..9 </var>",
+                "<intension> eq(mod(x,3),1) </intension>");
+        assertThat(instance.csp().getConstraints().iterator().next()).isInstanceOf(UnaryPredicateConstraint.class);
+        Set<Assignment> solutions = solutions(instance.csp());
+        assertThat(solutions).isNotEmpty();
+        for (Assignment a : solutions) {
+            assertThat(digitOf(a, "x") % 3).isEqualTo(1);
+        }
+    }
+
+    // ---- intension bare ground relation (eq/ne/le/lt vs a constant, single variable) --------------
+    // recognizeGroundRelation, below, recognizeIffOperands' own operand recognizer -- also chained
+    // directly into buildCtrIntension's own top-level .or() sequence: a bare single-variable
+    // comparison is already a genuine UnaryConstraint via genericIntensionConstraint's own
+    // UnaryPredicateConstraint fallback (NodeConsistency-eligible when added unconditionally), but
+    // UnaryPredicateConstraint implements neither Propagatable#propagate nor
+    // Propagatable#isNecessarilySatisfied, so a reifiedBy-attributed occurrence of this exact shape
+    // previously got zero incremental propagation from its ReifiedConstraint wrapper. Routing
+    // through UnaryComparatorConstraint instead closes that gap without weakening the unreified case.
+
+    @Test void intensionGroundRelationSingleVariable_bareEq_routesThroughUnaryComparatorConstraint() throws IOException {
         Xcsp3Instance instance = parseXml(
                 "<var id=\"x\"> 0..9 </var>",
                 "<intension> eq(x,5) </intension>");
-        assertThat(instance.csp().getConstraints().iterator().next()).isInstanceOf(UnaryPredicateConstraint.class);
+        assertThat(instance.csp().getConstraints().iterator().next()).isInstanceOf(UnaryComparatorConstraint.class);
         Optional<Assignment> solution = Solver.Factory.INSTANCE.createSolver(instance.csp()).getSolution();
         assertThat(solution).isPresent();
         assertThat(digitOf(solution.get(), "x")).isEqualTo(5);
+    }
+
+    @Test void intensionGroundRelationSingleVariable_constantFirstLe_routesThroughFlippedUnaryComparatorConstraint() throws IOException {
+        // le(0,x): the real corpus shape (constant first) -- e.g. MagicSequence-style le(0,p[i])
+        // clauses, previously only recognized inside iff via recognizeRelation; now recognized here
+        // directly too.
+        Xcsp3Instance instance = parseXml(
+                "<var id=\"x\"> -3..5 </var>",
+                "<intension> le(0,x) </intension>");
+        assertThat(instance.csp().getConstraints().iterator().next()).isInstanceOf(UnaryComparatorConstraint.class);
+        Set<Assignment> solutions = solutions(instance.csp());
+        assertThat(solutions).isNotEmpty();
+        for (Assignment a : solutions) {
+            assertThat(digitOf(a, "x")).isGreaterThanOrEqualTo(0);
+        }
+    }
+
+    @Test void intensionGroundRelationSingleVariable_reified_indicatorTracksConstraintTruthValue() throws IOException {
+        // The motivating scenario: reifiedBy means this UnaryComparatorConstraint becomes the body
+        // of a ReifiedConstraint. Unlike UnaryPredicateConstraint (the pre-existing fallback for this
+        // shape), it's genuinely Propagatable, so the indicator is determined by real propagation,
+        // not just a final isSatisfiedBy check.
+        Xcsp3Instance instance = parseXml(
+                "<var id=\"x\"> -3..5 </var><var id=\"b\"> 0..1 </var>",
+                "<intension reifiedBy=\"b\"> le(0,x) </intension>");
+        Set<Assignment> found = solutions(instance.csp());
+        assertThat(found).isNotEmpty();
+        for (Assignment a : found) {
+            int x = digitOf(a, "x");
+            int b = digitOf(a, "b");
+            assertThat(b == 1).as("x=%d, b=%d", x, b).isEqualTo(x >= 0);
+        }
     }
 
     @Test void intensionBinaryComparisonReified_indicatorTracksConstraintTruthValue() throws IOException {

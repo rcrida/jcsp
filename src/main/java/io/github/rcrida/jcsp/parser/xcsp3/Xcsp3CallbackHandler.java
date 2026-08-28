@@ -431,6 +431,7 @@ final class Xcsp3CallbackHandler implements XCallbacks2 {
             return;
         }
         addOrReify(recognizeBinaryRelation(tree)
+                .or(() -> recognizeGroundRelation(tree))
                 .or(() -> recognizeBooleanProductChannel(tree))
                 .or(() -> recognizeProductOfPair(tree))
                 .or(() -> recognizeDistanceOfPair(tree))
@@ -492,11 +493,29 @@ final class Xcsp3CallbackHandler implements XCallbacks2 {
      * and a real {@code explainInfeasible}, not just a {@link io.github.rcrida.jcsp.domains.BoundedDomain}
      * clip), so there's no
      * remaining reason to route two operators through a different, more general class than the
-     * other four. Added specifically to recognize {@code iff(le(...),le(...))} as {@link
-     * #recognizeIffOperands}' own two operands -- confirmed via the bundled competition corpus that
-     * this shape occurs 15 times, previously falling all the way to unpropagated {@link
-     * PredicateConstraint} since neither operand was a plain boolean variable nor an {@code
-     * EQ}/{@code NEQ} ground relation.
+     * other four. Originally added to recognize {@code iff(le(...),le(...))} as {@link
+     * #recognizeIffOperands}' own two operands (via {@link #recognizeRelation}) -- confirmed via the
+     * bundled competition corpus that this shape occurs 15 times, previously falling all the way to
+     * unpropagated {@link PredicateConstraint} since neither operand was a plain boolean variable
+     * nor an {@code EQ}/{@code NEQ} ground relation.
+     * <p>
+     * Also chained directly into {@link #buildCtrIntension}'s own top-level {@code .or()} sequence,
+     * not just reachable via {@link #recognizeRelation}: a bare top-level {@code eq}/{@code ne}/
+     * {@code le}/{@code lt} against a constant (e.g. {@code le(0,x)}) is a genuinely single-variable
+     * intension, which {@link #genericIntensionConstraint} already routes to {@link
+     * io.github.rcrida.jcsp.constraints.unary.UnaryPredicateConstraint} regardless -- fine when the
+     * constraint is added unconditionally (a real {@code UnaryConstraint} either way, so {@link
+     * io.github.rcrida.jcsp.consistency.node.NodeConsistency} prunes it directly before search), but
+     * {@link io.github.rcrida.jcsp.constraints.unary.UnaryPredicateConstraint} implements neither
+     * {@link Propagatable#propagate} nor {@link Propagatable#isNecessarilySatisfied}, so a {@code
+     * reifiedBy}-attributed occurrence of this exact shape got zero incremental propagation from its
+     * {@link ReifiedConstraint} wrapper (only a final {@code isSatisfiedBy} check once every
+     * variable is assigned) -- confirmed via the bundled competition corpus, 65 {@code le(N,VAR)}
+     * occurrences alone. Recognizing it here instead routes to {@link UnaryComparatorConstraint},
+     * which -- unlike {@link io.github.rcrida.jcsp.constraints.unary.UnaryPredicateConstraint} --
+     * genuinely participates in {@link ReifiedConstraint}'s own {@link Propagatable} reasoning
+     * either way, so this closes the gap specifically for the reified case without weakening the
+     * unreified one.
      */
     private Optional<Constraint> recognizeGroundRelation(XNode<XVarInteger> node) {
         Operator operator = intensionRelationalOperator(node.getType());
@@ -679,8 +698,19 @@ final class Xcsp3CallbackHandler implements XCallbacks2 {
      * limitation of the {@code Set}-based factors representation itself, shared by every public
      * {@code productConstraint} entry point, not something worth working around just for this one
      * recognizer.
+     * <p>
+     * Package-private (not {@code private}): {@code tree.sons[0] instanceof XNodeParent} being
+     * {@code false} is unreachable through any real, parseable XCSP3 file now that {@link
+     * #recognizeGroundRelation} is chained ahead of this method in {@link #buildCtrIntension} --
+     * every {@code eq}-vs-constant or {@code eq}-vs-variable shape with a leaf {@code tree.sons[0]}
+     * is intercepted there first, and {@code xcsp3-tools}' canonizer always places a compound
+     * operand ahead of a leaf for {@code eq} otherwise (confirmed empirically); a genuinely
+     * variable-free {@code eq(3,5)} top-level intension isn't even parseable ({@code xcsp3-tools}
+     * itself throws a {@code NullPointerException} for one). {@code Xcsp3CallbackHandlerTest}
+     * exercises this branch directly, the same reasoning {@link #applySumCondition}'s own comment
+     * documents for its sibling unreachable branches.
      */
-    private Optional<Constraint> recognizeBooleanProductChannel(XNodeParent<XVarInteger> tree) {
+    Optional<Constraint> recognizeBooleanProductChannel(XNodeParent<XVarInteger> tree) {
         if (tree.getType() != TypeExpr.EQ || tree.sons.length != 2) return Optional.empty();
         if (!(tree.sons[0] instanceof XNodeParent<XVarInteger> mulNode)
                 || mulNode.getType() != TypeExpr.MUL || mulNode.sons.length != 2) {
