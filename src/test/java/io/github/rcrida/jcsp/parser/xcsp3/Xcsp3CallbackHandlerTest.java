@@ -224,4 +224,18 @@ class Xcsp3CallbackHandlerTest {
         Xcsp3CallbackHandler handler = new Xcsp3CallbackHandler();
         assertThat(handler.recognizeBooleanProductChannel(tree)).isEmpty();
     }
+
+    /**
+     * A leaf that's neither {@code VAR} nor {@code LONG} -- {@link Xcsp3CallbackHandler#asVariable}/
+     * {@link Xcsp3CallbackHandler#asConstant} already intercept those two, so a leaf reaching {@link
+     * Xcsp3CallbackHandler#resolveVariable}'s own {@code !(node instanceof XNodeParent)} check at
+     * all isn't constructible via real parsing (an {@code XVarInteger}-typed node never has any
+     * other leaf type). Confirmed unreachable the same way
+     * {@code recognizeBooleanProductChannel_firstOperandNotXNodeParent_declines} above is.
+     */
+    @Test void resolveVariable_nonVarNonLongLeaf_declines() {
+        XNodeLeaf<XVarInteger> leaf = new XNodeLeaf<>(TypeExpr.SYMBOL, "unexpected");
+        Xcsp3CallbackHandler handler = new Xcsp3CallbackHandler();
+        assertThat(handler.resolveVariable(leaf)).isEmpty();
+    }
 }

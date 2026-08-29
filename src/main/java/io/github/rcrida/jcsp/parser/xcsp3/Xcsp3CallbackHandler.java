@@ -141,11 +141,13 @@ final class Xcsp3CallbackHandler implements XCallbacks2 {
     private final Map<String, Variable<Boolean>> booleanIndicators = new LinkedHashMap<>();
     private final Map<Integer, Variable<Integer>> constantVariables = new LinkedHashMap<>();
     private final Map<String, Variable<Integer>> distanceAuxiliaries = new LinkedHashMap<>();
+    private final Map<String, DivModAuxiliaries> divModAuxiliaries = new LinkedHashMap<>();
     private final Map<Set<Variable<Integer>>, List<PendingCount>> pendingSingleValueCounts = new LinkedHashMap<>();
     private @Nullable ToDoubleFunction<Assignment> objective;
     private boolean maximize;
     private @Nullable XReification currentReification;
     private int declaredConstraintCount;
+    private int orIndicatorCount;
 
     Xcsp3CallbackHandler() {
         // By default xcsp3-tools "recognizes" simple intension/count/sum/etc. shapes and routes
@@ -339,12 +341,16 @@ final class Xcsp3CallbackHandler implements XCallbacks2 {
      * #elementResult}) that need a genuine {@code Variable<Integer>} but the source XCSP3 condition
      * is a constant, not a variable reference. Memoized by value, the same pattern {@link
      * #shiftVariable}/{@link #booleanIndicatorFor} use, so repeated occurrences of the same constant
-     * share one auxiliary variable instead of building a redundant copy per occurrence.
+     * share one auxiliary variable instead of building a redundant copy per occurrence. Also
+     * registered into {@link #boundsByName} at creation, alongside every genuinely-declared XCSP3
+     * variable, so a resolved constant can validly serve as a nested {@code div}/{@code mod}
+     * dividend too (see {@link #resolveVariable}) without a null bounds lookup.
      */
     private Variable<Integer> constantVariable(int value) {
         return constantVariables.computeIfAbsent(value, v -> {
             Variable<Integer> constant = Variable.Factory.INSTANCE.create("$const" + v);
             builder.variableDomain(constant, IntRangeDomain.of(v, v));
+            boundsByName.put(constant.getName(), new int[]{v, v});
             return constant;
         });
     }
@@ -382,6 +388,107 @@ final class Xcsp3CallbackHandler implements XCallbacks2 {
         });
     }
 
+    private record DivModAuxiliaries(Variable<Integer> quotient, Variable<Integer> remainder) {}
+
+    /**
+     * Fresh {@code quotient}/{@code remainder} pair for {@code dividend / divisor} and {@code
+     * dividend % divisor}, linked together via a single unconditional {@link
+     * LinearVariableConstraint} ({@code divisor*quotient + remainder == dividend}, added directly
+     * against {@link #builder} the same "definitional" way {@link #distanceAuxiliary} links its own
+     * auxiliary) -- built together rather than independently since one linking constraint pins both
+     * at once; building either alone would mean either a duplicated constraint or an
+     * under-constrained lone quotient/remainder. Memoized by {@code (dividend, divisor)}, the same
+     * {@code computeIfAbsent} pattern {@link #distanceAuxiliary}/{@link #constantVariable} use.
+     * <p>
+     * Callers (see {@link #resolveVariable}) are responsible for guarding {@code divisor > 0} and
+     * {@code dividend}'s own declared min bound {@code >= 0} before calling this method -- Java's
+     * {@code /}/{@code %} are truncate-toward-zero, which only coincides with floor-division/true-
+     * modulo semantics for non-negative operands, the same "strictly positive mins" convention
+     * documented for {@code productConstraint}/{@code divisionConstraint} in this project's
+     * top-level documentation. This method does not re-check that guard itself.
+     * <p>
+     * Both auxiliaries are registered into {@link #boundsByName} at creation (mirroring {@link
+     * #constantVariable}), non-negative by construction given the guard above, so a nested {@code
+     * div}/{@code mod} of one of these auxiliaries (e.g. a future {@code div(div(x,2),3)}) resolves
+     * correctly rather than hitting a null bounds lookup.
+     */
+    private DivModAuxiliaries divModAuxiliaries(Variable<Integer> dividend, int divisor) {
+        String key = dividend.getName() + "$divmod$" + divisor;
+        return divModAuxiliaries.computeIfAbsent(key, name -> {
+            int[] bounds = boundsByName.get(dividend.getName());
+            int quotientLow = bounds[0] / divisor;
+            int quotientHigh = bounds[1] / divisor;
+            Variable<Integer> quotient = Variable.Factory.INSTANCE.create(name + "$q");
+            Variable<Integer> remainder = Variable.Factory.INSTANCE.create(name + "$r");
+            builder.variableDomain(quotient, IntRangeDomain.of(quotientLow, quotientHigh));
+            builder.variableDomain(remainder, IntRangeDomain.of(0, divisor - 1));
+            builder.constraint(LinearVariableConstraint.of(
+                    Map.of(quotient, divisor, remainder, 1), Operator.EQ, dividend));
+            boundsByName.put(quotient.getName(), new int[]{quotientLow, quotientHigh});
+            boundsByName.put(remainder.getName(), new int[]{0, divisor - 1});
+            return new DivModAuxiliaries(quotient, remainder);
+        });
+    }
+
+    private Variable<Integer> divAuxiliary(Variable<Integer> dividend, int divisor) {
+        return divModAuxiliaries(dividend, divisor).quotient();
+    }
+
+    private Variable<Integer> modAuxiliary(Variable<Integer> dividend, int divisor) {
+        return divModAuxiliaries(dividend, divisor).remainder();
+    }
+
+    /**
+     * Recursively resolves an XCSP3 value-producing expression node to a {@link Variable}, the
+     * value-producing half of the expression grammar (see {@link #resolveConstraint} for the
+     * relation-producing half). Tries the two leaf cases first (bare variable, constant --
+     * {@link #asVariable}/{@link #asConstant} only ever match a leaf, never descending into a
+     * compound node), then the one known compound case ({@code div}/{@code mod} by a positive
+     * constant divisor, recursing into the dividend via this same method -- genuinely recursive, so
+     * a nested compound dividend like {@code div(div(x,2),3)} resolves correctly, not just one
+     * level deep). Declines (returns empty) for anything else, e.g. {@code add}/{@code mul} (not
+     * yet supported -- extending to another compound operator is a one-line addition here, mirroring
+     * this method's own {@code div}/{@code mod} case and reusing that operator's own existing
+     * {@code ...VariableConstraint} sibling as the linking constraint).
+     * <p>
+     * The divisor guard is checked before recursing into the dividend, not after -- a cheap,
+     * side-effect-free check first avoids the common case of an invalid divisor triggering an
+     * unnecessary (though harmless -- see below) recursive resolution.
+     * <p>
+     * Materializes eagerly rather than through a side-effect-free two-phase descriptor: a
+     * declined recognition can in principle leave a harmless orphaned auxiliary and linking
+     * constraint behind (always satisfiable, memoized so a genuine reuse elsewhere isn't
+     * duplicated, never affects the solution set over the real declared variables) -- accepted as
+     * simpler than a fully lazy descriptor tree mirroring the recursion at every level, for a
+     * benefit with no confirmed real occurrence.
+     * <p>
+     * Package-private (not {@code private}): {@code !(node instanceof XNodeParent)} being {@code
+     * true} here is unreachable through any real, parseable XCSP3 file -- {@link #asVariable}/
+     * {@link #asConstant} already intercept the only two leaf types ({@code VAR}/{@code LONG}) an
+     * {@code XVarInteger}-typed node ever has, so a leaf reaching this line at all isn't
+     * constructible via real parsing. {@code Xcsp3CallbackHandlerTest} exercises this branch
+     * directly, the same reasoning {@link #recognizeBooleanProductChannel}'s own comment documents
+     * for its sibling unreachable branch.
+     */
+    Optional<Variable<Integer>> resolveVariable(XNode<XVarInteger> node) {
+        Optional<Variable<Integer>> bare = asVariable(node);
+        if (bare.isPresent()) return bare;
+        Optional<Integer> constant = asConstant(node);
+        if (constant.isPresent()) return Optional.of(constantVariable(constant.get()));
+        if (!(node instanceof XNodeParent<XVarInteger> parent) || parent.sons.length != 2) return Optional.empty();
+        boolean isDiv = parent.getType() == TypeExpr.DIV;
+        if (!isDiv && parent.getType() != TypeExpr.MOD) return Optional.empty();
+        Optional<Integer> divisor = asConstant(parent.sons[1]);
+        if (divisor.isEmpty() || divisor.get() <= 0) return Optional.empty();
+        Optional<Variable<Integer>> dividend = resolveVariable(parent.sons[0]);
+        if (dividend.isEmpty()) return Optional.empty();
+        int[] bounds = boundsByName.get(dividend.get().getName());
+        if (bounds[0] < 0) return Optional.empty();
+        return Optional.of(isDiv
+                ? divAuxiliary(dividend.get(), divisor.get())
+                : modAuxiliary(dividend.get(), divisor.get()));
+    }
+
     // ---- Operator mapping -----------------------------------------------------------------------
 
     private static Operator mapOperator(TypeConditionOperatorRel operator) {
@@ -407,15 +514,22 @@ final class Xcsp3CallbackHandler implements XCallbacks2 {
     // ---- intension ------------------------------------------------------------------------------
 
     /**
-     * Recognizes two common shapes -- a bare binary comparison ({@code eq}/{@code ne}/{@code
-     * lt}/{@code le}/{@code ge}/{@code gt} between two plain variables) and a binary offset
-     * relation (the same operators between a variable and a two-term {@code add(var, constant)})
-     * -- and routes them onto {@link BinaryComparatorConstraint}/{@link BinaryOffsetConstraint}
-     * instead of the generic {@link PredicateConstraint}, since those already have real
-     * bounds-consistency propagation where {@link PredicateConstraint} has none (only checked once
-     * every variable is assigned). Everything else -- deeper nesting, more than two operands, a
-     * non-relational root -- falls back to {@link #genericIntensionConstraint}; recognition failure
-     * is always safe, just less propagated, never incorrect.
+     * {@link #recognizeIffOperands}/{@link #recognizeDistancePairComparison} are special-cased
+     * before the main chain since each returns a different record type needing its own
+     * post-processing ({@link #addIff}, or building a {@link BinaryComparatorConstraint} inline),
+     * not a single side-effect-free {@link Constraint}. The main chain itself starts with {@link
+     * #resolveConstraint} -- a recursive relation resolver covering a bare binary comparison, a
+     * binary offset relation, a ground relation against a constant, a {@code dist(...)} comparison,
+     * and {@code and}/{@code or} of arbitrary arity and nesting depth over any of those -- routing
+     * onto real propagating constraints ({@link BinaryComparatorConstraint}, {@link
+     * BinaryOffsetConstraint}, {@link io.github.rcrida.jcsp.constraints.unary.UnaryComparatorConstraint},
+     * {@link io.github.rcrida.jcsp.constraints.binary.AbsoluteDifferenceConstraint}, {@link
+     * AndConstraint}, {@link AtLeastNConstraint}) instead of the generic {@link
+     * PredicateConstraint}, which has none (only checked once every variable is assigned). {@link
+     * #recognizeBooleanProductChannel}/{@link #recognizeProductOfPair}/{@link
+     * #recognizeSumOrLinear} follow for the remaining product/sum shapes {@link #resolveConstraint}
+     * doesn't cover. Everything else falls back to {@link #genericIntensionConstraint}; recognition
+     * failure anywhere is always safe, just less propagated, never incorrect.
      */
     @Override
     public void buildCtrIntension(String id, XVarInteger[] list, XNodeParent<XVarInteger> tree) {
@@ -430,12 +544,9 @@ final class Xcsp3CallbackHandler implements XCallbacks2 {
                     distancePair.get().auxLeft(), distancePair.get().operator(), distancePair.get().auxRight()), id);
             return;
         }
-        addOrReify(recognizeBinaryRelation(tree)
-                .or(() -> recognizeGroundRelation(tree))
+        addOrReify(resolveConstraint(tree)
                 .or(() -> recognizeBooleanProductChannel(tree))
                 .or(() -> recognizeProductOfPair(tree))
-                .or(() -> recognizeDistanceOfPair(tree))
-                .or(() -> recognizeOrOfLiterals(tree))
                 .or(() -> recognizeSumOrLinear(tree))
                 .orElseGet(() -> genericIntensionConstraint(list, tree)), id);
     }
@@ -516,21 +627,30 @@ final class Xcsp3CallbackHandler implements XCallbacks2 {
      * genuinely participates in {@link ReifiedConstraint}'s own {@link Propagatable} reasoning
      * either way, so this closes the gap specifically for the reified case without weakening the
      * unreified one.
+     * <p>
+     * The non-constant side is resolved via {@link #resolveVariable}, not the narrower {@link
+     * #asVariable}, so a compound sub-expression this class knows how to materialize (currently
+     * {@code div}/{@code mod}) works here too -- e.g. {@code le(0,div(x,6))} -- not just a bare
+     * variable. The constant side is checked first (via {@link #asConstant}, cheap and
+     * side-effect-free) specifically so that {@link #resolveVariable} is only ever asked to resolve
+     * the <em>other</em> side -- {@link #resolveVariable} itself would happily resolve a bare
+     * constant too (via its own {@link #constantVariable} case), which would otherwise make this
+     * method's two branches ambiguous for a genuinely both-sides-ground shape.
      */
     private Optional<Constraint> recognizeGroundRelation(XNode<XVarInteger> node) {
         Operator operator = intensionRelationalOperator(node.getType());
         if (!LITERAL_OPERATORS.contains(operator) || node.sons.length != 2) {
             return Optional.empty();
         }
-        Optional<Variable<Integer>> leftVar = asVariable(node.sons[0]);
-        if (leftVar.isPresent()) {
-            return asConstant(node.sons[1])
-                    .map(constant -> UnaryComparatorConstraint.of(leftVar.get(), operator, constant));
+        Optional<Integer> rightConstant = asConstant(node.sons[1]);
+        if (rightConstant.isPresent()) {
+            return resolveVariable(node.sons[0])
+                    .map(v -> UnaryComparatorConstraint.of(v, operator, rightConstant.get()));
         }
-        Optional<Variable<Integer>> rightVar = asVariable(node.sons[1]);
-        if (rightVar.isPresent()) {
-            return asConstant(node.sons[0])
-                    .map(constant -> UnaryComparatorConstraint.of(rightVar.get(), flip(operator), constant));
+        Optional<Integer> leftConstant = asConstant(node.sons[0]);
+        if (leftConstant.isPresent()) {
+            return resolveVariable(node.sons[1])
+                    .map(v -> UnaryComparatorConstraint.of(v, flip(operator), leftConstant.get()));
         }
         return Optional.empty();
     }
@@ -626,9 +746,9 @@ final class Xcsp3CallbackHandler implements XCallbacks2 {
                 || distNode.getType() != TypeExpr.DIST || distNode.sons.length != 2) {
             return Optional.empty();
         }
-        Optional<Variable<Integer>> a = asVariable(distNode.sons[0]);
+        Optional<Variable<Integer>> a = resolveVariable(distNode.sons[0]);
         if (a.isEmpty()) return Optional.empty();
-        Optional<Variable<Integer>> b = asVariable(distNode.sons[1]);
+        Optional<Variable<Integer>> b = resolveVariable(distNode.sons[1]);
         if (b.isEmpty()) return Optional.empty();
         return Optional.of(new DistancePairOperand(a.get(), b.get()));
     }
@@ -639,23 +759,27 @@ final class Xcsp3CallbackHandler implements XCallbacks2 {
      * {@link AbsoluteDifferenceVariableConstraint} (variable target) or the already-existing {@link
      * AbsoluteDifferenceConstraint} (constant target) instead of the generic {@link
      * PredicateConstraint}. Unlike {@link #recognizeDistancePairComparison}, this is a plain
-     * chain-recognizer (no auxiliary variables needed -- the comparison's own right-hand side
-     * already <em>is</em> the target/bound). Same operand-order restriction as every other {@code
+     * chain-recognizer for the target side (no auxiliary needed there -- the comparison's own
+     * right-hand side already <em>is</em> the target/bound), though {@code dist}'s own two operands
+     * ({@code a}/{@code b}) are resolved via {@link #resolveVariable}, which may itself materialize
+     * a {@code div}/{@code mod} auxiliary. Same operand-order restriction as every other {@code
      * dist}/{@code mul}/{@code add} recognizer in this class: {@code xcsp3-tools}' canonizer always
      * places the compound {@code dist(...)} node first against a plain variable/constant target
      * (confirmed via the same corpus scan that motivated this method), so a defensive reverse-order
-     * check would be permanently dead code.
+     * check would be permanently dead code. Parameter type is the base {@link XNode} (not {@link
+     * XNodeParent}) so this method is also callable on a non-top-level node, e.g. from {@link
+     * #resolveConstraint}'s own recursive descent into an {@code and}/{@code or} child.
      */
-    private Optional<Constraint> recognizeDistanceOfPair(XNodeParent<XVarInteger> tree) {
+    private Optional<Constraint> recognizeDistanceOfPair(XNode<XVarInteger> tree) {
         Operator operator = intensionRelationalOperator(tree.getType());
         if (operator == null || tree.sons.length != 2) return Optional.empty();
         if (!(tree.sons[0] instanceof XNodeParent<XVarInteger> distNode)
                 || distNode.getType() != TypeExpr.DIST || distNode.sons.length != 2) {
             return Optional.empty();
         }
-        Optional<Variable<Integer>> a = asVariable(distNode.sons[0]);
+        Optional<Variable<Integer>> a = resolveVariable(distNode.sons[0]);
         if (a.isEmpty()) return Optional.empty();
-        Optional<Variable<Integer>> b = asVariable(distNode.sons[1]);
+        Optional<Variable<Integer>> b = resolveVariable(distNode.sons[1]);
         if (b.isEmpty()) return Optional.empty();
 
         Optional<Variable<Integer>> target = asVariable(tree.sons[1]);
@@ -813,9 +937,13 @@ final class Xcsp3CallbackHandler implements XCallbacks2 {
      * of unpropagated intension in that corpus. Recognition failure on either side (a nested/compound
      * child, e.g. {@code and(...)} or a {@code dist}-based relation) is always safe, just less
      * propagated, falling through to {@link #genericIntensionConstraint} unchanged.
+     * <p>
+     * Requires the caller to have already confirmed {@code tree.getType() == TypeExpr.OR} and
+     * {@code tree.sons.length == 2} -- its sole caller, {@link #resolveConstraint}'s own {@code
+     * or(...)} branch, always checks both before calling this as its cheaper special case for the
+     * 2-ary shape, so a defensive re-check here would be permanently dead code.
      */
     private Optional<Constraint> recognizeOrOfLiterals(XNodeParent<XVarInteger> tree) {
-        if (tree.getType() != TypeExpr.OR || tree.sons.length != 2) return Optional.empty();
         Optional<RelationLogicConstraint.Literal> left = recognizeLiteral(tree.sons[0]);
         if (left.isEmpty()) return Optional.empty();
         Optional<RelationLogicConstraint.Literal> right = recognizeLiteral(tree.sons[1]);
@@ -868,6 +996,83 @@ final class Xcsp3CallbackHandler implements XCallbacks2 {
         }
         return asConstant(node.sons[1])
                 .map(constant -> new RelationLogicConstraint.ValueLiteral(leftVar.get(), operator, constant));
+    }
+
+    /**
+     * Recursively resolves a relation-producing XCSP3 expression node to a {@link Constraint} --
+     * the {@link Constraint}-returning sibling of {@link #resolveVariable} (which resolves the
+     * other, value-producing half of XCSP3's expression grammar). Tries direct relation patterns
+     * first (cheapest, most specific: {@link #recognizeBinaryRelation}, {@link
+     * #recognizeGroundRelation}, {@link #recognizeDistanceOfPair}), then the two recursive/compound
+     * cases ({@code and}/{@code or}, of arbitrary arity and nesting depth, bottoming out back at
+     * this same method for each child) -- e.g. XCSP3's knight's-move adjacency idiom {@code
+     * or(and(eq(dist(div(a,k),div(b,k)),1),eq(dist(mod(a,k),mod(b,k)),2)), and(...))}, but also any
+     * deeper nesting like {@code and(a, or(b,c))} or a 3+-ary {@code or(a,b,c)}.
+     * <p>
+     * {@code and(...)}: routes through {@link AndConstraint} (real fixpoint over every
+     * recursively-resolved conjunct). {@code or(...)}: prefers the existing {@link
+     * #recognizeOrOfLiterals} first when exactly 2-ary (cheaper -- no extra indicator variables,
+     * already fully {@link Propagatable} via {@link RelationLogicConstraint}); otherwise reifies
+     * each recursively-resolved disjunct into a fresh indicator (same pattern {@link #addIff} uses
+     * for its own two operands) and combines via {@link AtLeastNConstraint} with {@code n=1} -- a
+     * genuine N-ary OR primitive, avoiding the extra indicator-per-fold-step a pairwise {@link
+     * io.github.rcrida.jcsp.constraints.binary.BinaryLogicConstraint} chain would need.
+     * <p>
+     * Recognition failure anywhere in the recursion is always safe, just less propagated -- falls
+     * through to {@link #genericIntensionConstraint} unchanged.
+     */
+    private Optional<Constraint> resolveConstraint(XNode<XVarInteger> node) {
+        Optional<Constraint> binary = recognizeBinaryRelation(node);
+        if (binary.isPresent()) return binary;
+        Optional<Constraint> ground = recognizeGroundRelation(node);
+        if (ground.isPresent()) return ground;
+        Optional<Constraint> dist = recognizeDistanceOfPair(node);
+        if (dist.isPresent()) return dist;
+
+        if (node.getType() == TypeExpr.AND) {
+            return resolveEachChild(node).map(constraints -> AndConstraint.of(Set.copyOf(constraints)));
+        }
+        if (node.getType() == TypeExpr.OR) {
+            if (node.sons.length == 2) {
+                // A node with getType() == OR is necessarily an XNodeParent -- only a parent node
+                // ever carries a logical-combinator type; a leaf's type is always VAR/LONG/SYMBOL --
+                // so this cast is always safe, no defensive instanceof check needed.
+                Optional<Constraint> literalOr = recognizeOrOfLiterals((XNodeParent<XVarInteger>) node);
+                if (literalOr.isPresent()) return literalOr;
+            }
+            return resolveEachChild(node).map(constraints -> {
+                Set<Variable<Boolean>> indicators = new LinkedHashSet<>();
+                for (Constraint c : constraints) {
+                    // Indicator names must be unique per disjunct, not just per variable set:
+                    // indicatorName(side, operand) derives its name purely from the operand's own
+                    // variables, so two structurally different disjuncts sharing the exact same
+                    // variable set (e.g. two AND-branches each over the same div/mod auxiliaries,
+                    // differing only in their target constants -- the actual knight's-move shape)
+                    // would otherwise collide onto one indicator, silently aliasing two genuinely
+                    // different reifications together. The "Or" + orIndicatorCount++ prefix
+                    // guarantees a fresh name per disjunct regardless.
+                    Variable<Boolean> indicator =
+                            Variable.Factory.INSTANCE.create(indicatorName("Or" + orIndicatorCount++, c));
+                    builder.variableDomain(indicator, BooleanDomain.INSTANCE);
+                    builder.reifyConstraint(indicator, c);
+                    indicators.add(indicator);
+                }
+                return AtLeastNConstraint.builder().variables(Set.copyOf(indicators)).n(1).build();
+            });
+        }
+        return Optional.empty();
+    }
+
+    // Resolves every son via resolveConstraint, returning empty (declining the whole node) if any
+    // son doesn't resolve -- shared by both the AND and OR branches above.
+    private Optional<List<Constraint>> resolveEachChild(XNode<XVarInteger> node) {
+        List<Constraint> results = new ArrayList<>();
+        for (XNode<XVarInteger> son : node.sons) {
+            Optional<Constraint> c = resolveConstraint(son);
+            if (c.isEmpty()) return Optional.empty();
+            results.add(c.get());
+        }
+        return Optional.of(results);
     }
 
     /**
@@ -1020,6 +1225,18 @@ final class Xcsp3CallbackHandler implements XCallbacks2 {
         return PredicateConstraint.builder().variables(toVariableSet(list)).predicate(predicate).build();
     }
 
+    /**
+     * The bare-variable-pair and {@code var op (var+const)} cases are tried first since neither
+     * needs an auxiliary variable ({@link BinaryOffsetConstraint} represents {@code var+const}
+     * directly). Only once neither applies does this fall back to the more general {@link
+     * #resolveVariable} on both sides -- e.g. {@code eq(div(x,6), div(y,6))}, {@code eq(div(x,6),
+     * y)}. That general fallback deliberately declines whenever either side is a bare constant
+     * (checked via {@link #asConstant}): {@link #resolveVariable} would happily resolve a bare
+     * constant too (via {@link #constantVariable}), which would otherwise let this method
+     * needlessly beat {@link #recognizeGroundRelation} to a ground-relation shape (e.g. {@code
+     * eq(x,5)}), producing a wasteful extra auxiliary variable where {@link
+     * UnaryComparatorConstraint} already handles it directly.
+     */
     private Optional<Constraint> recognizeBinaryRelation(XNode<XVarInteger> node) {
         Operator operator = intensionRelationalOperator(node.getType());
         if (operator == null || node.sons.length != 2) return Optional.empty();
@@ -1034,14 +1251,18 @@ final class Xcsp3CallbackHandler implements XCallbacks2 {
         // "var <op> var+k" rearranges to "var+k <flip(op)> var" to match BinaryOffsetConstraint's
         // fixed "left + offset <op> right" shape, which only ever applies the offset to the left side.
         if (leftVar.isPresent()) {
-            return asVariablePlusConstant(right)
+            Optional<Constraint> offset = asVariablePlusConstant(right)
                     .<Constraint>map(vk -> BinaryOffsetConstraint.of(vk.variable(), vk.offset(), flip(operator), leftVar.get()));
+            if (offset.isPresent()) return offset;
         }
         if (rightVar.isPresent()) {
-            return asVariablePlusConstant(left)
+            Optional<Constraint> offset = asVariablePlusConstant(left)
                     .<Constraint>map(vk -> BinaryOffsetConstraint.of(vk.variable(), vk.offset(), operator, rightVar.get()));
+            if (offset.isPresent()) return offset;
         }
-        return Optional.empty();
+        if (asConstant(left).isPresent() || asConstant(right).isPresent()) return Optional.empty();
+        return resolveVariable(left).flatMap(l -> resolveVariable(right)
+                .map(r -> BinaryComparatorConstraint.of(l, operator, r)));
     }
 
     // Package-private (not private): TypeExpr.GE/GT never reach here through any real XCSP3

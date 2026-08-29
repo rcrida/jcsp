@@ -6,6 +6,8 @@ import io.github.rcrida.jcsp.constraints.binary.AbsoluteDifferenceConstraint;
 import io.github.rcrida.jcsp.constraints.binary.BinaryComparatorConstraint;
 import io.github.rcrida.jcsp.constraints.binary.BinaryOffsetConstraint;
 import io.github.rcrida.jcsp.constraints.nary.AbsoluteDifferenceVariableConstraint;
+import io.github.rcrida.jcsp.constraints.nary.AndConstraint;
+import io.github.rcrida.jcsp.constraints.nary.AtLeastNConstraint;
 import io.github.rcrida.jcsp.constraints.nary.CountConstraint;
 import io.github.rcrida.jcsp.constraints.nary.GlobalCardinalityConstraint;
 import io.github.rcrida.jcsp.constraints.nary.LinearBoundConstraint;
@@ -678,22 +680,66 @@ class Xcsp3ParserTest {
         }
     }
 
-    @Test void intensionDistancePairComparison_secondDistOperandNotVariable_fallsBackToPredicateConstraint() throws IOException {
+    @Test void intensionDistancePairComparison_constantDistOperand_resolvesViaResolveVariable() throws IOException {
         // ne(dist(a,5),dist(c,d)): the left dist node's *second* operand is a bare constant, not a
-        // variable -- confirmed via a real probe that xcsp3-tools' canonizer keeps a variable-vs-
-        // constant dist(...) in that order (unlike a variable-vs-compound dist(...), which gets
-        // reordered compound-first) -- exercises asVariable(distNode.sons[1]).isEmpty() specifically,
-        // distinct from intensionDistanceOfPair_operandNotVariable's rejection on the first operand.
+        // variable -- since asDistancePairOperand now resolves each dist operand via
+        // resolveVariable (not the narrower asVariable), a bare constant resolves too (via
+        // constantVariable), so this recognizes exactly like the all-variable case rather than
+        // falling back to PredicateConstraint.
         Xcsp3Instance instance = parseXml(
                 "<var id=\"a\"> 1..3 </var><var id=\"c\"> 1..3 </var><var id=\"d\"> 1..3 </var>",
                 "<intension> ne(dist(a,5),dist(c,d)) </intension>");
-        assertThat(instance.csp().getConstraints().iterator().next()).isInstanceOf(PredicateConstraint.class);
+        assertThat(instance.csp().getConstraints()).filteredOn(c -> c instanceof AbsoluteDifferenceVariableConstraint<?>).hasSize(2);
+        assertThat(instance.csp().getConstraints()).anyMatch(c -> c instanceof BinaryComparatorConstraint<?>);
         Set<Assignment> found = solutions(instance.csp());
         assertThat(found).isNotEmpty();
         for (Assignment a : found) {
             int distLeft = Math.abs(digitOf(a, "a") - 5);
             int distRight = Math.abs(digitOf(a, "c") - digitOf(a, "d"));
             assertThat(distLeft).isNotEqualTo(distRight);
+        }
+    }
+
+    @Test void intensionDistancePairComparison_secondDistOperandUnsupportedCompound_fallsBackToPredicateConstraint() throws IOException {
+        // ne(dist(div(x,6),div(y,z)),dist(e,f)): the left dist node's *second* operand is a div
+        // with a variable divisor, unresolvable (resolveVariable's divisor guard requires a
+        // constant) -- while the first (div(x,6)) resolves fine. xcsp3-tools' canonizer promotes a
+        // compound ahead of a bare leaf (confirmed elsewhere in this file), but leaves two
+        // same-operator-type compounds (div vs div here) in their written order (confirmed via a
+        // real probe -- unlike add(c,1), which the canonizer promotes ahead of div regardless of
+        // which side it's written on), so this genuinely exercises asDistancePairOperand's
+        // resolveVariable(distNode.sons[1]).isEmpty() branch specifically, distinct from the
+        // first-operand rejection every other "operand not variable" test in this file exercises.
+        Xcsp3Instance instance = parseXml(
+                "<var id=\"x\"> 1..6 </var><var id=\"y\"> 1..6 </var><var id=\"z\"> 1..3 </var>"
+                        + "<var id=\"e\"> 1..3 </var><var id=\"f\"> 1..3 </var>",
+                "<intension> ne(dist(div(x,6),div(y,z)),dist(e,f)) </intension>");
+        // Not iterator().next(): div(x,6)'s own auxiliary-linking LinearVariableConstraint is added
+        // (as a side effect of successfully resolving the first dist operand) before the top-level
+        // PredicateConstraint, so it iterates first.
+        assertThat(instance.csp().getConstraints()).anyMatch(c -> c instanceof PredicateConstraint);
+        Set<Assignment> found = solutions(instance.csp());
+        assertThat(found).isNotEmpty();
+        for (Assignment a : found) {
+            int distLeft = Math.abs(digitOf(a, "x") / 6 - digitOf(a, "y") / digitOf(a, "z"));
+            int distRight = Math.abs(digitOf(a, "e") - digitOf(a, "f"));
+            assertThat(distLeft).isNotEqualTo(distRight);
+        }
+    }
+
+    @Test void resolveVariableDiv_secondDistOperandUnsupportedCompound_fallsBackToPredicateConstraint() throws IOException {
+        // eq(dist(div(x,6),div(y,z)),1): the *second* dist operand (div(y,z), variable divisor)
+        // fails to resolve while the first (div(x,6)) succeeds -- exercises
+        // recognizeDistanceOfPair's own resolveVariable(distNode.sons[1]).isEmpty() branch, the
+        // dist-vs-target sibling of the pair-comparison test above.
+        Xcsp3Instance instance = parseXml(
+                "<var id=\"x\"> 1..6 </var><var id=\"y\"> 1..6 </var><var id=\"z\"> 1..3 </var>",
+                "<intension> eq(dist(div(x,6),div(y,z)),1) </intension>");
+        assertThat(instance.csp().getConstraints()).anyMatch(c -> c instanceof PredicateConstraint);
+        Set<Assignment> found = solutions(instance.csp());
+        assertThat(found).isNotEmpty();
+        for (Assignment a : found) {
+            assertThat(Math.abs(digitOf(a, "x") / 6 - digitOf(a, "y") / digitOf(a, "z"))).isEqualTo(1);
         }
     }
 
@@ -833,16 +879,18 @@ class Xcsp3ParserTest {
         }
     }
 
-    @Test void intensionOrGeOperand_fallsBackToPredicateConstraint() throws IOException {
+    @Test void intensionOrGeOperand_recognizesViaResolveConstraintsGeneralNaryPath() throws IOException {
         // or(ge(x,2), eq(y,1)): ge(x,2) canonicalizes to le(2,x) -- constant first, variable second,
-        // the one operand order recognizeLiteral doesn't check (confirmed via a real probe: no
-        // bundled competition instance's or(...) node ever takes this shape) -- so recognition
-        // declines via leftVar.isEmpty() (2 isn't a variable), distinct from
-        // intensionOrNonVariableLiteralOperand's decline (a genuine two-variable compound).
+        // the one operand order recognizeLiteral (the 2-literal special case) doesn't check, so
+        // that narrower path still declines here. But resolveConstraint's general N-ary OR fallback
+        // recurses into each child via resolveConstraint itself, which reaches recognizeGroundRelation
+        // for le(2,x) -- recognizeGroundRelation checks *both* operand orders, unlike recognizeLiteral
+        // -- so this now recognizes via the general path (AtLeastNConstraint over two reified
+        // indicators) where it previously fell all the way to PredicateConstraint.
         Xcsp3Instance instance = parseXml(
                 "<var id=\"x\"> 0..3 </var><var id=\"y\"> 0..1 </var>",
                 "<intension> or(ge(x,2),eq(y,1)) </intension>");
-        assertThat(instance.csp().getConstraints().iterator().next()).isInstanceOf(PredicateConstraint.class);
+        assertThat(instance.csp().getConstraints()).anyMatch(c -> c instanceof AtLeastNConstraint);
         Set<Assignment> found = solutions(instance.csp());
         assertThat(found).isNotEmpty();
         for (Assignment a : found) {
@@ -850,13 +898,20 @@ class Xcsp3ParserTest {
         }
     }
 
-    @Test void intensionOrNestedChild_fallsBackToPredicateConstraint() throws IOException {
-        // or(and(eq(x,1),eq(y,2)), eq(z,3)): the left child is a compound and(...), not a bare
-        // eq/ne literal -- recognition must decline and fall through to genericIntensionConstraint.
+    @Test void intensionOrNestedChild_recognizesViaResolveConstraintsRecursion() throws IOException {
+        // or(and(eq(x,1),eq(y,2)), eq(z,3)): the left child is a compound and(...) -- previously
+        // unrecognizable (recognizeOrOfLiterals' recognizeLiteral only matches a bare eq/ne/le/lt
+        // literal, never a compound and/or child), but resolveConstraint recurses into it: the
+        // and(...) child resolves via AndConstraint over its own two recognized conjuncts (reified
+        // into its own fresh indicator, so AndConstraint itself appears as a ReifiedConstraint body
+        // rather than a top-level constraint), the eq(z,3) child resolves via recognizeGroundRelation
+        // (reified into a sibling indicator), and the two indicators combine via one top-level
+        // AtLeastNConstraint -- the actual motivating capability behind this whole recursive design.
         Xcsp3Instance instance = parseXml(
                 "<var id=\"x\"> 0..2 </var><var id=\"y\"> 0..2 </var><var id=\"z\"> 0..3 </var>",
                 "<intension> or(and(eq(x,1),eq(y,2)),eq(z,3)) </intension>");
-        assertThat(instance.csp().getConstraints().iterator().next()).isInstanceOf(PredicateConstraint.class);
+        assertThat(instance.csp().getConstraints()).anyMatch(c -> c instanceof AtLeastNConstraint);
+        assertThat(instance.csp().getConstraints()).anyMatch(c -> c.getRelation().contains("AND"));
         Set<Assignment> found = solutions(instance.csp());
         assertThat(found).isNotEmpty();
         for (Assignment a : found) {
@@ -900,12 +955,16 @@ class Xcsp3ParserTest {
         }
     }
 
-    @Test void intensionOrThreeOperands_fallsBackToPredicateConstraint() throws IOException {
-        // A 3-operand or(...) isn't the two-child shape this recognizer matches.
+    @Test void intensionOrThreeOperands_recognizesViaAtLeastNConstraint() throws IOException {
+        // or(eq(x,1),eq(y,2),eq(z,3)): a 3-operand or(...) isn't the two-child shape
+        // recognizeOrOfLiterals matches, but resolveConstraint's general OR path has no arity
+        // restriction -- each of the three children recognizes via recognizeGroundRelation and the
+        // whole thing combines into one AtLeastNConstraint(n=1) over three reified indicators, a
+        // genuine N-ary OR primitive rather than PredicateConstraint's opaque, unpropagated check.
         Xcsp3Instance instance = parseXml(
                 "<var id=\"x\"> 0..3 </var><var id=\"y\"> 0..3 </var><var id=\"z\"> 0..3 </var>",
                 "<intension> or(eq(x,1),eq(y,2),eq(z,3)) </intension>");
-        assertThat(instance.csp().getConstraints().iterator().next()).isInstanceOf(PredicateConstraint.class);
+        assertThat(instance.csp().getConstraints()).anyMatch(c -> c instanceof AtLeastNConstraint);
         Set<Assignment> found = solutions(instance.csp());
         assertThat(found).isNotEmpty();
         for (Assignment a : found) {
@@ -2736,20 +2795,24 @@ class Xcsp3ParserTest {
     }
 
     @Test void intensionOverSingleVariable_routesThroughUnaryPredicateConstraint() throws IOException {
-        // eq(mod(x,3),1): a genuine single-variable predicate that isn't a bare comparison against
-        // a constant (mod(x,3) is compound, not a bare variable), so neither recognizeBinaryRelation
-        // nor recognizeGroundRelation match -- with only one variable in scope,
-        // genericIntensionConstraint routes it through UnaryPredicateConstraint (a real
-        // UnaryConstraint, eligible for NodeConsistency's own preprocessing) rather than the n-ary
-        // PredicateConstraint every other fallback case here uses.
+        // eq(mul(x,x),4): a genuine single-variable predicate that isn't a bare comparison against
+        // a constant (mul(x,x) is compound, not a bare variable, and resolveVariable only knows
+        // div/mod, not mul -- so neither recognizeBinaryRelation nor recognizeGroundRelation match;
+        // recognizeProductOfPair/recognizeBooleanProductChannel also decline a self-product, since
+        // ProductVariableConstraint/ProductConstraint can't represent one variable used twice) --
+        // with only one variable in scope, genericIntensionConstraint routes it through
+        // UnaryPredicateConstraint (a real UnaryConstraint, eligible for NodeConsistency's own
+        // preprocessing) rather than the n-ary PredicateConstraint every other fallback case here
+        // uses. (mod(x,3) was this test's original premise, but resolveVariable's div/mod widening
+        // now recognizes it via recognizeGroundRelation -- see the dedicated div/mod tests instead.)
         Xcsp3Instance instance = parseXml(
                 "<var id=\"x\"> 0..9 </var>",
-                "<intension> eq(mod(x,3),1) </intension>");
+                "<intension> eq(mul(x,x),4) </intension>");
         assertThat(instance.csp().getConstraints().iterator().next()).isInstanceOf(UnaryPredicateConstraint.class);
         Set<Assignment> solutions = solutions(instance.csp());
         assertThat(solutions).isNotEmpty();
         for (Assignment a : solutions) {
-            assertThat(digitOf(a, "x") % 3).isEqualTo(1);
+            assertThat(digitOf(a, "x") * digitOf(a, "x")).isEqualTo(4);
         }
     }
 
@@ -2805,6 +2868,297 @@ class Xcsp3ParserTest {
         }
     }
 
+    // ---- resolveVariable / divModAuxiliaries (div(v,k)/mod(v,k) as a resolvable compound value) ---
+    // resolveVariable is the recursive value-resolver wired into recognizeGroundRelation,
+    // recognizeBinaryRelation, recognizeDistanceOfPair, and recognizeDistancePairComparison/
+    // asDistancePairOperand: a bare variable or constant resolves directly, div(v,k)/mod(v,k)
+    // resolves via a fresh quotient/remainder auxiliary pair (divModAuxiliaries) linked to v by one
+    // LinearVariableConstraint, and the resolution genuinely recurses (a div/mod of another div/mod
+    // resolves too, not just one level deep).
+
+    @Test void resolveVariableDiv_insideGroundRelation_routesThroughUnaryComparatorConstraintOverAuxiliary() throws IOException {
+        Xcsp3Instance instance = parseXml(
+                "<var id=\"x\"> 0..9 </var>",
+                "<intension> eq(div(x,3),2) </intension>");
+        assertThat(instance.csp().getConstraints()).anyMatch(c -> c instanceof UnaryComparatorConstraint<?>);
+        assertThat(instance.csp().getConstraints()).anyMatch(c -> c instanceof LinearVariableConstraint<?>);
+        Set<Assignment> found = solutions(instance.csp());
+        assertThat(found).isNotEmpty();
+        for (Assignment a : found) {
+            assertThat(digitOf(a, "x") / 3).isEqualTo(2);
+        }
+    }
+
+    @Test void resolveVariableMod_constantFirst_insideGroundRelation_routesThroughFlippedUnaryComparatorConstraint() throws IOException {
+        Xcsp3Instance instance = parseXml(
+                "<var id=\"x\"> 0..9 </var>",
+                "<intension> le(1,mod(x,3)) </intension>");
+        assertThat(instance.csp().getConstraints()).anyMatch(c -> c instanceof UnaryComparatorConstraint<?>);
+        Set<Assignment> found = solutions(instance.csp());
+        assertThat(found).isNotEmpty();
+        for (Assignment a : found) {
+            assertThat(digitOf(a, "x") % 3).isGreaterThanOrEqualTo(1);
+        }
+    }
+
+    @Test void resolveVariableDiv_vsPlainVariable_insideBinaryRelation_routesThroughBinaryComparatorConstraintOverAuxiliary() throws IOException {
+        Xcsp3Instance instance = parseXml(
+                "<var id=\"x\"> 0..9 </var><var id=\"y\"> 0..3 </var>",
+                "<intension> eq(div(x,3),y) </intension>");
+        assertThat(instance.csp().getConstraints()).anyMatch(c -> c instanceof BinaryComparatorConstraint<?>);
+        Set<Assignment> found = solutions(instance.csp());
+        assertThat(found).isNotEmpty();
+        for (Assignment a : found) {
+            assertThat(digitOf(a, "x") / 3).isEqualTo(digitOf(a, "y"));
+        }
+    }
+
+    @Test void resolveVariableDiv_vsAnotherDivOperand_insideBinaryRelation_routesThroughBinaryComparatorConstraintOverBothAuxiliaries() throws IOException {
+        Xcsp3Instance instance = parseXml(
+                "<var id=\"x\"> 0..9 </var><var id=\"y\"> 0..9 </var>",
+                "<intension> eq(div(x,3),div(y,2)) </intension>");
+        assertThat(instance.csp().getConstraints()).anyMatch(c -> c instanceof BinaryComparatorConstraint<?>);
+        assertThat(instance.csp().getConstraints()).filteredOn(c -> c instanceof LinearVariableConstraint<?>).hasSize(2);
+        Set<Assignment> found = solutions(instance.csp());
+        assertThat(found).isNotEmpty();
+        for (Assignment a : found) {
+            assertThat(digitOf(a, "x") / 3).isEqualTo(digitOf(a, "y") / 2);
+        }
+    }
+
+    @Test void resolveVariableDiv_insideDistOfPair_routesThroughAbsoluteDifferenceConstraintOverAuxiliaries() throws IOException {
+        Xcsp3Instance instance = parseXml(
+                "<var id=\"x\"> 0..9 </var><var id=\"y\"> 0..9 </var>",
+                "<intension> eq(dist(div(x,3),div(y,3)),1) </intension>");
+        assertThat(instance.csp().getConstraints()).anyMatch(c -> c instanceof AbsoluteDifferenceConstraint<?>);
+        Set<Assignment> found = solutions(instance.csp());
+        assertThat(found).isNotEmpty();
+        for (Assignment a : found) {
+            assertThat(Math.abs(digitOf(a, "x") / 3 - digitOf(a, "y") / 3)).isEqualTo(1);
+        }
+    }
+
+    @Test void resolveVariableDiv_negativeDomainDividend_declinesAndFallsBackToUnaryPredicateConstraint() throws IOException {
+        // resolveVariable's div/mod case requires the dividend's declared min bound >= 0 (Java's
+        // /,% are truncate-toward-zero, matching floor-division/true-modulo only for non-negative
+        // operands) -- exercises that guard specifically.
+        Xcsp3Instance instance = parseXml(
+                "<var id=\"x\"> -3..5 </var>",
+                "<intension> eq(div(x,3),1) </intension>");
+        assertThat(instance.csp().getConstraints().iterator().next()).isInstanceOf(UnaryPredicateConstraint.class);
+        Set<Assignment> found = solutions(instance.csp());
+        assertThat(found).isNotEmpty();
+        for (Assignment a : found) {
+            assertThat(Math.floorDiv(digitOf(a, "x"), 3)).isEqualTo(1);
+        }
+    }
+
+    @Test void resolveVariableDiv_variableDivisor_declinesAndFallsBackToPredicateConstraint() throws IOException {
+        // div(x,y): the divisor is itself a variable, not a constant -- exercises
+        // asConstant(parent.sons[1]).isEmpty() specifically.
+        Xcsp3Instance instance = parseXml(
+                "<var id=\"x\"> 0..9 </var><var id=\"y\"> 1..3 </var>",
+                "<intension> eq(div(x,y),2) </intension>");
+        assertThat(instance.csp().getConstraints().iterator().next()).isInstanceOf(PredicateConstraint.class);
+        Set<Assignment> found = solutions(instance.csp());
+        assertThat(found).isNotEmpty();
+        for (Assignment a : found) {
+            assertThat(digitOf(a, "x") / digitOf(a, "y")).isEqualTo(2);
+        }
+    }
+
+    @Test void resolveVariableDiv_nonPositiveConstantDivisor_declinesAndFallsBackToUnaryPredicateConstraint() throws IOException {
+        // div(x,-2): the divisor is a constant but not strictly positive -- exercises
+        // divisor.get() <= 0 specifically, distinct from divisor.isEmpty() (a variable divisor,
+        // tested above). Target -2 (not 1) since resolveVariable declines entirely here -- the
+        // fallback genericIntensionConstraint/IntensionExpressionEvaluator evaluates div via plain
+        // Java integer division (truncating, not floor), so the target must be reachable under that
+        // exact semantics for x in the declared domain (x=4 or x=5 give 4/-2==5/-2==-2 in Java).
+        Xcsp3Instance instance = parseXml(
+                "<var id=\"x\"> 0..9 </var>",
+                "<intension> eq(div(x,-2),-2) </intension>");
+        assertThat(instance.csp().getConstraints().iterator().next()).isInstanceOf(UnaryPredicateConstraint.class);
+        Set<Assignment> found = solutions(instance.csp());
+        assertThat(found).isNotEmpty();
+        for (Assignment a : found) {
+            assertThat(digitOf(a, "x") / -2).isEqualTo(-2);
+        }
+    }
+
+    @Test void resolveVariableGroundRelation_ternaryCompoundOperand_declinesCleanly() throws IOException {
+        // eq(add(x,y,z),5): resolveVariable is called (via recognizeGroundRelation) on a compound
+        // operand with 3 sons, not the 2-son shape its div/mod case requires -- exercises
+        // resolveVariable's own parent.sons.length != 2 guard specifically (distinct from a node
+        // that isn't a compound at all). The whole shape is still recognized elsewhere
+        // (recognizeSumOrLinear), just not via resolveVariable/recognizeGroundRelation.
+        Xcsp3Instance instance = parseXml(
+                "<var id=\"x\"> 0..3 </var><var id=\"y\"> 0..3 </var><var id=\"z\"> 0..3 </var>",
+                "<intension> eq(add(x,y,z),5) </intension>");
+        Set<Assignment> found = solutions(instance.csp());
+        assertThat(found).isNotEmpty();
+        for (Assignment a : found) {
+            assertThat(digitOf(a, "x") + digitOf(a, "y") + digitOf(a, "z")).isEqualTo(5);
+        }
+    }
+
+    @Test void resolveVariableDiv_sameVariableAndDivisor_reusedAcrossTwoRecognizers_sharesOneAuxiliaryPair() throws IOException {
+        // div(x,3) occurs once via recognizeGroundRelation (eq(div(x,3),2)) and once via
+        // recognizeBinaryRelation (eq(div(x,3),y)) -- both should resolve to the same quotient/
+        // remainder auxiliary pair, sharing one LinearVariableConstraint, not building a redundant
+        // second copy (the same amortization distanceAuxiliary/constantVariable already give).
+        Xcsp3Instance instance = parseXml(
+                "<var id=\"x\"> 0..9 </var><var id=\"y\"> 0..3 </var>",
+                "<intension> eq(div(x,3),2) </intension>"
+                        + "<intension> eq(div(x,3),y) </intension>");
+        assertThat(instance.csp().getConstraints()).filteredOn(c -> c instanceof LinearVariableConstraint<?>).hasSize(1);
+    }
+
+    @Test void resolveVariableDiv_nestedDivOfDiv_resolvesRecursively() throws IOException {
+        // div(div(x,2),3): the dividend of the outer div is itself a div node -- confirms
+        // resolveVariable's recursion (not just one level deep) and that the synthesized quotient
+        // auxiliary's own bounds are registered into boundsByName so the outer div's guard can
+        // validate it.
+        Xcsp3Instance instance = parseXml(
+                "<var id=\"x\"> 0..23 </var>",
+                "<intension> eq(div(div(x,2),3),1) </intension>");
+        assertThat(instance.csp().getConstraints()).filteredOn(c -> c instanceof LinearVariableConstraint<?>).hasSize(2);
+        Set<Assignment> found = solutions(instance.csp());
+        assertThat(found).isNotEmpty();
+        for (Assignment a : found) {
+            assertThat((digitOf(a, "x") / 2) / 3).isEqualTo(1);
+        }
+    }
+
+    @Test void resolveVariableDiv_dividendItselfUnresolvable_declinesAndFallsBackToPredicateConstraint() throws IOException {
+        // div(add(x,y),3): the dividend is a compound resolveVariable doesn't support (add isn't a
+        // known operator there, only div/mod) -- exercises resolveVariable's own recursive-dividend
+        // branch declining cleanly rather than crashing or mis-resolving.
+        Xcsp3Instance instance = parseXml(
+                "<var id=\"x\"> 0..5 </var><var id=\"y\"> 0..5 </var>",
+                "<intension> eq(div(add(x,y),3),1) </intension>");
+        assertThat(instance.csp().getConstraints().iterator().next()).isInstanceOf(PredicateConstraint.class);
+        Set<Assignment> found = solutions(instance.csp());
+        assertThat(found).isNotEmpty();
+        for (Assignment a : found) {
+            assertThat((digitOf(a, "x") + digitOf(a, "y")) / 3).isEqualTo(1);
+        }
+    }
+
+    // ---- resolveConstraint (recursive and/or composition, arbitrary arity/depth) -------------------
+
+    @Test void resolveConstraint_knightsMoveShape_endToEnd_routesThroughAndConstraintAndAtLeastNConstraint() throws IOException {
+        // The actual motivating corpus shape (KnightTour-06-int.xml.lzma/QueenAttacking-06.xml.lzma,
+        // 71 occurrences total): or(and(eq(dist(div,div),1),eq(dist(mod,mod),2)),
+        // and(eq(dist(div,div),2),eq(dist(mod,mod),1))) -- a knight's-move adjacency relation between
+        // two cell-index variables on a 6-wide grid (row = div(v,6), col = mod(v,6)). Exercises the
+        // full stack together: resolveVariable's div/mod widening inside dist(...), resolveConstraint's
+        // AND branch (AndConstraint over two AbsoluteDifferenceConstraint leaves), and its OR branch
+        // (AtLeastNConstraint over the two AND branches' reified indicators).
+        Xcsp3Instance instance = parseXml(
+                "<var id=\"x0\"> 0..35 </var><var id=\"x1\"> 0..35 </var>",
+                "<intension> or(and(eq(dist(div(x0,6),div(x1,6)),1),eq(dist(mod(x0,6),mod(x1,6)),2)),"
+                        + "and(eq(dist(div(x0,6),div(x1,6)),2),eq(dist(mod(x0,6),mod(x1,6)),1))) </intension>");
+        assertThat(instance.csp().getConstraints()).anyMatch(c -> c instanceof AtLeastNConstraint);
+        Set<Assignment> found = solutions(instance.csp());
+        assertThat(found).isNotEmpty();
+        for (Assignment a : found) {
+            int row0 = digitOf(a, "x0") / 6, col0 = digitOf(a, "x0") % 6;
+            int row1 = digitOf(a, "x1") / 6, col1 = digitOf(a, "x1") % 6;
+            int dRow = Math.abs(row0 - row1), dCol = Math.abs(col0 - col1);
+            assertThat((dRow == 1 && dCol == 2) || (dRow == 2 && dCol == 1)).isTrue();
+        }
+        // Cross-check completeness: every genuine knight-adjacent pair on the 6x6 grid is found.
+        int expectedPairs = 0;
+        for (int v0 = 0; v0 < 36; v0++) {
+            for (int v1 = 0; v1 < 36; v1++) {
+                int dRow = Math.abs(v0 / 6 - v1 / 6), dCol = Math.abs(v0 % 6 - v1 % 6);
+                if ((dRow == 1 && dCol == 2) || (dRow == 2 && dCol == 1)) expectedPairs++;
+            }
+        }
+        assertThat(found).hasSize(expectedPairs);
+    }
+
+    @Test void resolveConstraint_twoLiteralOr_stillRoutesThroughRelationLogicConstraint() throws IOException {
+        // or(eq(x,1),eq(y,2)): confirms the cheaper 2-literal special case (recognizeOrOfLiterals,
+        // via RelationLogicConstraint -- no extra indicator variables) still takes priority over the
+        // general N-ary path for the shape it already handles well; no regression from folding
+        // recognizeOrOfLiterals into resolveConstraint's own dispatch.
+        Xcsp3Instance instance = parseXml(
+                "<var id=\"x\"> 0..3 </var><var id=\"y\"> 0..3 </var>",
+                "<intension> or(eq(x,1),eq(y,2)) </intension>");
+        assertThat(instance.csp().getConstraints()).hasSize(1);
+        assertThat(instance.csp().getConstraints().iterator().next()).isInstanceOf(RelationLogicConstraint.class);
+        Set<Assignment> found = solutions(instance.csp());
+        assertThat(found).isNotEmpty();
+        for (Assignment a : found) {
+            assertThat(digitOf(a, "x") == 1 || digitOf(a, "y") == 2).isTrue();
+        }
+    }
+
+    @Test void resolveConstraint_deeplyNestedAndOr_resolvesRecursively() throws IOException {
+        // and(eq(x,1), or(eq(y,2),eq(z,3))): AND at the root, OR nested inside one conjunct --
+        // confirms genuine recursion (not just one level of and/or), not just the one hardcoded
+        // or(and,and) shape.
+        Xcsp3Instance instance = parseXml(
+                "<var id=\"x\"> 0..3 </var><var id=\"y\"> 0..3 </var><var id=\"z\"> 0..3 </var>",
+                "<intension> and(eq(x,1),or(eq(y,2),eq(z,3))) </intension>");
+        assertThat(instance.csp().getConstraints().iterator().next()).isInstanceOf(AndConstraint.class);
+        Set<Assignment> found = solutions(instance.csp());
+        assertThat(found).isNotEmpty();
+        for (Assignment a : found) {
+            assertThat(digitOf(a, "x")).isEqualTo(1);
+            assertThat(digitOf(a, "y") == 2 || digitOf(a, "z") == 3).isTrue();
+        }
+    }
+
+    @Test void resolveConstraint_orOfThreeAndPairs_resolvesRecursively() throws IOException {
+        // or(and(eq(x,1),eq(y,1)), and(eq(x,2),eq(y,2)), eq(z,9)): a 3-ary or(...) where two
+        // children are themselves and(...) -- confirms the N-ary OR path composes with nested AND
+        // children too, not just the exactly-2-ary knight's-move shape.
+        Xcsp3Instance instance = parseXml(
+                "<var id=\"x\"> 0..3 </var><var id=\"y\"> 0..3 </var><var id=\"z\"> 0..9 </var>",
+                "<intension> or(and(eq(x,1),eq(y,1)),and(eq(x,2),eq(y,2)),eq(z,9)) </intension>");
+        assertThat(instance.csp().getConstraints()).anyMatch(c -> c instanceof AtLeastNConstraint);
+        Set<Assignment> found = solutions(instance.csp());
+        assertThat(found).isNotEmpty();
+        for (Assignment a : found) {
+            boolean opt1 = digitOf(a, "x") == 1 && digitOf(a, "y") == 1;
+            boolean opt2 = digitOf(a, "x") == 2 && digitOf(a, "y") == 2;
+            assertThat(opt1 || opt2 || digitOf(a, "z") == 9).isTrue();
+        }
+    }
+
+    @Test void resolveConstraint_andWithUnrecognizableConjunct_declinesAndFallsBackToPredicateConstraint() throws IOException {
+        // and(eq(x,1), eq(y,z,w)): the second conjunct is a 3-ary equality, unrecognizable by any
+        // leaf relation -- the whole and(...) must decline, not partially succeed.
+        Xcsp3Instance instance = parseXml(
+                "<var id=\"x\"> 0..3 </var><var id=\"y\"> 0..3 </var>"
+                        + "<var id=\"z\"> 0..3 </var><var id=\"w\"> 0..3 </var>",
+                "<intension> and(eq(x,1),eq(y,z,w)) </intension>");
+        assertThat(instance.csp().getConstraints().iterator().next()).isInstanceOf(PredicateConstraint.class);
+        Set<Assignment> found = solutions(instance.csp());
+        assertThat(found).isNotEmpty();
+        for (Assignment a : found) {
+            assertThat(digitOf(a, "x")).isEqualTo(1);
+            boolean allEqual = digitOf(a, "y") == digitOf(a, "z") && digitOf(a, "z") == digitOf(a, "w");
+            assertThat(allEqual).isTrue();
+        }
+    }
+
+    @Test void resolveConstraint_reifiedOrOfAndPairs_indicatorTracksConstraintTruthValue() throws IOException {
+        Xcsp3Instance instance = parseXml(
+                "<var id=\"x\"> 0..3 </var><var id=\"y\"> 0..3 </var><var id=\"b\"> 0..1 </var>",
+                "<intension reifiedBy=\"b\"> or(and(eq(x,1),eq(y,1)),and(eq(x,2),eq(y,2))) </intension>");
+        Set<Assignment> found = solutions(instance.csp());
+        assertThat(found).isNotEmpty();
+        for (Assignment a : found) {
+            boolean shape = (digitOf(a, "x") == 1 && digitOf(a, "y") == 1)
+                    || (digitOf(a, "x") == 2 && digitOf(a, "y") == 2);
+            assertThat(digitOf(a, "b") == 1).as("x=%d, y=%d, b=%d", digitOf(a, "x"), digitOf(a, "y"), digitOf(a, "b"))
+                    .isEqualTo(shape);
+        }
+    }
+
     @Test void intensionBinaryComparisonReified_indicatorTracksConstraintTruthValue() throws IOException {
         Xcsp3Instance instance = parseXml(
                 "<var id=\"x\"> 0..3 </var><var id=\"y\"> 0..3 </var><var id=\"b\"> 0..1 </var>",
@@ -2819,16 +3173,15 @@ class Xcsp3ParserTest {
         }
     }
 
-    @Test void intensionConjunctionOfNotEqualAndLessThan_fallsBackToPredicateConstraint() throws IOException {
-        // and(ne(x,y), lt(y,z)): the root operator is AND, not a relational one, so
-        // recognizeBinaryRelation never matches and this falls all the way through to
-        // IntensionExpressionEvaluator -- unlike a bare top-level ne/lt (recognized directly as a
-        // BinaryComparatorConstraint/BinaryOffsetConstraint), NE/LT nested inside a larger boolean
-        // expression is the real, reachable shape that exercises applyOperator's own NE/LT cases.
+    @Test void intensionConjunctionOfNotEqualAndLessThan_recognizesViaAndConstraint() throws IOException {
+        // and(ne(x,y), lt(y,z)): the root operator is AND -- resolveConstraint's AND branch
+        // recognizes both conjuncts (each a bare binary relation via recognizeBinaryRelation) and
+        // combines them via AndConstraint, a real fixpoint over both, rather than falling through
+        // to the opaque, unpropagated PredicateConstraint this used to reach.
         Xcsp3Instance instance = parseXml(
                 "<var id=\"x\"> 1..3 </var><var id=\"y\"> 1..3 </var><var id=\"z\"> 1..3 </var>",
                 "<intension> and(ne(x,y),lt(y,z)) </intension>");
-        assertThat(instance.csp().getConstraints().iterator().next()).isInstanceOf(PredicateConstraint.class);
+        assertThat(instance.csp().getConstraints().iterator().next()).isInstanceOf(AndConstraint.class);
         Set<Assignment> solutions = solutions(instance.csp());
         assertThat(solutions).isNotEmpty();
         for (Assignment a : solutions) {
