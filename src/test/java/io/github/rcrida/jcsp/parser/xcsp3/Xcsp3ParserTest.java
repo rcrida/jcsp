@@ -3457,6 +3457,121 @@ class Xcsp3ParserTest {
         }
     }
 
+    // ---- intension eq/ne(compound-relation, variable) channel recognition (ChannelRecognizer) ----
+
+    @Test void intensionChannelNegated_routesThroughBinaryComparatorConstraint() throws IOException {
+        // QueenAttacking-06.xml.lzma's own shape: ne(and(ne(q,x),or(...)),b) -- "b is the negation
+        // of whether q and x are a queen's-move apart". Simplified here to and(ne(x,y),or(eq(x,1),
+        // eq(y,2))) against a plain channel variable b, with ne (not eq) as the outer operator.
+        Xcsp3Instance instance = parseXml(
+                "<var id=\"x\"> 0..2 </var><var id=\"y\"> 0..2 </var><var id=\"b\"> 0..1 </var>",
+                "<intension> ne(and(ne(x,y),or(eq(x,1),eq(y,2))),b) </intension>");
+        assertThat(instance.csp().getConstraints()).anyMatch(c -> c instanceof BinaryComparatorConstraint);
+        Set<Assignment> solutions = solutions(instance.csp());
+        assertThat(solutions).isNotEmpty();
+        for (Assignment a : solutions) {
+            int x = digitOf(a, "x");
+            int y = digitOf(a, "y");
+            boolean cond = x != y && (x == 1 || y == 2);
+            assertThat(digitOf(a, "b") == 1).as("x=%d, y=%d", x, y).isEqualTo(!cond);
+        }
+    }
+
+    @Test void intensionChannelEquals_routesThroughBinaryComparatorConstraint() throws IOException {
+        // Same shape as intensionChannelNegated but with eq (not ne) as the outer operator --
+        // confirms ChannelRecognizer isn't hardcoded to negation, just whichever of EQ/NEQ the
+        // outer node carries.
+        Xcsp3Instance instance = parseXml(
+                "<var id=\"x\"> 0..2 </var><var id=\"y\"> 0..2 </var><var id=\"b\"> 0..1 </var>",
+                "<intension> eq(and(ne(x,y),eq(x,1)),b) </intension>");
+        assertThat(instance.csp().getConstraints()).anyMatch(c -> c instanceof BinaryComparatorConstraint);
+        Set<Assignment> solutions = solutions(instance.csp());
+        assertThat(solutions).isNotEmpty();
+        for (Assignment a : solutions) {
+            int x = digitOf(a, "x");
+            int y = digitOf(a, "y");
+            boolean cond = x != y && x == 1;
+            assertThat(digitOf(a, "b") == 1).as("x=%d, y=%d", x, y).isEqualTo(cond);
+        }
+    }
+
+    @Test void intensionChannelWrongOperator_fallsBackToPredicateConstraint() throws IOException {
+        // le(mul(x,y,w),z): a three-operand mul isn't the two-variable shape ProductOfPairRecognizer
+        // matches, and le isn't eq/ne -- ChannelRecognizer's own operator guard declines before ever
+        // trying to resolve either side, exercising a genuinely different decline path from the
+        // "operand unrecognizable" tests below.
+        Xcsp3Instance instance = parseXml(
+                "<var id=\"x\"> 1..2 </var><var id=\"y\"> 1..2 </var><var id=\"w\"> 1..2 </var><var id=\"z\"> 0..10 </var>",
+                "<intension> le(mul(x,y,w),z) </intension>");
+        assertThat(instance.csp().getConstraints().iterator().next()).isInstanceOf(PredicateConstraint.class);
+        Set<Assignment> solutions = solutions(instance.csp());
+        assertThat(solutions).isNotEmpty();
+        for (Assignment a : solutions) {
+            assertThat(digitOf(a, "x") * digitOf(a, "y") * digitOf(a, "w")).isLessThanOrEqualTo(digitOf(a, "z"));
+        }
+    }
+
+    @Test void intensionChannelLeftSideUnrecognizable_fallsBackToPredicateConstraint() throws IOException {
+        // ne(mul(x,y,w),b): the operator matches (ne), but the left side is a three-operand mul --
+        // neither dispatchable as a relation nor a bare variable -- so indicatorFor declines for it
+        // without ever needing to look at the right side.
+        Xcsp3Instance instance = parseXml(
+                "<var id=\"x\"> 1..2 </var><var id=\"y\"> 1..2 </var><var id=\"w\"> 1..2 </var><var id=\"b\"> 0..8 </var>",
+                "<intension> ne(mul(x,y,w),b) </intension>");
+        assertThat(instance.csp().getConstraints().iterator().next()).isInstanceOf(PredicateConstraint.class);
+        Set<Assignment> solutions = solutions(instance.csp());
+        assertThat(solutions).isNotEmpty();
+        for (Assignment a : solutions) {
+            assertThat(digitOf(a, "b")).isNotEqualTo(digitOf(a, "x") * digitOf(a, "y") * digitOf(a, "w"));
+        }
+    }
+
+    @Test void intensionChannelRightSideUnrecognizable_fallsBackToPredicateConstraint() throws IOException {
+        // ne(and(ne(x,y),eq(x,1)),or(mul(p,q,r),eq(a,1))): the left side resolves fine via dispatch
+        // (the same and(...) shape intensionChannelEquals recognizes) -- confirmed empirically to
+        // stay tree.sons[0] here (xcsp3-tools' canonizer keeps a recognizable and(...) ahead of an
+        // or(...) it's paired against, the same complexity-based reordering SumOrLinearRecognizer's
+        // own doc describes for add/mul) -- but the right side, or(mul(p,q,r),eq(a,1)), is itself
+        // unrecognizable: mul(p,q,r) alone can't dispatch (no operator-bearing wrapper), so
+        // OrRecognizer's own resolveEachChild declines the whole or(...) even though its other
+        // disjunct eq(a,1) would recognize fine alone. This exercises the "left succeeded, right
+        // didn't" branch specifically -- distinct from intensionChannelLeftSideUnrecognizable's
+        // left-side failure, where mul always sorts first regardless of what it's paired against.
+        // p,q,r are all >= 1, so mul(p,q,r) is always nonzero -- meaning the outer intension's raw
+        // arithmetic evaluation (the generic fallback that ends up handling this) always sees
+        // or(...) as true, reducing the whole ne(...) to "and(...) must be false". ChannelRecognizer
+        // resolves both sides read-only before reifying either, so the left side succeeding first
+        // leaves no orphaned ReifiedConstraint behind once the right side is discovered to fail.
+        Xcsp3Instance instance = parseXml(
+                "<var id=\"x\"> 0..2 </var><var id=\"y\"> 0..2 </var><var id=\"a\"> 0..2 </var>"
+                        + "<var id=\"p\"> 1..2 </var><var id=\"q\"> 1..2 </var><var id=\"r\"> 1..2 </var>",
+                "<intension> ne(and(ne(x,y),eq(x,1)),or(mul(p,q,r),eq(a,1))) </intension>");
+        assertThat(instance.csp().getConstraints().iterator().next()).isInstanceOf(PredicateConstraint.class);
+        Set<Assignment> solutions = solutions(instance.csp());
+        assertThat(solutions).isNotEmpty();
+        for (Assignment assignment : solutions) {
+            int x = digitOf(assignment, "x");
+            int y = digitOf(assignment, "y");
+            assertThat(x != y && x == 1).as("x=%d, y=%d", x, y).isFalse();
+        }
+    }
+
+    @Test void intensionChannelReified_indicatorTracksWholeChannelTruthValue() throws IOException {
+        Xcsp3Instance instance = parseXml(
+                "<var id=\"x\"> 0..2 </var><var id=\"y\"> 0..2 </var><var id=\"b\"> 0..1 </var><var id=\"r\"> 0..1 </var>",
+                "<intension reifiedBy=\"r\"> ne(and(ne(x,y),eq(x,1)),b) </intension>");
+        Set<Assignment> found = solutions(instance.csp());
+        assertThat(found).isNotEmpty();
+        for (Assignment a : found) {
+            int x = digitOf(a, "x");
+            int y = digitOf(a, "y");
+            boolean cond = x != y && x == 1;
+            int b = digitOf(a, "b");
+            int r = digitOf(a, "r");
+            assertThat(r == 1).as("x=%d, y=%d, b=%d", x, y, b).isEqualTo(b != (cond ? 1 : 0));
+        }
+    }
+
     @Test void intensionNeitherSideIsBareVariable_fallsBackToPredicateConstraint() throws IOException {
         // Both sides are mul(...) expressions -- neither is a plain variable, and unlike
         // eq(add(x,1),add(y,2)) (which xcsp3-tools' own canonizer simplifies into an equivalent

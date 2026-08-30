@@ -169,7 +169,8 @@ final class Xcsp3CallbackHandler implements XCallbacks2 {
             new BooleanProductChannelRecognizer(this),
             new ProductOfPairRecognizer(this),
             new SumOrLinearRecognizer(this),
-            new RelationSumRecognizer(this, this::recognizeConstraint));
+            new RelationSumRecognizer(this, this::recognizeConstraint),
+            new ChannelRecognizer(this, this::recognizeConstraint));
 
     Xcsp3CallbackHandler() {
         // By default xcsp3-tools "recognizes" simple intension/count/sum/etc. shapes and routes
@@ -268,10 +269,26 @@ final class Xcsp3CallbackHandler implements XCallbacks2 {
      * through {@link #addOrReify}, since this bridge is never itself the constraint being loaded.
      */
     private Variable<Boolean> booleanIndicatorFor(XVarInteger intVar) {
-        return booleanIndicators.computeIfAbsent(intVar.id(), name -> {
-            Variable<Boolean> boolVar = Variable.Factory.INSTANCE.create(name + "$bool");
+        return booleanIndicatorForName(intVar.id());
+    }
+
+    /**
+     * {@link #booleanIndicatorFor(XVarInteger)}'s sibling for a caller that already holds a
+     * resolved {@link Variable} rather than the raw XCSP3 {@code XVarInteger} object -- {@link
+     * Variable#getName()} is the same id string {@link #variablesByName} keys on, so this shares
+     * the identical memoized {@link #booleanIndicators} entry either way. Package-private: used by
+     * {@link ChannelRecognizer} to bridge a bare-variable operand of a {@code eq}/{@code ne}
+     * channel into a boolean indicator alongside its other operand's own reified indicator.
+     */
+    Variable<Boolean> booleanIndicatorFor(Variable<Integer> intVar) {
+        return booleanIndicatorForName(intVar.getName());
+    }
+
+    private Variable<Boolean> booleanIndicatorForName(String name) {
+        return booleanIndicators.computeIfAbsent(name, n -> {
+            Variable<Boolean> boolVar = Variable.Factory.INSTANCE.create(n + "$bool");
             builder.variableDomain(boolVar, BooleanDomain.INSTANCE);
-            builder.reifyConstraint(boolVar, UnaryComparatorConstraint.of(variablesByName.get(name), Operator.EQ, 1));
+            builder.reifyConstraint(boolVar, UnaryComparatorConstraint.of(variablesByName.get(n), Operator.EQ, 1));
             return boolVar;
         });
     }
