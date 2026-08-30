@@ -211,27 +211,12 @@ class Xcsp3CallbackHandlerTest {
     }
 
     /**
-     * {@code eq(3,5)}-shaped: {@code tree.sons[0]} is a bare {@code LONG} leaf, not a compound
-     * {@code mul(...)} node. Confirmed unreachable through any real, parseable XCSP3 file -- see
-     * {@link Xcsp3CallbackHandler#recognizeBooleanProductChannel}'s own comment -- so this needs
-     * the same direct construction {@code buildCtrIntensionSymbolic_nonLeafOperand_throwsUnsupported}
-     * above uses.
-     */
-    @Test void recognizeBooleanProductChannel_firstOperandNotXNodeParent_declines() {
-        XNodeLeaf<XVarInteger> left = new XNodeLeaf<>(TypeExpr.LONG, 3L);
-        XNodeLeaf<XVarInteger> right = new XNodeLeaf<>(TypeExpr.LONG, 5L);
-        XNodeParent<XVarInteger> tree = new XNodeParent<>(TypeExpr.EQ, left, right);
-        Xcsp3CallbackHandler handler = new Xcsp3CallbackHandler();
-        assertThat(handler.recognizeBooleanProductChannel(tree)).isEmpty();
-    }
-
-    /**
      * A leaf that's neither {@code VAR} nor {@code LONG} -- {@link Xcsp3CallbackHandler#asVariable}/
      * {@link Xcsp3CallbackHandler#asConstant} already intercept those two, so a leaf reaching {@link
      * Xcsp3CallbackHandler#resolveVariable}'s own {@code !(node instanceof XNodeParent)} check at
      * all isn't constructible via real parsing (an {@code XVarInteger}-typed node never has any
-     * other leaf type). Confirmed unreachable the same way
-     * {@code recognizeBooleanProductChannel_firstOperandNotXNodeParent_declines} above is.
+     * other leaf type). Confirmed unreachable the same way {@link BooleanProductChannelRecognizerTest}'s
+     * own {@code firstOperandNotXNodeParent_declines} is.
      */
     @Test void resolveVariable_nonVarNonLongLeaf_declines() {
         XNodeLeaf<XVarInteger> leaf = new XNodeLeaf<>(TypeExpr.SYMBOL, "unexpected");

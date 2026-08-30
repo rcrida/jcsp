@@ -920,17 +920,22 @@ class Xcsp3ParserTest {
         }
     }
 
-    @Test void intensionOrNonVariableLiteralOperand_fallsBackToPredicateConstraint() throws IOException {
+    @Test void intensionOrNonLiteralOperand_recognizesViaFullRecursiveChain() throws IOException {
         // or(eq(add(x,y),5), eq(z,2)): the left child is a bare eq (arity 2, EQ operator), but
         // add(x,y) sums two distinct variables -- unlike add(var,const), which xcsp3-tools' own
         // canonizer folds directly into a var-vs-constant equality (eq(add(x,1),5) becomes eq(x,4)
         // before this code ever sees it, confirmed empirically), a two-variable sum survives as a
-        // genuine compound expression -- recognizeLiteral's own leftVar.isEmpty() guard declines
-        // here, distinct from intensionOrNestedChild's rejection at the "not even an eq/ne node" check.
+        // genuine compound expression -- OrRecognizer's own 2-literal recognizeOrOfLiterals declines
+        // here (its recognizeLiteral only matches a bare eq/ne/le/lt, not a compound add(...) operand),
+        // but the general OR path recurses into each child via the handler's full recognizeConstraint
+        // chain, not just another literal/leaf-relation -- so eq(add(x,y),5) still resolves, via
+        // SumOrLinearRecognizer, to a real SumBoundConstraint rather than falling all the way to
+        // PredicateConstraint. Recognizing a shape is sound wherever in the tree it occurs, so an
+        // and/or child is never restricted to a narrower recognizer set than a top-level relation.
         Xcsp3Instance instance = parseXml(
                 "<var id=\"x\"> 0..3 </var><var id=\"y\"> 0..3 </var><var id=\"z\"> 0..3 </var>",
                 "<intension> or(eq(add(x,y),5),eq(z,2)) </intension>");
-        assertThat(instance.csp().getConstraints().iterator().next()).isInstanceOf(PredicateConstraint.class);
+        assertThat(instance.csp().getConstraints()).anyMatch(c -> c instanceof AtLeastNConstraint);
         Set<Assignment> found = solutions(instance.csp());
         assertThat(found).isNotEmpty();
         for (Assignment a : found) {
