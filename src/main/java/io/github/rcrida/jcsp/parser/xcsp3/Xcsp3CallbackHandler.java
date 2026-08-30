@@ -168,7 +168,8 @@ final class Xcsp3CallbackHandler implements XCallbacks2 {
             new OrRecognizer(this, this::recognizeConstraint),
             new BooleanProductChannelRecognizer(this),
             new ProductOfPairRecognizer(this),
-            new SumOrLinearRecognizer(this));
+            new SumOrLinearRecognizer(this),
+            new RelationSumRecognizer(this, this::recognizeConstraint));
 
     Xcsp3CallbackHandler() {
         // By default xcsp3-tools "recognizes" simple intension/count/sum/etc. shapes and routes

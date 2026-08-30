@@ -10,6 +10,8 @@ import io.github.rcrida.jcsp.constraints.nary.AndConstraint;
 import io.github.rcrida.jcsp.constraints.nary.AtLeastNConstraint;
 import io.github.rcrida.jcsp.constraints.nary.CountConstraint;
 import io.github.rcrida.jcsp.constraints.nary.GlobalCardinalityConstraint;
+import io.github.rcrida.jcsp.constraints.nary.LinearBooleanBoundConstraint;
+import io.github.rcrida.jcsp.constraints.nary.LinearBooleanVariableConstraint;
 import io.github.rcrida.jcsp.constraints.nary.LinearBoundConstraint;
 import io.github.rcrida.jcsp.constraints.nary.LinearVariableConstraint;
 import io.github.rcrida.jcsp.constraints.nary.MinVariableConstraint;
@@ -3371,6 +3373,87 @@ class Xcsp3ParserTest {
         assertThat(solutions).isNotEmpty();
         for (Assignment a : solutions) {
             assertThat(digitOf(a, "z")).isEqualTo(digitOf(a, "x") + digitOf(a, "y") + 2);
+        }
+    }
+
+    // ---- intension add(relation,...) op target recognition (LinearBooleanBoundConstraint/LinearBooleanVariableConstraint) ----
+
+    @Test void intensionSumOfRelations_constantTarget_routesThroughLinearBooleanBoundConstraint() throws IOException {
+        // add(le(2,x),le(3,y)): both add terms are themselves relations (x>=2, y>=3), not bare
+        // variables/weighted mul terms -- SumOrLinearRecognizer declines each term, but
+        // RelationSumRecognizer resolves each via the full recognizer chain (here,
+        // GroundRelationRecognizer), reifies them into fresh boolean indicators, and sums those
+        // indicators (weight 1 each) against a constant target -- "exactly one of these two
+        // thresholds is met".
+        Xcsp3Instance instance = parseXml(
+                "<var id=\"x\"> 0..3 </var><var id=\"y\"> 0..3 </var>",
+                "<intension> eq(add(le(2,x),le(3,y)),1) </intension>");
+        assertThat(instance.csp().getConstraints()).anyMatch(c -> c instanceof LinearBooleanBoundConstraint);
+        Set<Assignment> solutions = solutions(instance.csp());
+        assertThat(solutions).isNotEmpty();
+        for (Assignment a : solutions) {
+            int xGe2 = digitOf(a, "x") >= 2 ? 1 : 0;
+            int yGe3 = digitOf(a, "y") >= 3 ? 1 : 0;
+            assertThat(xGe2 + yGe3).isEqualTo(1);
+        }
+    }
+
+    @Test void intensionSumOfRelations_variableTarget_routesThroughLinearBooleanVariableConstraint() throws IOException {
+        Xcsp3Instance instance = parseXml(
+                "<var id=\"x\"> 0..3 </var><var id=\"y\"> 0..3 </var><var id=\"z\"> 0..1 </var>",
+                "<intension> eq(z,add(le(2,x),le(3,y))) </intension>");
+        assertThat(instance.csp().getConstraints()).anyMatch(c -> c instanceof LinearBooleanVariableConstraint);
+        Set<Assignment> solutions = solutions(instance.csp());
+        assertThat(solutions).isNotEmpty();
+        for (Assignment a : solutions) {
+            int xGe2 = digitOf(a, "x") >= 2 ? 1 : 0;
+            int yGe3 = digitOf(a, "y") >= 3 ? 1 : 0;
+            assertThat(digitOf(a, "z")).isEqualTo(xGe2 + yGe3);
+        }
+    }
+
+    @Test void intensionSumOfThreeRelations_generalizesToNTerms() throws IOException {
+        Xcsp3Instance instance = parseXml(
+                "<var id=\"x\"> 0..3 </var><var id=\"y\"> 0..3 </var><var id=\"z\"> 0..3 </var>",
+                "<intension> eq(add(le(2,x),le(2,y),le(2,z)),2) </intension>");
+        assertThat(instance.csp().getConstraints()).anyMatch(c -> c instanceof LinearBooleanBoundConstraint);
+        Set<Assignment> solutions = solutions(instance.csp());
+        assertThat(solutions).isNotEmpty();
+        for (Assignment a : solutions) {
+            int count = (digitOf(a, "x") >= 2 ? 1 : 0) + (digitOf(a, "y") >= 2 ? 1 : 0) + (digitOf(a, "z") >= 2 ? 1 : 0);
+            assertThat(count).isEqualTo(2);
+        }
+    }
+
+    @Test void intensionSumOfMixedRelationAndBareVariableTerms_fallsBackToPredicateConstraint() throws IOException {
+        // add(le(2,x),y): one term is a relation (le(2,x)), the other a bare variable -- neither
+        // SumOrLinearRecognizer (needs every term to be a bare variable/weighted mul term) nor
+        // RelationSumRecognizer (needs every term to dispatch as a relation; a bare variable leaf
+        // never does, since intensionRelationalOperator(VAR) is null) can recognize the whole add,
+        // so it falls all the way through to PredicateConstraint.
+        Xcsp3Instance instance = parseXml(
+                "<var id=\"x\"> 0..3 </var><var id=\"y\"> 0..3 </var><var id=\"z\"> 0..9 </var>",
+                "<intension> eq(z,add(le(2,x),y)) </intension>");
+        assertThat(instance.csp().getConstraints().iterator().next()).isInstanceOf(PredicateConstraint.class);
+        Set<Assignment> solutions = solutions(instance.csp());
+        assertThat(solutions).isNotEmpty();
+        for (Assignment a : solutions) {
+            int xGe2 = digitOf(a, "x") >= 2 ? 1 : 0;
+            assertThat(digitOf(a, "z")).isEqualTo(xGe2 + digitOf(a, "y"));
+        }
+    }
+
+    @Test void intensionSumOfRelationsReified_indicatorTracksConstraintTruthValue() throws IOException {
+        Xcsp3Instance instance = parseXml(
+                "<var id=\"x\"> 0..3 </var><var id=\"y\"> 0..3 </var><var id=\"b\"> 0..1 </var>",
+                "<intension reifiedBy=\"b\"> eq(add(le(2,x),le(3,y)),1) </intension>");
+        Set<Assignment> found = solutions(instance.csp());
+        assertThat(found).isNotEmpty();
+        for (Assignment a : found) {
+            int xGe2 = digitOf(a, "x") >= 2 ? 1 : 0;
+            int yGe3 = digitOf(a, "y") >= 3 ? 1 : 0;
+            int b = digitOf(a, "b");
+            assertThat(b == 1).as("x=%d, y=%d, b=%d", digitOf(a, "x"), digitOf(a, "y"), b).isEqualTo(xGe2 + yGe3 == 1);
         }
     }
 
