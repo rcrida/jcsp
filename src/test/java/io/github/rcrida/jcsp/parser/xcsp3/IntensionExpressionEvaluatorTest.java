@@ -7,6 +7,7 @@ import org.xcsp.common.predicates.XNode;
 import org.xcsp.common.predicates.XNodeLeaf;
 import org.xcsp.parser.entries.XVariables.XVarInteger;
 
+import java.util.List;
 import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -44,6 +45,73 @@ class IntensionExpressionEvaluatorTest {
         assertThat(IntensionExpressionEvaluator.evaluate(tree, Assignment.empty(), Map.of())).isEqualTo(1);
         XNode<XVarInteger> falseTree = XNode.node(TypeExpr.GT, XNode.longLeaf(3), XNode.longLeaf(3));
         assertThat(IntensionExpressionEvaluator.evaluate(falseTree, Assignment.empty(), Map.of())).isEqualTo(0);
+    }
+
+    // ---- sqr / pow / min / max / imp / if -----------------------------------------------------------
+
+    @Test void evaluate_square() {
+        XNode<XVarInteger> tree = XNode.node(TypeExpr.SQR, XNode.longLeaf(4));
+        assertThat(IntensionExpressionEvaluator.evaluate(tree, Assignment.empty(), Map.of())).isEqualTo(16);
+    }
+
+    @Test void evaluate_power() {
+        XNode<XVarInteger> tree = XNode.node(TypeExpr.POW, XNode.longLeaf(2), XNode.longLeaf(5));
+        assertThat(IntensionExpressionEvaluator.evaluate(tree, Assignment.empty(), Map.of())).isEqualTo(32);
+    }
+
+    @Test void evaluate_power_zeroExponent_isOne() {
+        XNode<XVarInteger> tree = XNode.node(TypeExpr.POW, XNode.longLeaf(7), XNode.longLeaf(0));
+        assertThat(IntensionExpressionEvaluator.evaluate(tree, Assignment.empty(), Map.of())).isEqualTo(1);
+    }
+
+    @Test void evaluate_power_negativeExponent_throws() {
+        XNode<XVarInteger> tree = XNode.node(TypeExpr.POW, XNode.longLeaf(2), XNode.longLeaf(-1));
+        assertThatThrownBy(() -> IntensionExpressionEvaluator.evaluate(tree, Assignment.empty(), Map.of()))
+                .isInstanceOf(UnsupportedXcsp3ConstraintException.class);
+    }
+
+    @Test void evaluate_min() {
+        XNode<XVarInteger> tree = XNode.<XVarInteger>node(TypeExpr.MIN,
+                List.of(XNode.longLeaf(5), XNode.longLeaf(2), XNode.longLeaf(8)));
+        assertThat(IntensionExpressionEvaluator.evaluate(tree, Assignment.empty(), Map.of())).isEqualTo(2);
+    }
+
+    @Test void evaluate_max() {
+        XNode<XVarInteger> tree = XNode.<XVarInteger>node(TypeExpr.MAX,
+                List.of(XNode.longLeaf(5), XNode.longLeaf(2), XNode.longLeaf(8)));
+        assertThat(IntensionExpressionEvaluator.evaluate(tree, Assignment.empty(), Map.of())).isEqualTo(8);
+    }
+
+    @Test void evaluate_implication() {
+        // Covers all four (antecedent, consequent) truth combinations, not just the two needed to
+        // pick the right overall result -- the antecedent-true/consequent-true case specifically
+        // exercises the short-circuited second half of "operands[0] == 0 || operands[1] != 0" that
+        // a false antecedent alone never reaches.
+        XNode<XVarInteger> falseAntecedent = XNode.node(TypeExpr.IMP, XNode.longLeaf(0), XNode.longLeaf(0));
+        assertThat(IntensionExpressionEvaluator.evaluate(falseAntecedent, Assignment.empty(), Map.of())).isEqualTo(1);
+        XNode<XVarInteger> trueAntecedentFalseConsequent = XNode.node(TypeExpr.IMP, XNode.longLeaf(1), XNode.longLeaf(0));
+        assertThat(IntensionExpressionEvaluator.evaluate(trueAntecedentFalseConsequent, Assignment.empty(), Map.of())).isEqualTo(0);
+        XNode<XVarInteger> trueAntecedentTrueConsequent = XNode.node(TypeExpr.IMP, XNode.longLeaf(1), XNode.longLeaf(1));
+        assertThat(IntensionExpressionEvaluator.evaluate(trueAntecedentTrueConsequent, Assignment.empty(), Map.of())).isEqualTo(1);
+    }
+
+    @Test void evaluate_unsupportedOperator_throws() {
+        // XCSP3-core's own integer <intension> grammar is fully covered by this evaluator now (see
+        // its own Javadoc); sqrt is a real TypeExpr constant but belongs to XCSP3's continuous-math
+        // extension, out of scope for an XVarInteger-typed intension -- constructed directly here
+        // since no real parseable XCSP3 file reaches this branch any more.
+        XNode<XVarInteger> tree = XNode.node(TypeExpr.SQRT, XNode.longLeaf(4));
+        assertThatThrownBy(() -> IntensionExpressionEvaluator.evaluate(tree, Assignment.empty(), Map.of()))
+                .isInstanceOf(UnsupportedXcsp3ConstraintException.class);
+    }
+
+    @Test void evaluate_ternaryConditional() {
+        XNode<XVarInteger> thenBranch = XNode.<XVarInteger>node(TypeExpr.IF,
+                List.of(XNode.longLeaf(1), XNode.longLeaf(10), XNode.longLeaf(20)));
+        assertThat(IntensionExpressionEvaluator.evaluate(thenBranch, Assignment.empty(), Map.of())).isEqualTo(10);
+        XNode<XVarInteger> elseBranch = XNode.<XVarInteger>node(TypeExpr.IF,
+                List.of(XNode.longLeaf(0), XNode.longLeaf(10), XNode.longLeaf(20)));
+        assertThat(IntensionExpressionEvaluator.evaluate(elseBranch, Assignment.empty(), Map.of())).isEqualTo(20);
     }
 
     // ---- in / notin / set(...) literals -------------------------------------------------------------

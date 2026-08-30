@@ -17,14 +17,20 @@ import java.util.stream.LongStream;
  * Converts an XCSP3 {@code <intension>} expression tree -- already parsed into an {@link XNode}
  * AST by {@code xcsp3-tools} -- into a {@link Predicate}{@code <Assignment>} suitable for {@link
  * io.github.rcrida.jcsp.ConstraintSatisfactionProblem.ConstraintSatisfactionProblemBuilder#predicateConstraint}.
- * Covers the arithmetic ({@code neg}/{@code abs}/{@code add}/{@code sub}/{@code mul}/{@code
- * div}/{@code mod}/{@code dist}), relational ({@code eq}/{@code ne}/{@code lt}/{@code le}/{@code
- * ge}/{@code gt}), boolean ({@code not}/{@code and}/{@code or}/{@code xor}/{@code iff}), and
- * set-membership ({@code in}/{@code notin} against a {@code set(...)} whose members are themselves
- * arbitrary sub-expressions -- constants, variables, or nested arithmetic like {@code sub(x,1)} --
- * evaluated per member against the current assignment, same as any other operand) operators that
- * appear in this project's XCSP3 test fixtures -- not the full XCSP3 expression language (e.g.
- * {@code min}/{@code max}/{@code imp}/{@code if} are not handled). An operator outside this set
+ * Covers the full XCSP3-core integer {@code <intension>} grammar: arithmetic ({@code neg}/{@code
+ * abs}/{@code sqr}/{@code add}/{@code sub}/{@code mul}/{@code div}/{@code mod}/{@code pow}/{@code
+ * min}/{@code max}/{@code dist}), relational ({@code eq}/{@code ne}/{@code lt}/{@code le}/{@code
+ * ge}/{@code gt}), boolean ({@code not}/{@code and}/{@code or}/{@code xor}/{@code iff}/{@code
+ * imp}), the ternary {@code if(cond,then,else)} conditional, and set-membership ({@code in}/{@code
+ * notin} against a {@code set(...)} whose members are themselves arbitrary sub-expressions --
+ * constants, variables, or nested arithmetic like {@code sub(x,1)} -- evaluated per member against
+ * the current assignment, same as any other operand). This is the fallback evaluator for whatever
+ * {@code recognizeConstraint}'s recognizer chain didn't map onto a propagating constraint, so it
+ * needs to cover every operator a legal XCSP3 instance could use there, not just the operators any
+ * particular sample instance happens to exercise -- a real competition submission is not bound to
+ * this project's own test fixtures. Out of scope: the pure-set operators ({@code union}/{@code
+ * inter}/{@code diff}/etc.) and continuous math functions ({@code sqrt}/{@code sin}/etc.), neither
+ * of which apply to an {@code XVarInteger}-scoped scalar intension. An operator outside this set
  * throws {@link UnsupportedXcsp3ConstraintException} rather than silently mis-evaluating.
  */
 final class IntensionExpressionEvaluator {
@@ -88,12 +94,16 @@ final class IntensionExpressionEvaluator {
         return switch (type) {
             case NEG -> -operands[0];
             case ABS -> Math.abs(operands[0]);
+            case SQR -> operands[0] * operands[0];
             case DIST -> Math.abs(operands[0] - operands[1]);
             case ADD -> LongStream.of(operands).sum();
             case SUB -> operands[0] - operands[1];
             case MUL -> LongStream.of(operands).reduce(1L, (a, b) -> a * b);
             case DIV -> operands[0] / operands[1];
             case MOD -> operands[0] % operands[1];
+            case POW -> longPow(operands[0], operands[1]);
+            case MIN -> LongStream.of(operands).min().orElseThrow();
+            case MAX -> LongStream.of(operands).max().orElseThrow();
             case EQ -> allEqual(operands) ? 1 : 0;
             case NE -> operands[0] != operands[1] ? 1 : 0;
             case LT -> operands[0] < operands[1] ? 1 : 0;
@@ -109,6 +119,10 @@ final class IntensionExpressionEvaluator {
             // XCSP3 core: true iff every operand shares the same truth value -- operationally
             // identical to EQ (allEqual), just restricted to boolean-typed operands.
             case IFF -> allEqual(operands) ? 1 : 0;
+            // XCSP3 core: binary implication, operands[0] -> operands[1].
+            case IMP -> operands[0] == 0 || operands[1] != 0 ? 1 : 0;
+            // XCSP3 core: ternary conditional -- if(cond,then,else), always exactly 3 operands.
+            case IF -> operands[0] != 0 ? operands[1] : operands[2];
             default -> throw new UnsupportedXcsp3ConstraintException("Unsupported intension operator: " + type);
         };
     }
@@ -118,5 +132,19 @@ final class IntensionExpressionEvaluator {
             if (operands[i] != operands[0]) return false;
         }
         return true;
+    }
+
+    // XCSP3's pow(base, exponent) always uses a small non-negative integer literal exponent in
+    // practice; a negative exponent has no exact long-integer result, so this throws rather than
+    // silently truncating a fractional Math.pow result to a wrong integer.
+    private static long longPow(long base, long exponent) {
+        if (exponent < 0) {
+            throw new UnsupportedXcsp3ConstraintException("pow with a negative exponent is not supported: " + exponent);
+        }
+        long result = 1;
+        for (long i = 0; i < exponent; i++) {
+            result *= base;
+        }
+        return result;
     }
 }

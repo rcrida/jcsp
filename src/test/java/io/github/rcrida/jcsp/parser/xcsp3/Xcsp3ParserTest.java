@@ -3596,15 +3596,80 @@ class Xcsp3ParserTest {
         assertThat(solutions(instance.csp())).hasSize(4);
     }
 
-    @Test void intensionUnsupportedOperator_throwsWhenEvaluated() throws IOException {
-        // buildCtrIntension only builds a lazy Predicate<Assignment> -- the unsupported operator
-        // isn't detected until the predicate is actually evaluated against a candidate assignment
-        // during search, not at parse time.
+    // ---- sqr / pow / min / max / imp / if (full XCSP3-core intension grammar coverage) --------------
+
+    @Test void intensionSquare_evaluatesCorrectly() throws IOException {
         Xcsp3Instance instance = parseXml(
-                "<var id=\"x\"> 0..5 </var><var id=\"y\"> 0..5 </var>",
-                "<intension> eq(min(x,y),0) </intension>");
-        assertThatThrownBy(() -> solutions(instance.csp()))
-                .isInstanceOf(UnsupportedXcsp3ConstraintException.class);
+                "<var id=\"x\"> 0..5 </var><var id=\"y\"> 0..30 </var>",
+                "<intension> eq(sqr(x),y) </intension>");
+        Set<Assignment> solutions = solutions(instance.csp());
+        assertThat(solutions).isNotEmpty();
+        for (Assignment a : solutions) {
+            int x = digitOf(a, "x");
+            assertThat(digitOf(a, "y")).isEqualTo(x * x);
+        }
+    }
+
+    @Test void intensionPower_evaluatesCorrectly() throws IOException {
+        Xcsp3Instance instance = parseXml(
+                "<var id=\"x\"> 0..4 </var><var id=\"y\"> 0..70 </var>",
+                "<intension> eq(pow(x,3),y) </intension>");
+        Set<Assignment> solutions = solutions(instance.csp());
+        assertThat(solutions).isNotEmpty();
+        for (Assignment a : solutions) {
+            int x = digitOf(a, "x");
+            assertThat(digitOf(a, "y")).isEqualTo((int) Math.pow(x, 3));
+        }
+    }
+
+    @Test void intensionMinOfPair_evaluatesCorrectly() throws IOException {
+        Xcsp3Instance instance = parseXml(
+                "<var id=\"x\"> 0..5 </var><var id=\"y\"> 0..5 </var><var id=\"z\"> 0..5 </var>",
+                "<intension> eq(z,min(x,y)) </intension>");
+        Set<Assignment> solutions = solutions(instance.csp());
+        assertThat(solutions).isNotEmpty();
+        for (Assignment a : solutions) {
+            assertThat(digitOf(a, "z")).isEqualTo(Math.min(digitOf(a, "x"), digitOf(a, "y")));
+        }
+    }
+
+    @Test void intensionMaxOfThree_evaluatesCorrectly() throws IOException {
+        Xcsp3Instance instance = parseXml(
+                "<var id=\"x\"> 0..5 </var><var id=\"y\"> 0..5 </var><var id=\"z\"> 0..5 </var><var id=\"w\"> 0..5 </var>",
+                "<intension> eq(w,max(x,y,z)) </intension>");
+        Set<Assignment> solutions = solutions(instance.csp());
+        assertThat(solutions).isNotEmpty();
+        for (Assignment a : solutions) {
+            int x = digitOf(a, "x");
+            int y = digitOf(a, "y");
+            int z = digitOf(a, "z");
+            assertThat(digitOf(a, "w")).isEqualTo(Math.max(x, Math.max(y, z)));
+        }
+    }
+
+    @Test void intensionImplication_evaluatesCorrectly() throws IOException {
+        Xcsp3Instance instance = parseXml(
+                "<var id=\"x\"> 0..1 </var><var id=\"y\"> 0..1 </var>",
+                "<intension> imp(eq(x,1),eq(y,1)) </intension>");
+        Set<Assignment> solutions = solutions(instance.csp());
+        assertThat(solutions).isNotEmpty();
+        for (Assignment a : solutions) {
+            int x = digitOf(a, "x");
+            int y = digitOf(a, "y");
+            assertThat(x != 1 || y == 1).as("x=%d, y=%d", x, y).isTrue();
+        }
+    }
+
+    @Test void intensionTernaryConditional_evaluatesCorrectly() throws IOException {
+        Xcsp3Instance instance = parseXml(
+                "<var id=\"x\"> 0..1 </var><var id=\"z\"> 0..1 </var>",
+                "<intension> eq(z,if(eq(x,1),1,0)) </intension>");
+        Set<Assignment> solutions = solutions(instance.csp());
+        assertThat(solutions).isNotEmpty();
+        for (Assignment a : solutions) {
+            int x = digitOf(a, "x");
+            assertThat(digitOf(a, "z")).isEqualTo(x == 1 ? 1 : 0);
+        }
     }
 
     // ---- symbolic (string-valued) variable domains -------------------------------------------------------------------------
