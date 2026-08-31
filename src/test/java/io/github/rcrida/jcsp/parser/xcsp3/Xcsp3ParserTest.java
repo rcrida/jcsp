@@ -3146,6 +3146,99 @@ class Xcsp3ParserTest {
         }
     }
 
+    // ---- resolveVariable / subAuxiliary (sub(a,b) as a resolvable compound value) --------------------
+    // sub survives unflattened only when nested inside dist(...) -- a ground/binary relation's own
+    // sub operand is always algebraically eliminated by the canonizer first (e.g. eq(sub(x,y),5)
+    // canonicalizes directly to eq(x,add(y,5))), confirmed via a real probe.
+
+    @Test void resolveVariableSub_insideDistOfPair_routesThroughAbsoluteDifferenceConstraintOverAuxiliary() throws IOException {
+        Xcsp3Instance instance = parseXml(
+                "<var id=\"x\"> -10..10 </var><var id=\"y\"> -10..10 </var><var id=\"z\"> -10..10 </var>",
+                "<intension> eq(dist(sub(x,y),z),3) </intension>");
+        assertThat(instance.csp().getConstraints()).anyMatch(c -> c instanceof AbsoluteDifferenceConstraint<?>);
+        Set<Assignment> found = solutions(instance.csp());
+        assertThat(found).isNotEmpty();
+        for (Assignment a : found) {
+            assertThat(Math.abs((digitOf(a, "x") - digitOf(a, "y")) - digitOf(a, "z"))).isEqualTo(3);
+        }
+    }
+
+    @Test void resolveVariableSub_rightOperandUnresolvable_declines() throws IOException {
+        // dist(sub(x,mul(y,2)),z): sub's own right operand is compound (mul(y,2)), not resolvable
+        // by resolveVariable's own leaf/neg/sub/div/mod cases -- exercises the right.isEmpty()
+        // check specifically.
+        Xcsp3Instance instance = parseXml(
+                "<var id=\"x\"> -10..10 </var><var id=\"y\"> -5..5 </var><var id=\"z\"> -10..10 </var>",
+                "<intension> eq(dist(sub(x,mul(y,2)),z),3) </intension>");
+        assertThat(instance.csp().getConstraints().iterator().next()).isInstanceOf(PredicateConstraint.class);
+        Set<Assignment> found = solutions(instance.csp());
+        assertThat(found).isNotEmpty();
+        for (Assignment a : found) {
+            assertThat(Math.abs((digitOf(a, "x") - digitOf(a, "y") * 2) - digitOf(a, "z"))).isEqualTo(3);
+        }
+    }
+
+    @Test void resolveVariableSub_leftOperandUnresolvable_declines() throws IOException {
+        // dist(sub(mul(x,2),y),z): sub's own left operand is compound (mul(x,2)) -- distinct from
+        // the right-operand rejection above, exercising left.isEmpty() specifically.
+        Xcsp3Instance instance = parseXml(
+                "<var id=\"x\"> -5..5 </var><var id=\"y\"> -10..10 </var><var id=\"z\"> -10..10 </var>",
+                "<intension> eq(dist(sub(mul(x,2),y),z),3) </intension>");
+        assertThat(instance.csp().getConstraints().iterator().next()).isInstanceOf(PredicateConstraint.class);
+        Set<Assignment> found = solutions(instance.csp());
+        assertThat(found).isNotEmpty();
+        for (Assignment a : found) {
+            assertThat(Math.abs((digitOf(a, "x") * 2 - digitOf(a, "y")) - digitOf(a, "z"))).isEqualTo(3);
+        }
+    }
+
+    // ---- SumOrLinearRecognizer target-side resolveVariable fallback (compound target) ---------------
+
+    @Test void intensionSumTarget_compoundDivExpression_routesThroughSumVariableConstraintOverAuxiliary() throws IOException {
+        // eq(sub(div(x,2),y),z) canonicalizes to eq(add(y,z),div(x,2)) -- a genuinely compound
+        // target (div(x,2)), neither a bare variable nor a constant, that only resolveVariable's
+        // fallback (not the narrower asVariable/asConstant pair) can resolve.
+        Xcsp3Instance instance = parseXml(
+                "<var id=\"x\"> 0..10 </var><var id=\"y\"> -10..10 </var><var id=\"z\"> -10..10 </var>",
+                "<intension> eq(sub(div(x,2),y),z) </intension>");
+        assertThat(instance.csp().getConstraints()).anyMatch(c -> c instanceof SumVariableConstraint<?>);
+        Set<Assignment> found = solutions(instance.csp());
+        assertThat(found).isNotEmpty();
+        for (Assignment a : found) {
+            assertThat((digitOf(a, "x") / 2) - digitOf(a, "y")).isEqualTo(digitOf(a, "z"));
+        }
+    }
+
+    @Test void intensionSumTarget_compoundDivExpressionWeightedCoefficients_routesThroughLinearVariableConstraint() throws IOException {
+        // eq(sub(div(x,2),mul(y,3)),z) canonicalizes to eq(add(mul(y,3),z),div(x,2)) -- a compound
+        // target (div(x,2)) alongside non-unit coefficients (y:3, z:1), exercising the
+        // unitCoefficients==false half of the compound-target fallback specifically (distinct from
+        // intensionSumTarget_compoundDivExpression's all-unit-coefficient case).
+        Xcsp3Instance instance = parseXml(
+                "<var id=\"x\"> 0..10 </var><var id=\"y\"> -5..5 </var><var id=\"z\"> -20..20 </var>",
+                "<intension> eq(sub(div(x,2),mul(y,3)),z) </intension>");
+        assertThat(instance.csp().getConstraints()).anyMatch(c -> c instanceof LinearVariableConstraint<?>);
+        Set<Assignment> found = solutions(instance.csp());
+        assertThat(found).isNotEmpty();
+        for (Assignment a : found) {
+            assertThat((digitOf(a, "x") / 2) - digitOf(a, "y") * 3).isEqualTo(digitOf(a, "z"));
+        }
+    }
+
+    @Test void intensionSumTarget_compoundExpressionUnresolvable_fallsBackToPredicateConstraint() throws IOException {
+        // eq(add(y,z),mul(x,2)): mul(x,2) is a genuinely compound target, but mul isn't one of
+        // resolveVariable's own known compound operators (neg/sub/div/mod) -- declines cleanly.
+        Xcsp3Instance instance = parseXml(
+                "<var id=\"x\"> 0..10 </var><var id=\"y\"> -10..10 </var><var id=\"z\"> -10..10 </var>",
+                "<intension> eq(add(y,z),mul(x,2)) </intension>");
+        assertThat(instance.csp().getConstraints().iterator().next()).isInstanceOf(PredicateConstraint.class);
+        Set<Assignment> found = solutions(instance.csp());
+        assertThat(found).isNotEmpty();
+        for (Assignment a : found) {
+            assertThat(digitOf(a, "y") + digitOf(a, "z")).isEqualTo(digitOf(a, "x") * 2);
+        }
+    }
+
     // ---- resolveConstraint (recursive and/or composition, arbitrary arity/depth) -------------------
 
     @Test void resolveConstraint_knightsMoveShape_endToEnd_routesThroughAndConstraintAndAtLeastNConstraint() throws IOException {

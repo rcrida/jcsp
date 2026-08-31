@@ -137,6 +137,7 @@ final class Xcsp3CallbackHandler implements XCallbacks2 {
     private final Map<String, Variable<Integer>> distanceAuxiliaries = new LinkedHashMap<>();
     private final Map<String, DivModAuxiliaries> divModAuxiliaries = new LinkedHashMap<>();
     private final Map<String, Variable<Integer>> negAuxiliaries = new LinkedHashMap<>();
+    private final Map<String, Variable<Integer>> subAuxiliaries = new LinkedHashMap<>();
     private final Map<Set<Variable<Integer>>, List<PendingCount>> pendingSingleValueCounts = new LinkedHashMap<>();
     private @Nullable ToDoubleFunction<Assignment> objective;
     private boolean maximize;
@@ -531,19 +532,48 @@ final class Xcsp3CallbackHandler implements XCallbacks2 {
     }
 
     /**
+     * Fresh variable holding {@code left - right}, linked via an unconditional {@link
+     * LinearVariableConstraint} ({@code 1*left + -1*right == aux}) -- the same reuse-as-linking-
+     * constraint pattern {@link #negAuxiliary}/{@link #divModAuxiliaries} already use. Unlike {@link
+     * #distanceAuxiliary}, {@code sub} isn't symmetric ({@code sub(a,b) != sub(b,a)} in general), so
+     * the memoization key encodes operand order rather than normalizing it. Confirmed via a real
+     * corpus probe that {@code sub} survives unflattened only when nested inside {@code dist(...)}
+     * (e.g. {@code eq(dist(sub(x,y),z),3)}) -- a ground or binary relation's own {@code sub} operand
+     * is always algebraically eliminated by {@code xcsp3-tools}' canonizer before any recognizer
+     * ever sees it (e.g. {@code eq(sub(x,y),5)} canonicalizes directly to {@code eq(x,add(y,5))}),
+     * so this case is reached almost exclusively via {@link DistanceOfPairRecognizer}/{@link
+     * DistancePairComparisonRecognizer}.
+     */
+    private Variable<Integer> subAuxiliary(Variable<Integer> left, Variable<Integer> right) {
+        String key = left.getName() + "$sub$" + right.getName();
+        return subAuxiliaries.computeIfAbsent(key, name -> {
+            int[] leftBounds = boundsByName.get(left.getName());
+            int[] rightBounds = boundsByName.get(right.getName());
+            int lo = leftBounds[0] - rightBounds[1];
+            int hi = leftBounds[1] - rightBounds[0];
+            Variable<Integer> aux = Variable.Factory.INSTANCE.create(name);
+            builder.variableDomain(aux, IntRangeDomain.of(lo, hi));
+            builder.constraint(LinearVariableConstraint.of(Map.of(left, 1, right, -1), Operator.EQ, aux));
+            boundsByName.put(aux.getName(), new int[]{lo, hi});
+            return aux;
+        });
+    }
+
+    /**
      * Recursively resolves an XCSP3 value-producing expression node to a {@link Variable}, the
      * value-producing half of the expression grammar (see {@link #recognizeConstraint} for the
      * relation-producing half). Tries the two leaf cases first (bare variable, constant --
      * {@link #asVariable}/{@link #asConstant} only ever match a leaf, never descending into a
-     * compound node), then the two known compound cases: {@code neg} ({@link #negAuxiliary}) and
-     * {@code div}/{@code mod} by a positive constant divisor ({@link #divAuxiliary}/{@link
-     * #modAuxiliary}), each recursing into its own operand via this same method -- genuinely
-     * recursive, so a nested compound operand like {@code div(neg(x),2)} or {@code neg(div(x,2))}
+     * compound node), then the three known compound cases: {@code neg} ({@link #negAuxiliary}),
+     * {@code sub} ({@link #subAuxiliary}, resolving <em>both</em> operands recursively via this same
+     * method, unlike the other two), and {@code div}/{@code mod} by a positive constant divisor
+     * ({@link #divAuxiliary}/{@link #modAuxiliary}) -- genuinely recursive throughout, so a nested
+     * compound operand like {@code div(neg(x),2)}, {@code neg(div(x,2))}, or {@code sub(neg(x),y)}
      * resolves correctly, not just one level deep. Declines (returns empty) for anything else, e.g.
      * {@code add}/{@code mul} (not yet supported -- extending to another compound operator is a
-     * one-line addition here, mirroring this method's own {@code neg}/{@code div}/{@code mod} cases
-     * and reusing that operator's own existing {@code ...VariableConstraint} sibling as the linking
-     * constraint).
+     * one-line addition here, mirroring this method's own {@code neg}/{@code sub}/{@code div}/{@code
+     * mod} cases and reusing that operator's own existing {@code ...VariableConstraint} sibling as
+     * the linking constraint).
      * <p>
      * The divisor guard is checked before recursing into the dividend, not after -- a cheap,
      * side-effect-free check first avoids the common case of an invalid divisor triggering an
@@ -574,6 +604,13 @@ final class Xcsp3CallbackHandler implements XCallbacks2 {
             return resolveVariable(parent.sons[0]).map(this::negAuxiliary);
         }
         if (parent.sons.length != 2) return Optional.empty();
+        if (parent.getType() == TypeExpr.SUB) {
+            Optional<Variable<Integer>> left = resolveVariable(parent.sons[0]);
+            if (left.isEmpty()) return Optional.empty();
+            Optional<Variable<Integer>> right = resolveVariable(parent.sons[1]);
+            if (right.isEmpty()) return Optional.empty();
+            return Optional.of(subAuxiliary(left.get(), right.get()));
+        }
         boolean isDiv = parent.getType() == TypeExpr.DIV;
         if (!isDiv && parent.getType() != TypeExpr.MOD) return Optional.empty();
         Optional<Integer> divisor = asConstant(parent.sons[1]);

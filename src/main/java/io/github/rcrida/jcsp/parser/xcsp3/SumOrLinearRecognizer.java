@@ -55,6 +55,13 @@ import java.util.Optional;
  * constant one -- the same complexity-based reordering {@link GroundRelationRecognizer}'s own
  * {@code EQ}/{@code NEQ} handling relies on. A defensive reverse-order check on either would be
  * permanently dead code.
+ * <p>
+ * The target side falls back to {@link Xcsp3CallbackHandler#resolveVariable} (materializing a
+ * {@code neg}/{@code sub}/{@code div}/{@code mod} auxiliary) once both {@code asVariable} and
+ * {@code asConstant} decline -- confirmed via a real corpus probe that this shape is reachable:
+ * {@code eq(sub(div(x,2),y),z)} canonicalizes to {@code eq(add(y,z),div(x,2))}, moving the
+ * subtracted term across the relation and leaving a genuinely compound target ({@code div(x,2)}),
+ * not just a bare variable/constant the narrower pair alone could ever have matched.
  */
 final class SumOrLinearRecognizer implements ConstraintRecognizer {
 
@@ -87,9 +94,20 @@ final class SumOrLinearRecognizer implements ConstraintRecognizer {
                     ? SumVariableConstraint.of(coefficients.keySet(), operator, targetVar.get())
                     : LinearVariableConstraint.of(coefficients, operator, targetVar.get()));
         }
-        return Xcsp3CallbackHandler.asConstant(targetSide).map(constant -> unitCoefficients
-                ? SumBoundConstraint.of(coefficients.keySet(), operator, constant)
-                : LinearBoundConstraint.of(coefficients, operator, constant));
+        Optional<Integer> targetConstant = Xcsp3CallbackHandler.asConstant(targetSide);
+        if (targetConstant.isPresent()) {
+            return Optional.of(unitCoefficients
+                    ? SumBoundConstraint.of(coefficients.keySet(), operator, targetConstant.get())
+                    : LinearBoundConstraint.of(coefficients, operator, targetConstant.get()));
+        }
+        // Neither a bare variable nor a constant -- e.g. eq(add(y,z),div(x,2)), the shape
+        // xcsp3-tools' canonizer produces from eq(sub(div(x,2),y),z) by moving the subtracted term
+        // across the relation. resolveVariable materializes a compound target (neg/sub/div/mod) into
+        // a real auxiliary variable, so the variable-target siblings still apply -- just with one
+        // extra auxiliary instead of the tighter constant-bound form.
+        return handler.resolveVariable(targetSide).map(resolvedTarget -> unitCoefficients
+                ? SumVariableConstraint.of(coefficients.keySet(), operator, resolvedTarget)
+                : LinearVariableConstraint.of(coefficients, operator, resolvedTarget));
     }
 
     /**
