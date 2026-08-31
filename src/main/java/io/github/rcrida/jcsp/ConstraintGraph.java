@@ -13,6 +13,7 @@ import io.github.rcrida.jcsp.variables.Variable;
 import org.jspecify.annotations.NonNull;
 
 import java.util.AbstractMap;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -168,12 +169,30 @@ class ConstraintGraph {
                 .collect(Collectors.toUnmodifiableSet());
     }
 
+    /**
+     * {@code Collectors.groupingBy}'s own map (a plain {@link HashMap}) is wrapped via {@link
+     * Collections#unmodifiableMap} rather than {@code Map.copyOf} deliberately: {@code Map.copyOf}
+     * builds one of the JDK's small immutable collections ({@code java.util.ImmutableCollections}),
+     * which since JDK 9 randomizes its internal hash-bucket layout with a salt derived from {@code
+     * System.nanoTime()} at JVM startup -- fixed for one running process, different every launch.
+     * {@link Arc}'s own {@code hashCode()} is fully deterministic (it composes {@link
+     * Variable}'s, which for {@code Variable.Impl} is just {@code String.hashCode()}, spec-guaranteed
+     * stable), so this map's own key ordering would otherwise be deterministic too -- {@code
+     * Map.copyOf}'s salt was the only reason {@link
+     * io.github.rcrida.jcsp.consistency.arc.AC3#apply}'s initial arc-processing queue (built directly
+     * from this map's {@code keySet()}) varied launch-to-launch despite producing the same
+     * arc-consistent fixpoint either way (AC3 is confluent, so this was never a correctness issue,
+     * only a source of node-count/timing noise across separate {@code java} processes -- the same
+     * noise {@code RestartRandomization} was added to reduce for {@code DomWdegLubySearch}'s own,
+     * unrelated tie-break randomness, and doesn't touch this JDK-internal source at all).
+     * {@code Collections.unmodifiableMap} is a plain non-copying wrapper with no such salting.
+     */
     private static Map<Arc, List<BinaryConstraint<?, ?>>> computeAllBinaryArcConstraints(Set<BinaryConstraint<?, ?>> allBinaryConstraints) {
         Map<Arc, List<BinaryConstraint<?, ?>>> grouped = allBinaryConstraints.stream()
                 .flatMap(binaryConstraint -> getArcStream(binaryConstraint)
                         .map(arc -> new AbstractMap.SimpleEntry<>(arc, binaryConstraint)))
                 .collect(Collectors.groupingBy(Map.Entry::getKey, Collectors.mapping(Map.Entry::getValue, Collectors.toUnmodifiableList())));
-        return Map.copyOf(grouped);
+        return Collections.unmodifiableMap(grouped);
     }
 
     private static @NonNull Stream<Arc> getArcStream(BinaryConstraint<?, ?> bc) {
