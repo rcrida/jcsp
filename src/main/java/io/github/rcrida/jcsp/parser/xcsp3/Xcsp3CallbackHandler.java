@@ -146,11 +146,13 @@ final class Xcsp3CallbackHandler implements XCallbacks2 {
 
     /**
      * The registered {@code <intension>} pattern-matcher chain, in the exact priority order the
-     * hand-written chain this replaced used to try things: {@code iff} and {@code dist(...) op
-     * dist(...)} first (each needs to add its own auxiliary-linking constraints before returning),
-     * then the leaf-relation/{@code and}/{@code or} recognizers, then the remaining product/sum
-     * shapes. See {@link #recognizeConstraint} and {@link ConstraintRecognizer}'s own Javadoc.
-     * {@link AndRecognizer}/{@link OrRecognizer} recurse into each child via {@code
+     * hand-written chain this replaced used to try things: {@code dist(...) op dist(...)} first (it
+     * needs to add its own auxiliary-linking constraints before returning), then the leaf-relation/
+     * {@code and}/{@code or} recognizers, then the remaining product/sum shapes, then {@link
+     * ChannelRecognizer} last (a plain {@code var op var}/{@code var op constant} shape always gets
+     * a tighter, natively-typed constraint from an earlier recognizer first). See {@link
+     * #recognizeConstraint} and {@link ConstraintRecognizer}'s own Javadoc. {@link AndRecognizer}/
+     * {@link OrRecognizer}/{@link ChannelRecognizer} recurse into each child via {@code
      * this::recognizeConstraint} -- the same full chain, not a narrower subset -- so a child can be
      * recognized as any registered shape (including a nested {@code iff}, {@code
      * dist(...) op dist(...)}, product, or sum), not just another leaf relation or {@code and}/
@@ -161,7 +163,6 @@ final class Xcsp3CallbackHandler implements XCallbacks2 {
      * #recognizeConstraint} is itself invoked for the first time is not a forward-reference bug.
      */
     private final List<ConstraintRecognizer> recognizers = List.of(
-            new IffRecognizer(this),
             new DistancePairComparisonRecognizer(this),
             new BinaryRelationRecognizer(this),
             new GroundRelationRecognizer(this),
@@ -299,8 +300,9 @@ final class Xcsp3CallbackHandler implements XCallbacks2 {
      * A fresh boolean variable named {@code name}, unconditionally reified against {@code
      * reifiedAgainst} -- built directly against {@link #builder}, since this indicator is never
      * itself the constraint being loaded, only a definitional bridge. Package-private: shared by
-     * {@link IffRecognizer} (one call per {@code iff} operand) and {@link OrRecognizer} (one call
-     * per disjunct in its N-ary {@code or} fallback), both of which need exactly this "create and
+     * {@link ChannelRecognizer} (one call per {@code eq}/{@code ne}/{@code iff} operand), {@link
+     * OrRecognizer} (one call per disjunct in its N-ary {@code or} fallback), and {@link
+     * RelationSumRecognizer} (one call per {@code add} term), each needing exactly this "create and
      * hard-reify" idiom and nothing more -- narrower than exposing {@link #builder} itself.
      */
     Variable<Boolean> newReifiedIndicator(String name, Constraint reifiedAgainst) {
@@ -672,9 +674,9 @@ final class Xcsp3CallbackHandler implements XCallbacks2 {
     }
 
     // Package-private: derives a fresh boolean indicator's name from an operand constraint's own
-    // variable set. Shared by IffRecognizer (one call per iff operand) and OrRecognizer (one call
-    // per disjunct, prefixed with its own per-disjunct counter for uniqueness -- see that class's
-    // own Javadoc for why a plain operand-derived name alone isn't always unique there).
+    // variable set. Shared by ChannelRecognizer, RelationSumRecognizer, and OrRecognizer, each
+    // prefixing with its own per-call counter for uniqueness -- see OrRecognizer's own Javadoc for
+    // why a plain operand-derived name alone isn't always unique.
     static String indicatorName(String side, Constraint operand) {
         return operand.getVariables().stream()
                 .map(Object::toString)

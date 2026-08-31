@@ -38,7 +38,8 @@ import java.util.Optional;
  * relation.
  * <p>
  * Also registered directly in {@link Xcsp3CallbackHandler#recognizeConstraint}'s own chain, not
- * just reachable via {@link IffRecognizer}: a bare top-level {@code eq}/{@code ne}/{@code le}/
+ * just reachable via {@link ChannelRecognizer}'s own full-dispatch operand resolution (e.g. as one
+ * side of an {@code iff}): a bare top-level {@code eq}/{@code ne}/{@code le}/
  * {@code lt} against a constant (e.g. {@code le(0,x)}) is a genuinely single-variable intension,
  * which {@code genericIntensionConstraint} already routes to {@code UnaryPredicateConstraint}
  * regardless -- fine when the constraint is added unconditionally (a real {@code UnaryConstraint}

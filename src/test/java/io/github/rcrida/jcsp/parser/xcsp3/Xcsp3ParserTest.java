@@ -18,6 +18,7 @@ import io.github.rcrida.jcsp.constraints.nary.MinVariableConstraint;
 import io.github.rcrida.jcsp.constraints.nary.PredicateConstraint;
 import io.github.rcrida.jcsp.constraints.nary.ProductConstraint;
 import io.github.rcrida.jcsp.constraints.nary.ProductVariableConstraint;
+import io.github.rcrida.jcsp.constraints.nary.ReifiedConstraint;
 import io.github.rcrida.jcsp.constraints.nary.RelationLogicConstraint;
 import io.github.rcrida.jcsp.constraints.nary.SumBoundConstraint;
 import io.github.rcrida.jcsp.constraints.nary.SumVariableConstraint;
@@ -141,8 +142,9 @@ class Xcsp3ParserTest {
     @Test void intensionIffOfGroundEqualities_routesThroughReifiedUnaryComparator() throws IOException {
         // Mario-easy-4.xml.lzma's own shape: iff(eq(s,i), eq(g,0)) -- neither operand is a plain
         // boolean variable, so this doesn't match intensionIff_solutionsAllEqual's bare-variable
-        // case above; recognizeIffOperands/recognizeGroundRelation route it through a pair of
-        // ReifiedConstraints instead of the generic (unpropagated) PredicateConstraint.
+        // case above; ChannelRecognizer's full-dispatch operand resolution reaches
+        // GroundRelationRecognizer for each side, routing it through a pair of ReifiedConstraints
+        // instead of the generic (unpropagated) PredicateConstraint.
         // x==1 iff y==2, x,y in {0,1,2}: satisfying pairs are (0,0),(0,1),(1,2),(2,0),(2,1) --
         // x!=1 (2 choices) paired with each y!=2 (2 choices) = 4, plus x==1,y==2 = 1, total 5.
         Xcsp3Instance instance = parseXml(
@@ -204,20 +206,18 @@ class Xcsp3ParserTest {
         assertThat(solutions(instance.csp())).hasSize(9); // every (x,y) combo, b determined each time
     }
 
-    @Test void intensionIffOneSideUnrecognizable_fallsBackToGenericIntensionConstraint() throws IOException {
-        // eq(add(y,z),3) has a compound add(y,z) expression as its left operand -- neither a bare
-        // variable nor a bare constant, so both recognizeBinaryRelation (which needs var op var or
-        // var op (var+const), not var+var op const) and recognizeGroundRelation (which needs a bare
-        // variable on at least one side) decline it. recognizeRelation must fail cleanly and fall through to the
-        // pre-existing genericIntensionConstraint path, not throw or misbehave. Note: xcsp3-tools'
-        // own canonizer reorders the iff's two top-level operands by complexity, putting this
-        // (more complex) one at tree.sons[0] regardless of the order written here -- so this
-        // exercises recognizeIffOperands' left.isEmpty() branch, not its right.isEmpty() one (see
-        // intensionIffOperandOnRightUnrecognizable_fallsBackToGenericIntensionConstraint below for
-        // a case that survives canonization with the unrecognizable side on the right).
+    @Test void intensionIffOneSideCompoundSum_recognizedViaFullDispatch() throws IOException {
+        // eq(add(y,z),3) has a compound add(y,z) expression as its left operand -- neither
+        // recognizeBinaryRelation (needs var op var or var op (var+const), not var+var op const)
+        // nor recognizeGroundRelation (needs a bare variable on at least one side) can match it
+        // directly, but ChannelRecognizer's operand resolution now dispatches through the FULL
+        // recognizer chain (not IffRecognizer's old narrow binary/ground pair), so SumOrLinearRecognizer
+        // catches it instead -- genuinely improved recognition, not a regression to work around.
         Xcsp3Instance instance = parseXml(
                 "<var id=\"x\"> 0..2 </var><var id=\"y\"> 0..2 </var><var id=\"z\"> 0..2 </var>",
                 "<intension> iff(eq(x,1),eq(add(y,z),3)) </intension>");
+        assertThat(instance.csp().getConstraints())
+                .anyMatch(c -> c instanceof ReifiedConstraint rc && rc.getBody() instanceof SumBoundConstraint<?>);
         Set<Assignment> solutions = solutions(instance.csp());
         for (Assignment a : solutions) {
             int x = digitOf(a, "x");
@@ -228,15 +228,15 @@ class Xcsp3ParserTest {
         assertThat(solutions).hasSize(16); // (x,y,z) in {0..2}^3: verified by brute-force enumeration
     }
 
-    @Test void intensionIffLeftSideUnrecognizable_fallsBackToGenericIntensionConstraint() throws IOException {
-        // Mirrors intensionIffOneSideUnrecognizable_fallsBackToGenericIntensionConstraint but with
-        // the unrecognizable operand on the LEFT instead of the right -- recognizeIffOperands must
-        // fail on tree.sons[0] specifically (not just tree.sons[1]) and still fall through cleanly.
-        // eq(add(x,y),1) has a compound add(x,y) as its own left operand, so both
-        // recognizeBinaryRelation and recognizeGroundRelation decline it.
+    @Test void intensionIffLeftSideCompoundSum_recognizedViaFullDispatch() throws IOException {
+        // Mirrors intensionIffOneSideCompoundSum_recognizedViaFullDispatch but with the compound
+        // operand on the LEFT instead of the right -- eq(add(x,y),1) resolves via SumOrLinearRecognizer
+        // reached through full dispatch on tree.sons[0] specifically.
         Xcsp3Instance instance = parseXml(
                 "<var id=\"x\"> 0..2 </var><var id=\"y\"> 0..2 </var><var id=\"w\"> 0..1 </var>",
                 "<intension> iff(eq(add(x,y),1),eq(w,1)) </intension>");
+        assertThat(instance.csp().getConstraints())
+                .anyMatch(c -> c instanceof ReifiedConstraint rc && rc.getBody() instanceof SumBoundConstraint<?>);
         Set<Assignment> solutions = solutions(instance.csp());
         for (Assignment a : solutions) {
             int x = digitOf(a, "x");
@@ -302,14 +302,17 @@ class Xcsp3ParserTest {
         assertThat(solutions).hasSize(12); // (x,y) in {-3..5}x{0..2}: verified by brute-force enumeration
     }
 
-    @Test void intensionIffOperandConstantFirst_rightVarPresentButLeftNotConstant_fallsBackToGeneric() throws IOException {
+    @Test void intensionIffOperandConstantFirstCompoundSum_recognizedViaFullDispatch() throws IOException {
         // le(add(a,b),x) iff eq(y,1): sons[0]=add(a,b) is neither a variable nor a constant, so
-        // leftVar is empty; sons[1]=x is a plain variable (rightVar present), but asConstant(sons[0])
-        // also fails since add(a,b) isn't a bare constant either -- exercises the
-        // rightVar-present-but-asConstant-absent path specifically.
+        // ChannelRecognizer's own bare-variable fallback declines for it -- but full dispatch on
+        // that operand reaches SumOrLinearRecognizer (le(add(a,b),x) recognizes as a
+        // SumVariableConstraint, target x a plain variable), where IffRecognizer's old narrow
+        // binary/ground pair would have declined outright.
         Xcsp3Instance instance = parseXml(
                 "<var id=\"a\"> 0..2 </var><var id=\"b\"> 0..2 </var><var id=\"x\"> 0..4 </var><var id=\"y\"> 0..1 </var>",
                 "<intension> iff(le(add(a,b),x),eq(y,1)) </intension>");
+        assertThat(instance.csp().getConstraints())
+                .anyMatch(c -> c instanceof ReifiedConstraint rc && rc.getBody() instanceof SumVariableConstraint<?>);
         Set<Assignment> solutions = solutions(instance.csp());
         for (Assignment s : solutions) {
             int a = digitOf(s, "a");
@@ -321,16 +324,19 @@ class Xcsp3ParserTest {
         assertThat(solutions).hasSize(45); // (a,b,x,y) in {0..2}x{0..2}x{0..4}x{0..1}: verified by brute-force enumeration
     }
 
-    @Test void intensionIffOperandOnRightUnrecognizable_fallsBackToGenericIntensionConstraint() throws IOException {
+    @Test void intensionIffOperandBareVariable_recognizedViaBareVariableFallback() throws IOException {
         // eq(x,1) iff y: a bare boolean variable as the SECOND operand. Unlike a compound
         // sub-expression (add(...), etc.), a bare variable leaf doesn't get reordered ahead of a
         // relational EQ node by xcsp3-tools' complexity-based canonizer (confirmed via a throwaway
-        // probe), so this survives as tree.sons = [eq(x,1), y] -- the one case in this file that
-        // actually exercises recognizeIffOperands' right.isEmpty() branch as true, distinct from
-        // every left-side-unrecognizable case above.
+        // probe), so this survives as tree.sons = [eq(x,1), y]. IffRecognizer's own narrow
+        // recognizeRelation never accepted a bare-variable operand at all, so this used to fall all
+        // the way back to the generic PredicateConstraint -- ChannelRecognizer's own bare-variable
+        // fallback (shared with its eq/ne channel shape) now resolves it directly via
+        // booleanIndicatorFor, with no reification of a separate relation needed for that side.
         Xcsp3Instance instance = parseXml(
                 "<var id=\"x\"> 0..2 </var><var id=\"y\"> 0 1 </var>",
                 "<intension> iff(eq(x,1),y) </intension>");
+        assertThat(instance.csp().getConstraints()).anyMatch(c -> c instanceof BinaryComparatorConstraint<?>);
         Set<Assignment> solutions = solutions(instance.csp());
         for (Assignment a : solutions) {
             int x = digitOf(a, "x");
@@ -365,9 +371,9 @@ class Xcsp3ParserTest {
     @Test void intensionIffThreeOperands_sonsLengthGuardFallsBackToGeneric() throws IOException {
         // XCSP3's iff is a generalized n-ary biconditional (IntensionExpressionEvaluator's own IFF
         // case is allEqual(operands), not just a pairwise check) -- confirmed via a throwaway probe
-        // that xcsp3-tools accepts a 3-operand iff node. recognizeIffOperands only ever matches
-        // exactly two operands (ValueConjunctionConstraint-backed pairs need exactly a left and a
-        // right side), so a 3-operand iff must decline and fall through to the pre-existing generic
+        // that xcsp3-tools accepts a 3-operand iff node. ChannelRecognizer's own tree.sons.length
+        // != 2 guard only ever matches exactly two operands (a left and a right indicator to
+        // compare), so a 3-operand iff must decline and fall through to the pre-existing generic
         // path, which already handles n-ary IFF correctly.
         Xcsp3Instance instance = parseXml(
                 "<var id=\"x\"> 0..3 </var><var id=\"y\"> 0..3 </var><var id=\"z\"> 0..3 </var>",
@@ -2844,8 +2850,8 @@ class Xcsp3ParserTest {
     }
 
     // ---- intension bare ground relation (eq/ne/le/lt vs a constant, single variable) --------------
-    // recognizeGroundRelation, below, recognizeIffOperands' own operand recognizer -- also chained
-    // directly into buildCtrIntension's own top-level .or() sequence: a bare single-variable
+    // GroundRelationRecognizer, below, is also reachable via ChannelRecognizer's own full-dispatch
+    // operand resolution -- also chained directly into buildCtrIntension's own top-level .or() sequence: a bare single-variable
     // comparison is already a genuine UnaryConstraint via genericIntensionConstraint's own
     // UnaryPredicateConstraint fallback (NodeConsistency-eligible when added unconditionally), but
     // UnaryPredicateConstraint implements neither Propagatable#propagate nor

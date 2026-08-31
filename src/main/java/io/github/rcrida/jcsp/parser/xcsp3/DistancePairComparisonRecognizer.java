@@ -19,7 +19,7 @@ import java.util.Optional;
  * Xcsp3CallbackHandler#distanceAuxiliary}) instead of the generic {@code PredicateConstraint}.
  * Unlike every other registered recognizer, this one needs to add two <em>unconditional</em>
  * auxiliary-linking constraints directly against the handler's builder first (the same
- * "definitional, never itself the loaded constraint" treatment {@link IffRecognizer}'s own
+ * "definitional, never itself the loaded constraint" treatment {@link ChannelRecognizer}'s own
  * indicators get, via {@link Xcsp3CallbackHandler#distanceAuxiliary} itself) -- only the derived
  * {@code auxLeft <op> auxRight} relation is what this method returns, so reifying the whole thing
  * still reifies only the comparison, not the (always true) auxiliary definitions.
