@@ -136,6 +136,18 @@ class ConstraintGraph {
         return false;
     }
 
+    /**
+     * Both the per-variable neighbour sets and the outer map are wrapped via {@link
+     * Collections#unmodifiableSet}/{@link Collections#unmodifiableMap} rather than {@code
+     * Set.copyOf}/{@code Map.copyOf} for the same reason {@link #computeAllBinaryArcConstraints}'s
+     * own Javadoc documents: those {@code copyOf} factories build one of the JDK's small immutable
+     * collections, salted with a per-JVM-process random value that reshuffles hash-bucket-derived
+     * iteration order launch-to-launch for no reason relevant here ({@link Variable}'s own {@code
+     * hashCode()} is already fully deterministic). {@code startingVariable = neighbours.keySet()
+     * .iterator().next()} (used by cycle detection) and any other neighbour-set iteration depend
+     * on this map's/these sets' iteration order, so removing the salt here closes the same class of
+     * launch-to-launch search noise as that fix, for the {@code neighbours} structure specifically.
+     */
     private static Map<Variable<?>, Set<Variable<?>>> computeNeighbours(Set<Constraint> constraints, Set<Variable<?>> variables) {
         val neighbours = new HashMap<Variable<?>, Set<Variable<?>>>();
         for (Variable<?> variable : variables) {
@@ -150,11 +162,20 @@ class ConstraintGraph {
         val result = new HashMap<Variable<?>, Set<Variable<?>>>();
         for (Map.Entry<Variable<?>, Set<Variable<?>>> entry : neighbours.entrySet()) {
             entry.getValue().remove(entry.getKey());
-            result.put(entry.getKey(), Set.copyOf(entry.getValue()));
+            result.put(entry.getKey(), Collections.unmodifiableSet(entry.getValue()));
         }
-        return Map.copyOf(result);
+        return Collections.unmodifiableMap(result);
     }
 
+    /**
+     * Collected via {@code Collectors.toSet()} (a plain, unsalted {@link HashSet}) and wrapped in
+     * {@link Collections#unmodifiableSet} rather than {@code Collectors.toUnmodifiableSet()} for the
+     * same reason {@link #computeAllBinaryArcConstraints}'s own Javadoc documents: the latter builds
+     * one of the JDK's small immutable collections, salted per JVM process. This set's own iteration
+     * order feeds {@link #computeAllBinaryArcConstraints}'s encounter order, which in turn determines
+     * the relative order of multiple {@link BinaryConstraint}s sharing the same {@link Arc} in that
+     * method's own per-arc constraint lists.
+     */
     private static Set<BinaryConstraint<?, ?>> computeAllBinaryConstraints(Set<Constraint> constraints) {
         val binaryConstraints = constraints.stream()
                 .filter(c -> c instanceof BinaryConstraint)
@@ -165,8 +186,8 @@ class ConstraintGraph {
                 .map(c -> (BinaryDecomposable) c)
                 .flatMap(c -> c.getAsBinaryConstraints().stream())
                 .toList();
-        return Stream.concat(binaryConstraints.stream(), inferredBinaryConstraints.stream())
-                .collect(Collectors.toUnmodifiableSet());
+        return Collections.unmodifiableSet(Stream.concat(binaryConstraints.stream(), inferredBinaryConstraints.stream())
+                .collect(Collectors.toSet()));
     }
 
     /**
