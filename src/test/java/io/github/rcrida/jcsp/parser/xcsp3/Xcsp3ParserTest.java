@@ -461,14 +461,20 @@ class Xcsp3ParserTest {
         }
     }
 
-    @Test void intensionBooleanProductChannel_threeOperandMul_fallsBackToPredicateConstraint() throws IOException {
+    @Test void intensionBooleanProductChannel_threeOperandMul_routesThroughProductVariableConstraintInstead() throws IOException {
         // mul(x,y,z) canonicalizes with the compound node first (same complexity-based reordering
-        // as the two-operand case), but its arity is 3, not the 2 this recognizer requires --
-        // exercises the sons.length != 2 rejection specifically.
+        // as the two-operand case), but its arity is 3, not the 2 BooleanProductChannelRecognizer
+        // requires -- exercises that recognizer's own sons.length != 2 rejection specifically. It
+        // no longer falls all the way to PredicateConstraint, though: ProductRecognizer (registered
+        // right after) now handles mul of any arity two or more, so this three-distinct-factor case
+        // is picked up there instead -- with no propagation for a {0,1}-domain factor (per
+        // ProductConstraint/ProductVariableConstraint's own strictly-positive-minimum restriction),
+        // same as PredicateConstraint would have given, but as a real, correctly-typed constraint
+        // object rather than an opaque predicate.
         Xcsp3Instance instance = parseXml(
                 "<var id=\"x\"> 0 1 </var><var id=\"y\"> 0 1 </var><var id=\"z\"> 0 1 </var><var id=\"t\"> 0..1 </var>",
                 "<intension> eq(mul(x,y,z),t) </intension>");
-        assertThat(instance.csp().getConstraints().iterator().next()).isInstanceOf(PredicateConstraint.class);
+        assertThat(instance.csp().getConstraints().iterator().next()).isInstanceOf(ProductVariableConstraint.class);
         Set<Assignment> found = solutions(instance.csp());
         assertThat(found).isNotEmpty();
         for (Assignment a : found) {
@@ -490,6 +496,20 @@ class Xcsp3ParserTest {
         assertThat(found).isNotEmpty();
         for (Assignment a : found) {
             assertThat(digitOf(a, "t")).isEqualTo(digitOf(a, "x") * digitOf(a, "y"));
+        }
+    }
+
+    @Test void intensionProductOfThreeFactors_routesThroughProductVariableConstraint() throws IOException {
+        // mul(x,y,z) with three distinct non-boolean factors: ProductRecognizer's own arity
+        // generalization (an earlier version, ProductOfPairRecognizer, required exactly two).
+        Xcsp3Instance instance = parseXml(
+                "<var id=\"x\"> 1..3 </var><var id=\"y\"> 1..3 </var><var id=\"z\"> 1..3 </var><var id=\"t\"> 1..27 </var>",
+                "<intension> eq(mul(x,y,z),t) </intension>");
+        assertThat(instance.csp().getConstraints().iterator().next()).isInstanceOf(ProductVariableConstraint.class);
+        Set<Assignment> found = solutions(instance.csp());
+        assertThat(found).isNotEmpty();
+        for (Assignment a : found) {
+            assertThat(digitOf(a, "t")).isEqualTo(digitOf(a, "x") * digitOf(a, "y") * digitOf(a, "z"));
         }
     }
 
@@ -3496,18 +3516,19 @@ class Xcsp3ParserTest {
     }
 
     @Test void intensionChannelWrongOperator_fallsBackToPredicateConstraint() throws IOException {
-        // le(mul(x,y,w),z): a three-operand mul isn't the two-variable shape ProductOfPairRecognizer
-        // matches, and le isn't eq/ne -- ChannelRecognizer's own operator guard declines before ever
-        // trying to resolve either side, exercising a genuinely different decline path from the
-        // "operand unrecognizable" tests below.
+        // lt(mul(x,y,w),z): ProductRecognizer now handles a three-operand mul (see its own
+        // "distinct-factor" generalization), but only for EQ/LEQ/GEQ -- lt isn't one of those, so
+        // it still declines here, and lt isn't eq/ne either -- ChannelRecognizer's own operator
+        // guard declines before ever trying to resolve either side, exercising a genuinely
+        // different decline path from the "operand unrecognizable" tests below.
         Xcsp3Instance instance = parseXml(
                 "<var id=\"x\"> 1..2 </var><var id=\"y\"> 1..2 </var><var id=\"w\"> 1..2 </var><var id=\"z\"> 0..10 </var>",
-                "<intension> le(mul(x,y,w),z) </intension>");
+                "<intension> lt(mul(x,y,w),z) </intension>");
         assertThat(instance.csp().getConstraints().iterator().next()).isInstanceOf(PredicateConstraint.class);
         Set<Assignment> solutions = solutions(instance.csp());
         assertThat(solutions).isNotEmpty();
         for (Assignment a : solutions) {
-            assertThat(digitOf(a, "x") * digitOf(a, "y") * digitOf(a, "w")).isLessThanOrEqualTo(digitOf(a, "z"));
+            assertThat(digitOf(a, "x") * digitOf(a, "y") * digitOf(a, "w")).isLessThan(digitOf(a, "z"));
         }
     }
 

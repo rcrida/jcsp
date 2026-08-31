@@ -167,7 +167,7 @@ final class Xcsp3CallbackHandler implements XCallbacks2 {
             new AndRecognizer(this::recognizeConstraint),
             new OrRecognizer(this, this::recognizeConstraint),
             new BooleanProductChannelRecognizer(this),
-            new ProductOfPairRecognizer(this),
+            new ProductRecognizer(this),
             new SumOrLinearRecognizer(this),
             new RelationSumRecognizer(this, this::recognizeConstraint),
             new ChannelRecognizer(this, this::recognizeConstraint));
