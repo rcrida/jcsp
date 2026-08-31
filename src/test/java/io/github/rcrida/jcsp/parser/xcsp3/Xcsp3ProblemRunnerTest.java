@@ -5,6 +5,7 @@ import io.github.rcrida.jcsp.assignments.Assignment;
 import io.github.rcrida.jcsp.domains.IntRangeDomain;
 import io.github.rcrida.jcsp.solver.Cancellation;
 import io.github.rcrida.jcsp.solver.LinearObjective;
+import io.github.rcrida.jcsp.solver.RestartRandomization;
 import io.github.rcrida.jcsp.solver.listener.SolverListener;
 import io.github.rcrida.jcsp.variables.Variable;
 import org.junit.jupiter.api.Test;
@@ -55,6 +56,27 @@ class Xcsp3ProblemRunnerTest {
         assertThat(buffer.toString(StandardCharsets.UTF_8)).contains("s SATISFIABLE").contains("v <instantiation><list> x </list>");
     }
 
+    @Test void main_withThirdArgument_pinsRestartRandomizationSeed() throws IOException {
+        // The optional third CLI argument (a RestartRandomization seed) is what
+        // Xcsp3CompetitionRunner passes so separate runs are comparable -- see Xcsp3ProblemRunner's
+        // own Javadoc. Exercises the args.length >= 3 branch specifically.
+        Path instanceFile = tempDir.resolve("instance.xml");
+        Files.writeString(instanceFile, """
+                <instance format="XCSP3" type="CSP">
+                <variables><var id="x"> 0..2 </var></variables>
+                <constraints><intension> ge(x,0) </intension></constraints>
+                </instance>
+                """);
+        ByteArrayOutputStream buffer = new ByteArrayOutputStream();
+        System.setOut(printStreamInto(buffer));
+        try {
+            Xcsp3ProblemRunner.main(new String[]{instanceFile.toString(), "60", "42"});
+        } finally {
+            System.setOut(new PrintStream(new java.io.FileOutputStream(java.io.FileDescriptor.out), true, StandardCharsets.UTF_8));
+        }
+        assertThat(buffer.toString(StandardCharsets.UTF_8)).contains("s SATISFIABLE").contains("v <instantiation><list> x </list>");
+    }
+
     // ---- satisfaction chain -------------------------------------------------------------------------------------
 
     @Test void satisfaction_solvableProblem_reportsSatisfiableWithSolutionLine() {
@@ -69,6 +91,23 @@ class Xcsp3ProblemRunnerTest {
 
         String output = buffer.toString(StandardCharsets.UTF_8);
         assertThat(output).contains("s SATISFIABLE").contains("v <instantiation><list> x </list>").contains("c stats: Statistics(");
+    }
+
+    @Test void satisfaction_withFixedRestartRandomizationSeed_stillSolvesCorrectly() {
+        // Exercises the 5-arg solve overload and configBuilder's restartRandomization != null
+        // branch -- the fixed-seed path Xcsp3CompetitionRunner relies on for comparable runs.
+        Variable<Integer> x = F.create("x");
+        ConstraintSatisfactionProblem csp = ConstraintSatisfactionProblem.builder()
+                .variableDomain(x, IntRangeDomain.of(1, 3))
+                .build();
+        Xcsp3Instance instance = new Xcsp3Instance(csp, null, false, Set.of("x"), 0);
+
+        ByteArrayOutputStream buffer = new ByteArrayOutputStream();
+        Xcsp3ProblemRunner.solve(instance, Cancellation.NEVER, SolverListener.NONE,
+                RestartRandomization.seeded(42), printStreamInto(buffer));
+
+        String output = buffer.toString(StandardCharsets.UTF_8);
+        assertThat(output).contains("s SATISFIABLE").contains("v <instantiation><list> x </list>");
     }
 
     @Test void satisfaction_infeasibleProblem_reportsUnsatisfiable() {

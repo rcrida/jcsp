@@ -6,11 +6,13 @@ import io.github.rcrida.jcsp.assignments.Statistics;
 import io.github.rcrida.jcsp.solver.BoundSolver;
 import io.github.rcrida.jcsp.solver.BranchAndBoundSolver;
 import io.github.rcrida.jcsp.solver.Cancellation;
+import io.github.rcrida.jcsp.solver.RestartRandomization;
 import io.github.rcrida.jcsp.solver.Solver;
 import io.github.rcrida.jcsp.solver.SolverCancelledException;
 import io.github.rcrida.jcsp.solver.SolverConfig;
 import io.github.rcrida.jcsp.solver.listener.SolverListener;
 import io.github.rcrida.jcsp.variables.Variable;
+import org.jspecify.annotations.Nullable;
 
 import java.io.IOException;
 import java.io.PrintStream;
@@ -31,6 +33,21 @@ import java.util.stream.Stream;
  * {@code Xcsp3CompetitionRunner} (test sources, not part of the published library) drives a whole
  * batch of instances by {@code exec}-ing this class's {@link #main} once per file, mirroring that
  * same per-instance process isolation rather than reusing one JVM across the batch.
+ * <p>
+ * {@link #main}'s optional third argument pins a {@link RestartRandomization} seed rather than
+ * leaving {@code SolverConfig#getRestartRandomization()} at its own random-per-call default. A real
+ * competition run has no earlier run to compare against, so this argument defaults to absent
+ * (unset), preserving the library's normal restart-diversification behaviour for genuine end
+ * users; {@code Xcsp3CompetitionRunner} passes a fixed literal seed when it execs this class
+ * specifically because its own job (unlike a one-off competition run) is comparing solved/unknown
+ * counts across separate runs of possibly-different code, the same reproducibility need {@code
+ * NogoodPropagationBenchmark}/{@code CsplibBenchmarks} already pin a fixed seed for. A fixed seed
+ * only removes the dom/wdeg tie-break axis of run-to-run variance, not all of it: {@code AC3}'s own
+ * arc-processing order is independently salted once per JVM process and untouched by this either
+ * way, so residual variance across separate {@code java} launches (what {@code
+ * Xcsp3CompetitionRunner} always uses, one subprocess per instance) is expected and accepted, the
+ * same documented limitation {@code NogoodPropagationBenchmark#compareRestartRandomization} exists
+ * to characterize.
  */
 public final class Xcsp3ProblemRunner {
 
@@ -40,19 +57,25 @@ public final class Xcsp3ProblemRunner {
     public static void main(String[] args) throws IOException {
         Path instanceFile = Path.of(args[0]);
         long timeLimitSeconds = Long.parseLong(args[1]);
-        run(Xcsp3Parser.parse(instanceFile), timeLimitSeconds, System.out);
+        RestartRandomization restartRandomization = args.length >= 3
+                ? RestartRandomization.seeded(Long.parseLong(args[2]))
+                : null;
+        run(Xcsp3Parser.parse(instanceFile), timeLimitSeconds, restartRandomization, System.out);
     }
 
     /**
      * Enforces {@code timeLimitSeconds} by cancelling a fresh {@link Cancellation} from a
-     * background timer once it elapses, then delegates to {@link #solve}.
+     * background timer once it elapses, then delegates to {@link #solve}. {@code null}
+     * {@code restartRandomization} leaves {@link SolverConfig}'s own random-per-call default in
+     * place -- see this class's own Javadoc for when a caller should pass a fixed seed instead.
      */
-    static void run(Xcsp3Instance instance, long timeLimitSeconds, PrintStream out) {
+    static void run(Xcsp3Instance instance, long timeLimitSeconds,
+                     @Nullable RestartRandomization restartRandomization, PrintStream out) {
         Cancellation cancellation = new Cancellation();
         ScheduledExecutorService timer = Executors.newSingleThreadScheduledExecutor();
         timer.schedule(cancellation::cancel, timeLimitSeconds, TimeUnit.SECONDS);
         try {
-            solve(instance, cancellation, SolverListener.NONE, out);
+            solve(instance, cancellation, SolverListener.NONE, restartRandomization, out);
         } finally {
             timer.shutdownNow();
         }
@@ -65,13 +88,27 @@ public final class Xcsp3ProblemRunner {
      * s}/{@code o}/{@code v} status lines, so this doesn't change this class's own output contract.
      */
     static void solve(Xcsp3Instance instance, Cancellation cancellation, SolverListener listener, PrintStream out) {
+        solve(instance, cancellation, listener, null, out);
+    }
+
+    static void solve(Xcsp3Instance instance, Cancellation cancellation, SolverListener listener,
+                       @Nullable RestartRandomization restartRandomization, PrintStream out) {
         Statistics stats = new Statistics();
         if (instance.objective() == null) {
-            solveSatisfaction(instance, cancellation, listener, stats, out);
+            solveSatisfaction(instance, cancellation, listener, restartRandomization, stats, out);
         } else {
-            solveOptimization(instance, cancellation, listener, stats, out);
+            solveOptimization(instance, cancellation, listener, restartRandomization, stats, out);
         }
         out.println("c stats: " + stats);
+    }
+
+    private static SolverConfig configFor(
+            Cancellation cancellation, SolverListener listener, @Nullable RestartRandomization restartRandomization, Statistics stats) {
+        var builder = SolverConfig.builder().cancellation(cancellation).listener(listener).statistics(stats);
+        if (restartRandomization != null) {
+            builder.restartRandomization(restartRandomization);
+        }
+        return builder.build();
     }
 
     /**
@@ -82,8 +119,9 @@ public final class Xcsp3ProblemRunner {
      * {@link Optional#empty()}, indistinguishable here from genuine {@code UNSATISFIABLE}. Only the
      * thrown case is reported as {@code UNKNOWN}.
      */
-    private static void solveSatisfaction(Xcsp3Instance instance, Cancellation cancellation, SolverListener listener, Statistics stats, PrintStream out) {
-        SolverConfig config = SolverConfig.builder().cancellation(cancellation).listener(listener).statistics(stats).build();
+    private static void solveSatisfaction(Xcsp3Instance instance, Cancellation cancellation, SolverListener listener,
+                                           @Nullable RestartRandomization restartRandomization, Statistics stats, PrintStream out) {
+        SolverConfig config = configFor(cancellation, listener, restartRandomization, stats);
         BoundSolver solver = Solver.Factory.INSTANCE.createSolver(instance.csp(), config);
         try {
             Optional<Assignment> solution = solver.getSolution();
@@ -122,8 +160,9 @@ public final class Xcsp3ProblemRunner {
      * {@code iterator()} buffered ~16,800 results for ~200ms before yielding the first one, while
      * {@code forEach} delivered each within a fraction of a millisecond of its own production.
      */
-    private static void solveOptimization(Xcsp3Instance instance, Cancellation cancellation, SolverListener listener, Statistics stats, PrintStream out) {
-        SolverConfig config = SolverConfig.builder().cancellation(cancellation).listener(listener).statistics(stats).build();
+    private static void solveOptimization(Xcsp3Instance instance, Cancellation cancellation, SolverListener listener,
+                                           @Nullable RestartRandomization restartRandomization, Statistics stats, PrintStream out) {
+        SolverConfig config = configFor(cancellation, listener, restartRandomization, stats);
         BoundSolver solver = Solver.Factory.INSTANCE.createSolver(instance.csp(), instance.objective(), config);
         Assignment[] best = new Assignment[1];
         solver.getSolutions().forEach(solution -> {

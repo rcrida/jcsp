@@ -61,6 +61,20 @@ public final class Xcsp3CompetitionRunner {
      */
     private static final long PROCESS_KILL_MARGIN_SECONDS = 10;
 
+    /**
+     * Passed through to each child {@link Xcsp3ProblemRunner} process as a fixed {@code
+     * RestartRandomization} seed (see that class's own Javadoc), the same fixed-seed-for-comparison
+     * pattern {@code NogoodPropagationBenchmark}/{@code CsplibBenchmarks} already use elsewhere in
+     * this project. This batch's whole purpose is comparing solved/unknown counts across separate
+     * runs (typically before/after a code change) -- a fresh random seed per child process would
+     * make dom/wdeg restart tie-breaking a confounding source of run-to-run variance on top of the
+     * one this harness actually wants to measure. Doesn't make results fully reproducible across
+     * separate {@code java} launches on its own (this harness always execs one subprocess per
+     * instance) -- {@code AC3}'s own arc-processing order is independently salted once per JVM
+     * process regardless -- just removes the larger of the two variance sources.
+     */
+    private static final long RESTART_RANDOMIZATION_SEED = 20260830L;
+
     private Xcsp3CompetitionRunner() {
     }
 
@@ -149,7 +163,8 @@ public final class Xcsp3CompetitionRunner {
         String classpath = System.getProperty("java.class.path");
         ProcessBuilder builder = new ProcessBuilder(
                 javaBin, "-cp", classpath, "-Dorg.slf4j.simpleLogger.defaultLogLevel=error",
-                Xcsp3ProblemRunner.class.getName(), instance.toString(), String.valueOf(timeLimitSeconds));
+                Xcsp3ProblemRunner.class.getName(), instance.toString(), String.valueOf(timeLimitSeconds),
+                String.valueOf(RESTART_RANDOMIZATION_SEED));
         builder.redirectErrorStream(true);
 
         long startNanos = System.nanoTime();
