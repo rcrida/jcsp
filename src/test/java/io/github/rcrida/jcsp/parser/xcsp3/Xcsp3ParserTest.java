@@ -3384,6 +3384,73 @@ class Xcsp3ParserTest {
         }
     }
 
+    @Test void intensionAddOfNegatedVariableTerm_routesThroughLinearVariableConstraint() throws IOException {
+        // add(x,neg(y)): neg(y) contributes coefficient -1 to y, same as mul(y,-1) would.
+        Xcsp3Instance instance = parseXml(
+                "<var id=\"x\"> 0..5 </var><var id=\"y\"> 0..5 </var><var id=\"z\"> -5..5 </var>",
+                "<intension> eq(z,add(x,neg(y))) </intension>");
+        assertThat(instance.csp().getConstraints().iterator().next()).isInstanceOf(LinearVariableConstraint.class);
+        Set<Assignment> solutions = solutions(instance.csp());
+        assertThat(solutions).isNotEmpty();
+        for (Assignment a : solutions) {
+            assertThat(digitOf(a, "z")).isEqualTo(digitOf(a, "x") - digitOf(a, "y"));
+        }
+    }
+
+    @Test void intensionAddOfNegatedNonVariableTerm_fallsBackToPredicateConstraint() throws IOException {
+        // add(x,neg(mul(y,2))): neg's own operand is compound, not a bare variable.
+        Xcsp3Instance instance = parseXml(
+                "<var id=\"x\"> 0..5 </var><var id=\"y\"> 0..5 </var><var id=\"z\"> -10..10 </var>",
+                "<intension> eq(z,add(x,neg(mul(y,2)))) </intension>");
+        assertThat(instance.csp().getConstraints().iterator().next()).isInstanceOf(PredicateConstraint.class);
+        Set<Assignment> solutions = solutions(instance.csp());
+        assertThat(solutions).isNotEmpty();
+        for (Assignment a : solutions) {
+            assertThat(digitOf(a, "z")).isEqualTo(digitOf(a, "x") - digitOf(a, "y") * 2);
+        }
+    }
+
+    @Test void intensionAddOfSubtractionTerm_routesThroughLinearVariableConstraint() throws IOException {
+        // add(x,sub(y,w)): sub(y,w) contributes coefficient 1 to y and -1 to w from a single term.
+        Xcsp3Instance instance = parseXml(
+                "<var id=\"x\"> 0..5 </var><var id=\"y\"> 0..5 </var><var id=\"w\"> 0..5 </var><var id=\"z\"> -5..15 </var>",
+                "<intension> eq(z,add(x,sub(y,w))) </intension>");
+        assertThat(instance.csp().getConstraints().iterator().next()).isInstanceOf(LinearVariableConstraint.class);
+        Set<Assignment> solutions = solutions(instance.csp());
+        assertThat(solutions).isNotEmpty();
+        for (Assignment a : solutions) {
+            assertThat(digitOf(a, "z")).isEqualTo(digitOf(a, "x") + digitOf(a, "y") - digitOf(a, "w"));
+        }
+    }
+
+    @Test void intensionAddOfSubtractionTermWithNonVariableOperand_fallsBackToPredicateConstraint() throws IOException {
+        // add(x,sub(y,mul(w,2))): sub's own right operand is compound, not a bare variable.
+        Xcsp3Instance instance = parseXml(
+                "<var id=\"x\"> 0..5 </var><var id=\"y\"> 0..5 </var><var id=\"w\"> 0..5 </var><var id=\"z\"> -10..15 </var>",
+                "<intension> eq(z,add(x,sub(y,mul(w,2)))) </intension>");
+        assertThat(instance.csp().getConstraints().iterator().next()).isInstanceOf(PredicateConstraint.class);
+        Set<Assignment> solutions = solutions(instance.csp());
+        assertThat(solutions).isNotEmpty();
+        for (Assignment a : solutions) {
+            assertThat(digitOf(a, "z")).isEqualTo(digitOf(a, "x") + digitOf(a, "y") - digitOf(a, "w") * 2);
+        }
+    }
+
+    @Test void intensionAddOfSubtractionTermWithNonVariableLeftOperand_fallsBackToPredicateConstraint() throws IOException {
+        // add(x,sub(mul(y,2),w)): sub's own left operand is compound, not a bare variable --
+        // distinct from intensionAddOfSubtractionTermWithNonVariableOperand's right-operand
+        // rejection, exercising subLeft.isPresent() being false specifically.
+        Xcsp3Instance instance = parseXml(
+                "<var id=\"x\"> 0..5 </var><var id=\"y\"> 0..5 </var><var id=\"w\"> 0..5 </var><var id=\"z\"> -10..15 </var>",
+                "<intension> eq(z,add(x,sub(mul(y,2),w))) </intension>");
+        assertThat(instance.csp().getConstraints().iterator().next()).isInstanceOf(PredicateConstraint.class);
+        Set<Assignment> solutions = solutions(instance.csp());
+        assertThat(solutions).isNotEmpty();
+        for (Assignment a : solutions) {
+            assertThat(digitOf(a, "z")).isEqualTo(digitOf(a, "x") + digitOf(a, "y") * 2 - digitOf(a, "w"));
+        }
+    }
+
     @Test void intensionAddWithThreeOperands_fallsBackToPredicateConstraint() throws IOException {
         Xcsp3Instance instance = parseXml(
                 "<var id=\"x\"> 0..3 </var><var id=\"y\"> 0..3 </var><var id=\"z\"> 0..9 </var>",

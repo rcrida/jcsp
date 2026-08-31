@@ -21,22 +21,32 @@ import java.util.Optional;
  * Recognizes {@code A op B} where one of {@code A}/{@code B} is {@code add(t1, t2, ..., tn)} and
  * the other is a plain variable or constant -- e.g. {@code eq(add(x,y), z)} or {@code le(add(x,y),
  * 20)} -- routing onto {@link SumVariableConstraint}/{@link SumBoundConstraint} (every term a bare
- * variable) or {@link LinearVariableConstraint}/{@link LinearBoundConstraint} (at least one term a
- * weighted {@code mul(var, constant)}) instead of the generic {@link PredicateConstraint}, which
- * has no propagation at all. Each {@code add} term must independently be a bare variable or a
- * two-term {@code mul(var, constant)} -- anything deeper (a nested {@code add}, a product of two
- * variables, etc.) declines the whole recognition, always safe, just less propagated, never
- * incorrect, the same contract every recognizer in this package documents. The choice between the
- * "sum" and "linear" siblings is made once, from every term's own final coefficient after
- * same-variable terms are combined (e.g. {@code add(x,x)} contributes coefficient 2 to {@code x},
- * not two separate unit terms) -- {@code SumVariableConstraint}/{@code SumBoundConstraint} only
- * mean what they say when every one of that combined set is exactly {@code 1}.
+ * variable) or {@link LinearVariableConstraint}/{@link LinearBoundConstraint} (at least one term
+ * weighted) instead of the generic {@link PredicateConstraint}, which has no propagation at all.
+ * Each {@code add} term must independently reduce to one or two (variable, coefficient) pairs --
+ * see {@link #addTerm} for the four shapes recognized ({@code var}, {@code mul(var,const)}, {@code
+ * neg(var)}, {@code sub(var,var)}) -- anything deeper (a nested {@code add} the canonizer didn't
+ * already flatten, a product of two variables, a bare constant term, etc.) declines the whole
+ * recognition, always safe, just less propagated, never incorrect, the same contract every
+ * recognizer in this package documents. The choice between the "sum" and "linear" siblings is made
+ * once, from every term's own final coefficient after same-variable terms are combined (e.g.
+ * {@code add(x,x)} contributes coefficient 2 to {@code x}, {@code sub(x,x)} contributes 0 -- a
+ * degenerate but harmless case, not specially rejected) -- {@code SumVariableConstraint}/{@code
+ * SumBoundConstraint} only mean what they say when every one of that combined set is exactly
+ * {@code 1}.
  * <p>
- * Confirmed empirically against the bundled XCSP3 competition corpus: this recognizes roughly 94%
- * of what previously fell to {@link PredicateConstraint} across several instances entirely (e.g.
- * {@code CostasArray-12.xml.lzma}, {@code StillLife-wastage-03.xml.lzma}), leaving only a smaller
- * residue with deeper nesting (e.g. {@code RadarSurveillance-8-24-3-2-00.xml.lzma}'s wider {@code
- * add} terms) unrecognized.
+ * Confirmed empirically against the bundled XCSP3 competition corpus: the {@code var}/{@code
+ * mul(var,const)} pair alone recognizes roughly 94% of what previously fell to {@link
+ * PredicateConstraint} across several instances entirely (e.g. {@code CostasArray-12.xml.lzma},
+ * {@code StillLife-wastage-03.xml.lzma}). {@code neg(var)}/{@code sub(var,var)} terms are not
+ * corpus-confirmed the same way -- added because they're both linear (exactly as representable by
+ * {@link LinearVariableConstraint}/{@link LinearBoundConstraint} as {@code mul(var,-1)}) and both
+ * legal, plausible XCSP3 syntax a real instance could use even though none in the bundled sample
+ * corpus happens to, per this project's own "the corpus is examples, not the boundary of what to
+ * support" stance. A nested {@code add} genuinely never reaches this method unflattened, confirmed
+ * empirically: {@code xcsp3-tools}' canonizer always flattens {@code add(add(x,y),w)} into one
+ * three-term {@code add(x,y,w)} before {@code buildCtrIntension} ever sees it, since {@code add} is
+ * associative -- so that specific "anything deeper" case is unreachable dead code, not a real gap.
  * <p>
  * Only checks {@code add} as {@code tree.sons[0]}, not the reverse, and only checks {@code
  * mul(var, constant)} operand order within each term, not the reverse: confirmed empirically that
@@ -65,22 +75,9 @@ final class SumOrLinearRecognizer implements ConstraintRecognizer {
 
         Map<Variable<Integer>, Integer> coefficients = new LinkedHashMap<>();
         for (XNode<XVarInteger> term : addSide.sons) {
-            Optional<Variable<Integer>> bareVar = handler.asVariable(term);
-            if (bareVar.isPresent()) {
-                coefficients.merge(bareVar.get(), 1, Integer::sum);
-                continue;
+            if (!addTerm(coefficients, term)) {
+                return Optional.empty();
             }
-            if (term.getType() == TypeExpr.MUL && term.sons.length == 2) {
-                Optional<Variable<Integer>> mulVar = handler.asVariable(term.sons[0]);
-                if (mulVar.isPresent()) {
-                    Optional<Integer> mulConst = Xcsp3CallbackHandler.asConstant(term.sons[1]);
-                    if (mulConst.isPresent()) {
-                        coefficients.merge(mulVar.get(), mulConst.get(), Integer::sum);
-                        continue;
-                    }
-                }
-            }
-            return Optional.empty();
         }
         boolean unitCoefficients = coefficients.values().stream().allMatch(c -> c == 1);
 
@@ -93,5 +90,48 @@ final class SumOrLinearRecognizer implements ConstraintRecognizer {
         return Xcsp3CallbackHandler.asConstant(targetSide).map(constant -> unitCoefficients
                 ? SumBoundConstraint.of(coefficients.keySet(), operator, constant)
                 : LinearBoundConstraint.of(coefficients, operator, constant));
+    }
+
+    /**
+     * Folds one {@code add} term into {@code coefficients}, recognizing four shapes: a bare
+     * variable (coefficient {@code 1}), {@code mul(var, constant)} (coefficient {@code constant}),
+     * {@code neg(var)} (coefficient {@code -1}), and {@code sub(var, var)} (coefficient {@code 1}
+     * for the left operand, {@code -1} for the right -- the one shape here contributing to two
+     * different variables from a single term). Returns {@code false} (declining the whole
+     * recognition, per this class's own contract) for anything else.
+     */
+    private boolean addTerm(Map<Variable<Integer>, Integer> coefficients, XNode<XVarInteger> term) {
+        Optional<Variable<Integer>> bareVar = handler.asVariable(term);
+        if (bareVar.isPresent()) {
+            coefficients.merge(bareVar.get(), 1, Integer::sum);
+            return true;
+        }
+        if (term.getType() == TypeExpr.MUL && term.sons.length == 2) {
+            Optional<Variable<Integer>> mulVar = handler.asVariable(term.sons[0]);
+            if (mulVar.isPresent()) {
+                Optional<Integer> mulConst = Xcsp3CallbackHandler.asConstant(term.sons[1]);
+                if (mulConst.isPresent()) {
+                    coefficients.merge(mulVar.get(), mulConst.get(), Integer::sum);
+                    return true;
+                }
+            }
+        }
+        if (term.getType() == TypeExpr.NEG && term.sons.length == 1) {
+            Optional<Variable<Integer>> negVar = handler.asVariable(term.sons[0]);
+            if (negVar.isPresent()) {
+                coefficients.merge(negVar.get(), -1, Integer::sum);
+                return true;
+            }
+        }
+        if (term.getType() == TypeExpr.SUB && term.sons.length == 2) {
+            Optional<Variable<Integer>> subLeft = handler.asVariable(term.sons[0]);
+            Optional<Variable<Integer>> subRight = handler.asVariable(term.sons[1]);
+            if (subLeft.isPresent() && subRight.isPresent()) {
+                coefficients.merge(subLeft.get(), 1, Integer::sum);
+                coefficients.merge(subRight.get(), -1, Integer::sum);
+                return true;
+            }
+        }
+        return false;
     }
 }
