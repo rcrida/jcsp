@@ -223,4 +223,19 @@ class Xcsp3CallbackHandlerTest {
         Xcsp3CallbackHandler handler = new Xcsp3CallbackHandler();
         assertThat(handler.resolveVariable(leaf)).isEmpty();
     }
+
+    /**
+     * {@code neg} is strictly unary in the XCSP3 grammar, so a {@code neg} node with anything but
+     * one son can't occur via real parsing -- confirmed unreachable the same way {@link
+     * ProductRecognizerTest#singleOperandMul_declines} and {@link
+     * SumOrLinearRecognizerTest#negTermWithTwoOperands_declines} are for their own sibling
+     * fixed-arity operators.
+     */
+    @Test void resolveVariable_negWithTwoOperands_declines() {
+        XNodeLeaf<XVarInteger> a = new XNodeLeaf<>(TypeExpr.SYMBOL, "a");
+        XNodeLeaf<XVarInteger> b = new XNodeLeaf<>(TypeExpr.SYMBOL, "b");
+        XNodeParent<XVarInteger> negWithTwoSons = new XNodeParent<>(TypeExpr.NEG, a, b);
+        Xcsp3CallbackHandler handler = new Xcsp3CallbackHandler();
+        assertThat(handler.resolveVariable(negWithTwoSons)).isEmpty();
+    }
 }

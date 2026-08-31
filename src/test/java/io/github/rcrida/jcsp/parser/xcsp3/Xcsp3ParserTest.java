@@ -3071,6 +3071,81 @@ class Xcsp3ParserTest {
         }
     }
 
+    // ---- resolveVariable / negAuxiliary (neg(v) as a resolvable compound value) ---------------------
+    // neg(v) resolves the same recursive way div(v,k)/mod(v,k) already do, via a fresh negation
+    // auxiliary (negAuxiliary) linked to v by one LinearVariableConstraint -- no sign guard, unlike
+    // div/mod, since negation is exact for any integer domain.
+
+    @Test void resolveVariableNeg_insideGroundRelation_routesThroughUnaryComparatorConstraintOverAuxiliary() throws IOException {
+        Xcsp3Instance instance = parseXml(
+                "<var id=\"x\"> -10..10 </var>",
+                "<intension> eq(neg(x),5) </intension>");
+        assertThat(instance.csp().getConstraints()).anyMatch(c -> c instanceof UnaryComparatorConstraint<?>);
+        assertThat(instance.csp().getConstraints()).anyMatch(c -> c instanceof LinearVariableConstraint<?>);
+        Set<Assignment> found = solutions(instance.csp());
+        assertThat(found).isNotEmpty();
+        for (Assignment a : found) {
+            assertThat(-digitOf(a, "x")).isEqualTo(5);
+        }
+    }
+
+    @Test void resolveVariableNeg_insideBinaryRelation_routesThroughBinaryComparatorConstraintOverAuxiliary() throws IOException {
+        Xcsp3Instance instance = parseXml(
+                "<var id=\"x\"> -10..10 </var><var id=\"y\"> -10..10 </var>",
+                "<intension> eq(neg(x),y) </intension>");
+        assertThat(instance.csp().getConstraints()).anyMatch(c -> c instanceof BinaryComparatorConstraint<?>);
+        Set<Assignment> found = solutions(instance.csp());
+        assertThat(found).isNotEmpty();
+        for (Assignment a : found) {
+            assertThat(-digitOf(a, "x")).isEqualTo(digitOf(a, "y"));
+        }
+    }
+
+    @Test void resolveVariableNeg_insideDistOfPair_routesThroughAbsoluteDifferenceConstraintOverAuxiliary() throws IOException {
+        Xcsp3Instance instance = parseXml(
+                "<var id=\"x\"> -10..10 </var><var id=\"y\"> -10..10 </var>",
+                "<intension> eq(dist(neg(x),y),3) </intension>");
+        assertThat(instance.csp().getConstraints()).anyMatch(c -> c instanceof AbsoluteDifferenceConstraint<?>);
+        Set<Assignment> found = solutions(instance.csp());
+        assertThat(found).isNotEmpty();
+        for (Assignment a : found) {
+            assertThat(Math.abs(-digitOf(a, "x") - digitOf(a, "y"))).isEqualTo(3);
+        }
+    }
+
+    @Test void resolveVariableNeg_nestedInsideDiv_resolvesRecursively() throws IOException {
+        // neg(div(x,2)): the operand of neg is itself a div node -- confirms resolveVariable's
+        // recursion covers neg the same way it already covers div(div(...)).
+        Xcsp3Instance instance = parseXml(
+                "<var id=\"x\"> 0..10 </var><var id=\"y\"> -10..10 </var>",
+                "<intension> eq(neg(div(x,2)),y) </intension>");
+        assertThat(instance.csp().getConstraints()).anyMatch(c -> c instanceof BinaryComparatorConstraint<?>);
+        Set<Assignment> found = solutions(instance.csp());
+        assertThat(found).isNotEmpty();
+        for (Assignment a : found) {
+            assertThat(-(digitOf(a, "x") / 2)).isEqualTo(digitOf(a, "y"));
+        }
+    }
+
+    @Test void resolveVariableDiv_negAuxiliaryDividend_declinesWhenAuxiliaryDomainGoesNegative() throws IOException {
+        // div(neg(x),2): neg(x)'s own auxiliary domain is the negation of x's -- here [-10,0] for
+        // x in [0,10] -- so div's own dividend-min->=0 guard correctly declines even though x
+        // itself never goes negative, since the *auxiliary standing in for the dividend* does. The
+        // neg(x) resolution attempt still leaves its own harmless orphaned LinearVariableConstraint
+        // behind (the same accepted "declined recognition can leave an orphaned auxiliary" tradeoff
+        // resolveVariable's own Javadoc documents), so this checks anyMatch, not the first-iterated
+        // constraint.
+        Xcsp3Instance instance = parseXml(
+                "<var id=\"x\"> 0..10 </var><var id=\"y\"> -10..10 </var>",
+                "<intension> eq(div(neg(x),2),y) </intension>");
+        assertThat(instance.csp().getConstraints()).anyMatch(c -> c instanceof PredicateConstraint);
+        Set<Assignment> found = solutions(instance.csp());
+        assertThat(found).isNotEmpty();
+        for (Assignment a : found) {
+            assertThat(-digitOf(a, "x") / 2).isEqualTo(digitOf(a, "y"));
+        }
+    }
+
     // ---- resolveConstraint (recursive and/or composition, arbitrary arity/depth) -------------------
 
     @Test void resolveConstraint_knightsMoveShape_endToEnd_routesThroughAndConstraintAndAtLeastNConstraint() throws IOException {
