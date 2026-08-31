@@ -907,18 +907,33 @@ class Xcsp3ParserTest {
         }
     }
 
-    @Test void intensionOrGeOperand_recognizesViaResolveConstraintsGeneralNaryPath() throws IOException {
-        // or(ge(x,2), eq(y,1)): ge(x,2) canonicalizes to le(2,x) -- constant first, variable second,
-        // the one operand order recognizeLiteral (the 2-literal special case) doesn't check, so
-        // that narrower path still declines here. But resolveConstraint's general N-ary OR fallback
-        // recurses into each child via resolveConstraint itself, which reaches recognizeGroundRelation
-        // for le(2,x) -- recognizeGroundRelation checks *both* operand orders, unlike recognizeLiteral
-        // -- so this now recognizes via the general path (AtLeastNConstraint over two reified
-        // indicators) where it previously fell all the way to PredicateConstraint.
+    @Test void intensionOrLeqConstantFirstLiteral_recognizedViaFlippedValueLiteral() throws IOException {
+        // or(le(0,x), eq(y,1)): a genuine constant-first le literal (the real MagicSequence-style
+        // shape GroundRelationRecognizer's own doc describes, e.g. iff(le(0,p[i]),le(0,s[i]))) --
+        // recognizeLiteral now matches this directly (flipping LEQ to GEQ), not just the
+        // variable-first form.
+        Xcsp3Instance instance = parseXml(
+                "<var id=\"x\"> -3..5 </var><var id=\"y\"> 0..1 </var>",
+                "<intension> or(le(0,x),eq(y,1)) </intension>");
+        assertThat(instance.csp().getConstraints().iterator().next()).isInstanceOf(RelationLogicConstraint.class);
+        Set<Assignment> found = solutions(instance.csp());
+        assertThat(found).isNotEmpty();
+        for (Assignment a : found) {
+            assertThat(digitOf(a, "x") >= 0 || digitOf(a, "y") == 1).isTrue();
+        }
+    }
+
+    @Test void intensionOrGeOperand_recognizesViaCheaperLiteralPath() throws IOException {
+        // or(ge(x,2), eq(y,1)): ge(x,2) canonicalizes to le(2,x) -- constant first, variable second.
+        // recognizeLiteral now checks both operand orders (mirroring GroundRelationRecognizer's own
+        // dual-order check), so the cheaper 2-literal RelationLogicConstraint path recognizes this
+        // directly -- previously (when recognizeLiteral only checked variable-first) this fell
+        // through to the general N-ary OR fallback (AtLeastNConstraint over two reified indicators),
+        // which still worked but needed two extra indicator variables neither operand actually needs.
         Xcsp3Instance instance = parseXml(
                 "<var id=\"x\"> 0..3 </var><var id=\"y\"> 0..1 </var>",
                 "<intension> or(ge(x,2),eq(y,1)) </intension>");
-        assertThat(instance.csp().getConstraints()).anyMatch(c -> c instanceof AtLeastNConstraint);
+        assertThat(instance.csp().getConstraints().iterator().next()).isInstanceOf(RelationLogicConstraint.class);
         Set<Assignment> found = solutions(instance.csp());
         assertThat(found).isNotEmpty();
         for (Assignment a : found) {

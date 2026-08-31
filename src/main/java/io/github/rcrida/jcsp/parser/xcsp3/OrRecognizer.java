@@ -102,31 +102,23 @@ final class OrRecognizer implements ConstraintRecognizer {
     /**
      * Matches a bare {@code eq}/{@code ne}/{@code le}/{@code lt} between a variable and either a
      * constant or another variable -- {@link RelationLogicConstraint.ValueLiteral}/{@link
-     * RelationLogicConstraint.VariableLiteral} respectively. Only checks {@code (var, X)} operand
-     * order, not the reverse: for {@code eq}/{@code ne}, {@code xcsp3-tools}' canonizer genuinely
-     * always reorders a bare one to put the variable first (re-confirmed empirically for a literal
-     * nested inside {@code or(...)} specifically, not just at an intension's own root), so a
-     * defensive constant-first check for those two would be permanently dead code. {@code le}/
-     * {@code lt} aren't covered by that same canonizer guarantee -- {@link GroundRelationRecognizer}
-     * (used for {@code iff} operands, not {@code or(...)}) has to check both orders, since a real
-     * corpus instance has genuine constant-first {@code le} clauses -- but a full-corpus scan
-     * confirmed every real {@code or(...)} node specifically happens to use the variable-first form
-     * regardless, so checking only that order here is an empirically-justified simplification for
-     * this method's own narrower {@code or(...)} context, not a general claim about {@code le}/
-     * {@code lt} everywhere.
+     * RelationLogicConstraint.VariableLiteral} respectively -- in either operand order, mirroring
+     * {@link GroundRelationRecognizer}'s own dual-order check (flipping the operator via {@link
+     * Xcsp3CallbackHandler#flip} for a constant-first match, e.g. {@code le(0,x)} -> {@code
+     * ValueLiteral(x, GEQ, 0)}). A full-corpus scan of the bundled competition corpus found every
+     * real {@code or(...)} literal using the variable-first form regardless -- an earlier version
+     * of this method only checked that one order for exactly that reason -- but per this project's
+     * "the corpus is examples, not the boundary of what to support" stance (a real XCSP3 instance
+     * outside the bundled sample could easily write a constant-first {@code le}/{@code lt}, the same
+     * way {@link GroundRelationRecognizer}'s own real corpus instance does at an intension's own
+     * root), checking both orders here costs one extra branch and is never wrong.
      * <p>
      * {@code ge}/{@code gt} are deliberately excluded from {@link Xcsp3CallbackHandler#LITERAL_OPERATORS}:
-     * confirmed via the same probe that the canonizer always rewrites them into {@code le}/{@code
+     * confirmed via a corpus probe that the canonizer always rewrites them into {@code le}/{@code
      * lt} first -- against a constant, with the constant and variable operands <em>swapped</em>
-     * (e.g. {@code ge(x,5)} becomes {@code le(5,x)}, not {@code le(x,5)}), the one asymmetry real
-     * {@code eq}/{@code ne}/{@code le}/{@code lt} literals never have -- and the bundled
-     * competition corpus has zero {@code or(...)} nodes exercising that swapped shape (confirmed
-     * via a full-corpus scan), so recognizing it isn't worth the extra branch; declining is always
-     * safe, just less propagated. {@code lt} only ever survives against another <em>variable</em>
-     * operand this way, not a constant -- {@code lt(x,5)} canonicalizes to {@code le(x,4)} -- but
-     * that's transparent here: whichever of the two (rare, real) canonical forms a given literal
-     * takes, this method still only needs to check {@code (var, X)} order once operator/arity
-     * already match.
+     * (e.g. {@code ge(x,5)} becomes {@code le(5,x)}, not {@code le(x,5)}) -- so a bare {@code
+     * ge}/{@code gt} node is never actually reachable here regardless of which operand order this
+     * method checks; declining an unreachable operator is always safe.
      */
     private Optional<RelationLogicConstraint.Literal> recognizeLiteral(XNode<XVarInteger> node) {
         Operator operator = Xcsp3CallbackHandler.intensionRelationalOperator(node.getType());
@@ -134,12 +126,17 @@ final class OrRecognizer implements ConstraintRecognizer {
             return Optional.empty();
         }
         Optional<Variable<Integer>> leftVar = handler.asVariable(node.sons[0]);
-        if (leftVar.isEmpty()) return Optional.empty();
-        Optional<Variable<Integer>> rightVar = handler.asVariable(node.sons[1]);
-        if (rightVar.isPresent()) {
-            return Optional.of(new RelationLogicConstraint.VariableLiteral(leftVar.get(), operator, rightVar.get()));
+        if (leftVar.isPresent()) {
+            Optional<Variable<Integer>> rightVar = handler.asVariable(node.sons[1]);
+            if (rightVar.isPresent()) {
+                return Optional.of(new RelationLogicConstraint.VariableLiteral(leftVar.get(), operator, rightVar.get()));
+            }
+            return Xcsp3CallbackHandler.asConstant(node.sons[1])
+                    .map(constant -> new RelationLogicConstraint.ValueLiteral(leftVar.get(), operator, constant));
         }
-        return Xcsp3CallbackHandler.asConstant(node.sons[1])
-                .map(constant -> new RelationLogicConstraint.ValueLiteral(leftVar.get(), operator, constant));
+        return Xcsp3CallbackHandler.asConstant(node.sons[0])
+                .flatMap(constant -> handler.asVariable(node.sons[1])
+                        .map(rightVar -> new RelationLogicConstraint.ValueLiteral(
+                                rightVar, Xcsp3CallbackHandler.flip(operator), constant)));
     }
 }
