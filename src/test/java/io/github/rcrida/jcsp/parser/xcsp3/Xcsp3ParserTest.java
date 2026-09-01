@@ -5,6 +5,7 @@ import io.github.rcrida.jcsp.assignments.Assignment;
 import io.github.rcrida.jcsp.constraints.binary.AbsoluteDifferenceConstraint;
 import io.github.rcrida.jcsp.constraints.binary.BinaryComparatorConstraint;
 import io.github.rcrida.jcsp.constraints.binary.BinaryOffsetConstraint;
+import io.github.rcrida.jcsp.constraints.binary.SquareVariableConstraint;
 import io.github.rcrida.jcsp.constraints.nary.AbsoluteDifferenceVariableConstraint;
 import io.github.rcrida.jcsp.constraints.nary.AndConstraint;
 import io.github.rcrida.jcsp.constraints.nary.AtLeastNConstraint;
@@ -22,6 +23,7 @@ import io.github.rcrida.jcsp.constraints.nary.ReifiedConstraint;
 import io.github.rcrida.jcsp.constraints.nary.RelationLogicConstraint;
 import io.github.rcrida.jcsp.constraints.nary.SumBoundConstraint;
 import io.github.rcrida.jcsp.constraints.nary.SumVariableConstraint;
+import io.github.rcrida.jcsp.constraints.unary.SquareConstraint;
 import io.github.rcrida.jcsp.constraints.unary.UnaryComparatorConstraint;
 import io.github.rcrida.jcsp.constraints.unary.UnaryPredicateConstraint;
 import io.github.rcrida.jcsp.solver.Solver;
@@ -548,22 +550,22 @@ class Xcsp3ParserTest {
         }
     }
 
-    @Test void intensionProductOfPairLeqOperand_leftOperandNotXNodeParent_declines() throws IOException {
+    @Test void intensionProductOfPairLeqOperand_mulAsSecondOperand_routesThroughProductVariableConstraint() throws IOException {
         // le(x,mul(y,z)): unlike eq (whose canonizer always reorders a compound operand ahead of a
         // bare variable, confirmed empirically), le doesn't get complexity-reordered -- swapping its
         // operands would require also flipping the operator, which the canonizer only does to
         // eliminate ge/gt, not for plain complexity ordering -- so tree.sons[0] genuinely stays the
-        // bare variable x here. Exercises recognizeProductOfPair's own
-        // !(tree.sons[0] instanceof XNodeParent) branch specifically: since recognizeGroundRelation
-        // (added to the main chain to close the reified-single-variable gap) now intercepts every
-        // eq/ne/le/lt-vs-constant and recognizeBinaryRelation every var-vs-var shape, a leaf
-        // tree.sons[0] reaching this method at all had become otherwise unreachable for eq (compound
-        // always precedes a leaf there); le is the one operator where it still happens. The same
-        // tree also exercises recognizeDistanceOfPair's identical leaf-check further down the chain.
+        // bare variable x here (tree.sons[1] is mul(y,z)). ProductRecognizer now checks sons[1] for
+        // a mul(...) too (added for the ge/gt-swap case, e.g. ge(mul(...),c) -> le(c,mul(...))), and
+        // that same check also picks up this genuinely-distinct le-with-leaf-first shape, correctly
+        // flipping the operator (LEQ -> GEQ) since x<=y*z is the same relation as y*z>=x. This tree
+        // also still exercises recognizeDistanceOfPair's own leaf-check further down the chain (it
+        // still declines here, just no longer reaching the generic PredicateConstraint fallback
+        // afterward -- ProductRecognizer, registered after it, now claims the tree instead).
         Xcsp3Instance instance = parseXml(
                 "<var id=\"x\"> 0..20 </var><var id=\"y\"> 0..5 </var><var id=\"z\"> 0..5 </var>",
                 "<intension> le(x,mul(y,z)) </intension>");
-        assertThat(instance.csp().getConstraints().iterator().next()).isInstanceOf(PredicateConstraint.class);
+        assertThat(instance.csp().getConstraints().iterator().next()).isInstanceOf(ProductVariableConstraint.class);
         Set<Assignment> found = solutions(instance.csp());
         assertThat(found).isNotEmpty();
         for (Assignment a : found) {
@@ -606,20 +608,55 @@ class Xcsp3ParserTest {
         }
     }
 
-    @Test void intensionProductOfPairSelfProduct_fallsBackToPredicateConstraint() throws IOException {
+    @Test void intensionProductOfPairSelfProduct_routesThroughSquareVariableConstraint() throws IOException {
         // eq(mul(x,x),y) -- a genuine self-product ("x squared"). ProductVariableConstraint#of
-        // takes a Set<Variable<N>>, which can't represent one variable used twice as a factor, so
-        // recognition must decline rather than crash. A real regression test: found via the full
-        // XCSP3 competition corpus (LowAutocorrelation-015.xml.lzma), where an earlier, unguarded
-        // version of this method threw IllegalArgumentException: duplicate element from Set.of(a, a).
+        // takes a Set<Variable<N>>, which can't represent one variable used twice as a factor -- a
+        // real gap found via the full XCSP3 competition corpus (LowAutocorrelation-015.xml.lzma),
+        // where an earlier, unguarded version of this method threw IllegalArgumentException:
+        // duplicate element from Set.of(a, a). Rather than declining, ProductRecognizer now routes
+        // a two-factor self-product to the dedicated SquareVariableConstraint instead.
         Xcsp3Instance instance = parseXml(
                 "<var id=\"x\"> 1..4 </var><var id=\"y\"> 1..16 </var>",
                 "<intension> eq(mul(x,x),y) </intension>");
-        assertThat(instance.csp().getConstraints().iterator().next()).isInstanceOf(PredicateConstraint.class);
+        assertThat(instance.csp().getConstraints().iterator().next()).isInstanceOf(SquareVariableConstraint.class);
         Set<Assignment> found = solutions(instance.csp());
         assertThat(found).isNotEmpty();
         for (Assignment a : found) {
             assertThat(digitOf(a, "y")).isEqualTo(digitOf(a, "x") * digitOf(a, "x"));
+        }
+    }
+
+    @Test void intensionProductOfPairSelfProduct_geOperatorSwapsMulToSecondOperand_routesThroughSquareConstraint() throws IOException {
+        // ge(mul(x,x),4) is rewritten by xcsp3-tools' own canonizer into le(4,mul(x,x)) -- ge/gt are
+        // always eliminated via le/lt with operands swapped, and that swap moves the compound mul
+        // side to tree.sons[1] regardless of its complexity (confirmed via a direct probe against a
+        // real parsed tree: LE with son0=LONG, son1=MUL). ProductRecognizer must check sons[1] for
+        // mul(...) too, flipping the operator back, or GEQ would be silently unreachable for any
+        // source file that used ge/gt against a mul(...) operand.
+        Xcsp3Instance instance = parseXml(
+                "<var id=\"x\"> -5..5 </var>",
+                "<intension> ge(mul(x,x),4) </intension>");
+        assertThat(instance.csp().getConstraints().iterator().next()).isInstanceOf(SquareConstraint.class);
+        Set<Assignment> found = solutions(instance.csp());
+        assertThat(found).isNotEmpty();
+        for (Assignment a : found) {
+            assertThat(digitOf(a, "x") * digitOf(a, "x")).isGreaterThanOrEqualTo(4);
+        }
+    }
+
+    @Test void intensionProductOfPair_geOperatorSwapsMulToSecondOperand_routesThroughProductConstraint() throws IOException {
+        // Same GE-swap phenomenon as the self-product case above, but for a genuine two-distinct-
+        // factor product: ge(mul(x,y),6) canonicalizes to le(6,mul(x,y)), moving mul(...) to
+        // tree.sons[1]. Confirms the sons[1] check's general (non-self-product) path, not just
+        // recognizeSelfProduct, correctly flips the operator back to GEQ.
+        Xcsp3Instance instance = parseXml(
+                "<var id=\"x\"> 1..4 </var><var id=\"y\"> 1..4 </var>",
+                "<intension> ge(mul(x,y),6) </intension>");
+        assertThat(instance.csp().getConstraints().iterator().next()).isInstanceOf(ProductConstraint.class);
+        Set<Assignment> found = solutions(instance.csp());
+        assertThat(found).isNotEmpty();
+        for (Assignment a : found) {
+            assertThat(digitOf(a, "x") * digitOf(a, "y")).isGreaterThanOrEqualTo(6);
         }
     }
 
@@ -2843,24 +2880,26 @@ class Xcsp3ParserTest {
     }
 
     @Test void intensionOverSingleVariable_routesThroughUnaryPredicateConstraint() throws IOException {
-        // eq(mul(x,x),4): a genuine single-variable predicate that isn't a bare comparison against
-        // a constant (mul(x,x) is compound, not a bare variable, and resolveVariable only knows
-        // div/mod, not mul -- so neither recognizeBinaryRelation nor recognizeGroundRelation match;
-        // recognizeProductOfPair/recognizeBooleanProductChannel also decline a self-product, since
-        // ProductVariableConstraint/ProductConstraint can't represent one variable used twice) --
-        // with only one variable in scope, genericIntensionConstraint routes it through
+        // eq(pow(x,3),8): a genuine single-variable predicate that isn't a bare comparison against
+        // a constant (pow(x,3) is compound, not a bare variable, and resolveVariable only knows
+        // neg/sub/div/mod, not pow -- so neither recognizeBinaryRelation nor recognizeGroundRelation
+        // match); no recognizer handles XCSP3's pow(base,exponent) operator at all (ProductRecognizer's
+        // own Javadoc notes it as a separate, currently-unrecognized shape distinct from mul(x,x)'s
+        // self-product, which ProductRecognizer does recognize -- see the dedicated Square* tests
+        // instead) -- with only one variable in scope, genericIntensionConstraint routes it through
         // UnaryPredicateConstraint (a real UnaryConstraint, eligible for NodeConsistency's own
         // preprocessing) rather than the n-ary PredicateConstraint every other fallback case here
-        // uses. (mod(x,3) was this test's original premise, but resolveVariable's div/mod widening
-        // now recognizes it via recognizeGroundRelation -- see the dedicated div/mod tests instead.)
+        // uses. (mod(x,3) was this test's original premise, then mul(x,x), but resolveVariable's
+        // div/mod widening and ProductRecognizer's self-product routing have since picked both up --
+        // see the dedicated div/mod and Square* tests instead.)
         Xcsp3Instance instance = parseXml(
                 "<var id=\"x\"> 0..9 </var>",
-                "<intension> eq(mul(x,x),4) </intension>");
+                "<intension> eq(pow(x,3),8) </intension>");
         assertThat(instance.csp().getConstraints().iterator().next()).isInstanceOf(UnaryPredicateConstraint.class);
         Set<Assignment> solutions = solutions(instance.csp());
         assertThat(solutions).isNotEmpty();
         for (Assignment a : solutions) {
-            assertThat(digitOf(a, "x") * digitOf(a, "x")).isEqualTo(4);
+            assertThat((long) Math.pow(digitOf(a, "x"), 3)).isEqualTo(8);
         }
     }
 
