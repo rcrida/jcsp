@@ -13,6 +13,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -309,14 +310,115 @@ public class LinearBoundConstraintTest {
 
     @Test
     void propagate_noChange_returnsEmptyMap() {
-        // Domains already at propagation fixpoint: x∈{0..6}, y∈{0..4}
-        // newMax(x) = floor(12/2) = 6, newMax(y) = floor(12/3) = 4 — no further pruning
+        // 1*a + 1*b == 3, a,b∈{0..3}: bounds consistency is already tight (newMax=3, newMin=0 for
+        // both), and every value of each variable is reachable via some value of the other
+        // (0↔3, 1↔2, 2↔1, 3↔0), so the subset-sum coverage pass finds nothing more to narrow either.
+        Variable<Integer> a = F.create("a_nc");
+        Variable<Integer> b = F.create("b_nc");
+        var c = LinearBoundConstraint.of(Map.of(a, 1, b, 1), Operator.EQ, 3);
+        var domains = Map.<Variable<?>, Domain<?>>of(
+                a, IntRangeDomain.of(0, 3),
+                b, IntRangeDomain.of(0, 3));
+        var result = c.propagate(domains);
+        assertThat(result).isPresent();
+        assertThat(result.get()).isEmpty();
+    }
+
+    @Test
+    void propagate_eq_subsetSumCoverage_narrowsBeyondBoundsConsistency() {
+        // 2*x + 3*y == 12, x∈{0..6}, y∈{0..4}: bounds consistency alone is already at a fixpoint
+        // here (newMax(x)=floor(12/2)=6, newMax(y)=floor(12/3)=4), but not every numeric value in
+        // that range is actually reachable -- e.g. x=1 needs 3*y=10, no integer y. Only x∈{0,3,6}
+        // (paired with y=4,2,0 respectively) and y∈{0,2,4} are genuinely GAC-consistent.
         var domains = Map.<Variable<?>, Domain<?>>of(
                 x, IntRangeDomain.of(0, 6),
                 y, IntRangeDomain.of(0, 4));
         var result = eq12.propagate(domains);
         assertThat(result).isPresent();
-        assertThat(result.get()).isEmpty();
+        assertThat(result.get().get(x)).isEqualTo(DiscreteDomain.of(0, 3, 6));
+        assertThat(result.get().get(y)).isEqualTo(DiscreteDomain.of(0, 2, 4));
+    }
+
+    @Test
+    void propagate_eq_subsetSumCoverage_gappedDomain_detectsInfeasibility() {
+        // x1 + x2 == 4, x1∈{0,3}, x2∈{0,5}: no real combination of live values sums to 4
+        // (0+0=0, 0+5=5, 3+0=3, 3+5=8) -- here per-variable interval bounds consistency already
+        // narrows x2's own [1,4] range down to nothing (0 and 5 both fall outside it), so this
+        // particular case is actually caught by the existing bounds pass, not the new coverage
+        // pass; see propagate_eq_subsetSumCoverage_parityInfeasible_neitherVariableSingleton below
+        // for a case the bounds pass alone provably cannot catch.
+        Variable<Integer> x1 = F.create("x1_ssc");
+        Variable<Integer> x2 = F.create("x2_ssc");
+        var c = LinearBoundConstraint.of(Map.of(x1, 1, x2, 1), Operator.EQ, 4);
+        var domains = Map.<Variable<?>, Domain<?>>of(
+                x1, DiscreteDomain.of(0, 3),
+                x2, DiscreteDomain.of(0, 5));
+        assertThat(c.propagate(domains)).isEmpty();
+    }
+
+    @Test
+    void propagate_eq_subsetSumCoverage_parityInfeasible_neitherVariableSingleton() {
+        // 2*x1 + 2*x2 == 7, x1,x2∈{0,1,3}: any sum of two even contributions is even, so 7 (odd)
+        // is categorically unreachable -- but the bounds pass alone only narrows each domain to
+        // {1,3} (removing 0, which falls outside the derived [1,3] interval) without emptying
+        // either one, so this infeasibility is only found by the subset-sum coverage pass itself.
+        Variable<Integer> x1 = F.create("x1_par");
+        Variable<Integer> x2 = F.create("x2_par");
+        var c = LinearBoundConstraint.of(Map.of(x1, 2, x2, 2), Operator.EQ, 7);
+        var domains = Map.<Variable<?>, Domain<?>>of(
+                x1, DiscreteDomain.of(0, 1, 3),
+                x2, DiscreteDomain.of(0, 1, 3));
+        assertThat(c.propagate(domains)).isEmpty();
+    }
+
+    @Test
+    void propagate_eq_subsetSumCoverage_negativeCoefficientAndValues() {
+        // x1 - x2 == 1, x1∈{-3,0,2}, x2∈{-4,1,3}: only (2,1) and (-3,-4) actually sum-differ by 1
+        // (2-1=1, -3-(-4)=1); 0 has no partner (0-(-4)=4, 0-1=-1, 0-3=-3).
+        Variable<Integer> x1 = F.create("x1_neg");
+        Variable<Integer> x2 = F.create("x2_neg");
+        var c = LinearBoundConstraint.of(Map.of(x1, 1, x2, -1), Operator.EQ, 1);
+        var domains = Map.<Variable<?>, Domain<?>>of(
+                x1, DiscreteDomain.of(-3, 0, 2),
+                x2, DiscreteDomain.of(-4, 1, 3));
+        var result = c.propagate(domains);
+        assertThat(result).isPresent();
+        assertThat(result.get().get(x1)).isEqualTo(DiscreteDomain.of(-3, 2));
+        assertThat(result.get().get(x2)).isEqualTo(DiscreteDomain.of(-4, 1));
+    }
+
+    @Test
+    void propagate_eq_subsetSumCoverage_threeTerm_jointlyInfeasibleDespiteEveryVariablePassingBounds() {
+        // x1 + x2 + x3 == 10, x1∈{2,4,8}, x2∈{0,7}, x3∈{0,4}: every one of the 12 combinations
+        // (2+0+0, 2+0+4, ..., 8+7+4) sums to something other than 10, but each variable's own
+        // interval-bounds check independently passes (e.g. x1's derived range is [-1,10], which
+        // contains all of {2,4,8}) -- only the subset-sum coverage pass, reasoning about actual
+        // combinations across all three variables jointly, catches this.
+        Variable<Integer> x1 = F.create("x1_3t");
+        Variable<Integer> x2 = F.create("x2_3t");
+        Variable<Integer> x3 = F.create("x3_3t");
+        var c = LinearBoundConstraint.of(Map.of(x1, 1, x2, 1, x3, 1), Operator.EQ, 10);
+        var domains = Map.<Variable<?>, Domain<?>>of(
+                x1, DiscreteDomain.of(2, 4, 8),
+                x2, DiscreteDomain.of(0, 7),
+                x3, DiscreteDomain.of(0, 4));
+        assertThat(c.propagate(domains)).isEmpty();
+    }
+
+    @Test
+    void propagate_eq_subsetSumCoverage_guardExceeded_fallsBackToBoundsOnly() {
+        // Coefficients/domain wide enough that totalMax-totalMin+1 exceeds
+        // SubsetSumCoveragePropagation.MAX_REACHABLE_RANGE -- the coverage pass must be skipped
+        // (not attempted, not crash) and only the existing bounds-consistency pass applies.
+        Variable<Integer> big1 = F.create("big1");
+        Variable<Integer> big2 = F.create("big2");
+        var c = LinearBoundConstraint.of(Map.of(big1, 1, big2, 1), Operator.EQ, 300_000);
+        var domains = Map.<Variable<?>, Domain<?>>of(
+                big1, IntRangeDomain.of(0, 300_000),
+                big2, IntRangeDomain.of(0, 300_000));
+        var result = c.propagate(domains);
+        assertThat(result).isPresent();
+        assertThat(result.get()).isEmpty(); // bounds pass alone: newMax=300000 for both, already tight
     }
 
     // --- propagate() : Double / IntervalDomain ---
@@ -575,10 +677,11 @@ public class LinearBoundConstraintTest {
     }
 
     @Test
-    void propagateWithReasons_onePinned_perVariablePrunedToEmpty_returnsEmptyReason() {
+    void propagateWithReasons_onePinned_perVariablePrunedToEmpty_citesExactValueSet() {
         // 2*x + 3*y == 7, x∈{0,4} (gapped), y∈{1} (singleton): x must equal 2, which is absent
-        // from {0,4} → infeasible; x has no singleton value to blame, so even though y is
-        // pinned, the explanation can't be sound without x.
+        // from {0,4} → infeasible; x has no singleton value to blame, so RangeNogoodConstraint
+        // (which can't safely cite a gapped domain as a range either) falls back to citing every
+        // variable's exact current value set instead of returning no explanation at all.
         Variable<Integer> nx = F.create("nx");
         Variable<Integer> ny = F.create("ny");
         var c = LinearBoundConstraint.of(Map.of(nx, 2, ny, 3), Operator.EQ, 7);
@@ -587,6 +690,27 @@ public class LinearBoundConstraintTest {
                 ny, DiscreteDomain.of(1));
         var result = c.propagateWithReasons(domains);
         assertThat(result.isInfeasible()).isTrue();
-        assertThat(result.reason()).isNull();
+        assertThat(result.reason()).isEqualTo(ValueSetNogoodConstraint.of(Map.of(
+                nx, Set.of(0, 4), ny, Set.of(1))));
+    }
+
+    @Test
+    void propagateWithReasons_subsetSumCoverageWipeout_neitherVariableSingleton_citesExactValueSet() {
+        // Same parity-infeasible scenario as propagate_eq_subsetSumCoverage_parityInfeasible_
+        // neitherVariableSingleton: the bounds pass alone can't detect it (narrows both domains to
+        // {1,3}, neither emptied), so this specifically exercises the subset-sum coverage pass's
+        // own infeasibility detection -- and it must do so while both original domains are still
+        // non-singleton (3 live values each) and gapped (RangeNogoodConstraint can't cite either
+        // as a range), forcing the fallback to ValueSetNogoodConstraint.
+        Variable<Integer> x1 = F.create("x1_wc");
+        Variable<Integer> x2 = F.create("x2_wc");
+        var c = LinearBoundConstraint.of(Map.of(x1, 2, x2, 2), Operator.EQ, 7);
+        var domains = Map.<Variable<?>, Domain<?>>of(
+                x1, DiscreteDomain.of(0, 1, 3),
+                x2, DiscreteDomain.of(0, 1, 3));
+        var result = c.propagateWithReasons(domains);
+        assertThat(result.isInfeasible()).isTrue();
+        assertThat(result.reason()).isEqualTo(ValueSetNogoodConstraint.of(Map.of(
+                x1, Set.of(0, 1, 3), x2, Set.of(0, 1, 3))));
     }
 }

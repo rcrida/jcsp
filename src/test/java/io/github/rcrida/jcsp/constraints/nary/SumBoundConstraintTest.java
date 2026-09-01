@@ -431,19 +431,32 @@ public class SumBoundConstraintTest {
     }
 
     @Test
-    void propagateWithReasons_onePinned_perVariablePrunedToEmpty_returnsEmptyReason() {
-        // v1 enumerable {0,1}, v2∈{9..9} (singleton); v1 + v2 == 10.
-        // Globally feasible (totalMin=9, totalMax=10), but v1 must narrow to {1}, which is
-        // present — use a domain where the required value is absent instead.
+    void propagateWithReasons_onePinned_perVariablePrunedToEmpty_citesExactValueSet() {
+        // v1 enumerable {0,4}, v2∈{9..9} (singleton); v1 + v2 == 10.
+        // v1 must equal 1 (10-9), which is absent from {0,4} → infeasible; v1 has no singleton
+        // value to blame, so RangeNogoodConstraint (which can't cite a gapped domain as a range
+        // either) falls back to citing every variable's exact current value set.
         var c = SumBoundConstraint.of(Set.of(v1, v2), Operator.EQ, 10);
         var domains = Map.<Variable<?>, Domain<?>>of(
                 v1, io.github.rcrida.jcsp.domains.DiscreteDomain.of(0, 4),
                 v2, IntRangeDomain.of(9, 9));
-        // v1 must equal 1 (10-9), which is absent from {0,4} → infeasible; v1 has no singleton
-        // value to blame, so even though v2 is pinned, the explanation can't be sound without v1.
         var result = c.propagateWithReasons(domains);
         assertThat(result.isInfeasible()).isTrue();
-        assertThat(result.reason()).isNull();
+        assertThat(result.reason()).isEqualTo(ValueSetNogoodConstraint.of(Map.of(
+                v1, Set.of(0, 4), v2, Set.of(9))));
+    }
+
+    @Test
+    void propagate_eq_subsetSumCoverage_gappedDomain_detectsInfeasibility() {
+        // v1 + v2 == 4, v1∈{0,3}, v2∈{0,5}: bounds consistency sees the achievable range [0,8],
+        // which contains 4, but no real combination of live values sums to it -- the same gap
+        // LinearBoundConstraint's subset-sum coverage pass closes, exercised here via the shared
+        // LinearBoundPropagation.propagateInt code path SumBoundConstraint also uses.
+        var c = SumBoundConstraint.of(Set.of(v1, v2), Operator.EQ, 4);
+        var domains = Map.<Variable<?>, Domain<?>>of(
+                v1, io.github.rcrida.jcsp.domains.DiscreteDomain.of(0, 3),
+                v2, io.github.rcrida.jcsp.domains.DiscreteDomain.of(0, 5));
+        assertThat(c.propagate(domains)).isEmpty();
     }
 
     @Test

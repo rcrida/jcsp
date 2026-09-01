@@ -89,16 +89,21 @@ public class LinearBoundConstraint<N extends Number> extends NaryConstraint impl
      * On infeasibility, the weighted sum's violation depends on the combined contribution of
      * every variable, not any single variable in isolation — unlike {@link MaxConstraint}/
      * {@link MinConstraint}, a weighted sum has no monotonic "one value alone already breaks the
-     * bound" case. {@link #propagate}'s own infeasibility test ({@code totalMin}/{@code totalMax}
-     * against {@link #bound}) only ever depends on each variable's current domain bounds, not on
-     * any variable being singleton, so {@link RangeNogoodConstraint#fromCurrentBounds} is tried
-     * first, falling back to {@link Propagatable#allSingletonReason}'s fully collective ground
-     * reason only when it can't safely cite some variable's domain as a range.
+     * bound" case. {@link #propagate}'s own bounds-only infeasibility test ({@code totalMin}/
+     * {@code totalMax} against {@link #bound}) only ever depends on each variable's current domain
+     * bounds, not on any variable being singleton, so {@link RangeNogoodConstraint#fromCurrentBounds}
+     * is tried first. It falls back to {@link ValueSetNogoodConstraint#fromCurrentState} — not
+     * {@link Propagatable#allSingletonReason} directly — because {@code propagate}'s {@code EQ}
+     * case also runs {@link SubsetSumCoveragePropagation#computeSubsetSumCoverage}, whose
+     * infeasibility can be detected while other cited variables are still non-singleton (that's
+     * the whole point of value-level coverage over gapped discrete domains); {@code
+     * allSingletonReason} alone would be unsound there, the same reasoning {@link
+     * MaxVariableConstraint#explainInfeasible} already documents for its own coverage path.
      */
     @Override
     public Optional<NogoodConstraint> explainInfeasible(@NonNull Map<Variable<?>, Domain<?>> domains) {
         return RangeNogoodConstraint.fromCurrentBounds(getVariables(), domains)
-                .or(() -> GroundNogoodConstraint.fromReason(Propagatable.allSingletonReason(getVariables(), domains)));
+                .or(() -> ValueSetNogoodConstraint.fromCurrentState(getVariables(), domains));
     }
 
     @SuppressWarnings("unchecked")
