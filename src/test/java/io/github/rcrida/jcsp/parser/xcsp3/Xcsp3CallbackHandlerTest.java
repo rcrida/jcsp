@@ -12,6 +12,7 @@ import org.xcsp.parser.entries.XVariables.XVarInteger;
 import org.xcsp.parser.entries.XVariables.XVarSymbolic;
 
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -237,5 +238,34 @@ class Xcsp3CallbackHandlerTest {
         XNodeParent<XVarInteger> negWithTwoSons = new XNodeParent<>(TypeExpr.NEG, a, b);
         Xcsp3CallbackHandler handler = new Xcsp3CallbackHandler();
         assertThat(handler.resolveVariable(negWithTwoSons)).isEmpty();
+    }
+
+    /**
+     * {@code add} is n-ary in the XCSP3 grammar but {@code xcsp3-tools}' own canonizer collapses a
+     * single-operand {@code add} directly into its sole operand ({@code TypeExpr#isIdentityWhenOneOperand()}),
+     * so an {@code add} node with exactly one son can't occur via real parsing -- confirmed
+     * unreachable the same way {@link ProductRecognizerTest#singleOperandMul_declines} is for its
+     * own sibling n-ary operator.
+     */
+    @Test void resolveVariable_addWithOneOperand_declines() {
+        XNodeLeaf<XVarInteger> a = new XNodeLeaf<>(TypeExpr.SYMBOL, "a");
+        XNodeParent<XVarInteger> addWithOneSon = new XNodeParent<>(TypeExpr.ADD, a);
+        Xcsp3CallbackHandler handler = new Xcsp3CallbackHandler();
+        assertThat(handler.resolveVariable(addWithOneSon)).isEmpty();
+    }
+
+    /**
+     * {@link Xcsp3CallbackHandler#combineVariablePlusConstant} is the extracted, node-independent
+     * half of {@link Xcsp3CallbackHandler#asVariablePlusConstant} -- see that method's own Javadoc
+     * for why the {@code variable present, constant absent} combination (e.g. {@code add(x,y)}, two
+     * bare variables) is no longer reachable through the real-parsing entry point at all once {@link
+     * SumOrLinearRecognizer} started running before {@link BinaryRelationRecognizer}: constructing a
+     * real repro would need a genuine {@code org.xcsp.parser.entries.XVariables$XVarInteger}, whose
+     * constructor is {@code protected} and unavailable from this package, so this tests the combining
+     * logic directly against plain {@link Optional} values instead.
+     */
+    @Test void combineVariablePlusConstant_variablePresentConstantAbsent_declines() {
+        Variable<Integer> v = Variable.Factory.INSTANCE.create("combine_v");
+        assertThat(Xcsp3CallbackHandler.combineVariablePlusConstant(Optional.of(v), Optional.empty())).isEmpty();
     }
 }

@@ -24,8 +24,11 @@ import java.util.Optional;
  * variable) or {@link LinearVariableConstraint}/{@link LinearBoundConstraint} (at least one term
  * weighted) instead of the generic {@link PredicateConstraint}, which has no propagation at all.
  * Each {@code add} term must independently reduce to one or two (variable, coefficient) pairs --
- * see {@link #addTerm} for the four shapes recognized ({@code var}, {@code mul(var,const)}, {@code
- * neg(var)}, {@code sub(var,var)}) -- anything deeper (a nested {@code add} the canonizer didn't
+ * see {@link Xcsp3CallbackHandler#foldAddTerm} for the four shapes recognized ({@code var}, {@code
+ * mul(var,const)}, {@code neg(var)}, {@code sub(var,var)}; shared with {@link
+ * Xcsp3CallbackHandler#addAuxiliary} for the same term-folding needed when {@code add} itself
+ * appears as a nested value-producing sub-expression rather than a whole relation's operand) --
+ * anything deeper (a nested {@code add} the canonizer didn't
  * already flatten, a product of two variables, a bare constant term, etc.) declines the whole
  * recognition, always safe, just less propagated, never incorrect, the same contract every
  * recognizer in this package documents. The choice between the "sum" and "linear" siblings is made
@@ -67,7 +70,8 @@ import java.util.Optional;
  * defensive reverse-order check there would be permanently dead code.
  * <p>
  * The target side falls back to {@link Xcsp3CallbackHandler#resolveVariable} (materializing a
- * {@code neg}/{@code sub}/{@code div}/{@code mod} auxiliary) once both {@code asVariable} and
+ * {@code neg}/{@code add}/{@code sub}/{@code div}/{@code mod} auxiliary) once both {@code
+ * asVariable} and
  * {@code asConstant} decline -- confirmed via a real corpus probe that this shape is reachable:
  * {@code eq(sub(div(x,2),y),z)} canonicalizes to {@code eq(add(y,z),div(x,2))}, moving the
  * subtracted term across the relation and leaving a genuinely compound target ({@code div(x,2)}),
@@ -101,7 +105,7 @@ final class SumOrLinearRecognizer implements ConstraintRecognizer {
             XNode<XVarInteger> addSide, Operator operator, XNode<XVarInteger> targetSide) {
         Map<Variable<Integer>, Integer> coefficients = new LinkedHashMap<>();
         for (XNode<XVarInteger> term : addSide.sons) {
-            if (!addTerm(coefficients, term)) {
+            if (!handler.foldAddTerm(coefficients, term)) {
                 return Optional.empty();
             }
         }
@@ -127,48 +131,5 @@ final class SumOrLinearRecognizer implements ConstraintRecognizer {
         return handler.resolveVariable(targetSide).map(resolvedTarget -> unitCoefficients
                 ? SumVariableConstraint.of(coefficients.keySet(), operator, resolvedTarget)
                 : LinearVariableConstraint.of(coefficients, operator, resolvedTarget));
-    }
-
-    /**
-     * Folds one {@code add} term into {@code coefficients}, recognizing four shapes: a bare
-     * variable (coefficient {@code 1}), {@code mul(var, constant)} (coefficient {@code constant}),
-     * {@code neg(var)} (coefficient {@code -1}), and {@code sub(var, var)} (coefficient {@code 1}
-     * for the left operand, {@code -1} for the right -- the one shape here contributing to two
-     * different variables from a single term). Returns {@code false} (declining the whole
-     * recognition, per this class's own contract) for anything else.
-     */
-    private boolean addTerm(Map<Variable<Integer>, Integer> coefficients, XNode<XVarInteger> term) {
-        Optional<Variable<Integer>> bareVar = handler.asVariable(term);
-        if (bareVar.isPresent()) {
-            coefficients.merge(bareVar.get(), 1, Integer::sum);
-            return true;
-        }
-        if (term.getType() == TypeExpr.MUL && term.sons.length == 2) {
-            Optional<Variable<Integer>> mulVar = handler.asVariable(term.sons[0]);
-            if (mulVar.isPresent()) {
-                Optional<Integer> mulConst = Xcsp3CallbackHandler.asConstant(term.sons[1]);
-                if (mulConst.isPresent()) {
-                    coefficients.merge(mulVar.get(), mulConst.get(), Integer::sum);
-                    return true;
-                }
-            }
-        }
-        if (term.getType() == TypeExpr.NEG && term.sons.length == 1) {
-            Optional<Variable<Integer>> negVar = handler.asVariable(term.sons[0]);
-            if (negVar.isPresent()) {
-                coefficients.merge(negVar.get(), -1, Integer::sum);
-                return true;
-            }
-        }
-        if (term.getType() == TypeExpr.SUB && term.sons.length == 2) {
-            Optional<Variable<Integer>> subLeft = handler.asVariable(term.sons[0]);
-            Optional<Variable<Integer>> subRight = handler.asVariable(term.sons[1]);
-            if (subLeft.isPresent() && subRight.isPresent()) {
-                coefficients.merge(subLeft.get(), 1, Integer::sum);
-                coefficients.merge(subRight.get(), -1, Integer::sum);
-                return true;
-            }
-        }
-        return false;
     }
 }

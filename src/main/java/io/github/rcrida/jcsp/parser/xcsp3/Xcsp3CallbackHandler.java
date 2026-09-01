@@ -138,6 +138,7 @@ final class Xcsp3CallbackHandler implements XCallbacks2 {
     private final Map<String, DivModAuxiliaries> divModAuxiliaries = new LinkedHashMap<>();
     private final Map<String, Variable<Integer>> negAuxiliaries = new LinkedHashMap<>();
     private final Map<String, Variable<Integer>> subAuxiliaries = new LinkedHashMap<>();
+    private final Map<String, Variable<Integer>> addAuxiliaries = new LinkedHashMap<>();
     private final Map<Set<Variable<Integer>>, List<PendingCount>> pendingSingleValueCounts = new LinkedHashMap<>();
     private @Nullable ToDoubleFunction<Assignment> objective;
     private boolean maximize;
@@ -161,9 +162,25 @@ final class Xcsp3CallbackHandler implements XCallbacks2 {
      * this::recognizeConstraint} is a lazily-bound method reference (captures {@code this}, not a
      * value computed now), so referencing it from a field initializer that runs before {@link
      * #recognizeConstraint} is itself invoked for the first time is not a forward-reference bug.
+     * <p>
+     * {@link SumOrLinearRecognizer} is a deliberate exception to the "leaf-relation recognizers
+     * first" ordering above -- it must run <em>before</em> {@link BinaryRelationRecognizer}/{@link
+     * GroundRelationRecognizer}, not after, once {@link #resolveVariable} learned to resolve
+     * {@code add(...)} (see {@link #addAuxiliary}): both of those recognizers' own final fallback
+     * calls {@code resolveVariable} on whichever side isn't a bare variable/constant, which would
+     * otherwise let them "win" an {@code add(...)}-shaped operand first, producing a
+     * {@code UnaryComparatorConstraint}/{@code BinaryComparatorConstraint} over a freshly
+     * materialized sum auxiliary -- correct, but strictly less tight than the direct {@code
+     * SumVariableConstraint}/{@code SumBoundConstraint}/{@code LinearVariableConstraint}/{@code
+     * LinearBoundConstraint} {@link SumOrLinearRecognizer} itself would produce for the exact same
+     * tree. A real regression caught by this project's own test suite (fourteen {@code
+     * Xcsp3ParserTest} failures, e.g. {@code intensionSumUnweighted_constantTarget_routesThroughSumBoundConstraint}
+     * suddenly observing a {@code LinearVariableConstraint} instead) the moment {@code add} support
+     * was added to {@code resolveVariable} without also reordering this list.
      */
     private final List<ConstraintRecognizer> recognizers = List.of(
             new DistancePairComparisonRecognizer(this),
+            new SumOrLinearRecognizer(this),
             new BinaryRelationRecognizer(this),
             new GroundRelationRecognizer(this),
             new DistanceOfPairRecognizer(this),
@@ -171,7 +188,6 @@ final class Xcsp3CallbackHandler implements XCallbacks2 {
             new OrRecognizer(this, this::recognizeConstraint),
             new BooleanProductChannelRecognizer(this),
             new ProductRecognizer(this),
-            new SumOrLinearRecognizer(this),
             new RelationSumRecognizer(this, this::recognizeConstraint),
             new ChannelRecognizer(this, this::recognizeConstraint));
 
@@ -562,20 +578,123 @@ final class Xcsp3CallbackHandler implements XCallbacks2 {
     }
 
     /**
+     * Folds one {@code add} term into {@code coefficients}, recognizing four shapes: a bare
+     * variable (coefficient {@code 1}), {@code mul(var, constant)} (coefficient {@code constant}),
+     * {@code neg(var)} (coefficient {@code -1}), and {@code sub(var, var)} (coefficient {@code 1}
+     * for the left operand, {@code -1} for the right -- the one shape here contributing to two
+     * different variables from a single term). Returns {@code false} (declining the whole caller's
+     * own recognition/resolution, per this package's shared recognizer contract) for anything else.
+     * Package-private: shared by {@link SumOrLinearRecognizer#recognize} (folding an {@code add}
+     * that's already a whole relation's operand) and {@link #addAuxiliary} below (folding an {@code
+     * add} appearing as a nested value-producing sub-expression) -- the same term shapes are valid
+     * in both contexts, so duplicating this logic per caller would just be two copies to keep in
+     * sync.
+     */
+    boolean foldAddTerm(Map<Variable<Integer>, Integer> coefficients, XNode<XVarInteger> term) {
+        Optional<Variable<Integer>> bareVar = asVariable(term);
+        if (bareVar.isPresent()) {
+            coefficients.merge(bareVar.get(), 1, Integer::sum);
+            return true;
+        }
+        if (term.getType() == TypeExpr.MUL && term.sons.length == 2) {
+            Optional<Variable<Integer>> mulVar = asVariable(term.sons[0]);
+            if (mulVar.isPresent()) {
+                Optional<Integer> mulConst = asConstant(term.sons[1]);
+                if (mulConst.isPresent()) {
+                    coefficients.merge(mulVar.get(), mulConst.get(), Integer::sum);
+                    return true;
+                }
+            }
+        }
+        if (term.getType() == TypeExpr.NEG && term.sons.length == 1) {
+            Optional<Variable<Integer>> negVar = asVariable(term.sons[0]);
+            if (negVar.isPresent()) {
+                coefficients.merge(negVar.get(), -1, Integer::sum);
+                return true;
+            }
+        }
+        if (term.getType() == TypeExpr.SUB && term.sons.length == 2) {
+            Optional<Variable<Integer>> subLeft = asVariable(term.sons[0]);
+            Optional<Variable<Integer>> subRight = asVariable(term.sons[1]);
+            if (subLeft.isPresent() && subRight.isPresent()) {
+                coefficients.merge(subLeft.get(), 1, Integer::sum);
+                coefficients.merge(subRight.get(), -1, Integer::sum);
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Fresh variable holding {@code add(t1,...,tn)}'s value, linked via an unconditional {@link
+     * LinearVariableConstraint} built directly from the folded {@code (variable, coefficient)}
+     * pairs {@link #foldAddTerm} produces per term -- the same "definitional" treatment {@link
+     * #negAuxiliary}/{@link #subAuxiliary} give their own links, generalized from a fixed one/two
+     * variable shape to an arbitrary-arity weighted sum. Declines (returns empty) the same way
+     * {@link SumOrLinearRecognizer#recognize} does when any term doesn't reduce to one of {@link
+     * #foldAddTerm}'s four recognized shapes. Memoized by the folded coefficient map's own contents
+     * (sorted for a stable key), not the original tree shape -- so two syntactically different but
+     * semantically identical sums (e.g. {@code add(x,x)} and {@code add(mul(x,2))}) share one
+     * auxiliary, the same amortization {@link #distanceAuxiliary}/{@link #constantVariable} already
+     * give their own repeated-occurrence case.
+     * <p>
+     * Added for XCSP3's {@code div(add(...),k)}/{@code mod(add(...),k)} shape (confirmed via a real
+     * corpus fallback-histogram scan: {@code eq(mod(add(C[0],l[18],l[18]),10),l[17])} and its {@code
+     * div} sibling were the single largest remaining {@link PredicateConstraint} fallback bucket,
+     * two-thirds of all residual occurrences across the bundled corpus) -- {@code
+     * resolveVariable}'s own {@code div}/{@code mod} case needs its dividend resolved to a single
+     * variable first, which an unresolved {@code add(...)} dividend couldn't previously provide.
+     * <p>
+     * Package-private: called by {@link #resolveVariable} (this class's own caller) and referenced
+     * from {@link SumOrLinearRecognizer}'s Javadoc, which folds the identical term shapes for its
+     * own, different purpose (an {@code add} that's already a whole relation's operand, not a nested
+     * value-producing sub-expression).
+     */
+    Optional<Variable<Integer>> addAuxiliary(XNodeParent<XVarInteger> addNode) {
+        Map<Variable<Integer>, Integer> coefficients = new LinkedHashMap<>();
+        for (XNode<XVarInteger> term : addNode.sons) {
+            if (!foldAddTerm(coefficients, term)) return Optional.empty();
+        }
+        String key = coefficients.entrySet().stream()
+                .map(e -> e.getKey().getName() + "x" + e.getValue())
+                .sorted()
+                .collect(Collectors.joining("$"));
+        return Optional.of(addAuxiliaries.computeIfAbsent(key, name -> {
+            int lo = 0, hi = 0;
+            for (Map.Entry<Variable<Integer>, Integer> entry : coefficients.entrySet()) {
+                int[] bounds = boundsByName.get(entry.getKey().getName());
+                int coefficient = entry.getValue();
+                int a = bounds[0] * coefficient, b = bounds[1] * coefficient;
+                lo += Math.min(a, b);
+                hi += Math.max(a, b);
+            }
+            Variable<Integer> aux = Variable.Factory.INSTANCE.create("$add$" + name);
+            builder.variableDomain(aux, IntRangeDomain.of(lo, hi));
+            builder.constraint(LinearVariableConstraint.of(coefficients, Operator.EQ, aux));
+            boundsByName.put(aux.getName(), new int[]{lo, hi});
+            return aux;
+        }));
+    }
+
+    /**
      * Recursively resolves an XCSP3 value-producing expression node to a {@link Variable}, the
      * value-producing half of the expression grammar (see {@link #recognizeConstraint} for the
      * relation-producing half). Tries the two leaf cases first (bare variable, constant --
      * {@link #asVariable}/{@link #asConstant} only ever match a leaf, never descending into a
-     * compound node), then the three known compound cases: {@code neg} ({@link #negAuxiliary}),
-     * {@code sub} ({@link #subAuxiliary}, resolving <em>both</em> operands recursively via this same
-     * method, unlike the other two), and {@code div}/{@code mod} by a positive constant divisor
-     * ({@link #divAuxiliary}/{@link #modAuxiliary}) -- genuinely recursive throughout, so a nested
-     * compound operand like {@code div(neg(x),2)}, {@code neg(div(x,2))}, or {@code sub(neg(x),y)}
+     * compound node), then the four known compound cases: {@code neg} ({@link #negAuxiliary}),
+     * {@code add} of any arity ({@link #addAuxiliary}, folding each term via {@link #foldAddTerm}
+     * rather than recursing into this method per term -- a term's own coefficient needs folding
+     * against same-variable terms elsewhere in the sum, which a plain per-term {@code
+     * resolveVariable} call couldn't do), {@code sub} ({@link #subAuxiliary}, resolving <em>both</em>
+     * operands recursively via this same method, unlike {@code add}), and {@code div}/{@code mod} by
+     * a positive constant divisor ({@link #divAuxiliary}/{@link #modAuxiliary}) -- genuinely
+     * recursive throughout (including into {@code add}'s own dividend/operand position), so a nested
+     * compound operand like {@code div(add(x,y),2)}, {@code neg(div(x,2))}, or {@code sub(neg(x),y)}
      * resolves correctly, not just one level deep. Declines (returns empty) for anything else, e.g.
-     * {@code add}/{@code mul} (not yet supported -- extending to another compound operator is a
-     * one-line addition here, mirroring this method's own {@code neg}/{@code sub}/{@code div}/{@code
-     * mod} cases and reusing that operator's own existing {@code ...VariableConstraint} sibling as
-     * the linking constraint).
+     * {@code mul} (not yet supported -- extending to another compound operator is a one-line
+     * addition here, mirroring this method's own {@code neg}/{@code sub}/{@code div}/{@code mod}
+     * cases and reusing that operator's own existing {@code ...VariableConstraint} sibling as the
+     * linking constraint).
      * <p>
      * The divisor guard is checked before recursing into the dividend, not after -- a cheap,
      * side-effect-free check first avoids the common case of an invalid divisor triggering an
@@ -604,6 +723,9 @@ final class Xcsp3CallbackHandler implements XCallbacks2 {
         if (!(node instanceof XNodeParent<XVarInteger> parent)) return Optional.empty();
         if (parent.getType() == TypeExpr.NEG && parent.sons.length == 1) {
             return resolveVariable(parent.sons[0]).map(this::negAuxiliary);
+        }
+        if (parent.getType() == TypeExpr.ADD && parent.sons.length >= 2) {
+            return addAuxiliary(parent);
         }
         if (parent.sons.length != 2) return Optional.empty();
         if (parent.getType() == TypeExpr.SUB) {
@@ -836,8 +958,29 @@ final class Xcsp3CallbackHandler implements XCallbacks2 {
      */
     Optional<VariablePlusConstant> asVariablePlusConstant(XNode<XVarInteger> node) {
         if (node.getType() != TypeExpr.ADD || node.sons.length != 2) return Optional.empty();
-        Optional<Variable<Integer>> variable = asVariable(node.sons[0]);
-        Optional<Integer> constant = asConstant(node.sons[1]);
+        return combineVariablePlusConstant(asVariable(node.sons[0]), asConstant(node.sons[1]));
+    }
+
+    /**
+     * The node-independent half of {@link #asVariablePlusConstant}: given the already-resolved
+     * operand/constant, decides whether both are present. Extracted specifically so the {@code
+     * variable present, constant absent} combination -- e.g. {@code add(x,y)}, two bare variables,
+     * no constant term -- can be unit-tested directly against plain {@link Optional} values, since
+     * it's no longer reachable through {@link #asVariablePlusConstant}'s own real-parsing entry
+     * point at all: once {@link SumOrLinearRecognizer} started running before {@link
+     * BinaryRelationRecognizer} (see this class's own {@code recognizers} field Javadoc), it always
+     * intercepts a two-bare-variable {@code add(...)} against a bare-variable target first (its own
+     * target resolution succeeds trivially via {@link #asVariable} for exactly the same target shape
+     * {@link BinaryRelationRecognizer} would need), so {@link BinaryRelationRecognizer} never gets a
+     * chance to ask this combination in practice any more -- a real, confirmed reachability change
+     * (not a hypothetical one), the same kind of coverage-gated exception documented for other
+     * provably-rare branches in this codebase, solved the same way: extract, then unit-test directly
+     * rather than fighting to construct an artificial real-parsing repro (which here would need a
+     * genuine {@code org.xcsp.parser.entries.XVariables$XVarInteger}, whose own constructor is
+     * {@code protected} and unavailable outside its package).
+     */
+    static Optional<VariablePlusConstant> combineVariablePlusConstant(
+            Optional<Variable<Integer>> variable, Optional<Integer> constant) {
         if (variable.isPresent() && constant.isPresent()) {
             return Optional.of(new VariablePlusConstant(variable.get(), constant.get()));
         }

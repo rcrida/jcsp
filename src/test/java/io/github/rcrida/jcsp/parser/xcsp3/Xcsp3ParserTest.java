@@ -679,14 +679,20 @@ class Xcsp3ParserTest {
     }
 
     @Test void intensionProductOfPairTargetNeitherVariableNorConstant_declines() throws IOException {
-        // eq(mul(x,y),add(z,w)): the right-hand side is itself a compound expression -- neither a
+        // eq(mul(x,y),add(z,w)): mul(x,y)'s target side is itself a compound expression -- neither a
         // bare variable nor a constant -- exercises asConstant(tree.sons[1]).isEmpty() after
-        // asVariable(tree.sons[1]) has already failed.
+        // asVariable(tree.sons[1]) has already failed, so ProductRecognizer declines. Both
+        // SumOrLinearRecognizer (mul(x,y) as add(z,w)'s target isn't resolvable, mul being
+        // unsupported by resolveVariable) and BinaryRelationRecognizer's own final fallback (which
+        // does resolve add(z,w) into a real sum auxiliary along the way, via resolveVariable, before
+        // failing on mul(x,y) and declining overall) also decline -- the auxiliary is a harmless
+        // orphan (resolveVariable's own documented, accepted tradeoff), checked via anyMatch rather
+        // than the fragile iterator().next() (unspecified Set order, now more than one element).
         Xcsp3Instance instance = parseXml(
                 "<var id=\"x\"> 1..3 </var><var id=\"y\"> 1..3 </var>"
                         + "<var id=\"z\"> 1..4 </var><var id=\"w\"> 1..4 </var>",
                 "<intension> eq(mul(x,y),add(z,w)) </intension>");
-        assertThat(instance.csp().getConstraints().iterator().next()).isInstanceOf(PredicateConstraint.class);
+        assertThat(instance.csp().getConstraints()).anyMatch(c -> c instanceof PredicateConstraint);
         Set<Assignment> found = solutions(instance.csp());
         assertThat(found).isNotEmpty();
         for (Assignment a : found) {
@@ -852,13 +858,19 @@ class Xcsp3ParserTest {
     }
 
     @Test void intensionDistancePairComparison_rightOperandNotDist_fallsBackToPredicateConstraint() throws IOException {
-        // ne(dist(a,b),add(c,d)): the right side isn't a dist(...) node at all, so
-        // recognizeDistancePairComparison declines, and recognizeDistanceOfPair also declines
-        // (add(c,d) is neither a variable nor a constant) -- falls all the way to PredicateConstraint.
+        // ne(dist(a,b),add(c,d)) canonicalizes to ne(add(c,d),dist(a,b)) (add first) -- neither
+        // recognizeDistancePairComparison (needs dist on both sides) nor recognizeDistanceOfPair
+        // (needs sons[0] to literally be dist(...), which it no longer is post-canonicalization)
+        // matches, so it falls all the way to PredicateConstraint. BinaryRelationRecognizer's own
+        // final fallback does resolve add(c,d) into a real sum auxiliary along the way (via
+        // resolveVariable) before failing on dist(a,b) and declining overall -- a harmless orphaned
+        // auxiliary/linking-constraint (resolveVariable's own documented, accepted tradeoff), so the
+        // PredicateConstraint that actually governs this relation is checked via anyMatch rather
+        // than the fragile iterator().next() (unspecified Set order, now more than one element).
         Xcsp3Instance instance = parseXml(
                 "<var id=\"a\"> 1..3 </var><var id=\"b\"> 1..3 </var><var id=\"c\"> 1..3 </var><var id=\"d\"> 1..3 </var>",
                 "<intension> ne(dist(a,b),add(c,d)) </intension>");
-        assertThat(instance.csp().getConstraints().iterator().next()).isInstanceOf(PredicateConstraint.class);
+        assertThat(instance.csp().getConstraints()).anyMatch(c -> c instanceof PredicateConstraint);
         Set<Assignment> found = solutions(instance.csp());
         assertThat(found).isNotEmpty();
         for (Assignment a : found) {
@@ -3134,14 +3146,19 @@ class Xcsp3ParserTest {
         }
     }
 
-    @Test void resolveVariableDiv_dividendItselfUnresolvable_declinesAndFallsBackToPredicateConstraint() throws IOException {
-        // div(add(x,y),3): the dividend is a compound resolveVariable doesn't support (add isn't a
-        // known operator there, only div/mod) -- exercises resolveVariable's own recursive-dividend
-        // branch declining cleanly rather than crashing or mis-resolving.
+    @Test void resolveVariableDiv_addDividend_constantTarget_routesThroughUnaryComparatorConstraintOverAuxiliary() throws IOException {
+        // div(add(x,y),3): the dividend is now a resolvable compound (resolveVariable's own add
+        // case, added for XCSP3's div(add(...),k)/mod(add(...),k) shape -- see addAuxiliary) --
+        // resolves to a real div auxiliary over the sum, then GroundRelationRecognizer picks up the
+        // constant target (1) directly. This used to decline entirely (add wasn't a known compound
+        // operator to resolveVariable); now it's a genuinely tighter UnaryComparatorConstraint, not
+        // PredicateConstraint -- see intensionSumTarget_divOfAddDividend_routesThroughBinaryComparatorConstraintOverAuxiliary
+        // for the variable-target sibling of this same shape.
         Xcsp3Instance instance = parseXml(
                 "<var id=\"x\"> 0..5 </var><var id=\"y\"> 0..5 </var>",
                 "<intension> eq(div(add(x,y),3),1) </intension>");
-        assertThat(instance.csp().getConstraints().iterator().next()).isInstanceOf(PredicateConstraint.class);
+        assertThat(instance.csp().getConstraints()).anyMatch(c -> c instanceof UnaryComparatorConstraint<?>);
+        assertThat(instance.csp().getConstraints()).noneMatch(c -> c instanceof PredicateConstraint);
         Set<Assignment> found = solutions(instance.csp());
         assertThat(found).isNotEmpty();
         for (Assignment a : found) {
@@ -3303,13 +3320,94 @@ class Xcsp3ParserTest {
         }
     }
 
+    @Test void intensionSumTarget_modOfAddDividend_routesThroughBinaryComparatorConstraintOverAuxiliary() throws IOException {
+        // eq(mod(add(c,l,l),10),r): mod's own dividend is add(c,l,l), not a bare variable -- l
+        // appears twice, contributing coefficient 2. resolveVariable now recurses into add (via
+        // addAuxiliary/foldAddTerm) before resolving div/mod, materializing a real sum auxiliary
+        // rather than declining. A real corpus regression: found via the fallback histogram as the
+        // single largest remaining PredicateConstraint bucket (mod and div siblings together,
+        // two-thirds of all residual occurrences across the bundled corpus).
+        Xcsp3Instance instance = parseXml(
+                "<var id=\"c\"> 0..5 </var><var id=\"l\"> 0..5 </var><var id=\"r\"> 0..9 </var>",
+                "<intension> eq(mod(add(c,l,l),10),r) </intension>");
+        assertThat(instance.csp().getConstraints()).anyMatch(c -> c instanceof BinaryComparatorConstraint<?>);
+        assertThat(instance.csp().getConstraints()).noneMatch(c -> c instanceof PredicateConstraint);
+        Set<Assignment> found = solutions(instance.csp());
+        assertThat(found).isNotEmpty();
+        for (Assignment a : found) {
+            int sum = digitOf(a, "c") + 2 * digitOf(a, "l");
+            assertThat(sum % 10).isEqualTo(digitOf(a, "r"));
+        }
+    }
+
+    @Test void intensionSumTarget_divOfAddDividend_routesThroughBinaryComparatorConstraintOverAuxiliary() throws IOException {
+        // Same shape as the mod case above, but div's own sibling -- exercises resolveVariable's
+        // isDiv branch reaching an add(...) dividend instead of mod's.
+        Xcsp3Instance instance = parseXml(
+                "<var id=\"c\"> 0..5 </var><var id=\"l\"> 0..5 </var><var id=\"q\"> 0..2 </var>",
+                "<intension> eq(div(add(c,l,l),10),q) </intension>");
+        assertThat(instance.csp().getConstraints()).anyMatch(c -> c instanceof BinaryComparatorConstraint<?>);
+        assertThat(instance.csp().getConstraints()).noneMatch(c -> c instanceof PredicateConstraint);
+        Set<Assignment> found = solutions(instance.csp());
+        assertThat(found).isNotEmpty();
+        for (Assignment a : found) {
+            int sum = digitOf(a, "c") + 2 * digitOf(a, "l");
+            assertThat(sum / 10).isEqualTo(digitOf(a, "q"));
+        }
+    }
+
+    @Test void intensionNeq_addVsAdd_routesThroughSumVariableConstraintOverAuxiliary() throws IOException {
+        // ne(add(a,b),add(c,d)): SumOrLinearRecognizer (tried before BinaryRelationRecognizer, per
+        // the recognizer-ordering fix above) recognizes add(a,b) directly as a coefficient map --
+        // {a:1,b:1} -- against a target it resolves via resolveVariable's new add case: a single sum
+        // auxiliary for add(c,d). This is tighter than routing both sides through resolveVariable
+        // independently (two auxiliaries plus an indirect BinaryComparatorConstraint), which is what
+        // BinaryRelationRecognizer's own final fallback would have produced had SumOrLinearRecognizer
+        // not been tried first. A real corpus shape (ne(add(x[0],x[11]),add(x[10],x[1]))).
+        Xcsp3Instance instance = parseXml(
+                "<var id=\"a\"> 0..3 </var><var id=\"b\"> 0..3 </var><var id=\"c\"> 0..3 </var><var id=\"d\"> 0..3 </var>",
+                "<intension> ne(add(a,b),add(c,d)) </intension>");
+        assertThat(instance.csp().getConstraints()).anyMatch(cn -> cn instanceof SumVariableConstraint);
+        assertThat(instance.csp().getConstraints()).noneMatch(cn -> cn instanceof PredicateConstraint);
+        Set<Assignment> found = solutions(instance.csp());
+        assertThat(found).isNotEmpty();
+        for (Assignment assignment : found) {
+            assertThat(digitOf(assignment, "a") + digitOf(assignment, "b"))
+                    .isNotEqualTo(digitOf(assignment, "c") + digitOf(assignment, "d"));
+        }
+    }
+
+    @Test void intensionSumTarget_modOfAddDividendWithUnfoldableTerm_fallsBackToPredicateConstraint() throws IOException {
+        // eq(mod(add(c,mul(a,b)),10),r): add's second term, mul(a,b), is a product of two variables
+        // -- not one of foldAddTerm's four recognized shapes (bare var, mul(var,const), neg(var),
+        // sub(var,var)) -- so addAuxiliary declines the same way SumOrLinearRecognizer's own
+        // recognition would for the identical term shape, and resolveVariable's mod case correctly
+        // falls through rather than materializing an incomplete auxiliary.
+        Xcsp3Instance instance = parseXml(
+                "<var id=\"c\"> 0..5 </var><var id=\"a\"> 0..3 </var><var id=\"b\"> 0..3 </var><var id=\"r\"> 0..9 </var>",
+                "<intension> eq(mod(add(c,mul(a,b)),10),r) </intension>");
+        assertThat(instance.csp().getConstraints().iterator().next()).isInstanceOf(PredicateConstraint.class);
+        Set<Assignment> found = solutions(instance.csp());
+        assertThat(found).isNotEmpty();
+        for (Assignment a : found) {
+            int sum = digitOf(a, "c") + digitOf(a, "a") * digitOf(a, "b");
+            assertThat(sum % 10).isEqualTo(digitOf(a, "r"));
+        }
+    }
+
     @Test void intensionSumTarget_compoundExpressionUnresolvable_fallsBackToPredicateConstraint() throws IOException {
         // eq(add(y,z),mul(x,2)): mul(x,2) is a genuinely compound target, but mul isn't one of
-        // resolveVariable's own known compound operators (neg/sub/div/mod) -- declines cleanly.
+        // resolveVariable's own known compound operators (neg/add/sub/div/mod) -- SumOrLinearRecognizer
+        // itself declines cleanly (its own target resolution fails on mul before ever materializing
+        // an add(y,z) auxiliary). BinaryRelationRecognizer's own final fallback does resolve
+        // add(y,z) into a real sum auxiliary along the way, via resolveVariable, before failing on
+        // mul(x,2) and declining overall -- a harmless orphaned auxiliary/linking-constraint
+        // (resolveVariable's own documented, accepted tradeoff), checked via anyMatch rather than
+        // the fragile iterator().next() (unspecified Set order, now more than one element).
         Xcsp3Instance instance = parseXml(
                 "<var id=\"x\"> 0..10 </var><var id=\"y\"> -10..10 </var><var id=\"z\"> -10..10 </var>",
                 "<intension> eq(add(y,z),mul(x,2)) </intension>");
-        assertThat(instance.csp().getConstraints().iterator().next()).isInstanceOf(PredicateConstraint.class);
+        assertThat(instance.csp().getConstraints()).anyMatch(c -> c instanceof PredicateConstraint);
         Set<Assignment> found = solutions(instance.csp());
         assertThat(found).isNotEmpty();
         for (Assignment a : found) {
