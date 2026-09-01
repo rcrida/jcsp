@@ -131,10 +131,18 @@ propagateEqCoverage`'s own Javadoc documents for omitting an equivalent check.
   `ValueSetNogoodConstraint` for) — both renamed to reflect the corrected, tighter behavior rather
   than the old gap.
 - Whether this change makes `MarketSplit-01` itself complete within a given time budget was not
-  assumed — see the corpus-audit follow-up for the actual before/after `Xcsp3CompetitionRunner`
-  comparison; per-constraint GAC on 4 independent equations is not expected to expose the kind of
-  cross-constraint infeasibility market-split instances are built to hide, regardless of how tight
-  any single equation's own propagation becomes.
+  assumed — verified via a real before/after `Xcsp3CompetitionRunner` run (same bundled corpus,
+  same 20-second-per-instance budget): all 64 previously-solved instances still solve (zero
+  regressions), one (`PrizeCollecting-15-3-5-0`) improved from `SATISFIABLE` to `OPTIMUM FOUND`
+  within the same budget, and `MarketSplit-01` itself still times out (`s UNKNOWN`) — as expected,
+  since per-constraint GAC on 4 independent equations doesn't expose the kind of cross-constraint
+  infeasibility market-split instances are built to hide, regardless of how tight any single
+  equation's own propagation becomes. It does show a real, substantial effect on search shape
+  within the same wall-clock budget (`nodesExplored` 294973→76210, `constraintChecks`
+  177652143→45595786 in the run measured), consistent with propagation now doing real per-node
+  work rather than none — whether that's a net win at a longer time budget is genuinely
+  undetermined from a single capped-budget run and wasn't further chased. `Vrp-A-n32-k5`'s own
+  930 `LinearBoundConstraint`s showed no meaningful change (`nodesExplored` 8572→9112).
 - Extending the same treatment to `SumVariableConstraint`/`LinearVariableConstraint`/
   `LinearBooleanVariableConstraint` (target-is-a-variable siblings) remains open future work, should
   a corpus instance motivate it.
