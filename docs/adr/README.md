@@ -76,3 +76,4 @@ section instead.
 | [0020](0020-assignment-relaxation-for-gcc-linked-tables.md) | Assignment-style LP relaxation for GlobalCardinalityConstraint-linked tables | Implemented |
 | [0021](0021-bitset-indexed-gac-for-table-constraints.md) | Bitset-indexed GAC for NaryTuplesConstraint | Implemented |
 | [0022](0022-bitset-and-residue-arc-consistency-ac3bitrm.md) | Bitset+residue arc consistency (AC3bit+rm) | Accepted |
+| [0023](0023-subset-sum-gac-for-linear-equality-constraints.md) | Subset-sum GAC for linear equality constraints | Accepted |
