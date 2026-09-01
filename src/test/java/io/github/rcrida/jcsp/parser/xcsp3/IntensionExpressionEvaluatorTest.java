@@ -82,6 +82,21 @@ class IntensionExpressionEvaluatorTest {
         assertThat(IntensionExpressionEvaluator.evaluate(tree, Assignment.empty(), Map.of())).isEqualTo(8);
     }
 
+    @Test void evaluate_or() {
+        // Covers both outcomes of the n-ary anyMatch: all-zero operands (false) and at least one
+        // nonzero operand (true) -- previously exercised only via a real or(...) intension tree that
+        // fell all the way back to PredicateConstraint (Xcsp3ParserTest's own
+        // intensionOrChainedEqualityOperand test), until NaryEqualityRecognizer started resolving
+        // that exact shape into a real AtLeastNConstraint instead, leaving this evaluator branch
+        // with no remaining real-parsing test -- tested directly here instead.
+        XNode<XVarInteger> allFalse = XNode.<XVarInteger>node(TypeExpr.OR,
+                List.of(XNode.longLeaf(0), XNode.longLeaf(0)));
+        assertThat(IntensionExpressionEvaluator.evaluate(allFalse, Assignment.empty(), Map.of())).isEqualTo(0);
+        XNode<XVarInteger> oneTrue = XNode.<XVarInteger>node(TypeExpr.OR,
+                List.of(XNode.longLeaf(0), XNode.longLeaf(1)));
+        assertThat(IntensionExpressionEvaluator.evaluate(oneTrue, Assignment.empty(), Map.of())).isEqualTo(1);
+    }
+
     @Test void evaluate_implication() {
         // Covers all four (antecedent, consequent) truth combinations, not just the two needed to
         // pick the right overall result -- the antecedent-true/consequent-true case specifically

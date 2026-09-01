@@ -351,12 +351,12 @@ class Xcsp3ParserTest {
 
     @Test void intensionIffOperandNaryEquality_recognizeGroundRelationSonsLengthGuardDeclines() throws IOException {
         // eq(x,y,z) (n-ary equality, 3 operands) as the iff's left operand: recognizeBinaryRelation
-        // declines outright (its own guard also requires exactly 2 sons), and recognizeGroundRelation
-        // declines too via its own node.sons.length != 2 check -- exercises that check's true outcome
-        // specifically with operator already EQ/NEQ (distinct from
-        // intensionIffOperandOrderingOperator_secondOperandNotConstant_falls_backToGeneric's
-        // ordering-operator case above, where the operator itself is now accepted -- it's the
-        // second-operand-not-a-constant check that declines there instead).
+        // and recognizeGroundRelation both decline outright (their own guards require exactly 2
+        // sons), but ChannelRecognizer's own operand resolution dispatches through the full
+        // recognizer chain, where NaryEqualityRecognizer now resolves this shape into an
+        // AndConstraint of its own, reified into a fresh indicator -- no longer falls through to
+        // ChannelRecognizer's bare-variable asVariable fallback the way an unrecognizable operand
+        // would.
         Xcsp3Instance instance = parseXml(
                 "<var id=\"x\"> 0..2 </var><var id=\"y\"> 0..2 </var><var id=\"z\"> 0..2 </var><var id=\"w\"> 0..1 </var>",
                 "<intension> iff(eq(x,y,z),eq(w,1)) </intension>");
@@ -1054,15 +1054,18 @@ class Xcsp3ParserTest {
         }
     }
 
-    @Test void intensionOrChainedEqualityOperand_fallsBackToPredicateConstraint() throws IOException {
-        // or(eq(x,y,z), eq(w,1)): the left child is an n-ary (3-operand) equality, not the arity-2
-        // shape recognizeLiteral's own node.sons.length != 2 guard requires -- distinct from
-        // intensionOrThreeOperands' rejection, which has three operands directly under or(...)
-        // itself rather than inside one of its two children.
+    @Test void intensionOrChainedEqualityOperand_recognizesViaAtLeastNConstraint() throws IOException {
+        // or(eq(x,y,z), eq(w,1)): the left child is an n-ary (3-operand) equality -- not the arity-2
+        // shape recognizeOrOfLiterals' own fast path handles, so that 2-literal path still declines,
+        // but OrRecognizer's own n-ary fallback dispatches each child through the full recognizer
+        // chain, where NaryEqualityRecognizer now resolves the left child (into an AndConstraint of
+        // its own) and GroundRelationRecognizer the right -- both reified and combined via
+        // AtLeastNConstraint(n=1), rather than falling back to PredicateConstraint as this used to.
         Xcsp3Instance instance = parseXml(
                 "<var id=\"x\"> 0..2 </var><var id=\"y\"> 0..2 </var><var id=\"z\"> 0..2 </var><var id=\"w\"> 0..1 </var>",
                 "<intension> or(eq(x,y,z),eq(w,1)) </intension>");
-        assertThat(instance.csp().getConstraints().iterator().next()).isInstanceOf(PredicateConstraint.class);
+        assertThat(instance.csp().getConstraints()).anyMatch(c -> c instanceof AtLeastNConstraint);
+        assertThat(instance.csp().getConstraints()).noneMatch(c -> c instanceof PredicateConstraint);
         Set<Assignment> found = solutions(instance.csp());
         assertThat(found).isNotEmpty();
         for (Assignment a : found) {
@@ -3558,14 +3561,17 @@ class Xcsp3ParserTest {
         }
     }
 
-    @Test void resolveConstraint_andWithUnrecognizableConjunct_declinesAndFallsBackToPredicateConstraint() throws IOException {
-        // and(eq(x,1), eq(y,z,w)): the second conjunct is a 3-ary equality, unrecognizable by any
-        // leaf relation -- the whole and(...) must decline, not partially succeed.
+    @Test void resolveConstraint_andWithNaryEqualityConjunct_recognizesBothConjuncts() throws IOException {
+        // and(eq(x,1), eq(y,z,w)): the second conjunct is a 3-ary equality -- now recognized by
+        // NaryEqualityRecognizer (itself an AndConstraint of consecutive pairwise equalities), so
+        // AndRecognizer's own dispatch succeeds on both conjuncts and wraps them in one outer
+        // AndConstraint, rather than declining the whole and(...) as it used to.
         Xcsp3Instance instance = parseXml(
                 "<var id=\"x\"> 0..3 </var><var id=\"y\"> 0..3 </var>"
                         + "<var id=\"z\"> 0..3 </var><var id=\"w\"> 0..3 </var>",
                 "<intension> and(eq(x,1),eq(y,z,w)) </intension>");
-        assertThat(instance.csp().getConstraints().iterator().next()).isInstanceOf(PredicateConstraint.class);
+        assertThat(instance.csp().getConstraints().iterator().next()).isInstanceOf(AndConstraint.class);
+        assertThat(instance.csp().getConstraints()).noneMatch(c -> c instanceof PredicateConstraint);
         Set<Assignment> found = solutions(instance.csp());
         assertThat(found).isNotEmpty();
         for (Assignment a : found) {
@@ -4117,12 +4123,48 @@ class Xcsp3ParserTest {
         }
     }
 
-    @Test void intensionChainedEquality_fallsBackToPredicateConstraint() throws IOException {
+    @Test void intensionChainedEquality_routesThroughAndConstraint() throws IOException {
+        // eq(x,y,z): XCSP3's eq generalizes to n-ary "all equal" for 3+ operands --
+        // NaryEqualityRecognizer resolves each operand (here, three bare variables) and chains them
+        // into x==y and y==z via one AndConstraint, rather than falling back to PredicateConstraint.
         Xcsp3Instance instance = parseXml(
                 "<var id=\"x\"> 0..3 </var><var id=\"y\"> 0..3 </var><var id=\"z\"> 0..3 </var>",
                 "<intension> eq(x,y,z) </intension>");
-        assertThat(instance.csp().getConstraints().iterator().next()).isInstanceOf(PredicateConstraint.class);
+        assertThat(instance.csp().getConstraints().iterator().next()).isInstanceOf(AndConstraint.class);
         assertThat(solutions(instance.csp())).hasSize(4);
+    }
+
+    @Test void intensionChainedEquality_withConstantOperand_routesThroughAndConstraint() throws IOException {
+        // eq(x,y,299): a mix of two bare variables and a bare constant -- resolveVariable wraps the
+        // constant in its own memoized singleton-domain auxiliary, the same way every other
+        // resolveVariable caller gets one for free, so this chains into x==y and y==$const299.
+        Xcsp3Instance instance = parseXml(
+                "<var id=\"x\"> 297..300 </var><var id=\"y\"> 297..300 </var>",
+                "<intension> eq(x,y,299) </intension>");
+        assertThat(instance.csp().getConstraints().iterator().next()).isInstanceOf(AndConstraint.class);
+        Set<Assignment> found = solutions(instance.csp());
+        assertThat(found).hasSize(1);
+        for (Assignment a : found) {
+            assertThat(digitOf(a, "x")).isEqualTo(299);
+            assertThat(digitOf(a, "y")).isEqualTo(299);
+        }
+    }
+
+    @Test void intensionChainedEquality_unresolvableOperand_fallsBackToPredicateConstraint() throws IOException {
+        // eq(x,y,mul(a,b)): the third operand is a product of two variables -- mul isn't one of
+        // resolveVariable's own known compound operators -- so NaryEqualityRecognizer declines the
+        // whole node rather than partially chaining just the resolvable operands.
+        Xcsp3Instance instance = parseXml(
+                "<var id=\"x\"> 0..9 </var><var id=\"y\"> 0..9 </var><var id=\"a\"> 1..3 </var><var id=\"b\"> 1..3 </var>",
+                "<intension> eq(x,y,mul(a,b)) </intension>");
+        assertThat(instance.csp().getConstraints().iterator().next()).isInstanceOf(PredicateConstraint.class);
+        Set<Assignment> found = solutions(instance.csp());
+        assertThat(found).isNotEmpty();
+        for (Assignment a : found) {
+            int product = digitOf(a, "a") * digitOf(a, "b");
+            assertThat(digitOf(a, "x")).isEqualTo(digitOf(a, "y"));
+            assertThat(digitOf(a, "y")).isEqualTo(product);
+        }
     }
 
     // ---- sqr / pow / min / max / imp / if (full XCSP3-core intension grammar coverage) --------------
