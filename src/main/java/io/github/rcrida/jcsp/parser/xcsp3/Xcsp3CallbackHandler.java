@@ -183,6 +183,7 @@ final class Xcsp3CallbackHandler implements XCallbacks2 {
             new SumOrLinearRecognizer(this),
             new BinaryRelationRecognizer(this),
             new GroundRelationRecognizer(this),
+            new InSetRecognizer(this),
             new DistanceOfPairRecognizer(this),
             new AndRecognizer(this::recognizeConstraint),
             new OrRecognizer(this, this::recognizeConstraint),

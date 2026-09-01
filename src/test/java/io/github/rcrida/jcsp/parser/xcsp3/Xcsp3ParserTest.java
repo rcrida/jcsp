@@ -25,6 +25,7 @@ import io.github.rcrida.jcsp.constraints.nary.SumBoundConstraint;
 import io.github.rcrida.jcsp.constraints.nary.SumVariableConstraint;
 import io.github.rcrida.jcsp.constraints.unary.SquareConstraint;
 import io.github.rcrida.jcsp.constraints.unary.UnaryComparatorConstraint;
+import io.github.rcrida.jcsp.constraints.unary.UnaryInSetConstraint;
 import io.github.rcrida.jcsp.constraints.unary.UnaryPredicateConstraint;
 import io.github.rcrida.jcsp.solver.Solver;
 import io.github.rcrida.jcsp.variables.Variable;
@@ -2982,6 +2983,64 @@ class Xcsp3ParserTest {
             int x = digitOf(a, "x");
             int b = digitOf(a, "b");
             assertThat(b == 1).as("x=%d, b=%d", x, b).isEqualTo(x >= 0);
+        }
+    }
+
+    // ---- intension in/notin (UnaryInSetConstraint) ------------------------------------------------
+
+    @Test void intensionIn_literalConstantSet_routesThroughUnaryInSetConstraint() throws IOException {
+        // in(x,set(1,2,4)): every set(...) member is a bare constant, so InSetRecognizer routes
+        // this to a real, propagating UnaryInSetConstraint instead of the generic PredicateConstraint.
+        Xcsp3Instance instance = parseXml(
+                "<var id=\"x\"> 0..5 </var>",
+                "<intension> in(x,set(1,2,4)) </intension>");
+        assertThat(instance.csp().getConstraints().iterator().next()).isInstanceOf(UnaryInSetConstraint.class);
+        Set<Assignment> found = solutions(instance.csp());
+        assertThat(found).hasSize(3);
+        for (Assignment a : found) {
+            assertThat(Set.of(1, 2, 4)).contains(digitOf(a, "x"));
+        }
+    }
+
+    @Test void intensionNotin_literalConstantSet_routesThroughUnaryInSetConstraint() throws IOException {
+        Xcsp3Instance instance = parseXml(
+                "<var id=\"x\"> 0..5 </var>",
+                "<intension> notin(x,set(1,2,4)) </intension>");
+        assertThat(instance.csp().getConstraints().iterator().next()).isInstanceOf(UnaryInSetConstraint.class);
+        Set<Assignment> found = solutions(instance.csp());
+        assertThat(found).hasSize(3);
+        for (Assignment a : found) {
+            assertThat(Set.of(1, 2, 4)).doesNotContain(digitOf(a, "x"));
+        }
+    }
+
+    @Test void intensionIn_nonConstantSetMember_fallsBackToPredicateConstraint() throws IOException {
+        // in(x,set(1,y)): y is a variable, not a constant -- the set's own membership genuinely
+        // depends on y's current value too, so this isn't unary at all; InSetRecognizer declines
+        // and IntensionExpressionEvaluator's own per-assignment set evaluation still handles it
+        // correctly, just without propagation.
+        Xcsp3Instance instance = parseXml(
+                "<var id=\"x\"> 0..3 </var><var id=\"y\"> 0..3 </var>",
+                "<intension> in(x,set(1,y)) </intension>");
+        assertThat(instance.csp().getConstraints().iterator().next()).isInstanceOf(PredicateConstraint.class);
+        Set<Assignment> found = solutions(instance.csp());
+        assertThat(found).isNotEmpty();
+        for (Assignment a : found) {
+            int x = digitOf(a, "x");
+            int y = digitOf(a, "y");
+            assertThat(x == 1 || x == y).isTrue();
+        }
+    }
+
+    @Test void intensionIn_reified_indicatorTracksConstraintTruthValue() throws IOException {
+        Xcsp3Instance instance = parseXml(
+                "<var id=\"x\"> 0..5 </var><var id=\"b\"> 0..1 </var>",
+                "<intension reifiedBy=\"b\"> in(x,set(1,2,4)) </intension>");
+        Set<Assignment> found = solutions(instance.csp());
+        assertThat(found).isNotEmpty();
+        for (Assignment a : found) {
+            boolean inSet = Set.of(1, 2, 4).contains(digitOf(a, "x"));
+            assertThat(digitOf(a, "b") == 1).isEqualTo(inSet);
         }
     }
 

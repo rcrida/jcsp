@@ -73,6 +73,7 @@ import io.github.rcrida.jcsp.constraints.nary.ValueConjunctionConstraint;
 import io.github.rcrida.jcsp.constraints.nary.ValueDisjunctionConstraint;
 import io.github.rcrida.jcsp.constraints.unary.SetMembershipConstraint;
 import io.github.rcrida.jcsp.constraints.unary.UnaryComparatorConstraint;
+import io.github.rcrida.jcsp.constraints.unary.UnaryInSetConstraint;
 import io.github.rcrida.jcsp.domains.BoundedDomain;
 import io.github.rcrida.jcsp.domains.Domain;
 import io.github.rcrida.jcsp.domains.SetBoundedDomain;
@@ -141,6 +142,7 @@ public class FixpointPropagation {
 
     public static final List<ConstraintConsistency> PROPAGATORS = List.of(
             FixpointConsistency.of(UnaryComparatorConstraint.class),
+            FixpointConsistency.of(UnaryInSetConstraint.class),
             FixpointConsistency.of(BinaryComparatorConstraint.class),
             FixpointConsistency.of(BinaryOffsetConstraint.class),
             FixpointConsistency.of(AbsoluteDifferenceConstraint.class),
