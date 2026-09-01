@@ -73,7 +73,12 @@ public class SquareVariableConstraint<N extends Number> extends BinaryConstraint
      * AbsoluteDifferenceVariableConstraint}'s own conjunctive decomposition for its {@code
      * LEQ}-like case. {@code GEQ} has no such decomposition -- {@code left^2 >= right} excludes an
      * open middle band, a disjunction -- so it only narrows {@code right}, leaving {@code left}
-     * untouched, the same tradeoff that class's own {@code GEQ} case accepts.
+     * untouched, the same tradeoff that class's own {@code GEQ} case accepts. {@code newTargetHi}
+     * is not re-checked for non-negativity before the {@code sqrt} below: whenever {@code leqLike}
+     * is true and the {@code sqLo > targetHi} infeasibility check above didn't already return,
+     * {@code targetHi >= sqLo >= 0} necessarily holds, and {@code newTargetHi = min(targetHi,
+     * sqHi)} of two values each {@code >= sqLo} is itself {@code >= sqLo >= 0} -- a real
+     * non-negative bound, never a defensive guess.
      */
     @Override
     @SuppressWarnings("unchecked")
@@ -103,7 +108,7 @@ public class SquareVariableConstraint<N extends Number> extends BinaryConstraint
             updated.put(getRight(), prunedTarget.get());
         }
 
-        if (leqLike && newTargetHi >= 0) {
+        if (leqLike) {
             double root = Math.sqrt(newTargetHi);
             double newXMin = Math.max(xMin, -root);
             double newXMax = Math.min(xMax, root);

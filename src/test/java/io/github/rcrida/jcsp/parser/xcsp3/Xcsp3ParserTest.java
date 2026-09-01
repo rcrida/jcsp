@@ -660,6 +660,24 @@ class Xcsp3ParserTest {
         }
     }
 
+    @Test void intensionProductOfThreeFactorsWithDuplicate_fallsBackToPredicateConstraint() throws IOException {
+        // eq(mul(x,x,y),z): a genuine duplicate factor at arity 3 (not the two-factor self-product
+        // recognizeSelfProduct handles) -- exercises the general factor loop's own
+        // !factors.add(factor.get()) branch specifically, distinct from mul(x,x)'s own dedicated
+        // Square routing (only tried for mulNode.sons.length == 2). ProductVariableConstraint's
+        // Set<Variable<N>> factor representation can't hold x twice here either, so recognition must
+        // decline the same way the two-factor case originally did before Square* existed.
+        Xcsp3Instance instance = parseXml(
+                "<var id=\"x\"> 1..3 </var><var id=\"y\"> 1..3 </var><var id=\"z\"> 1..27 </var>",
+                "<intension> eq(mul(x,x,y),z) </intension>");
+        assertThat(instance.csp().getConstraints().iterator().next()).isInstanceOf(PredicateConstraint.class);
+        Set<Assignment> found = solutions(instance.csp());
+        assertThat(found).isNotEmpty();
+        for (Assignment a : found) {
+            assertThat(digitOf(a, "z")).isEqualTo(digitOf(a, "x") * digitOf(a, "x") * digitOf(a, "y"));
+        }
+    }
+
     @Test void intensionProductOfPairTargetNeitherVariableNorConstant_declines() throws IOException {
         // eq(mul(x,y),add(z,w)): the right-hand side is itself a compound expression -- neither a
         // bare variable nor a constant -- exercises asConstant(tree.sons[1]).isEmpty() after
@@ -3527,6 +3545,24 @@ class Xcsp3ParserTest {
         }
     }
 
+    @Test void intensionSum_geOperatorSwapsAddToSecondOperand_routesThroughSumBoundConstraint() throws IOException {
+        // ge(add(x,y),6) is rewritten by xcsp3-tools' own canonizer into le(6,add(x,y)) -- ge/gt are
+        // always eliminated via le/lt with operands swapped, and that swap moves the compound add
+        // side to tree.sons[1] regardless of its complexity (confirmed via a direct probe against a
+        // real parsed tree: LE with son0=LONG, son1=ADD, for domains 1..5). SumOrLinearRecognizer
+        // must check sons[1] for add(...) too, flipping the operator back, or GEQ would be silently
+        // unreachable for any source file that used ge/gt against an add(...) operand.
+        Xcsp3Instance instance = parseXml(
+                "<var id=\"x\"> 1..5 </var><var id=\"y\"> 1..5 </var>",
+                "<intension> ge(add(x,y),6) </intension>");
+        assertThat(instance.csp().getConstraints().iterator().next()).isInstanceOf(SumBoundConstraint.class);
+        Set<Assignment> solutions = solutions(instance.csp());
+        assertThat(solutions).hasSize(15); // 15 of 25 pairs in {1..5}^2 sum to >= 6
+        for (Assignment a : solutions) {
+            assertThat(digitOf(a, "x") + digitOf(a, "y")).isGreaterThanOrEqualTo(6);
+        }
+    }
+
     @Test void intensionSumWeighted_constantTarget_routesThroughLinearBoundConstraint() throws IOException {
         // eq(add(mul(x,2),y),10): x is weighted, y is unit-coefficient, target is a constant.
         Xcsp3Instance instance = parseXml(
@@ -3710,6 +3746,26 @@ class Xcsp3ParserTest {
             int xGe2 = digitOf(a, "x") >= 2 ? 1 : 0;
             int yGe3 = digitOf(a, "y") >= 3 ? 1 : 0;
             assertThat(xGe2 + yGe3).isEqualTo(1);
+        }
+    }
+
+    @Test void intensionSumOfRelations_geOperatorSwapsAddToSecondOperand_routesThroughLinearBooleanBoundConstraint() throws IOException {
+        // ge(add(eq(x,1),eq(y,1),eq(z,1)),2) is rewritten by xcsp3-tools' own canonizer into
+        // le(2,add(...)) -- the same ge/gt operand-swap phenomenon SumOrLinearRecognizer's own
+        // GE-swap test documents, but here every add term is itself a relation, so this exercises
+        // RelationSumRecognizer's identical dual-order fix instead: "at least two of these three
+        // equality checks hold".
+        Xcsp3Instance instance = parseXml(
+                "<var id=\"x\"> 0..1 </var><var id=\"y\"> 0..1 </var><var id=\"z\"> 0..1 </var>",
+                "<intension> ge(add(eq(x,1),eq(y,1),eq(z,1)),2) </intension>");
+        assertThat(instance.csp().getConstraints()).anyMatch(c -> c instanceof LinearBooleanBoundConstraint);
+        Set<Assignment> solutions = solutions(instance.csp());
+        assertThat(solutions).hasSize(4); // C(3,2)+C(3,3) = 3+1 = 4 ways to have >=2 of 3 booleans true
+        for (Assignment a : solutions) {
+            int xEq1 = digitOf(a, "x") == 1 ? 1 : 0;
+            int yEq1 = digitOf(a, "y") == 1 ? 1 : 0;
+            int zEq1 = digitOf(a, "z") == 1 ? 1 : 0;
+            assertThat(xEq1 + yEq1 + zEq1).isGreaterThanOrEqualTo(2);
         }
     }
 

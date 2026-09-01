@@ -127,6 +127,21 @@ public class SquareConstraintTest {
         assertThat(((DiscreteDomain<Integer>) result.get(X)).toList()).containsExactly(-3, -2, -1, 0, 1, 2, 3);
     }
 
+    @Test void propagate_domainEntirelyNegative_sqLoIsSmallerMagnitudeEndpoint() {
+        // domain=[-5,-2] (entirely negative, doesn't straddle zero): sqLo=min(25,4)=4, distinct from
+        // the straddles-zero case (sqLo=0) every other domain used elsewhere in this class exercises.
+        var result = SquareConstraint.of(X, Operator.GEQ, 3).propagate(Map.of(X, IntRangeDomain.of(-5, -2)));
+        assertThat(result).isPresent();
+        assertThat(result.get()).isEmpty();
+    }
+
+    @Test void propagate_leq_domainEntirelyAboveAchievableRange_infeasible() {
+        // domain=[8,10] (entirely positive and far from zero), x^2<=9: sqrt(9)=3, so
+        // newMin=max(8,-3)=8 > newMax=min(10,3)=3 -- infeasible via the crossed-bounds check, not
+        // the b<0 guard (b=9 is a perfectly valid, achievable-in-general square bound).
+        assertThat(SquareConstraint.of(X, Operator.LEQ, 9).propagate(Map.of(X, IntRangeDomain.of(8, 10)))).isEmpty();
+    }
+
     // --- propagate: EQ ---
 
     @Test void propagate_eq_narrowsToRootsRange() {
@@ -137,6 +152,12 @@ public class SquareConstraintTest {
     @Test void propagate_eq_unreachableBound_infeasible() {
         // domain=[2,5]: sqLo=4, sqHi=25; bound=1 is below sqLo -> unreachable
         assertThat(SquareConstraint.of(X, Operator.EQ, 1).propagate(Map.of(X, IntRangeDomain.of(2, 5)))).isEmpty();
+    }
+
+    @Test void propagate_eq_boundAboveSqHi_infeasible() {
+        // domain=[-5,5]: sqLo=0, sqHi=25; bound=30 is above sqHi -> unreachable, distinct from the
+        // below-sqLo case above (exercises the b > sqHi side of the reachability check).
+        assertThat(SquareConstraint.of(X, Operator.EQ, 30).propagate(Map.of(X, IntRangeDomain.of(-5, 5)))).isEmpty();
     }
 
     // --- propagate: GEQ/GT ---
@@ -193,9 +214,13 @@ public class SquareConstraintTest {
     }
 
     @Test void explainInfeasible_nonSingleton_citesValueSet() {
-        var domain = IntRangeDomain.of(-5, 5);
+        // A gapped domain (missing 0) isn't "safe to cite as range" (RangeNogoodConstraint's own
+        // gate requires size == max-min+1), so fromCurrentBounds declines and the ValueSetNogoodConstraint
+        // fallback is exercised instead.
+        var domain = IntRangeDomain.of(-5, 5).toBuilder().delete(0).build();
         var result = SquareConstraint.of(X, Operator.LEQ, -1).propagateWithReasons(Map.of(X, domain));
         assertThat(result.isInfeasible()).isTrue();
         assertThat(result.reason()).isNotNull();
+        assertThat(result.reason().isSatisfiedBy(a(-5))).isFalse();
     }
 }

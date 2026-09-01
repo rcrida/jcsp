@@ -4,6 +4,7 @@ import io.github.rcrida.jcsp.constraints.Operator;
 import io.github.rcrida.jcsp.domains.DiscreteDomain;
 import io.github.rcrida.jcsp.domains.IntRangeDomain;
 import io.github.rcrida.jcsp.domains.IntervalDomain;
+import io.github.rcrida.jcsp.domains.NumericDiscreteDomain;
 import io.github.rcrida.jcsp.variables.Variable;
 import org.junit.jupiter.api.Test;
 
@@ -94,6 +95,39 @@ public class SquareVariableConstraintTest {
                 .propagate(Map.of(X, IntRangeDomain.of(-2, 2), T, IntRangeDomain.of(10, 20)))).isEmpty();
     }
 
+    @Test void propagate_domainEntirelyNegative_sqLoIsSmallerMagnitudeEndpoint() {
+        // x=[-5,-2] (entirely negative, doesn't straddle zero): sqLo=min(25,4)=4, distinct from the
+        // straddles-zero case (sqLo=0) and the entirely-positive case (both exercised elsewhere in
+        // this class already, e.g. x=[2,5] above). t=[0,20] is wide enough that narrowing its min up
+        // to sqLo=4 stays feasible (unlike a narrower target range, which would invert lo>hi and
+        // report infeasible instead -- not what this test is checking).
+        var result = SquareVariableConstraint.of(X, Operator.GEQ, T)
+                .propagate(Map.of(X, IntRangeDomain.of(-5, -2), T, IntRangeDomain.of(0, 20))).orElseThrow();
+        assertThat(((DiscreteDomain<Integer>) result.get(T)).toList()).doesNotContain(0, 1, 2, 3);
+    }
+
+    @Test void propagate_eq_targetNarrowingEmptiesGappedDomain_infeasible() {
+        // t's live values are {-10,40} (a gap domain spanning far past the narrowed range on both
+        // sides), x=[-5,5]: sqLo=0, sqHi=25. Feasibility checks pass (0<=40, 25>=-10), so the code
+        // proceeds to narrow t to [0,25] -- but neither -10 nor 40 lies in that range, so narrowing
+        // empties t's value set even though [0,25] itself is a non-empty numeric range: exercises
+        // prunedTarget.get().isEmpty() specifically, distinct from propagate_eq_infeasible_* above
+        // (which are caught by the earlier bounds-only feasibility check, never reaching narrow()).
+        var gappedTarget = NumericDiscreteDomain.of(-10, 40);
+        assertThat(SquareVariableConstraint.of(X, Operator.EQ, T)
+                .propagate(Map.of(X, IntRangeDomain.of(-5, 5), T, gappedTarget))).isEmpty();
+    }
+
+    @Test void propagate_leq_operandNarrowingEmptiesGappedDomain_infeasible() {
+        // x's live values are {-10,10} (a gap domain), t=[0,9]: sqLo=0 (straddles zero), so the
+        // target-side feasibility/narrowing passes through unchanged (t is already tight). left then
+        // narrows via sqrt(9)=3 to [-3,3] -- but neither -10 nor 10 lies in that range, emptying x's
+        // value set: exercises prunedLeft.get().isEmpty() specifically.
+        var gappedOperand = NumericDiscreteDomain.of(-10, 10);
+        assertThat(SquareVariableConstraint.of(X, Operator.LEQ, T)
+                .propagate(Map.of(X, gappedOperand, T, IntRangeDomain.of(0, 9)))).isEmpty();
+    }
+
     // --- propagate: LEQ ---
 
     @Test void propagate_leq_narrowsTargetMax() {
@@ -158,8 +192,12 @@ public class SquareVariableConstraintTest {
     // --- explainInfeasible ---
 
     @Test void explainInfeasible_returnsNonNullReason() {
+        // T's domain is gapped (missing 15), so it isn't "safe to cite as range"
+        // (RangeNogoodConstraint's own gate requires size == max-min+1) -- fromCurrentBounds
+        // declines the whole citation, exercising the ValueSetNogoodConstraint fallback instead.
+        var gappedT = IntRangeDomain.of(10, 20).toBuilder().delete(15).build();
         var result = SquareVariableConstraint.of(X, Operator.EQ, T)
-                .propagateWithReasons(Map.of(X, IntRangeDomain.of(-2, 2), T, IntRangeDomain.of(10, 20)));
+                .propagateWithReasons(Map.of(X, IntRangeDomain.of(-2, 2), T, gappedT));
         assertThat(result.isInfeasible()).isTrue();
         assertThat(result.reason()).isNotNull();
     }

@@ -46,9 +46,12 @@ import java.util.function.Function;
  * eq(add(le(c,v)+),c)} (a sliding-window "count of these thresholds met" idiom) alone accounts for
  * 61 of 104 residual {@code PredicateConstraint} occurrences across the corpus.
  * <p>
- * Only checks {@code add} as {@code tree.sons[0]}, not the reverse, matching {@link
- * SumOrLinearRecognizer}'s own confirmed canonizer-ordering guarantee (the compound side always
- * precedes a plain variable/constant target).
+ * Checks {@code add} at both {@code tree.sons[0]} and {@code tree.sons[1]}, matching {@link
+ * SumOrLinearRecognizer}'s own identical dual-order fix: the compound side precedes a plain
+ * variable/constant target for an originally-written {@code eq}/{@code le}/{@code lt}, but {@code
+ * ge}/{@code gt}'s canonizer rewrite to {@code le}/{@code lt} swaps operands regardless of which
+ * side is compound (e.g. {@code ge(add(r1,r2),1)} arrives as {@code le(1,add(r1,r2))}), moving
+ * {@code add} to {@code sons[1]} and requiring the operator to be flipped back.
  */
 final class RelationSumRecognizer implements ConstraintRecognizer {
 
@@ -72,12 +75,21 @@ final class RelationSumRecognizer implements ConstraintRecognizer {
     @Override
     public Optional<Constraint> recognize(XNode<XVarInteger> tree) {
         Operator operator = Xcsp3CallbackHandler.intensionRelationalOperator(tree.getType());
-        if (operator == null || tree.sons.length != 2 || tree.sons[0].getType() != TypeExpr.ADD) {
+        if (operator == null || tree.sons.length != 2) {
             return Optional.empty();
         }
-        XNode<XVarInteger> addSide = tree.sons[0];
-        XNode<XVarInteger> targetSide = tree.sons[1];
+        if (tree.sons[0].getType() == TypeExpr.ADD) {
+            Optional<Constraint> result = recognizeAgainstAdd(tree.sons[0], operator, tree.sons[1]);
+            if (result.isPresent()) return result;
+        }
+        if (tree.sons[1].getType() == TypeExpr.ADD) {
+            return recognizeAgainstAdd(tree.sons[1], Xcsp3CallbackHandler.flip(operator), tree.sons[0]);
+        }
+        return Optional.empty();
+    }
 
+    private Optional<Constraint> recognizeAgainstAdd(
+            XNode<XVarInteger> addSide, Operator operator, XNode<XVarInteger> targetSide) {
         Optional<List<Constraint>> terms = ConstraintRecognizer.resolveEachChild(addSide, dispatch);
         if (terms.isEmpty()) {
             return Optional.empty();

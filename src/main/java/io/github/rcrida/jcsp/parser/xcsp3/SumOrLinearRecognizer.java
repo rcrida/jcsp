@@ -48,13 +48,23 @@ import java.util.Optional;
  * three-term {@code add(x,y,w)} before {@code buildCtrIntension} ever sees it, since {@code add} is
  * associative -- so that specific "anything deeper" case is unreachable dead code, not a real gap.
  * <p>
- * Only checks {@code add} as {@code tree.sons[0]}, not the reverse, and only checks {@code
- * mul(var, constant)} operand order within each term, not the reverse: confirmed empirically that
- * {@code xcsp3-tools}' canonizer always places the compound {@code add} first against a plain
- * variable/constant target, and always places a {@code mul} term's variable operand before its
- * constant one -- the same complexity-based reordering {@link GroundRelationRecognizer}'s own
- * {@code EQ}/{@code NEQ} handling relies on. A defensive reverse-order check on either would be
- * permanently dead code.
+ * Checks {@code add} at both {@code tree.sons[0]} and {@code tree.sons[1]}: {@code xcsp3-tools}'
+ * canonizer places the compound {@code add} first against a plain variable/constant target for an
+ * originally-written {@code eq}/{@code le}/{@code lt}, the same complexity-based reordering {@link
+ * GroundRelationRecognizer}'s own {@code EQ}/{@code NEQ} handling relies on -- but {@code ge}/
+ * {@code gt} are always rewritten to {@code le}/{@code lt} with operands <em>swapped</em> (e.g.
+ * {@code ge(add(x,y),6)} arrives here as {@code le(6,add(x,y))}), which moves the compound side to
+ * {@code sons[1]} regardless of its complexity. Confirmed via a direct probe against a real parsed
+ * tree ({@code ge(add(x,y),6)} on small domains produced {@code LE} with {@code son0=LONG,
+ * son1=ADD}), meaning a source file using {@code ge}/{@code gt} against an {@code add(...)}
+ * operand was previously unrecognized here entirely -- the {@code sons[1]}-as-{@code add} case
+ * flips the operator (mirroring {@link ProductRecognizer}'s identical dual-order fix, itself
+ * mirroring {@link GroundRelationRecognizer}'s own dual-order handling) since {@code target <op>
+ * addResult} is the reverse relation of {@code addResult <op> target}. Only {@code mul(var,
+ * constant)}'s own operand order within each term is still checked one way only, not the reverse:
+ * confirmed empirically that {@code xcsp3-tools}' canonizer always places a {@code mul} term's
+ * variable operand before its constant one regardless of the outer relation's operator -- a
+ * defensive reverse-order check there would be permanently dead code.
  * <p>
  * The target side falls back to {@link Xcsp3CallbackHandler#resolveVariable} (materializing a
  * {@code neg}/{@code sub}/{@code div}/{@code mod} auxiliary) once both {@code asVariable} and
@@ -74,12 +84,21 @@ final class SumOrLinearRecognizer implements ConstraintRecognizer {
     @Override
     public Optional<Constraint> recognize(XNode<XVarInteger> tree) {
         Operator operator = Xcsp3CallbackHandler.intensionRelationalOperator(tree.getType());
-        if (operator == null || tree.sons.length != 2 || tree.sons[0].getType() != TypeExpr.ADD) {
+        if (operator == null || tree.sons.length != 2) {
             return Optional.empty();
         }
-        XNode<XVarInteger> addSide = tree.sons[0];
-        XNode<XVarInteger> targetSide = tree.sons[1];
+        if (tree.sons[0].getType() == TypeExpr.ADD) {
+            Optional<Constraint> result = recognizeAgainstAdd(tree.sons[0], operator, tree.sons[1]);
+            if (result.isPresent()) return result;
+        }
+        if (tree.sons[1].getType() == TypeExpr.ADD) {
+            return recognizeAgainstAdd(tree.sons[1], Xcsp3CallbackHandler.flip(operator), tree.sons[0]);
+        }
+        return Optional.empty();
+    }
 
+    private Optional<Constraint> recognizeAgainstAdd(
+            XNode<XVarInteger> addSide, Operator operator, XNode<XVarInteger> targetSide) {
         Map<Variable<Integer>, Integer> coefficients = new LinkedHashMap<>();
         for (XNode<XVarInteger> term : addSide.sons) {
             if (!addTerm(coefficients, term)) {
