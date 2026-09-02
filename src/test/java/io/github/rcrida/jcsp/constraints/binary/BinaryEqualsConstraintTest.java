@@ -1,11 +1,15 @@
 package io.github.rcrida.jcsp.constraints.binary;
 
 import io.github.rcrida.jcsp.assignments.Assignment;
+import io.github.rcrida.jcsp.constraints.nary.ValueSetNogoodConstraint;
+import io.github.rcrida.jcsp.domains.Domain;
+import io.github.rcrida.jcsp.domains.DiscreteDomain;
 import io.github.rcrida.jcsp.variables.Variable;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.util.Map;
+import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -62,5 +66,73 @@ public class BinaryEqualsConstraintTest {
     @Test
     void of_createsEquivalentConstraint() {
         assertThat(BinaryEqualsConstraint.of(left, right)).isEqualTo(constraint);
+    }
+
+    // --- propagate() ---
+
+    @Test
+    void propagate_bothSidesNarrowedToIntersection() {
+        // x1∈{1,4}, x2∈{2,4}: a gapped pair bounds-only reasoning would under-prune (bounds
+        // intersection [max(1,2), min(4,4)] = [2,4] narrows x1 to {4} but leaves x2 at {2,4},
+        // retaining 2 even though it now has no support) -- a real value-level intersection
+        // narrows both to {4} directly.
+        var domains = Map.<Variable<?>, Domain<?>>of(
+                left, DiscreteDomain.of(1, 4),
+                right, DiscreteDomain.of(2, 4));
+        var result = constraint.propagate(domains);
+        assertThat(result).isPresent();
+        assertThat(result.get().get(left)).isEqualTo(DiscreteDomain.of(4));
+        assertThat(result.get().get(right)).isEqualTo(DiscreteDomain.of(4));
+    }
+
+    @Test
+    void propagate_onlyOneSideNarrows() {
+        var domains = Map.<Variable<?>, Domain<?>>of(
+                left, DiscreteDomain.of(1, 2, 3),
+                right, DiscreteDomain.of(2, 3));
+        var result = constraint.propagate(domains);
+        assertThat(result).isPresent();
+        assertThat(result.get().get(left)).isEqualTo(DiscreteDomain.of(2, 3));
+        assertThat(result.get()).doesNotContainKey(right);
+    }
+
+    @Test
+    void propagate_intersectionAlreadyEqual_returnsEmptyMap() {
+        var domains = Map.<Variable<?>, Domain<?>>of(
+                left, DiscreteDomain.of(1, 2),
+                right, DiscreteDomain.of(1, 2));
+        var result = constraint.propagate(domains);
+        assertThat(result).isPresent();
+        assertThat(result.get()).isEmpty();
+    }
+
+    @Test
+    void propagate_disjointDomains_infeasible() {
+        var domains = Map.<Variable<?>, Domain<?>>of(
+                left, DiscreteDomain.of(1, 2),
+                right, DiscreteDomain.of(3, 4));
+        assertThat(constraint.propagate(domains)).isEmpty();
+    }
+
+    // --- propagateWithReasons() ---
+
+    @Test
+    void propagateWithReasons_feasible_returnsEmptyReason() {
+        var domains = Map.<Variable<?>, Domain<?>>of(
+                left, DiscreteDomain.of(1, 4),
+                right, DiscreteDomain.of(2, 4));
+        var result = constraint.propagateWithReasons(domains);
+        assertThat(result.isInfeasible()).isFalse();
+    }
+
+    @Test
+    void propagateWithReasons_infeasible_citesBothSidesExactValueSets() {
+        var domains = Map.<Variable<?>, Domain<?>>of(
+                left, DiscreteDomain.of(1, 2),
+                right, DiscreteDomain.of(3, 4));
+        var result = constraint.propagateWithReasons(domains);
+        assertThat(result.isInfeasible()).isTrue();
+        assertThat(result.reason()).isEqualTo(ValueSetNogoodConstraint.of(Map.of(
+                left, Set.of(1, 2), right, Set.of(3, 4))));
     }
 }

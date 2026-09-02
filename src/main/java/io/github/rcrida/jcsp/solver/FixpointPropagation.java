@@ -17,6 +17,8 @@ import io.github.rcrida.jcsp.constraints.nary.AbsoluteDifferenceVariableConstrai
 import io.github.rcrida.jcsp.constraints.binary.SquareVariableConstraint;
 import io.github.rcrida.jcsp.constraints.unary.SquareConstraint;
 import io.github.rcrida.jcsp.constraints.binary.BinaryComparatorConstraint;
+import io.github.rcrida.jcsp.constraints.binary.BinaryEqualsConstraint;
+import io.github.rcrida.jcsp.constraints.binary.BinaryNotEqualsConstraint;
 import io.github.rcrida.jcsp.constraints.binary.BinaryOffsetConstraint;
 import io.github.rcrida.jcsp.constraints.binary.DivisionConstraint;
 import io.github.rcrida.jcsp.constraints.binary.SubsetConstraint;
@@ -145,6 +147,8 @@ public class FixpointPropagation {
             FixpointConsistency.of(UnaryInSetConstraint.class),
             FixpointConsistency.of(BinaryComparatorConstraint.class),
             FixpointConsistency.of(BinaryOffsetConstraint.class),
+            FixpointConsistency.of(BinaryEqualsConstraint.class),
+            FixpointConsistency.of(BinaryNotEqualsConstraint.class),
             FixpointConsistency.of(AbsoluteDifferenceConstraint.class),
             FixpointConsistency.of(AbsoluteDifferenceVariableConstraint.class),
             FixpointConsistency.of(SquareConstraint.class),
