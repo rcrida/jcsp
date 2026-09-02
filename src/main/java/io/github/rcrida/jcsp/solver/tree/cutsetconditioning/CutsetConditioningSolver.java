@@ -131,17 +131,35 @@ public class CutsetConditioningSolver extends SolverDecorator {
      * {@code takeWhile}'s own parallel-mode buffering, the second from the JDK's unsized-source
      * spliterator batching growing without bound when nothing ever matches -- neither is specific
      * to the cutset-assignment source itself, so no restructuring of just the check avoids them).
+     * <p>
+     * Branches explicitly on whether {@link #decomposeCsp} found a decomposition, rather than one
+     * post-hoc {@code solution.isEmpty() && cancellation.isCancelled()} check after either path --
+     * the two paths have different "current search space" available to snapshot into {@link
+     * Statistics#updateCurrentSearchSpace} on cancellation. With no decomposition, {@code
+     * getInner()} (whatever it wraps, not necessarily {@link
+     * io.github.rcrida.jcsp.solver.DomWdegLubySearch}) is the only search that ran, so this
+     * problem's own {@code csp} is the best available approximation, same as before. With a
+     * decomposition, {@link #solveByCutsetBatches} is this decorator's own search and already
+     * knows a strictly narrower, real state -- {@link Decomposition#tree}, the residual sub-problem
+     * actually being repeatedly handed to {@link #treeSolver} -- so it snapshots that itself rather
+     * than leaving this method to fall back to the wider, undecomposed {@code csp}.
      */
     @Override
     public Optional<Assignment> getSolution(@NonNull ConstraintSatisfactionProblem csp) {
         if (csp.isTree()) {
             return treeSolver.getSolution(csp);
         }
-        Optional<Assignment> solution = decomposeCsp(csp)
-                .map(this::solveByCutsetBatches)
-                .orElseGet(() -> getInner().getSolution(csp));
+        Optional<Decomposition> decomposition = decomposeCsp(csp);
+        if (decomposition.isEmpty()) {
+            Optional<Assignment> solution = getInner().getSolution(csp);
+            if (solution.isEmpty() && cancellation.isCancelled()) {
+                statistics.updateCurrentSearchSpace(csp.getSearchSpace());
+                throw new SolverCancelledException(statistics);
+            }
+            return solution;
+        }
+        Optional<Assignment> solution = solveByCutsetBatches(decomposition.get());
         if (solution.isEmpty() && cancellation.isCancelled()) {
-            statistics.updateCurrentSearchSpace(csp.getSearchSpace());
             throw new SolverCancelledException(statistics);
         }
         return solution;
@@ -160,7 +178,12 @@ public class CutsetConditioningSolver extends SolverDecorator {
      * bounded batches of {@link #CUTSET_BATCH_SIZE} rather than parallelizing over it directly,
      * trying each batch (in parallel) against {@link #treeSolver} before pulling the next; checks
      * {@link #cancellation} between batches, bounding cancellation latency to one batch's worth of
-     * work instead of the whole (potentially unbounded) enumeration.
+     * work instead of the whole (potentially unbounded) enumeration. When the loop ends because
+     * {@link #cancellation} was detected (as opposed to genuinely exhausting every cutset
+     * assignment without any extending to a full solution), snapshots {@link Decomposition#tree}'s
+     * own search space into {@link Statistics#updateCurrentSearchSpace} -- the residual sub-problem
+     * this method was actually, repeatedly handing to {@link #treeSolver}, strictly narrower than
+     * the full undecomposed problem {@link #getSolution}'s own fallback would otherwise report.
      */
     private Optional<Assignment> solveByCutsetBatches(Decomposition decomposition) {
         Iterator<Assignment> cutsetAssignments = getSolutions(decomposition.cycleCutset).iterator();
@@ -178,6 +201,9 @@ public class CutsetConditioningSolver extends SolverDecorator {
             if (found.isPresent()) {
                 return found;
             }
+        }
+        if (cancellation.isCancelled()) {
+            statistics.updateCurrentSearchSpace(decomposition.tree.getSearchSpace());
         }
         return Optional.empty();
     }

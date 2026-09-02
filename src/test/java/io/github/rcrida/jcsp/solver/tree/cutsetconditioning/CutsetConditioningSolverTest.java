@@ -3,6 +3,7 @@ package io.github.rcrida.jcsp.solver.tree.cutsetconditioning;
 import lombok.val;
 import io.github.rcrida.jcsp.ConstraintSatisfactionProblem;
 import io.github.rcrida.jcsp.assignments.Assignment;
+import io.github.rcrida.jcsp.assignments.Statistics;
 import io.github.rcrida.jcsp.constraints.nary.PredicateConstraint;
 import io.github.rcrida.jcsp.domains.Domain;
 import io.github.rcrida.jcsp.domains.IntRangeDomain;
@@ -17,6 +18,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -315,6 +317,110 @@ public class CutsetConditioningSolverTest {
                 .inner(cycleCutsetSolver).treeSolver(treeSolver).cancellation(cancellation).build();
         assertThatThrownBy(() -> cancellable.getSolution(CUTSET_CONDITIONING_PROBLEM))
                 .isInstanceOf(SolverCancelledException.class);
+    }
+
+    @Test
+    void getSolution_cancelledDuringCutsetBatches_snapshotsTreeSearchSpaceNotFullProblem() {
+        // CUTSET_CONDITIONING_PROBLEM: T1-T4 (domain size 9) form the tree, C is the cutset --
+        // full problem search space is 9^5 = 59049, but the tree alone is 9^4 = 6561. Cancellation
+        // is detected inside solveByCutsetBatches's own loop, which now snapshots decomposition.tree
+        // directly rather than leaving getSolution to fall back to the wider, undecomposed csp.
+        val cutset = ConstraintSatisfactionProblem.builder()
+                .variableDomain(C, DOMAIN)
+                .build();
+        val cutsetAssignment = Assignment.builder().value(C, 1).build();
+        doReturn(Stream.of(cutsetAssignment)).when(treeSolver).getSolutions(cutset);
+
+        Cancellation cancellation = new Cancellation();
+        cancellation.cancel();
+        Statistics statistics = new Statistics();
+        val cancellable = CutsetConditioningSolver.builder()
+                .inner(cycleCutsetSolver).treeSolver(treeSolver).cancellation(cancellation).statistics(statistics).build();
+        assertThatThrownBy(() -> cancellable.getSolution(CUTSET_CONDITIONING_PROBLEM))
+                .isInstanceOf(SolverCancelledException.class);
+        assertThat(statistics.getCurrentSearchSpace()).contains(BigInteger.valueOf(6561));
+    }
+
+    @Test
+    void getSolution_cutsetAssignmentsExhaustedWithoutCancellation_doesNotSnapshotSearchSpace() {
+        // The cutset enumeration genuinely runs out of assignments (none extend to a full
+        // solution) without cancellation ever firing -- solveByCutsetBatches's loop ends via
+        // exhaustion, not cancellation, so it must not touch currentSearchSpace.
+        val cutset = ConstraintSatisfactionProblem.builder()
+                .variableDomain(C, DOMAIN)
+                .build();
+        doReturn(Stream.<Assignment>empty()).when(treeSolver).getSolutions(cutset);
+
+        Statistics statistics = new Statistics();
+        val cancellable = CutsetConditioningSolver.builder()
+                .inner(cycleCutsetSolver).treeSolver(treeSolver).statistics(statistics).build();
+        assertThat(cancellable.getSolution(CUTSET_CONDITIONING_PROBLEM)).isEmpty();
+        assertThat(statistics.getCurrentSearchSpace()).isEmpty();
+    }
+
+    @Test
+    void getSolution_noDecompositionFoundGenuineUnsatWithoutCancellation_doesNotSnapshotSearchSpace() {
+        // Same fixture as getSolution_noTreeAtAll, but genuinely UNSAT (no cancellation ever
+        // fires) -- getInner().getSolution(csp) returns empty on its own merits, so this branch
+        // must not touch currentSearchSpace either.
+        Variable<Integer> a = VARIABLE_FACTORY.create("A_unsat");
+        Variable<Integer> b = VARIABLE_FACTORY.create("B_unsat");
+        Variable<Integer> c = VARIABLE_FACTORY.create("C_unsat");
+        Variable<Integer> d = VARIABLE_FACTORY.create("D_unsat");
+        val csp = ConstraintSatisfactionProblem.builder()
+                .variableDomain(a, DOMAIN)
+                .variableDomain(b, DOMAIN)
+                .variableDomain(c, DOMAIN)
+                .variableDomain(d, DOMAIN)
+                .notEqualsConstraint(c, d)
+                .constraint(PredicateConstraint.builder().variables(Set.of(a, b, c)).predicate(assignment -> {
+                    val A = (int) assignment.getValue(a).get();
+                    val B = (int) assignment.getValue(b).get();
+                    val C = (int) assignment.getValue(c).get();
+                    return A + B == C;
+                }).build())
+                .build();
+        when(cycleCutsetSolver.getSolution(csp)).thenReturn(Optional.empty());
+
+        Statistics statistics = new Statistics();
+        val cancellable = CutsetConditioningSolver.builder()
+                .inner(cycleCutsetSolver).treeSolver(treeSolver).statistics(statistics).build();
+        assertThat(cancellable.getSolution(csp)).isEmpty();
+        assertThat(statistics.getCurrentSearchSpace()).isEmpty();
+    }
+
+    @Test
+    void getSolution_noDecompositionFoundAndCancelled_snapshotsFullUndecomposedCsp() {
+        // Same fixture as getSolution_noTreeAtAll: the PredicateConstraint over {a,b,c} makes all
+        // of a,b,c unsplittable, and decomposeCsp finds nothing -- getInner().getSolution(csp) is
+        // the only search that ran, so this branch's fallback snapshot is the full csp itself
+        // (there's no narrower Decomposition available here, unlike the cutset-batches path).
+        Variable<Integer> a = VARIABLE_FACTORY.create("A_ndc");
+        Variable<Integer> b = VARIABLE_FACTORY.create("B_ndc");
+        Variable<Integer> c = VARIABLE_FACTORY.create("C_ndc");
+        Variable<Integer> d = VARIABLE_FACTORY.create("D_ndc");
+        val csp = ConstraintSatisfactionProblem.builder()
+                .variableDomain(a, DOMAIN)
+                .variableDomain(b, DOMAIN)
+                .variableDomain(c, DOMAIN)
+                .variableDomain(d, DOMAIN)
+                .notEqualsConstraint(c, d)
+                .constraint(PredicateConstraint.builder().variables(Set.of(a, b, c)).predicate(assignment -> {
+                    val A = (int) assignment.getValue(a).get();
+                    val B = (int) assignment.getValue(b).get();
+                    val C = (int) assignment.getValue(c).get();
+                    return A + B == C;
+                }).build())
+                .build();
+        when(cycleCutsetSolver.getSolution(csp)).thenReturn(Optional.empty());
+
+        Cancellation cancellation = new Cancellation();
+        cancellation.cancel();
+        Statistics statistics = new Statistics();
+        val cancellable = CutsetConditioningSolver.builder()
+                .inner(cycleCutsetSolver).treeSolver(treeSolver).cancellation(cancellation).statistics(statistics).build();
+        assertThatThrownBy(() -> cancellable.getSolution(csp)).isInstanceOf(SolverCancelledException.class);
+        assertThat(statistics.getCurrentSearchSpace()).contains(csp.getSearchSpace());
     }
 
     @Test
