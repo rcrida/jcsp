@@ -109,13 +109,28 @@ public class Statistics {
     }
 
     /**
-     * Overwrites {@link #currentSearchSpace} with {@code searchSpace} — unlike every other mutator
-     * on this class, not additive. Called exactly once per solve, at whichever cancellation-check
-     * site first observes {@link io.github.rcrida.jcsp.solver.Cancellation#isCancelled()} and stops
-     * search because of it.
+     * Sets {@link #currentSearchSpace} to {@code searchSpace} the <em>first</em> time this is
+     * called for a given {@link Statistics} instance — every later call is a no-op, unlike every
+     * other mutator on this class (all otherwise additive). This is deliberate, not just an
+     * optimization: several cancellation-detection sites ({@link
+     * io.github.rcrida.jcsp.solver.BranchAndBoundSolver#getSolutions}, {@link
+     * io.github.rcrida.jcsp.solver.DomWdegLubySearch#getSolutions}, {@link
+     * io.github.rcrida.jcsp.solver.SetBranchingSolver}) signal cancellation by returning an empty
+     * result from a {@code Stream} filter/step rather than throwing, which lets the enclosing lazy
+     * stream keep pulling and re-checking every remaining sibling candidate at every ancestor level
+     * as the recursion unwinds — since {@link io.github.rcrida.jcsp.solver.Cancellation} is a
+     * sticky, one-way flag, each of those re-checks would also call this method again, and unwinding
+     * proceeds from deep (narrow, meaningful) states back toward shallow (wide, close to the
+     * original) ones. A plain overwrite would let the last, shallowest, least useful re-detection
+     * clobber the true state at the actual moment of cancellation; first-write-wins keeps that first,
+     * deepest snapshot instead. Implemented via {@link AtomicReference#compareAndSet}, which also
+     * makes this correctly thread-safe for the case where {@link
+     * io.github.rcrida.jcsp.solver.IndependentSubproblemSolver} runs multiple subproblems
+     * concurrently sharing one {@link Statistics} instance and more than one independently detects
+     * cancellation.
      */
     public void updateCurrentSearchSpace(BigInteger searchSpace) {
-        currentSearchSpace.set(searchSpace);
+        currentSearchSpace.compareAndSet(null, searchSpace);
     }
 
     void add(Statistics other) {

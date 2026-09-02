@@ -29,10 +29,12 @@ public class StatisticsTest {
     }
 
     @Test
-    void updateCurrentSearchSpace_overwritesNotAccumulates() {
+    void updateCurrentSearchSpace_firstCallWinsLaterCallsAreNoOps() {
+        // Deliberate first-write-wins semantics, not overwrite -- see the method's own Javadoc for
+        // why (repeated re-detection of the same cancellation as a lazy stream unwinds).
         val statistics = new Statistics();
-        statistics.updateCurrentSearchSpace(BigInteger.valueOf(100));
         statistics.updateCurrentSearchSpace(BigInteger.valueOf(7));
+        statistics.updateCurrentSearchSpace(BigInteger.valueOf(100));
         assertThat(statistics.getCurrentSearchSpace()).contains(BigInteger.valueOf(7));
     }
 
