@@ -345,7 +345,10 @@ public class FixpointPropagation {
             @NonNull ConstraintSatisfactionProblem csp, @Nullable Set<Variable<?>> initialSeed,
             @NonNull SolverListener listener, @NonNull Statistics statistics, @NonNull Cancellation cancellation) {
         log.debug("applyFixpoint");
-        if (cancellation.isCancelled()) throw new SolverCancelledException(statistics);
+        if (cancellation.isCancelled()) {
+            statistics.updateCurrentSearchSpace(csp.getSearchSpace());
+            throw new SolverCancelledException(statistics);
+        }
         var current = csp;
         Set<Variable<?>> changedVariables = initialSeed;
         boolean changed = true;
@@ -353,7 +356,10 @@ public class FixpointPropagation {
             Map<Variable<?>, Domain<?>> before = current.getVariableDomains();
             double domainSumBefore = domainSum(current);
             for (var propagator : propagators) {
-                if (cancellation.isCancelled()) throw new SolverCancelledException(statistics);
+                if (cancellation.isCancelled()) {
+                    statistics.updateCurrentSearchSpace(current.getSearchSpace());
+                    throw new SolverCancelledException(statistics);
+                }
                 var beforePropagator = current;
                 var after = propagator.apply(current, changedVariables);
                 if (after.isEmpty()) return Optional.empty();
@@ -401,7 +407,10 @@ public class FixpointPropagation {
             @NonNull ConstraintSatisfactionProblem csp, @Nullable Set<Variable<?>> initialSeed,
             @NonNull SolverListener listener, @NonNull Statistics statistics, @NonNull Cancellation cancellation) {
         log.debug("applyFixpointWithReason");
-        if (cancellation.isCancelled()) throw new SolverCancelledException(statistics);
+        if (cancellation.isCancelled()) {
+            statistics.updateCurrentSearchSpace(csp.getSearchSpace());
+            throw new SolverCancelledException(statistics);
+        }
         var current = csp;
         Set<Variable<?>> changedVariables = initialSeed;
         boolean changed = true;
@@ -409,7 +418,10 @@ public class FixpointPropagation {
             Map<Variable<?>, Domain<?>> before = current.getVariableDomains();
             double domainSumBefore = domainSum(current);
             for (var propagator : propagators) {
-                if (cancellation.isCancelled()) throw new SolverCancelledException(statistics);
+                if (cancellation.isCancelled()) {
+                    statistics.updateCurrentSearchSpace(current.getSearchSpace());
+                    throw new SolverCancelledException(statistics);
+                }
                 var beforePropagator = current;
                 ConsistencyResult after = propagator.applyWithReason(current, changedVariables);
                 if (after.isInfeasible()) {

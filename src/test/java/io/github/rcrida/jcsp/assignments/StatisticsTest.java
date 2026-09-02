@@ -3,6 +3,8 @@ package io.github.rcrida.jcsp.assignments;
 import lombok.val;
 import org.junit.jupiter.api.Test;
 
+import java.math.BigInteger;
+
 import static org.assertj.core.api.Assertions.assertThat;
 
 public class StatisticsTest {
@@ -11,6 +13,27 @@ public class StatisticsTest {
         val statistics = new Statistics();
         assertThat(statistics.getNodesExplored().get()).isZero();
         assertThat(statistics.getConstraintChecks().get()).isZero();
+    }
+
+    @Test
+    void initialCurrentSearchSpaceIsEmpty() {
+        val statistics = new Statistics();
+        assertThat(statistics.getCurrentSearchSpace()).isEmpty();
+    }
+
+    @Test
+    void updateCurrentSearchSpace() {
+        val statistics = new Statistics();
+        statistics.updateCurrentSearchSpace(BigInteger.valueOf(42));
+        assertThat(statistics.getCurrentSearchSpace()).contains(BigInteger.valueOf(42));
+    }
+
+    @Test
+    void updateCurrentSearchSpace_overwritesNotAccumulates() {
+        val statistics = new Statistics();
+        statistics.updateCurrentSearchSpace(BigInteger.valueOf(100));
+        statistics.updateCurrentSearchSpace(BigInteger.valueOf(7));
+        assertThat(statistics.getCurrentSearchSpace()).contains(BigInteger.valueOf(7));
     }
 
     @Test
@@ -76,6 +99,7 @@ public class StatisticsTest {
         b.incrementConstraintChecks();
         b.incrementConstraintChecks();
         b.addRestarts(2);
+        b.updateCurrentSearchSpace(BigInteger.valueOf(99));
         a.add(b);
         assertThat(a.getNodesExplored().get()).isEqualTo(1);
         assertThat(a.getConstraintChecks().get()).isEqualTo(2);
@@ -84,5 +108,15 @@ public class StatisticsTest {
         assertThat(a.getSteps().get()).isEqualTo(1);
         assertThat(a.getNogoodsLearned().get()).isEqualTo(1);
         assertThat(a.getNogoodRejections().get()).isEqualTo(1);
+        assertThat(a.getCurrentSearchSpace()).contains(BigInteger.valueOf(99));
+    }
+
+    @Test
+    void add_otherHasNoCurrentSearchSpace_leavesExistingValueUnchanged() {
+        val a = new Statistics();
+        a.updateCurrentSearchSpace(BigInteger.valueOf(5));
+        val b = new Statistics();
+        a.add(b);
+        assertThat(a.getCurrentSearchSpace()).contains(BigInteger.valueOf(5));
     }
 }

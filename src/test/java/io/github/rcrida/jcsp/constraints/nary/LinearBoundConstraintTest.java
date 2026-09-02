@@ -12,6 +12,7 @@ import io.github.rcrida.jcsp.variables.Variable;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -394,10 +395,20 @@ public class LinearBoundConstraintTest {
         // interval-bounds check independently passes (e.g. x1's derived range is [-1,10], which
         // contains all of {2,4,8}) -- only the subset-sum coverage pass, reasoning about actual
         // combinations across all three variables jointly, catches this.
+        //
+        // Deliberately a LinkedHashMap, not Map.of(...): this specific x1/x2/x3 term ordering is
+        // what forces the DP's backward-iteration branch for the middle term (see
+        // SubsetSumCoveragePropagation's own coverage), and Map.of's iteration order for 3+ entries
+        // is randomized per JVM launch (JEP 269's ImmutableCollections salt) -- a Map.of(...) here
+        // would make that branch's coverage flaky across separate `mvn verify` runs.
         Variable<Integer> x1 = F.create("x1_3t");
         Variable<Integer> x2 = F.create("x2_3t");
         Variable<Integer> x3 = F.create("x3_3t");
-        var c = LinearBoundConstraint.of(Map.of(x1, 1, x2, 1, x3, 1), Operator.EQ, 10);
+        Map<Variable<Integer>, Integer> coefficients = new LinkedHashMap<>();
+        coefficients.put(x1, 1);
+        coefficients.put(x2, 1);
+        coefficients.put(x3, 1);
+        var c = LinearBoundConstraint.of(coefficients, Operator.EQ, 10);
         var domains = Map.<Variable<?>, Domain<?>>of(
                 x1, DiscreteDomain.of(2, 4, 8),
                 x2, DiscreteDomain.of(0, 7),

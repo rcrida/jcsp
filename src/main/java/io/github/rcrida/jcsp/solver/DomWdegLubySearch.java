@@ -181,6 +181,9 @@ public class DomWdegLubySearch implements Solver {
                     Assignment next = assignment.withValue((Variable<Object>) variable, value);
                     if (limits.checkStop(cancellation, next.getStatistics().getNodesExplored().get(), deadline)
                             != SolverLimits.StopReason.NONE) {
+                        if (cancellation.isCancelled()) {
+                            statistics.updateCurrentSearchSpace(csp.getSearchSpace());
+                        }
                         return Stream.empty();
                     }
                     ConstraintSatisfactionProblem cspWithNogoods = nogoodStore.apply(csp);
@@ -244,7 +247,10 @@ public class DomWdegLubySearch implements Solver {
         for (Object value : domainValuesOrderer.order(csp, variable, assignment).toList()) {
             Assignment next = assignment.withValue((Variable<Object>) variable, value);
             switch (limits.checkStop(cancellation, next.getStatistics().getNodesExplored().get(), deadline)) {
-                case CANCELLED -> throw new SolverCancelledException(statistics);
+                case CANCELLED -> {
+                    statistics.updateCurrentSearchSpace(csp.getSearchSpace());
+                    throw new SolverCancelledException(statistics);
+                }
                 case LIMIT_EXCEEDED -> throw LimitsExceeded.INSTANCE;
                 case NONE -> {}
             }

@@ -141,6 +141,7 @@ public class CutsetConditioningSolver extends SolverDecorator {
                 .map(this::solveByCutsetBatches)
                 .orElseGet(() -> getInner().getSolution(csp));
         if (solution.isEmpty() && cancellation.isCancelled()) {
+            statistics.updateCurrentSearchSpace(csp.getSearchSpace());
             throw new SolverCancelledException(statistics);
         }
         return solution;

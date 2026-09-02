@@ -123,8 +123,10 @@ class Xcsp3ProblemRunnerTest {
         Xcsp3ProblemRunner.solve(instance, Cancellation.NEVER, SolverListener.NONE, printStreamInto(buffer));
 
         List<String> lines = buffer.toString(StandardCharsets.UTF_8).lines().toList();
-        assertThat(lines.get(0)).isEqualTo("s UNSATISFIABLE");
-        assertThat(lines.get(1)).startsWith("c stats: Statistics(");
+        assertThat(lines.get(0)).isEqualTo("c search-space-before: 2");
+        assertThat(lines.get(1)).isEqualTo("s UNSATISFIABLE");
+        assertThat(lines.get(2)).startsWith("c stats: Statistics(");
+        assertThat(lines).hasSize(3); // never cancelled -- no c search-space-after: line at all
     }
 
     @Test void satisfaction_cancelledBeforeSearchCompletes_reportsUnknown() {
@@ -157,8 +159,10 @@ class Xcsp3ProblemRunnerTest {
         Xcsp3ProblemRunner.solve(instance, cancellation, cancelOnFirstNode, printStreamInto(buffer));
 
         List<String> lines = buffer.toString(StandardCharsets.UTF_8).lines().toList();
-        assertThat(lines.get(0)).isEqualTo("s UNKNOWN");
-        assertThat(lines.get(1)).startsWith("c stats: Statistics(");
+        assertThat(lines.get(0)).isEqualTo("c search-space-before: 256");
+        assertThat(lines.get(1)).isEqualTo("s UNKNOWN");
+        assertThat(lines.get(2)).startsWith("c stats: Statistics(");
+        assertThat(lines.get(3)).isEqualTo("c search-space-after: 256");
     }
 
     // ---- optimization chain -------------------------------------------------------------------------------------
@@ -194,8 +198,10 @@ class Xcsp3ProblemRunnerTest {
         Xcsp3ProblemRunner.solve(instance, Cancellation.NEVER, SolverListener.NONE, printStreamInto(buffer));
 
         List<String> lines = buffer.toString(StandardCharsets.UTF_8).lines().toList();
-        assertThat(lines.get(0)).isEqualTo("s UNSATISFIABLE");
-        assertThat(lines.get(1)).startsWith("c stats: Statistics(");
+        assertThat(lines.get(0)).isEqualTo("c search-space-before: 2");
+        assertThat(lines.get(1)).isEqualTo("s UNSATISFIABLE");
+        assertThat(lines.get(2)).startsWith("c stats: Statistics(");
+        assertThat(lines).hasSize(3); // never cancelled -- no c search-space-after: line at all
     }
 
     @Test void optimization_cancelledBeforeAnySolutionFound_reportsUnknown() {
@@ -212,8 +218,10 @@ class Xcsp3ProblemRunnerTest {
         Xcsp3ProblemRunner.solve(instance, cancellation, SolverListener.NONE, printStreamInto(buffer));
 
         List<String> lines = buffer.toString(StandardCharsets.UTF_8).lines().toList();
-        assertThat(lines.get(0)).isEqualTo("s UNKNOWN");
-        assertThat(lines.get(1)).startsWith("c stats: Statistics(");
+        assertThat(lines.get(0)).isEqualTo("c search-space-before: 3");
+        assertThat(lines.get(1)).isEqualTo("s UNKNOWN");
+        assertThat(lines.get(2)).startsWith("c stats: Statistics(");
+        assertThat(lines.get(3)).isEqualTo("c search-space-after: 3");
     }
 
     @Test void optimization_cancelledAfterFirstIncumbent_reportsSatisfiableNotProvenOptimal() {

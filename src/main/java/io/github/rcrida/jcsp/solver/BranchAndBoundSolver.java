@@ -326,6 +326,9 @@ public class BranchAndBoundSolver implements Solver {
                 .filter(next -> {
                     if (limits.checkStop(cancellation, next.getStatistics().getNodesExplored().get(), deadline)
                             != SolverLimits.StopReason.NONE) {
+                        if (cancellation.isCancelled()) {
+                            statistics.updateCurrentSearchSpace(csp.getSearchSpace());
+                        }
                         return false;
                     }
                     if (!next.isConsistent(cspWithNogoods)) {

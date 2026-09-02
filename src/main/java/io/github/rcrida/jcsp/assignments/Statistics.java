@@ -1,8 +1,13 @@
 package io.github.rcrida.jcsp.assignments;
 
+import lombok.AccessLevel;
+import lombok.Getter;
 import lombok.Value;
 
+import java.math.BigInteger;
+import java.util.Optional;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.atomic.AtomicReference;
 
 /**
  * Search statistics accumulated during a solve. Counters are thread-safe ({@link AtomicLong} --
@@ -33,6 +38,17 @@ import java.util.concurrent.atomic.AtomicLong;
  *       {@link #backtracks} exactly like any other constraint's rejection, per {@link
  *       io.github.rcrida.jcsp.assignments.NogoodStore}'s own design), only how much of that total
  *       is attributable to CDCL specifically.</li>
+ *   <li>{@link #currentSearchSpace} — unlike every field above, a single overwritten slot, not an
+ *       accumulator: {@link io.github.rcrida.jcsp.ConstraintSatisfactionProblem#getSearchSpace()}
+ *       of whatever live, propagation-narrowed problem search was working on at the exact point a
+ *       {@link io.github.rcrida.jcsp.solver.Cancellation} was detected (node/time limit or an
+ *       external stop signal) and search actually stopped because of it. {@code null} until that
+ *       happens — a completed solve (found a solution, proved UNSAT, or genuinely exhausted the
+ *       search) never touches it, since {@link io.github.rcrida.jcsp.ConstraintSatisfactionProblem#getSearchSpace()}
+ *       on the original, undecomposed problem already answers "how big was this problem" for that
+ *       case. Lets a caller see how much smaller the search space had actually become by the time
+ *       an incomplete solve gave up, as opposed to the always-unchanged size the original
+ *       (immutable) problem itself reports.</li>
  * </ul>
  */
 @Value
@@ -44,6 +60,7 @@ public class Statistics {
     AtomicLong steps = new AtomicLong();
     AtomicLong nogoodsLearned = new AtomicLong();
     AtomicLong nogoodRejections = new AtomicLong();
+    @Getter(AccessLevel.NONE) AtomicReference<BigInteger> currentSearchSpace = new AtomicReference<>();
 
     public void incrementNodesExplored() {
         nodesExplored.incrementAndGet();
@@ -73,6 +90,29 @@ public class Statistics {
         nogoodRejections.incrementAndGet();
     }
 
+    /**
+     * {@link Optional#empty()} until {@link #updateCurrentSearchSpace} is called at least once —
+     * see that method's own Javadoc, and {@link #currentSearchSpace}'s class-level bullet, for when
+     * that happens. A hand-written accessor (the field itself suppresses {@code @Value}'s usual
+     * generated getter via {@code @Getter(AccessLevel.NONE)}) rather than exposing the backing
+     * {@link AtomicReference} directly the way every other field's generated getter does — this one
+     * field is nullable-by-design rather than always-meaningful, so {@link Optional} is the honest
+     * shape for callers.
+     */
+    public Optional<BigInteger> getCurrentSearchSpace() {
+        return Optional.ofNullable(currentSearchSpace.get());
+    }
+
+    /**
+     * Overwrites {@link #currentSearchSpace} with {@code searchSpace} — unlike every other mutator
+     * on this class, not additive. Called exactly once per solve, at whichever cancellation-check
+     * site first observes {@link io.github.rcrida.jcsp.solver.Cancellation#isCancelled()} and stops
+     * search because of it.
+     */
+    public void updateCurrentSearchSpace(BigInteger searchSpace) {
+        currentSearchSpace.set(searchSpace);
+    }
+
     void add(Statistics other) {
         nodesExplored.addAndGet(other.nodesExplored.get());
         constraintChecks.addAndGet(other.constraintChecks.get());
@@ -81,5 +121,10 @@ public class Statistics {
         steps.addAndGet(other.steps.get());
         nogoodsLearned.addAndGet(other.nogoodsLearned.get());
         nogoodRejections.addAndGet(other.nogoodRejections.get());
+        // Not additive like the seven counters above -- summing two search-space sizes is
+        // meaningless. Last-known-non-null-wins instead.
+        if (other.currentSearchSpace.get() != null) {
+            currentSearchSpace.set(other.currentSearchSpace.get());
+        }
     }
 }

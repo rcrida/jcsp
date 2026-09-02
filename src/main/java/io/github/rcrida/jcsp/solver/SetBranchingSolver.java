@@ -120,6 +120,9 @@ public class SetBranchingSolver extends SolverDecorator {
                                        Object element, boolean forceIn, long deadline) {
         statistics.incrementNodesExplored();
         if (limits.checkStop(cancellation, statistics.getNodesExplored().get(), deadline) != SolverLimits.StopReason.NONE) {
+            if (cancellation.isCancelled()) {
+                statistics.updateCurrentSearchSpace(csp.getSearchSpace());
+            }
             return Stream.empty();
         }
         BranchOutcome outcome = forceIn

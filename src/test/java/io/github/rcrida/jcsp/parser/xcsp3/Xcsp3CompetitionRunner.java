@@ -94,17 +94,24 @@ public final class Xcsp3CompetitionRunner {
         return Paths.get(resource.toURI());
     }
 
+    private static final String ROW_FORMAT = "%-32s %-8s %-20s %-10s %-24s %-14s %-14s %s";
+
     static void run(Path directory, long timeLimitSeconds, PrintStream out) throws IOException, InterruptedException {
         List<Path> instances;
         try (Stream<Path> files = Files.list(directory)) {
             instances = files.filter(Xcsp3CompetitionRunner::isXcsp3Instance).sorted().toList();
         }
-        out.printf("%-40s %-10s %-20s %-12s %-24s %s%n", "Instance", "Time(s)", "Result", "Check", "Model (xcsp3->csp)", "Statistics");
-        out.println("-".repeat(90));
+        String header = ROW_FORMAT.formatted("Instance", "Time(s)", "Result", "Check", "Model (xcsp3->csp)",
+                "Space Before", "Space After", "Statistics");
+        out.println(header);
+        out.println("-".repeat(header.length()));
         int solved = 0, unknown = 0, failed = 0, checkMismatches = 0;
         for (Path instance : instances) {
             Result result = runOne(instance, timeLimitSeconds);
-            out.printf("%-40s %-10.2f %-20s %-12s %-24s %s%n", instanceName(instance), result.elapsedSeconds(), result.summary(), result.crossCheck(), result.model(), result.statsLine());
+            out.println(ROW_FORMAT.formatted(instanceName(instance), "%.2f".formatted(result.elapsedSeconds()),
+                    result.summary(), result.crossCheck(), result.model(),
+                    formatSearchSpace(result.searchSpaceBefore()), formatSearchSpace(result.searchSpaceAfter()),
+                    result.statsLine()));
             switch (category(result.summary())) {
                 case SOLVED -> solved++;
                 case UNKNOWN -> unknown++;
@@ -126,7 +133,22 @@ public final class Xcsp3CompetitionRunner {
         return name.endsWith(".xml") || name.endsWith(".xml.lzma");
     }
 
-    private record Result(double elapsedSeconds, String summary, String statsLine, String crossCheck, String model) {}
+    private record Result(double elapsedSeconds, String summary, String statsLine, String crossCheck, String model,
+                           String searchSpaceBefore, String searchSpaceAfter) {}
+
+    /**
+     * Compacts a raw (potentially very long -- {@link io.github.rcrida.jcsp.ConstraintSatisfactionProblem#getSearchSpace()}
+     * is a {@link java.math.BigInteger}) digit string into scientific notation once it's too wide
+     * for a table cell, operating on the digit string itself (no re-parsing back into a {@code
+     * BigInteger}) since only the digit count and leading digits matter for display.
+     */
+    private static String formatSearchSpace(String raw) {
+        if (!raw.chars().allMatch(Character::isDigit) || raw.length() <= 12) {
+            return raw;
+        }
+        String mantissa = raw.charAt(0) + "." + raw.substring(1, 4);
+        return mantissa + "e" + (raw.length() - 1);
+    }
 
     private enum Category {SOLVED, UNKNOWN, FAILED}
 
@@ -173,11 +195,13 @@ public final class Xcsp3CompetitionRunner {
         double elapsedSeconds = (System.nanoTime() - startNanos) / 1_000_000_000.0;
         if (!finished) {
             process.destroyForcibly();
-            return new Result(elapsedSeconds, "HUNG (killed after " + elapsedSeconds + "s)", "(no stats -- process killed)", "-", model);
+            return new Result(elapsedSeconds, "HUNG (killed after " + elapsedSeconds + "s)", "(no stats -- process killed)", "-", model,
+                    "(no search-space)", "(no search-space)");
         }
         String output = new String(process.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
         String summary = firstResultLine(output);
-        return new Result(elapsedSeconds, summary, statsLine(output), crossCheck(instance, summary, output), model);
+        return new Result(elapsedSeconds, summary, statsLine(output), crossCheck(instance, summary, output), model,
+                cLine(output, "c search-space-before: "), cLine(output, "c search-space-after: "));
     }
 
     /**
@@ -259,6 +283,21 @@ public final class Xcsp3CompetitionRunner {
                 .filter(line -> line.startsWith("c stats: "))
                 .findFirst()
                 .orElse("(no stats)");
+    }
+
+    /**
+     * Picks {@code prefix}'s own {@code c} line out of a captured child transcript, stripped of the
+     * prefix itself -- unlike {@link #statsLine}, which keeps its {@code "c stats: "} prefix since
+     * it's displayed as-is in the table's own labeled Statistics column. Used for {@link
+     * Xcsp3ProblemRunner#solve}'s two {@code c search-space-before:}/{@code c search-space-after:}
+     * lines, each destined for its own already-labeled table column.
+     */
+    private static String cLine(String output, String prefix) {
+        return output.lines()
+                .filter(line -> line.startsWith(prefix))
+                .findFirst()
+                .map(line -> line.substring(prefix.length()))
+                .orElse("(no search-space)");
     }
 
     private static String instanceName(Path instance) {

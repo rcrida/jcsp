@@ -82,10 +82,21 @@ public final class Xcsp3ProblemRunner {
     }
 
     /**
-     * {@code stats} is printed as a {@code c} (comment) line after the result, regardless of
-     * outcome (SAT, UNSAT, UNKNOWN, or OPTIMUM FOUND) -- {@code c}-prefixed lines are the standard
-     * SAT/CP competition convention for extra, parser-ignorable information alongside the {@code
-     * s}/{@code o}/{@code v} status lines, so this doesn't change this class's own output contract.
+     * {@code c search-space-before:} is {@link ConstraintSatisfactionProblem#getSearchSpace()} on
+     * the original, undecomposed {@code instance.csp()} -- the declared size, unaffected by however
+     * much search progresses. {@code c search-space-after:} is {@code stats}'s own {@link
+     * Statistics#getCurrentSearchSpace()}, printed only when present -- i.e. only when a
+     * {@link Cancellation}/timeout actually stopped search before it completed, in which case it's
+     * the live, propagation-narrowed search space at the exact point that happened. Omitted
+     * entirely for a completed solve (SAT, UNSAT, or OPTIMUM FOUND): {@code
+     * search-space-before}'s already-printed declared value is the whole answer there, with no
+     * narrower "current" state to report separately. {@code stats} is likewise printed as its own
+     * {@code c} line at the end. {@code c}-prefixed lines are the standard SAT/CP competition
+     * convention for extra, parser-ignorable information alongside the {@code s}/{@code o}/{@code
+     * v} status lines, so this doesn't change this class's own output contract. {@code
+     * Xcsp3CompetitionRunner} (test sources) parses these lines back out of a captured
+     * child-process transcript rather than re-parsing the instance itself, tolerating {@code
+     * search-space-after}'s absence.
      */
     static void solve(Xcsp3Instance instance, Cancellation cancellation, SolverListener listener, PrintStream out) {
         solve(instance, cancellation, listener, null, out);
@@ -93,6 +104,7 @@ public final class Xcsp3ProblemRunner {
 
     static void solve(Xcsp3Instance instance, Cancellation cancellation, SolverListener listener,
                        @Nullable RestartRandomization restartRandomization, PrintStream out) {
+        out.println("c search-space-before: " + instance.csp().getSearchSpace());
         Statistics stats = new Statistics();
         if (instance.objective() == null) {
             solveSatisfaction(instance, cancellation, listener, restartRandomization, stats, out);
@@ -100,6 +112,7 @@ public final class Xcsp3ProblemRunner {
             solveOptimization(instance, cancellation, listener, restartRandomization, stats, out);
         }
         out.println("c stats: " + stats);
+        stats.getCurrentSearchSpace().ifPresent(searchSpace -> out.println("c search-space-after: " + searchSpace));
     }
 
     private static SolverConfig configFor(
