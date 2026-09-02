@@ -2,6 +2,7 @@ package io.github.rcrida.jcsp.assignments;
 
 import lombok.AccessLevel;
 import lombok.Getter;
+import lombok.ToString;
 import lombok.Value;
 
 import java.math.BigInteger;
@@ -48,7 +49,11 @@ import java.util.concurrent.atomic.AtomicReference;
  *       on the original, undecomposed problem already answers "how big was this problem" for that
  *       case. Lets a caller see how much smaller the search space had actually become by the time
  *       an incomplete solve gave up, as opposed to the always-unchanged size the original
- *       (immutable) problem itself reports.</li>
+ *       (immutable) problem itself reports. Excluded from {@code toString()} ({@code
+ *       @ToString.Exclude}) since {@code Xcsp3ProblemRunner} (and any other caller) already has
+ *       its own dedicated, clearer place to report it (a separate {@code c search-space-after:}
+ *       line) rather than folding a potentially very large number into the same line as the other
+ *       seven counters.</li>
  * </ul>
  */
 @Value
@@ -60,7 +65,7 @@ public class Statistics {
     AtomicLong steps = new AtomicLong();
     AtomicLong nogoodsLearned = new AtomicLong();
     AtomicLong nogoodRejections = new AtomicLong();
-    @Getter(AccessLevel.NONE) AtomicReference<BigInteger> currentSearchSpace = new AtomicReference<>();
+    @Getter(AccessLevel.NONE) @ToString.Exclude AtomicReference<BigInteger> currentSearchSpace = new AtomicReference<>();
 
     public void incrementNodesExplored() {
         nodesExplored.incrementAndGet();
