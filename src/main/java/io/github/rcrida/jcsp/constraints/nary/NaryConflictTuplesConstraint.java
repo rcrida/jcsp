@@ -10,12 +10,15 @@ import lombok.Singular;
 import lombok.experimental.SuperBuilder;
 import org.jspecify.annotations.NonNull;
 
+import java.util.BitSet;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
 
 /**
@@ -30,9 +33,16 @@ import java.util.stream.Collectors;
  * by a pigeonhole argument (a same-cardinality subset of a finite set must be the whole set), that
  * count can only ever be reached when literally every possible completion is separately listed as
  * a conflict, which is both necessary and sufficient for "no valid completion exists". This is
- * exact GAC, not a sound-but-incomplete approximation, and costs the same O(variables × |{@link
- * #conflicts}|) per round {@link NaryTuplesConstraint#propagate} already costs -- no dependence on
- * domain size at all.
+ * exact GAC, not a sound-but-incomplete approximation, with no dependence on domain size at all.
+ * <p>
+ * {@link #propagate} routes that reasoning through {@link #conflictIndex}, the direct counterpart of
+ * {@link NaryTuplesConstraint}'s own {@link BitSet} support index (docs/adr/0021), for the same
+ * reason and with the same payoff: deciding which conflicts are still live becomes word-parallel
+ * {@link BitSet} intersection rather than a nested per-conflict, per-variable stream scan whose every
+ * step cost a map lookup, an {@link Optional} allocation and a domain membership test. Not an
+ * asymptotic change, but that per-conflict overhead is what dominated -- a single XCSP3 instance
+ * ({@code driverlogw-09.xml.lzma}) builds 17,447 of these, and 60% of a JFR profile's samples on it
+ * fell inside this one method, split across the two lambdas the scan allocated per call.
  * <p>
  * Added for XCSP3's {@code extension} construct's {@code positive="false"} case, confirmed via a
  * real competition instance ({@code driverlogw-09.xml.lzma}, over 1300 binary conflict-table
@@ -42,6 +52,53 @@ import java.util.stream.Collectors;
 @EqualsAndHashCode(callSuper = true)
 public class NaryConflictTuplesConstraint extends NaryConstraint implements Propagatable {
     @Singular Set<Assignment> conflicts;
+
+    /**
+     * Lazily-built, immutable inverted index from {@link #conflicts}: {@code
+     * conflictIndex.get(v).get(val)} is a {@link BitSet} over conflict positions, with bit {@code j}
+     * set iff the {@code j}-th conflict assigns {@code v = val}. The exact counterpart of {@link
+     * NaryTuplesConstraint}'s own support index -- identical structure, identical build, identical
+     * lifecycle (computed once per constraint instance from the immutable {@link #conflicts} field,
+     * read-only thereafter, so it is safe to share across concurrently-executing search threads with
+     * no synchronization beyond the initial compare-and-set) -- only the meaning of a set bit differs:
+     * there a bit records a permitted combination, here a forbidden one. See {@link
+     * NaryTuplesConstraint}'s own field Javadoc for why this shape rather than STR2's mutable
+     * current-tuple list, and docs/adr/0021 for the decision.
+     */
+    @EqualsAndHashCode.Exclude
+    private final AtomicReference<Map<Variable<?>, Map<Object, BitSet>>> conflictIndex = new AtomicReference<>();
+
+    private Map<Variable<?>, Map<Object, BitSet>> conflictIndex() {
+        Map<Variable<?>, Map<Object, BitSet>> existing = conflictIndex.get();
+        if (existing != null) return existing;
+        conflictIndex.compareAndSet(null, buildConflictIndex());
+        return conflictIndex.get();
+    }
+
+    private Map<Variable<?>, Map<Object, BitSet>> buildConflictIndex() {
+        Map<Variable<?>, Map<Object, BitSet>> index = new LinkedHashMap<>();
+        for (Variable<?> v : getVariables()) index.put(v, new LinkedHashMap<>());
+        int position = 0;
+        for (Assignment conflict : conflicts) {
+            for (Variable<?> v : getVariables()) {
+                Object value = conflict.getValue(v).orElseThrow();
+                index.get(v).computeIfAbsent(value, key -> new BitSet(conflicts.size())).set(position);
+            }
+            position++;
+        }
+        return index;
+    }
+
+    /**
+     * How many of {@code live}'s conflicts assign the value {@code support} was indexed under.
+     * Word-parallel, unlike re-counting the conflict list per value; the clone is why this is only
+     * ever called for a variable that already passed {@link #propagate}'s own product gate.
+     */
+    private static long liveOccurrences(BitSet support, BitSet live) {
+        BitSet intersection = (BitSet) support.clone();
+        intersection.and(live);
+        return intersection.cardinality();
+    }
 
     public static NaryConflictTuplesConstraint of(@NonNull Set<Assignment> conflicts) {
         assert !conflicts.isEmpty() : "conflicts must not be empty";
@@ -68,12 +125,23 @@ public class NaryConflictTuplesConstraint extends NaryConstraint implements Prop
      */
     @Override
     public Optional<Map<Variable<?>, Domain<?>>> propagate(@NonNull Map<Variable<?>, Domain<?>> domains) {
-        var liveConflicts = conflicts.stream()
-                .filter(t -> getVariables().stream().allMatch(v -> domains.get(v).contains(t.getValue(v).orElseThrow())))
-                .toList();
-        if (liveConflicts.isEmpty()) return Optional.of(Map.of());
+        Map<Variable<?>, Map<Object, BitSet>> index = conflictIndex();
+        BitSet live = null;
+        for (Variable<?> v : getVariables()) {
+            Map<Object, BitSet> conflictsByValue = index.get(v);
+            BitSet union = new BitSet(conflicts.size());
+            for (Object value : ((DiscreteDomain<?>) domains.get(v)).asCollection()) {
+                BitSet occurrences = conflictsByValue.get(value);
+                if (occurrences != null) union.or(occurrences);
+            }
+            if (live == null) live = union; else live.and(union);
+            // No conflict survives, so nothing is forbidden any more and every combination is
+            // allowed -- the opposite of NaryTuplesConstraint, where an empty live set means no
+            // permitted tuple remains and the constraint is infeasible.
+            if (live.isEmpty()) return Optional.of(Map.of());
+        }
 
-        long maxPossibleCount = liveConflicts.size();
+        long maxPossibleCount = live.cardinality();
         Map<Variable<?>, Domain<?>> updated = new HashMap<>();
         for (Variable<?> v : getVariables()) {
             long otherDomainProduct = 1;
@@ -85,13 +153,16 @@ public class NaryConflictTuplesConstraint extends NaryConstraint implements Prop
             }
             if (tooLargeToMatter) continue;
 
-            Map<Object, Long> liveConflictCountByValue = liveConflicts.stream()
-                    .collect(Collectors.groupingBy(t -> t.getValue(v).orElseThrow(), Collectors.counting()));
-
+            Map<Object, BitSet> conflictsByValue = index.get(v);
             DiscreteDomain<?> dom = (DiscreteDomain<?>) domains.get(v);
             Set<Object> unsupported = new HashSet<>();
-            for (var value : dom.toList()) {
-                if (liveConflictCountByValue.getOrDefault(value, 0L) == otherDomainProduct) unsupported.add(value);
+            for (Object value : dom.asCollection()) {
+                BitSet occurrences = conflictsByValue.get(value);
+                // A value appearing in no conflict at all is trivially supported: otherDomainProduct
+                // is at least 1 here, since a non-empty `live` means every variable's domain still
+                // holds at least that surviving conflict's own value.
+                if (occurrences == null) continue;
+                if (liveOccurrences(occurrences, live) == otherDomainProduct) unsupported.add(value);
             }
             if (unsupported.isEmpty()) continue;
 

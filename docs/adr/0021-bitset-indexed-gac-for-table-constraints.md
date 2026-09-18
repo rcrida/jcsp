@@ -76,6 +76,19 @@ on `propagate`'s internal representation.
   bits in *every* value's bucket for that column) but no corpus instance was found where it's the
   bottleneck — left as unbuilt future work rather than speculative scope.
 
+  **Reversed for `NaryConflictTuplesConstraint` on 2026-09-18.** The "no evidence it needs this"
+  half was simply untested at the time, and turned out to be wrong: the good algorithm and the
+  per-conflict scanning overhead are independent concerns, and it was the latter that dominated.
+  A JFR profile of `driverlogw-09.xml.lzma` put 60% of all execution samples inside that
+  constraint's `propagate` — specifically the two lambdas of its nested
+  `conflicts.stream().filter(t -> getVariables().stream().allMatch(...))` liveness scan, which
+  allocated a pipeline per call across 17,447 constraint objects. Adding the identical index
+  (`conflictIndex`) keeps the pigeonhole argument exactly as it was and only changes how liveness
+  is computed; a 500,000-instance randomized differential test against the previous implementation
+  found zero behavioural differences. The instance went from timing out at ~4,800 nodes in 30s to
+  solving in ~20.6s (6,936 nodes, `SolutionChecker`-validated). `NaryStarredTuplesConstraint`
+  remains unindexed, still for want of an instance where it is the bottleneck.
+
 ## Consequences
 
 - `NaryTuplesConstraint` gained a new `private final AtomicReference<...> supportIndex` field,

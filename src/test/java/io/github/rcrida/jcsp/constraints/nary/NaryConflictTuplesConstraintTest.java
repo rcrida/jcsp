@@ -120,6 +120,30 @@ public class NaryConflictTuplesConstraintTest {
         assertThat(result).isEmpty();
     }
 
+    @Test void propagate_valueInNoConflictAtAll_survivesWithoutCounting() {
+        // x in {0,1,2}, y in {0,1}, conflicts (0,0) and (0,1): only x=0 appears in the table at all.
+        // x's product gate passes (|D(y)| = 2, not greater than the 2 live conflicts), so every x
+        // value is examined -- x=0 is fully covered and pruned, while x=1 and x=2 appear in no
+        // conflict and are kept without any counting at all.
+        var c = NaryConflictTuplesConstraint.of(Set.of(
+                Assignment.of(Map.of(x, 0, y, 0)),
+                Assignment.of(Map.of(x, 0, y, 1))));
+        var domains = Map.<Variable<?>, Domain<?>>of(x, IntRangeDomain.of(0, 2), y, IntRangeDomain.of(0, 1));
+        var result = c.propagate(domains).orElseThrow();
+        assertThat(result.get(x)).isEqualTo(IntRangeDomain.of(1, 2));
+        assertThat(result).doesNotContainKey(y); // y's own gate fails: |D(x)| = 3 > 2 live conflicts
+    }
+
+    @Test void propagate_repeatedCalls_reuseTheSameIndex() {
+        // The inverted index is built once per constraint instance and reused thereafter; a second
+        // call against different domains must read the cached index and still propagate correctly.
+        var pinned = Map.<Variable<?>, Domain<?>>of(x, IntRangeDomain.of(0, 2), y, IntRangeDomain.of(0, 0));
+        assertThat(constraint.propagate(pinned).orElseThrow().get(x)).isEqualTo(IntRangeDomain.of(1, 2));
+        var open = Map.<Variable<?>, Domain<?>>of(x, IntRangeDomain.of(0, 2), y, IntRangeDomain.of(0, 2));
+        assertThat(constraint.propagate(open).orElseThrow()).isEmpty();
+        assertThat(constraint.propagate(pinned).orElseThrow().get(x)).isEqualTo(IntRangeDomain.of(1, 2));
+    }
+
     // --- explainInfeasible() ---
 
     @Test void explainInfeasible_allSingleton_returnsFullReason() {
