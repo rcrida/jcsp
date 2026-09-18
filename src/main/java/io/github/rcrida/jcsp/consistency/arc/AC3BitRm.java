@@ -252,6 +252,29 @@ public class AC3BitRm implements ConstraintConsistency {
         return applyQueue(problem, new ArrayDeque<>(bitIndex(problem).allArcs()));
     }
 
+    /**
+     * {@link AC3#seedQueue}'s counterpart over {@link BitIndex#arcsByTarget()} -- same soundness
+     * argument, since this class enforces the identical notion of consistency and uses the identical
+     * internal requeue rule (only how support is computed differs). Kept in step with {@link AC3} so
+     * the two remain interchangeable for a caller wiring this in manually per ADR-0022.
+     */
+    private Queue<Arc> seedQueue(ConstraintSatisfactionProblem problem, @Nullable Set<Variable<?>> changedSinceLastRun) {
+        val index = bitIndex(problem);
+        if (changedSinceLastRun == null) return new ArrayDeque<>(index.allArcs());
+        val queue = new ArrayDeque<Arc>();
+        for (Variable<?> variable : changedSinceLastRun) {
+            queue.addAll(index.arcsByTarget().getOrDefault(variable, List.of()));
+        }
+        return queue;
+    }
+
+    /** As {@link AC3#apply(ConstraintSatisfactionProblem, Set)}, seeded via {@link #seedQueue}. */
+    @Override
+    public Optional<ConstraintSatisfactionProblem> apply(ConstraintSatisfactionProblem problem,
+                                                          @Nullable Set<Variable<?>> changedSinceLastRun) {
+        return applyQueue(problem, seedQueue(problem, changedSinceLastRun));
+    }
+
     public Optional<ConstraintSatisfactionProblem> applyQueue(ConstraintSatisfactionProblem problem, Queue<Arc> queue) {
         val index = bitIndex(problem);
         queue = canonicalize(index, queue);
@@ -288,10 +311,11 @@ public class AC3BitRm implements ConstraintConsistency {
         return result.isInfeasible() ? Optional.ofNullable(result.reason()) : Optional.empty();
     }
 
+    /** As {@link #apply(ConstraintSatisfactionProblem, Set)}, seeded via {@link #seedQueue}. */
     @Override
     public ConsistencyResult applyWithReason(ConstraintSatisfactionProblem problem,
                                               @Nullable Set<Variable<?>> changedSinceLastRun) {
-        return applyQueueWithReason(problem, new ArrayDeque<>(bitIndex(problem).allArcs()));
+        return applyQueueWithReason(problem, seedQueue(problem, changedSinceLastRun));
     }
 
     /**

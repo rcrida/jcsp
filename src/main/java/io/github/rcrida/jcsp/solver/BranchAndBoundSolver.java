@@ -331,7 +331,7 @@ public class BranchAndBoundSolver implements Solver {
                         }
                         return false;
                     }
-                    if (!next.isConsistent(cspWithNogoods)) {
+                    if (!next.isConsistentAmong(cspWithNogoods.getConstraintsTouching(variable))) {
                         next.getStatistics().incrementBacktracks();
                         listener.onBacktrack(variable, next);
                         return false;

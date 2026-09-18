@@ -50,6 +50,18 @@ public class AC3 implements ConstraintConsistency {
         return problem.computeAuxiliaryCacheIfAbsent(ArcIndex.class, this::buildArcIndex);
     }
 
+    /**
+     * Every arc whose {@link Arc#getTo} is {@code variable}, read straight off {@link
+     * ArcIndex#arcsByTarget} -- the same memoized index {@link #applyQueue}'s own internal requeue
+     * rule uses. Package-private so {@link MAC} can reuse it instead of filtering {@code
+     * ConstraintSatisfactionProblem#getAllBinaryArcs()} itself, which cost {@code O(|arcs|)} plus a
+     * fresh {@link java.util.HashSet} at every search node for a result this lookup gives in
+     * {@code O(1)}.
+     */
+    List<Arc> arcsInto(ConstraintSatisfactionProblem problem, Variable<?> variable) {
+        return arcIndex(problem).arcsByTarget().getOrDefault(variable, List.of());
+    }
+
     private ArcIndex buildArcIndex(ConstraintSatisfactionProblem problem) {
         Map<Arc, List<BinaryConstraint<?, ?>>> arcConstraints = problem.getAllBinaryArcConstraints();
         Map<Variable<?>, List<Arc>> arcsByTarget = arcConstraints.keySet().stream()
@@ -61,6 +73,50 @@ public class AC3 implements ConstraintConsistency {
     public Optional<ConstraintSatisfactionProblem> apply(ConstraintSatisfactionProblem problem) {
         val queue = new ArrayDeque<>(arcIndex(problem).allArcs());
         return applyQueue(problem, queue);
+    }
+
+    /**
+     * Seeds the revise queue from {@code changedSinceLastRun} rather than re-enqueuing every arc in
+     * the problem, which is what this class did on every call until 2026-09-18 -- including at every
+     * search node, where the incoming problem is the parent's already-arc-consistent CSP plus
+     * whatever one branching decision narrowed.
+     * <p>
+     * Sound because it enqueues exactly what {@link #applyQueue}'s own internal requeue rule already
+     * enqueues after it narrows a domain: an arc {@code (X_k, X_i)} can only newly prune {@code D_k}
+     * when {@code D_i} -- its <em>support</em> side -- has shrunk, so {@link ArcIndex#arcsByTarget}
+     * for each changed variable is the complete set of arcs that could have become revisable. Every
+     * other arc was left arc-consistent by the pass that last ran to fixpoint over it, and nothing
+     * outside {@code changedSinceLastRun} has touched it since.
+     * <p>
+     * Relies on the same per-round invariant {@link
+     * io.github.rcrida.jcsp.consistency.fixpoint.FixpointConsistency#apply(ConstraintSatisfactionProblem, Set)}
+     * already relies on (see docs/adr/0019): a propagator running earlier in the <em>same</em>
+     * {@link io.github.rcrida.jcsp.solver.FixpointPropagation} round may narrow a variable this call
+     * therefore skips, but that narrowing lands in the next round's {@code changedSinceLastRun} diff,
+     * and the fixpoint loop only exits after a whole round changes nothing -- so no arc is ever
+     * dropped, only deferred by at most one round.
+     * <p>
+     * {@code null} (unknown -- a preprocessing call, or any caller with no parent state to diff
+     * against) falls back to the full arc queue, exactly as before.
+     */
+    private Queue<Arc> seedQueue(ConstraintSatisfactionProblem problem, @Nullable Set<Variable<?>> changedSinceLastRun) {
+        val index = arcIndex(problem);
+        if (changedSinceLastRun == null) return new ArrayDeque<>(index.allArcs());
+        val queue = new ArrayDeque<Arc>();
+        for (Variable<?> variable : changedSinceLastRun) {
+            queue.addAll(index.arcsByTarget().getOrDefault(variable, List.of()));
+        }
+        return queue;
+    }
+
+    /**
+     * Genuine override of {@link ConstraintConsistency#apply(ConstraintSatisfactionProblem, Set)}'s
+     * hint-ignoring default -- see {@link #seedQueue} for why the narrowed queue loses no pruning.
+     */
+    @Override
+    public Optional<ConstraintSatisfactionProblem> apply(ConstraintSatisfactionProblem problem,
+                                                          @Nullable Set<Variable<?>> changedSinceLastRun) {
+        return applyQueue(problem, seedQueue(problem, changedSinceLastRun));
     }
 
     public Optional<ConstraintSatisfactionProblem> applyQueue(ConstraintSatisfactionProblem problem, Queue<Arc> queue) {
@@ -102,10 +158,11 @@ public class AC3 implements ConstraintConsistency {
         return result.isInfeasible() ? Optional.ofNullable(result.reason()) : Optional.empty();
     }
 
+    /** As {@link #apply(ConstraintSatisfactionProblem, Set)}, seeded via {@link #seedQueue}. */
     @Override
     public ConsistencyResult applyWithReason(ConstraintSatisfactionProblem problem,
                                              @Nullable Set<Variable<?>> changedSinceLastRun) {
-        return applyQueueWithReason(problem, new ArrayDeque<>(arcIndex(problem).allArcs()));
+        return applyQueueWithReason(problem, seedQueue(problem, changedSinceLastRun));
     }
 
     /**

@@ -10,7 +10,7 @@ import io.github.rcrida.jcsp.variables.Variable;
 
 import java.util.ArrayDeque;
 import java.util.Optional;
-import java.util.stream.Collectors;
+import java.util.Queue;
 
 /**
  * Represents the Maintaining Arc Consistency (MAC) inference algorithm which is used in constraint satisfaction problems (CSPs).
@@ -35,14 +35,9 @@ public class MAC implements Inference {
     @SuppressWarnings("unchecked")
     public Optional<ConstraintSatisfactionProblem> apply(ConstraintSatisfactionProblem problem, Variable<?> variable, Assignment assignment) {
         val value = assignment.getValue(variable).orElseThrow();
-        val variableConstraints = problem.getAllBinaryArcs().stream()
-                .filter(arc -> isBinaryConstraintToX_i(arc, variable))
-                .filter(arc -> isNotAlreadyAssignedX_j(assignment, arc))
-                .collect(Collectors.toSet());
-        val queue = new ArrayDeque<>(variableConstraints);
         return AC3.INSTANCE.applyQueue(
                 problem.withDomain((Variable<Object>) variable, new ObjectSingletonDomain<>(value)),
-                queue);
+                seedQueue(problem, variable, assignment));
     }
 
     /**
@@ -55,21 +50,30 @@ public class MAC implements Inference {
     @SuppressWarnings("unchecked")
     public ConsistencyResult applyWithReason(ConstraintSatisfactionProblem problem, Variable<?> variable, Assignment assignment) {
         val value = assignment.getValue(variable).orElseThrow();
-        val variableConstraints = problem.getAllBinaryArcs().stream()
-                .filter(arc -> isBinaryConstraintToX_i(arc, variable))
-                .filter(arc -> isNotAlreadyAssignedX_j(assignment, arc))
-                .collect(Collectors.toSet());
-        val queue = new ArrayDeque<>(variableConstraints);
         return AC3.INSTANCE.applyQueueWithReason(
                 problem.withDomain((Variable<Object>) variable, new ObjectSingletonDomain<>(value)),
-                queue);
+                seedQueue(problem, variable, assignment));
     }
 
-    private static boolean isBinaryConstraintToX_i(Arc arc, Variable<?> X_i) {
-        return arc.getTo().equals(X_i);
-    }
-
-    private static boolean isNotAlreadyAssignedX_j(Assignment assignment, Arc arc) {
-        return assignment.getValue(arc.getFrom()).isEmpty();
+    /**
+     * The arcs {@code (X_j, variable)} worth revising after {@code variable} was just assigned: every
+     * arc pointing <em>at</em> it, minus those whose own {@code from} side is already assigned (a
+     * singleton domain that revision could only confirm or wipe out, and a wipeout there is already
+     * caught by the direct consistency check that precedes inference).
+     * <p>
+     * Reads {@link AC3#arcsInto} rather than filtering {@link
+     * ConstraintSatisfactionProblem#getAllBinaryArcs()}, which is what both callers did until
+     * 2026-09-18: that scanned every arc in the whole problem and collected a fresh {@link
+     * java.util.HashSet} on every search node -- {@code O(|arcs|)} for a result the memoized
+     * by-target index already holds, which on a large instance means tens of thousands of arc
+     * comparisons per node to find the handful incident on one variable.
+     */
+    private static Queue<Arc> seedQueue(ConstraintSatisfactionProblem problem, Variable<?> variable,
+                                         Assignment assignment) {
+        val queue = new ArrayDeque<Arc>();
+        for (Arc arc : AC3.INSTANCE.arcsInto(problem, variable)) {
+            if (!assignment.getValues().containsKey(arc.getFrom())) queue.add(arc);
+        }
+        return queue;
     }
 }

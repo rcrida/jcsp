@@ -56,6 +56,18 @@ import java.util.stream.Stream;
  * A lightweight {@link BudgetExceeded} sentinel (pre-allocated, no stack trace) unwinds the
  * recursion when the budget is exhausted.
  * <p>
+ * Both search methods check consistency <em>incrementally</em>, against {@link
+ * ConstraintSatisfactionProblem#getConstraintsTouching} for the variable just assigned, rather than
+ * rescanning every constraint in the problem via {@link Assignment#isConsistent}. Sound because
+ * neither method ever recurses into a node whose parent assignment failed that check, so the parent
+ * is consistent by induction (the root, with no values, trivially so) and extending it by one
+ * variable can only newly violate a constraint that variable participates in. Every constraint is
+ * therefore still checked with its final values: the check runs again each time any of its variables
+ * is assigned, including the last, at which point all of them are assigned and nothing can change
+ * them afterwards. The one thing this can miss is a nogood learned <em>after</em> the current prefix
+ * was checked that the prefix alone already violates — which costs pruning, never correctness, since
+ * a nogood is implied by the structural constraints that are fully checked regardless.
+ * <p>
  * {@link #cancellation} is checked the same way {@link #limits} is, at every site {@link #limits}
  * is: {@link #getSolutions}/{@link #searchStream} stop silently (matching how a limit hit already
  * behaves there); {@link #getSolution}/{@link #searchOne} throw {@link SolverCancelledException}
@@ -187,7 +199,7 @@ public class DomWdegLubySearch implements Solver {
                         return Stream.empty();
                     }
                     ConstraintSatisfactionProblem cspWithNogoods = nogoodStore.apply(csp);
-                    if (!next.isConsistent(cspWithNogoods)) {
+                    if (!next.isConsistentAmong(cspWithNogoods.getConstraintsTouching(variable))) {
                         next.getStatistics().incrementBacktracks();
                         selector.recordConflict(variable);
                         listener.onBacktrack(variable, next);
@@ -255,7 +267,7 @@ public class DomWdegLubySearch implements Solver {
                 case NONE -> {}
             }
             ConstraintSatisfactionProblem cspWithNogoods = nogoodStore.apply(csp);
-            if (!next.isConsistent(cspWithNogoods)) {
+            if (!next.isConsistentAmong(cspWithNogoods.getConstraintsTouching(variable))) {
                 next.getStatistics().incrementBacktracks();
                 selector.recordConflict(variable);
                 listener.onBacktrack(variable, next);

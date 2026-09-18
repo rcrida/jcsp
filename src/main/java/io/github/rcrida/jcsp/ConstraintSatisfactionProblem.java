@@ -509,6 +509,55 @@ public class ConstraintSatisfactionProblem {
         return getNeighbours().getOrDefault(variable, Set.of());
     }
 
+    /** {@link #getConstraintsTouching}'s memoized structural half — see its Javadoc. */
+    private record TouchingIndex(Map<Variable<?>, Set<Constraint>> byVariable) {
+    }
+
+    /**
+     * Every constraint referencing {@code variable} — the structural ones plus whichever learned
+     * {@link #nogoods} mention it — for a caller re-checking consistency after assigning exactly
+     * that one variable, instead of rescanning all of {@link #getConstraints()} and discarding the
+     * overwhelming majority via a per-constraint disjointness test. Sound for that use because an
+     * assignment extended by one variable can only newly violate a constraint that variable
+     * participates in; see {@link io.github.rcrida.jcsp.solver.DomWdegLubySearch}'s own call site.
+     * <p>
+     * The structural half is memoized against this problem's {@link ConstraintGraph} (via {@link
+     * #computeAuxiliaryCacheIfAbsent}), which every domain narrowing and every {@link #withNogoods}
+     * passes through untouched — so it is built once per solve and never rebuilt, unlike an index
+     * over {@link #getConstraints()}, whose reference changes on every nogood learned (the same
+     * "expensive to keep rebuilding" trap {@code NogoodFixpointConsistency} documents two reverted
+     * attempts at).
+     * <p>
+     * The nogood half is read from {@link #nogoodsByVariable}, the originating {@link
+     * io.github.rcrida.jcsp.assignments.NogoodStore}'s own live index, and combined as a {@link
+     * LightweightSets#unionView} rather than a copy, so no per-call allocation is proportional to
+     * either side. When that index is absent ({@code null} — direct/test construction via the
+     * builder's {@code nogood} method, which has no store behind it), every nogood is returned
+     * rather than none: an over-approximation costs only redundant checks, whereas guessing "none"
+     * would silently skip a nogood the caller asked about.
+     */
+    public Set<Constraint> getConstraintsTouching(@NonNull Variable<?> variable) {
+        Map<Variable<?>, Set<Constraint>> structuralIndex =
+                computeAuxiliaryCacheIfAbsent(TouchingIndex.class, ConstraintSatisfactionProblem::buildTouchingIndex)
+                        .byVariable();
+        Set<Constraint> structural = structuralIndex.getOrDefault(variable, Set.of());
+        if (nogoods.isEmpty()) return structural;
+        Set<NogoodConstraint> relevantNogoods = nogoodsByVariable == null
+                ? nogoods
+                : nogoodsByVariable.getOrDefault(variable, Set.of());
+        return relevantNogoods.isEmpty() ? structural : LightweightSets.unionView(structural, relevantNogoods);
+    }
+
+    private static TouchingIndex buildTouchingIndex(ConstraintSatisfactionProblem csp) {
+        Map<Variable<?>, Set<Constraint>> byVariable = new HashMap<>();
+        for (Constraint constraint : csp.constraintGraph.getConstraints()) {
+            for (Variable<?> variable : constraint.getVariables()) {
+                byVariable.computeIfAbsent(variable, ignored -> new HashSet<>()).add(constraint);
+            }
+        }
+        return new TouchingIndex(byVariable);
+    }
+
     /**
      * A set of all binary constraints applicable to this problem. Where possible casts n-ary constrains
      * as additional binary constraints. Ignores n-ary constraints that aren't decomposable.

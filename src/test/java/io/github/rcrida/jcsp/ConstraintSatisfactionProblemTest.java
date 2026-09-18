@@ -7,6 +7,7 @@ import io.github.rcrida.jcsp.constraints.binary.BinaryOffsetConstraint;
 import io.github.rcrida.jcsp.constraints.Operator;
 import io.github.rcrida.jcsp.constraints.nary.GroundNogoodConstraint;
 import io.github.rcrida.jcsp.constraints.nary.NogoodConstraint;
+import io.github.rcrida.jcsp.consistency.arc.Arc;
 import io.github.rcrida.jcsp.constraints.unary.UnaryComparatorConstraint;
 import io.github.rcrida.jcsp.domains.BooleanDomain;
 import io.github.rcrida.jcsp.domains.Domain;
@@ -221,6 +222,70 @@ public class ConstraintSatisfactionProblemTest {
                 .notEqualsConstraint(a, b)
                 .build();
         assertThat(csp.decomposeSubproblems(v -> true)).isEmpty();
+    }
+
+    @Test
+    void getAllBinaryArcs_bothDirectionsPerBinaryConstraint() {
+        Variable<Integer> a = VARIABLE_FACTORY.create("arcs_a");
+        Variable<Integer> b = VARIABLE_FACTORY.create("arcs_b");
+        val csp = ConstraintSatisfactionProblem.builder()
+                .variableDomain(a, domain)
+                .variableDomain(b, domain)
+                .notEqualsConstraint(a, b)
+                .build();
+        assertThat(csp.getAllBinaryArcs())
+                .containsExactlyInAnyOrder(new Arc(a, b), new Arc(b, a));
+    }
+
+    @Test
+    void getConstraintsTouching_structuralOnly() {
+        Variable<Integer> a = VARIABLE_FACTORY.create("touch_a");
+        Variable<Integer> b = VARIABLE_FACTORY.create("touch_b");
+        Variable<Integer> c = VARIABLE_FACTORY.create("touch_c");
+        val ab = BinaryNotEqualsConstraint.of(a, b);
+        val csp = ConstraintSatisfactionProblem.builder()
+                .variableDomain(a, domain)
+                .variableDomain(b, domain)
+                .variableDomain(c, domain)
+                .constraint(ab)
+                .build();
+        assertThat(csp.getConstraintsTouching(a)).containsExactly(ab);
+        assertThat(csp.getConstraintsTouching(b)).containsExactly(ab);
+        assertThat(csp.getConstraintsTouching(c)).isEmpty();
+    }
+
+    @Test
+    void getConstraintsTouching_unionsNogoodsViaLiveIndex() {
+        Variable<Integer> a = VARIABLE_FACTORY.create("touch_ng_a");
+        Variable<Integer> b = VARIABLE_FACTORY.create("touch_ng_b");
+        val ab = BinaryNotEqualsConstraint.of(a, b);
+        NogoodConstraint nogood = GroundNogoodConstraint.of(Map.of(a, 1));
+        val csp = ConstraintSatisfactionProblem.builder()
+                .variableDomain(a, IntRangeDomain.of(1, 3))
+                .variableDomain(b, IntRangeDomain.of(1, 3))
+                .constraint(ab)
+                .build()
+                .withNogoods(Set.of(nogood), Map.of(a, Set.of(nogood)));
+        assertThat(csp.getConstraintsTouching(a)).containsExactlyInAnyOrder(ab, nogood);
+        // b participates in no nogood, so the live index keeps it out of b's set.
+        assertThat(csp.getConstraintsTouching(b)).containsExactly(ab);
+    }
+
+    @Test
+    void getConstraintsTouching_withoutLiveIndex_returnsEveryNogood() {
+        Variable<Integer> a = VARIABLE_FACTORY.create("touch_noidx_a");
+        Variable<Integer> b = VARIABLE_FACTORY.create("touch_noidx_b");
+        val ab = BinaryNotEqualsConstraint.of(a, b);
+        NogoodConstraint nogood = GroundNogoodConstraint.of(Map.of(a, 1));
+        // Builder-supplied nogoods have no NogoodStore behind them, so nogoodsByVariable is null and
+        // every nogood is conservatively returned for every variable.
+        val csp = ConstraintSatisfactionProblem.builder()
+                .variableDomain(a, IntRangeDomain.of(1, 3))
+                .variableDomain(b, IntRangeDomain.of(1, 3))
+                .constraint(ab)
+                .nogood(nogood)
+                .build();
+        assertThat(csp.getConstraintsTouching(b)).containsExactlyInAnyOrder(ab, nogood);
     }
 
     @Test

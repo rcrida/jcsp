@@ -20,11 +20,13 @@ public interface ConstraintConsistency {
      * Variant of {@link #apply(ConstraintSatisfactionProblem)} that accepts a hint of which
      * variables' domains changed since this consistency pass last ran in the current fixpoint
      * loop (see {@link io.github.rcrida.jcsp.solver.FixpointPropagation#applyFixpoint}), or {@code null} meaning "unknown
-     * — assume everything may have changed". A pass whose cost genuinely doesn't scale with
-     * constraint count (e.g. {@link io.github.rcrida.jcsp.consistency.arc.AC3}, a single object
-     * internally managing its own revise queue over binary arcs) has no need for the hint and
-     * inherits this default, which simply ignores it and delegates to {@link #apply}. Both {@link
-     * io.github.rcrida.jcsp.consistency.fixpoint.FixpointConsistency} and {@link
+     * — assume everything may have changed". A pass with nothing to skip inherits this default,
+     * which simply ignores the hint and delegates to {@link #apply}. Three implementors override
+     * it. {@link io.github.rcrida.jcsp.consistency.arc.AC3} (and {@link
+     * io.github.rcrida.jcsp.consistency.arc.AC3BitRm}) seeds its revise queue from the hint instead
+     * of re-enqueuing every arc in the problem — its cost scales with <em>arc</em> count, not
+     * constraint count, so an unseeded queue re-revises the whole graph at every search node. Both
+     * {@link io.github.rcrida.jcsp.consistency.fixpoint.FixpointConsistency} and {@link
      * io.github.rcrida.jcsp.consistency.fixpoint.NogoodFixpointConsistency} override it: each can
      * back a constraint count that grows past "fixed and small" (a learned nogood set grows
      * unboundedly over a search, per {@link io.github.rcrida.jcsp.assignments.NogoodStore}; an
