@@ -229,6 +229,70 @@ public class AC3BitRmTest {
         assertThat(AC3BitRm.INSTANCE.applyWithReason(problem, null).isInfeasible()).isTrue();
     }
 
+    /**
+     * {@link AC3BitRm#seedQueue}'s three cases, mirroring {@link AC3}'s own (which the solver chain
+     * covers incidentally -- this class is wired into no chain, per ADR-0022, so its seeded path is
+     * only ever reached from here). {@code y <= x} with {@code x in 0..2}, {@code y in 0..5} is
+     * arc-consistent only after {@code y} is clipped to {@code 0..2}; that pruning happens on arc
+     * {@code (y, x)}, i.e. the arc whose target is {@code x}.
+     */
+    @Test
+    void applySeeded_nullHintRevisesEveryArc() {
+        val problem = comparatorProblem();
+        val result = AC3BitRm.INSTANCE.apply(problem, null).orElseThrow();
+        assertThat(result.getVariableDomains().get(variableNamed(problem, "seed_y")))
+                .isEqualTo(IntRangeDomain.of(0, 2));
+    }
+
+    @Test
+    void applySeeded_hintNamingTheSupportSideRevisesThatArc() {
+        val problem = comparatorProblem();
+        Variable<?> x = variableNamed(problem, "seed_x");
+        Variable<?> y = variableNamed(problem, "seed_y");
+        // Arc (y, x) is indexed by its target x, so naming x as changed enqueues exactly it.
+        val result = AC3BitRm.INSTANCE.apply(problem, Set.of(x)).orElseThrow();
+        assertThat(result.getVariableDomains().get(y)).isEqualTo(IntRangeDomain.of(0, 2));
+    }
+
+    @Test
+    void applySeeded_hintNamingAnArclessVariableRevisesNothing() {
+        val problem = comparatorProblem();
+        Variable<?> y = variableNamed(problem, "seed_y");
+        Variable<Integer> unconstrained = Variable.Factory.INSTANCE.create("seed_unconstrained");
+        val result = AC3BitRm.INSTANCE.apply(problem, Set.of(unconstrained)).orElseThrow();
+        assertThat(result.getVariableDomains().get(y)).isEqualTo(IntRangeDomain.of(0, 5));
+    }
+
+    @Test
+    void applyWithReasonSeeded_usesTheSameSeeding() {
+        val redOnly = new EnumDomain<>(EnumSet.of(RED));
+        val problem = ConstraintSatisfactionProblem.builder()
+                .variableDomain(WA, redOnly)
+                .variableDomain(NT, redOnly)
+                .notEqualsConstraint(WA, NT)
+                .build();
+        assertThat(AC3BitRm.INSTANCE.applyWithReason(problem, Set.of(NT)).isInfeasible()).isTrue();
+        // NT is not a neighbour of itself, so a hint naming only an unrelated variable leaves the
+        // wipeout undetected by this pass -- the deferral seedQueue's Javadoc describes.
+        Variable<Integer> unrelated = Variable.Factory.INSTANCE.create("seed_unrelated");
+        assertThat(AC3BitRm.INSTANCE.applyWithReason(problem, Set.of(unrelated)).isInfeasible()).isFalse();
+    }
+
+    private static ConstraintSatisfactionProblem comparatorProblem() {
+        Variable<Integer> x = Variable.Factory.INSTANCE.create("seed_x");
+        Variable<Integer> y = Variable.Factory.INSTANCE.create("seed_y");
+        return ConstraintSatisfactionProblem.builder()
+                .variableDomain(x, IntRangeDomain.of(0, 2))
+                .variableDomain(y, IntRangeDomain.of(0, 5))
+                .constraint(BinaryComparatorConstraint.of(y, Operator.LEQ, x))
+                .build();
+    }
+
+    private static Variable<?> variableNamed(ConstraintSatisfactionProblem problem, String name) {
+        return problem.getVariableDomains().keySet().stream()
+                .filter(v -> v.getName().equals(name)).findFirst().orElseThrow();
+    }
+
     @Test
     void twoConstraintsOnSameArc_bothEnforced() {
         // Arc(x, y) carries two separate BinaryConstraint objects, exercising the per-constraint-

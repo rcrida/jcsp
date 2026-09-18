@@ -13,7 +13,6 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.util.Map;
-import java.util.Optional;
 import java.util.Random;
 import java.util.Set;
 
@@ -49,9 +48,9 @@ class DomWdegVariableSelectorTest {
         var selector = new DomWdegVariableSelector(Set.of(c12, c23));
 
         when(csp.getVariableDomains()).thenReturn(Map.of(v1, d1, v2, d2, v3, d3));
-        when(assignment.getValue(v1)).thenReturn(Optional.empty());
-        when(assignment.getValue(v2)).thenReturn(Optional.empty());
-        when(assignment.getValue(v3)).thenReturn(Optional.empty());
+        when(assignment.isAssigned(v1)).thenReturn(false);
+        when(assignment.isAssigned(v2)).thenReturn(false);
+        when(assignment.isAssigned(v3)).thenReturn(false);
         when(d1.size()).thenReturn(1);
         when(d2.size()).thenReturn(4);
         when(d3.size()).thenReturn(3);
@@ -69,15 +68,15 @@ class DomWdegVariableSelectorTest {
 
         // nextAssignment: v1 is the just-assigned variable (excluded by !v.equals(variable));
         // only v2 (the unassigned neighbour in c12) is actually queried.
-        when(nextAssignment.getValue(v2)).thenReturn(Optional.empty());
+        when(nextAssignment.isAssigned(v2)).thenReturn(false);
         selector.incrementWeights(v1, nextAssignment); // c12 weight → 2
 
         // Now select: v2 unassigned, v3 unassigned; v1 is excluded from csp.getVariableDomains()
         // (not a live decision variable here) but still globally unassigned, so c12 stays active.
         when(csp.getVariableDomains()).thenReturn(Map.of(v2, d2, v3, d3));
-        when(assignment.getValue(v1)).thenReturn(Optional.empty()); // c12's other endpoint, queried by isActive(c12, v2, ...)
-        when(assignment.getValue(v2)).thenReturn(Optional.empty());
-        when(assignment.getValue(v3)).thenReturn(Optional.empty());
+        when(assignment.isAssigned(v1)).thenReturn(false); // c12's other endpoint, queried by isActive(c12, v2, ...)
+        when(assignment.isAssigned(v2)).thenReturn(false);
+        when(assignment.isAssigned(v3)).thenReturn(false);
         when(d2.size()).thenReturn(4); // v2: wdeg = c12(2)+c23(1)=3 (both active) → ratio=4/3≈1.33
         when(d3.size()).thenReturn(3); // v3: wdeg = c23(1) → ratio=3/1=3.0
         // v2 wins with ratio 1.33 < 3.0
@@ -95,8 +94,8 @@ class DomWdegVariableSelectorTest {
 
         // nextAssignment: v2 is the just-assigned variable (excluded by !v.equals(variable));
         // v3 (neighbour via c23) and v1 (neighbour via c12) are what actually get queried.
-        when(nextAssignment.getValue(v3)).thenReturn(Optional.of("assigned"));
-        when(nextAssignment.getValue(v1)).thenReturn(Optional.empty());
+        when(nextAssignment.isAssigned(v3)).thenReturn(true);
+        when(nextAssignment.isAssigned(v1)).thenReturn(false);
 
         selector.incrementWeights(v2, nextAssignment);
         // c12 connects v1+v2; v1 is unassigned → c12 weight becomes 2
@@ -106,9 +105,9 @@ class DomWdegVariableSelectorTest {
         // v2 is excluded from csp.getVariableDomains() (not a live decision variable here) but still
         // globally unassigned, so c12/c23 both stay active -- matching the wdeg comments below.
         when(csp.getVariableDomains()).thenReturn(Map.of(v1, d1, v3, d3));
-        when(assignment.getValue(v1)).thenReturn(Optional.empty());
-        when(assignment.getValue(v2)).thenReturn(Optional.empty()); // c12/c23's other endpoint, queried by isActive
-        when(assignment.getValue(v3)).thenReturn(Optional.empty());
+        when(assignment.isAssigned(v1)).thenReturn(false);
+        when(assignment.isAssigned(v2)).thenReturn(false); // c12/c23's other endpoint, queried by isActive
+        when(assignment.isAssigned(v3)).thenReturn(false);
         when(d1.size()).thenReturn(2); // v1: wdeg = c12(2) (v2 not in variableDomains here) → ratio=1.0
         when(d3.size()).thenReturn(2); // v3: wdeg = c23(1) → ratio=2.0  (v2 not in variableDomains)
 
@@ -123,9 +122,9 @@ class DomWdegVariableSelectorTest {
         var selector = new DomWdegVariableSelector(Set.of(c12));
 
         when(csp.getVariableDomains()).thenReturn(Map.of(v1, d1, v3, d3));
-        when(assignment.getValue(v1)).thenReturn(Optional.empty());
-        when(assignment.getValue(v2)).thenReturn(Optional.empty()); // v2 counted as unassigned neighbour
-        when(assignment.getValue(v3)).thenReturn(Optional.empty());
+        when(assignment.isAssigned(v1)).thenReturn(false);
+        when(assignment.isAssigned(v2)).thenReturn(false); // v2 counted as unassigned neighbour
+        when(assignment.isAssigned(v3)).thenReturn(false);
         when(d1.size()).thenReturn(5); // v1: ratio = 5/1 = 5.0
         when(d3.size()).thenReturn(1); // v3: ratio = MAX_VALUE (no active constraints)
 
@@ -140,13 +139,13 @@ class DomWdegVariableSelectorTest {
         NogoodConstraint nogood = GroundNogoodConstraint.of(Map.of(v1, "a", v3, "b"));
         var selector = new DomWdegVariableSelector(Set.of(c12, nogood));
 
-        when(nextAssignment.getValue(v2)).thenReturn(Optional.empty());
+        when(nextAssignment.isAssigned(v2)).thenReturn(false);
         selector.incrementWeights(v1, nextAssignment); // c12 weight -> 2; nogood skipped entirely
 
         when(csp.getVariableDomains()).thenReturn(Map.of(v2, d2, v3, d3));
-        when(assignment.getValue(v1)).thenReturn(Optional.empty());
-        when(assignment.getValue(v2)).thenReturn(Optional.empty());
-        when(assignment.getValue(v3)).thenReturn(Optional.empty());
+        when(assignment.isAssigned(v1)).thenReturn(false);
+        when(assignment.isAssigned(v2)).thenReturn(false);
+        when(assignment.isAssigned(v3)).thenReturn(false);
         when(d2.size()).thenReturn(2); // v2: wdeg = c12(2) → ratio = 1.0
         when(d3.size()).thenReturn(1); // v3: wdeg = 0 (nogood ignored, not just unweighted) → ratio = MAX_VALUE
 
@@ -162,8 +161,8 @@ class DomWdegVariableSelectorTest {
         var selector = new DomWdegVariableSelector(Set.of());
 
         when(csp.getVariableDomains()).thenReturn(Map.of(v1, d1, v3, d3));
-        when(assignment.getValue(v1)).thenReturn(Optional.empty());
-        when(assignment.getValue(v3)).thenReturn(Optional.empty());
+        when(assignment.isAssigned(v1)).thenReturn(false);
+        when(assignment.isAssigned(v3)).thenReturn(false);
         when(d1.size()).thenReturn(1);
         when(d3.size()).thenReturn(1);
 
@@ -178,8 +177,8 @@ class DomWdegVariableSelectorTest {
         var selector = new DomWdegVariableSelector(Set.of());
 
         when(csp.getVariableDomains()).thenReturn(Map.of(v1, d1, v3, d3));
-        when(assignment.getValue(v1)).thenReturn(Optional.empty());
-        when(assignment.getValue(v3)).thenReturn(Optional.empty());
+        when(assignment.isAssigned(v1)).thenReturn(false);
+        when(assignment.isAssigned(v3)).thenReturn(false);
         when(d1.size()).thenReturn(1);
         when(d3.size()).thenReturn(1);
 
@@ -201,8 +200,8 @@ class DomWdegVariableSelectorTest {
         when(random.nextInt(2)).thenReturn(0, 1);
 
         when(csp.getVariableDomains()).thenReturn(Map.of(v1, d1, v3, d3));
-        when(assignment.getValue(v1)).thenReturn(Optional.empty());
-        when(assignment.getValue(v3)).thenReturn(Optional.empty());
+        when(assignment.isAssigned(v1)).thenReturn(false);
+        when(assignment.isAssigned(v3)).thenReturn(false);
         when(d1.size()).thenReturn(1);
         when(d3.size()).thenReturn(1);
 
@@ -224,8 +223,8 @@ class DomWdegVariableSelectorTest {
         Random random = mock(Random.class);
 
         when(csp.getVariableDomains()).thenReturn(Map.of(v1, d1, v2, d2));
-        when(assignment.getValue(v1)).thenReturn(Optional.empty());
-        when(assignment.getValue(v2)).thenReturn(Optional.empty());
+        when(assignment.isAssigned(v1)).thenReturn(false);
+        when(assignment.isAssigned(v2)).thenReturn(false);
         when(d1.size()).thenReturn(1);
         when(d2.size()).thenReturn(4);
 
@@ -246,7 +245,7 @@ class DomWdegVariableSelectorTest {
         var selector = new DomWdegVariableSelector(Set.of(c12));
 
         when(csp.getVariableDomains()).thenReturn(Map.of(v1, d1, v2, d2));
-        when(assignment.getValue(v1)).thenReturn(Optional.empty());
+        when(assignment.isAssigned(v1)).thenReturn(false);
 
         selector.recordConflict(v1);
         assertThat(selector.select(csp, assignment)).isEqualTo(v1);
@@ -263,8 +262,8 @@ class DomWdegVariableSelectorTest {
         var selector = new DomWdegVariableSelector(Set.of(c12));
 
         when(csp.getVariableDomains()).thenReturn(Map.of(v1, d1, v2, d2));
-        when(assignment.getValue(v1)).thenReturn(Optional.of("assigned"));
-        when(assignment.getValue(v2)).thenReturn(Optional.empty());
+        when(assignment.isAssigned(v1)).thenReturn(true);
+        when(assignment.isAssigned(v2)).thenReturn(false);
         when(d2.size()).thenReturn(1);
 
         selector.recordConflict(v1);
@@ -279,7 +278,7 @@ class DomWdegVariableSelectorTest {
         var selector = new DomWdegVariableSelector(Set.of());
 
         when(csp.getVariableDomains()).thenReturn(Map.of(v2, d2));
-        when(assignment.getValue(v2)).thenReturn(Optional.empty());
+        when(assignment.isAssigned(v2)).thenReturn(false);
         when(d2.size()).thenReturn(3);
 
         selector.recordConflict(v1);
@@ -291,7 +290,7 @@ class DomWdegVariableSelectorTest {
         var selector = new DomWdegVariableSelector(Set.of());
 
         when(csp.getVariableDomains()).thenReturn(Map.of(v1, d1));
-        when(assignment.getValue(v1)).thenReturn(Optional.of("assigned"));
+        when(assignment.isAssigned(v1)).thenReturn(true);
 
         assertThatThrownBy(() -> selector.select(csp, assignment))
                 .isInstanceOf(IllegalStateException.class)

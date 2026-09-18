@@ -72,7 +72,7 @@ public class MAC implements Inference {
                                          Assignment assignment) {
         val queue = new ArrayDeque<Arc>();
         for (Arc arc : AC3.INSTANCE.arcsInto(problem, variable)) {
-            if (!assignment.getValues().containsKey(arc.getFrom())) queue.add(arc);
+            if (!assignment.isAssigned(arc.getFrom())) queue.add(arc);
         }
         return queue;
     }

@@ -137,13 +137,13 @@ public class DomWdegVariableSelector implements UnassignedVariableSelector {
     @Override
     public Variable<?> select(@NonNull ConstraintSatisfactionProblem csp, @NonNull Assignment assignment) {
         if (lastConflictVariable != null && csp.getVariableDomains().containsKey(lastConflictVariable)
-                && assignment.getValue(lastConflictVariable).isEmpty()) {
+                && !assignment.isAssigned(lastConflictVariable)) {
             return lastConflictVariable;
         }
         double bestRatio = Double.MAX_VALUE;
         List<Variable<?>> tied = new ArrayList<>();
         for (Map.Entry<Variable<?>, Domain<?>> e : csp.getVariableDomains().entrySet()) {
-            if (assignment.getValue(e.getKey()).isPresent()) continue;
+            if (assignment.isAssigned(e.getKey())) continue;
             double ratio = ratio(e.getKey(), e.getValue().size(), assignment);
             if (ratio < bestRatio) {
                 bestRatio = ratio;
@@ -172,9 +172,18 @@ public class DomWdegVariableSelector implements UnassignedVariableSelector {
     /** A constraint is "active" w.r.t. {@code variable} if it has at least one other variable
      *  still unassigned in {@code assignment}. Callers only ever pass a constraint drawn from
      *  {@link #constraintsByVariable}'s entry for {@code variable}, so it's already guaranteed
-     *  to involve {@code variable} and to not be a {@link NogoodConstraint}. */
+     *  to involve {@code variable} and to not be a {@link NogoodConstraint}.
+     *  <p>
+     *  A plain loop over {@link Assignment#getValues()} rather than a {@code stream().anyMatch(...)}
+     *  over {@link Assignment#getValue}: this runs once per (unassigned variable × incident
+     *  constraint) at every search node, so the stream pipeline and the {@link java.util.Optional}
+     *  per variable examined were among the largest allocation sources in the whole solver -- the
+     *  same stream-construction cost {@code NogoodFixpointConsistency#relevant} and {@link
+     *  Assignment#isConsistentAmong} were each already fixed for. */
     private boolean isActive(@NonNull Constraint c, @NonNull Variable<?> variable, @NonNull Assignment assignment) {
-        return c.getVariables().stream()
-                .anyMatch(v -> !v.equals(variable) && assignment.getValue(v).isEmpty());
+        for (Variable<?> v : c.getVariables()) {
+            if (!v.equals(variable) && !assignment.isAssigned(v)) return true;
+        }
+        return false;
     }
 }

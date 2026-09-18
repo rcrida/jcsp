@@ -73,6 +73,22 @@ public record Assignment(@Singular Map<Variable<?>, Object> values, Statistics s
     }
 
     /**
+     * Whether {@code variable} has a value here — {@link #getValue}'s answer without the {@link
+     * Optional} wrapper. Exactly equivalent to {@code getValue(variable).isPresent()}, since {@link
+     * #values} never intentionally maps a variable to {@code null} (the same assumption {@link
+     * #getValue} and {@link #partialValues} already rely on).
+     * <p>
+     * Exists because the "is this assigned yet?" question is asked far more often than the value
+     * itself is wanted, in loops whose iteration count is the whole point: {@link
+     * io.github.rcrida.jcsp.solver.backtrackingsearch.selector.DomWdegVariableSelector} asks it once
+     * per (unassigned variable × incident constraint × node), where allocating an {@link Optional}
+     * per question made it one of the largest allocation sources in the solver.
+     */
+    public boolean isAssigned(@NonNull Variable<?> variable) {
+        return values.containsKey(variable);
+    }
+
+    /**
      * Iterates {@code variables} and looks each one up in {@link #values} directly, rather than
      * scanning every entry in {@link #values} and filtering by membership in {@code variables} —
      * {@code variables} is typically a single constraint's own handful of variables, far smaller
