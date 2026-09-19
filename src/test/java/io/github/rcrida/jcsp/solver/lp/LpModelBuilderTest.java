@@ -6,6 +6,7 @@ import io.github.rcrida.jcsp.constraints.Operator;
 import io.github.rcrida.jcsp.constraints.nary.GlobalCardinalityConstraint;
 import io.github.rcrida.jcsp.constraints.nary.NaryStarredTuplesConstraint;
 import io.github.rcrida.jcsp.domains.IntRangeDomain;
+import io.github.rcrida.jcsp.constraints.nary.GroundNogoodConstraint;
 import io.github.rcrida.jcsp.solver.LinearObjective;
 import io.github.rcrida.jcsp.variables.Variable;
 import org.junit.jupiter.api.Test;
@@ -537,5 +538,104 @@ public class LpModelBuilderTest {
 
         assertThat(bound).isPresent();
         assertThat(bound.get().lowerBound()).isCloseTo(-1.0, within(1e-6));
+    }
+
+    // --- model reuse across calls sharing a cache key ---
+
+    /** minimize 2x+3y s.t. x+y>=4. */
+    private static ConstraintSatisfactionProblem reuseFixture(Variable<Integer> x, Variable<Integer> y, int xMax) {
+        return ConstraintSatisfactionProblem.builder()
+                .variableDomain(x, IntRangeDomain.of(0, xMax))
+                .variableDomain(y, IntRangeDomain.of(0, 10))
+                .sumConstraint(Set.of(x, y), Operator.GEQ, 4)
+                .build();
+    }
+
+    @Test
+    void cachedModel_refreshesBoundsRatherThanReusingThePreviousNodesDomains() {
+        // The bug this guards: a retained model whose variable bounds are not re-applied would
+        // answer the second call with the first call's domains. Narrowing x out of the optimum
+        // must move the bound from 8 (x=4) to 12+ (y forced in).
+        Variable<Integer> x = F.create("reuse_x");
+        Variable<Integer> y = F.create("reuse_y");
+        LinearObjective objective = LinearObjective.builder().coefficient(x, 2.0).coefficient(y, 3.0).build();
+        Object key = new Object();
+
+        // Derived via withDomain, not rebuilt: that is what shares one ConstraintGraph -- and hence
+        // one auxiliary cache -- the way successive search nodes do. A freshly built CSP would get a
+        // new graph and silently never hit the cache, so this test would prove nothing.
+        var wideCsp = reuseFixture(x, y, 10);
+        var wide = LpModelBuilder.solve(wideCsp, objective, key);
+        assertThat(wide).isPresent();
+        assertThat(wide.get().lowerBound()).isCloseTo(8.0, within(1e-6));
+
+        // Same key and graph, x now capped at 1: cheapest is x=1,y=3 -> 2 + 9 = 11.
+        var narrowedCsp = wideCsp.withDomain(x, IntRangeDomain.of(0, 1));
+        var narrowed = LpModelBuilder.solve(narrowedCsp, objective, key);
+        assertThat(narrowed).isPresent();
+        assertThat(narrowed.get().lowerBound()).isCloseTo(11.0, within(1e-6));
+
+        // And widening again must recover the original bound, not stay narrow.
+        var rewidened = LpModelBuilder.solve(narrowedCsp.withDomain(x, IntRangeDomain.of(0, 10)), objective, key);
+        assertThat(rewidened).isPresent();
+        assertThat(rewidened.get().lowerBound()).isCloseTo(8.0, within(1e-6));
+    }
+
+    @Test
+    void cachedModel_differentObjectiveUnderTheSameKey_isRebuiltNotReused() {
+        Variable<Integer> x = F.create("objswap_x");
+        Variable<Integer> y = F.create("objswap_y");
+        Object key = new Object();
+        var csp = reuseFixture(x, y, 10);
+
+        var first = LpModelBuilder.solve(csp, LinearObjective.builder()
+                .coefficient(x, 2.0).coefficient(y, 3.0).build(), key);
+        assertThat(first.orElseThrow().lowerBound()).isCloseTo(8.0, within(1e-6));
+
+        // y is now the cheap one: all-y at y=4 costs 12, vs all-x at x=4 costing 20.
+        var second = LpModelBuilder.solve(csp, LinearObjective.builder()
+                .coefficient(x, 5.0).coefficient(y, 3.0).build(), key);
+        assertThat(second.orElseThrow().lowerBound()).isCloseTo(12.0, within(1e-6));
+    }
+
+    @Test
+    void cachedModel_assignmentRelaxationRows_areNotReused() {
+        // Those rows add ojAlgo variables derived from each call's live domains, so this problem
+        // must fall back to a full rebuild -- and still produce the tight -11 bound every time.
+        Variable<Integer> s0 = F.create("nocache_s0");
+        Variable<Integer> s1 = F.create("nocache_s1");
+        Variable<Integer> g0 = F.create("nocache_g0");
+        Variable<Integer> g1 = F.create("nocache_g1");
+        var csp = ConstraintSatisfactionProblem.builder()
+                .variableDomain(s0, IntRangeDomain.of(0, 2))
+                .variableDomain(s1, IntRangeDomain.of(0, 2))
+                .variableDomain(g0, IntRangeDomain.of(0, 10))
+                .variableDomain(g1, IntRangeDomain.of(0, 10))
+                .globalCardinalityRangeConstraint(Set.of(s0, s1),
+                        Map.of(0, atMostOne(), 1, atMostOne(), 2, atMostOne()))
+                .tuplesConstraint(Set.of(
+                        Assignment.of(Map.of(s0, 0, g0, 10)),
+                        Assignment.of(Map.of(s0, 1, g0, 1)),
+                        Assignment.of(Map.of(s0, 2, g0, 1))))
+                .tuplesConstraint(Set.of(
+                        Assignment.of(Map.of(s1, 0, g1, 10)),
+                        Assignment.of(Map.of(s1, 1, g1, 1)),
+                        Assignment.of(Map.of(s1, 2, g1, 1))))
+                .build();
+        LinearObjective objective = LinearObjective.builder().coefficient(g0, -1.0).coefficient(g1, -1.0).build();
+        Object key = new Object();
+
+        assertThat(LpModelBuilder.solve(csp, objective, key).orElseThrow().lowerBound()).isCloseTo(-11.0, within(1e-6));
+        assertThat(LpModelBuilder.solve(csp, objective, key).orElseThrow().lowerBound()).isCloseTo(-11.0, within(1e-6));
+        // Uncached overload, twice over the same problem: exercises the constraint-classification
+        // cache's own hit path, which the reusable-model path would otherwise reach only once.
+        assertThat(LpModelBuilder.solve(csp, objective).orElseThrow().lowerBound()).isCloseTo(-11.0, within(1e-6));
+        assertThat(LpModelBuilder.solve(csp, objective).orElseThrow().lowerBound()).isCloseTo(-11.0, within(1e-6));
+        // Learning a nogood keeps the same constraint graph but changes getConstraints()' reference,
+        // which invalidates the classification cache. The bound is unaffected: a nogood is not
+        // linear, so it contributes no LP row.
+        var withNogood = csp.withNogoods(Set.of(GroundNogoodConstraint.of(Map.of(s0, 0))));
+        assertThat(LpModelBuilder.solve(withNogood, objective).orElseThrow().lowerBound())
+                .isCloseTo(-11.0, within(1e-6));
     }
 }

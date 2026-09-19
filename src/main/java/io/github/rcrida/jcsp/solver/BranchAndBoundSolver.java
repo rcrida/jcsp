@@ -1,6 +1,10 @@
 package io.github.rcrida.jcsp.solver;
 
+import lombok.AccessLevel;
 import lombok.Builder;
+import lombok.EqualsAndHashCode;
+import lombok.Getter;
+import lombok.ToString;
 import lombok.Value;
 import lombok.extern.slf4j.Slf4j;
 import lombok.val;
@@ -106,6 +110,17 @@ public class BranchAndBoundSolver implements Solver {
     /** Below this, an LP-relaxed value is treated as already integral rather than fractional. */
     private static final double FRACTIONAL_EPSILON = 1e-6;
 
+    /**
+     * Identity token under which this solver's reusable LP model is cached, per {@link
+     * ConstraintSatisfactionProblem} -- see {@link LpModelBuilder#solve(ConstraintSatisfactionProblem,
+     * LinearObjective, Object)} for why reuse is keyed on a per-solver token rather than shared. A
+     * field with a direct initializer and no {@code @Builder.Default} is invisible to the generated
+     * builder (Lombok's convention), so every instance gets its own; excluded from {@code equals}/
+     * {@code hashCode}/{@code toString} so it cannot affect this value class's identity.
+     */
+    @EqualsAndHashCode.Exclude @ToString.Exclude @Getter(AccessLevel.NONE)
+    Object lpModelCacheKey = new Object();
+
     @NonNull UnassignedVariableSelector unassignedVariableSelector;
     @NonNull DomainValuesOrderer domainValuesOrderer;
     @NonNull Inference inference;
@@ -143,7 +158,7 @@ public class BranchAndBoundSolver implements Solver {
         }
         Variable<?> variable;
         if (objective instanceof LinearObjective linearObjective) {
-            Optional<LpBound> bound = LpModelBuilder.solve(csp, linearObjective);
+            Optional<LpBound> bound = LpModelBuilder.solve(csp, linearObjective, lpModelCacheKey);
             if (bound.isEmpty() || bound.get().lowerBound() >= incumbent[0]) {
                 return Stream.empty();
             }
@@ -249,7 +264,7 @@ public class BranchAndBoundSolver implements Solver {
      */
     private Optional<Assignment> resolveContinuousResidual(ConstraintSatisfactionProblem csp, Assignment assignment, double incumbent) {
         if (objective instanceof LinearObjective linearObjective) {
-            Optional<Assignment> viaLp = LpModelBuilder.solve(csp, linearObjective)
+            Optional<Assignment> viaLp = LpModelBuilder.solve(csp, linearObjective, lpModelCacheKey)
                     .map(bound -> mergeUnassigned(assignment, bound.solution()))
                     .filter(candidate -> candidate.isComplete(csp) && candidate.isConsistent(csp));
             if (viaLp.isPresent()) {

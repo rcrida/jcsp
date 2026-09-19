@@ -18,6 +18,7 @@ import io.github.rcrida.jcsp.solver.LinearObjective;
 import io.github.rcrida.jcsp.variables.Variable;
 import lombok.extern.slf4j.Slf4j;
 import org.jspecify.annotations.NonNull;
+import org.jspecify.annotations.Nullable;
 import org.ojalgo.optimisation.Expression;
 import org.ojalgo.optimisation.ExpressionsBasedModel;
 import org.ojalgo.optimisation.Optimisation;
@@ -88,13 +89,68 @@ public final class LpModelBuilder {
      * certainly infeasible too, since the relaxation only ever enlarges the feasible region).
      */
     public static Optional<LpBound> solve(@NonNull ConstraintSatisfactionProblem csp, @NonNull LinearObjective objective) {
+        return solve(csp, objective, null);
+    }
+
+    /**
+     * As {@link #solve(ConstraintSatisfactionProblem, LinearObjective)}, reusing one {@link
+     * ExpressionsBasedModel} across calls that share {@code cacheKey} instead of rebuilding it from
+     * scratch every time.
+     * <p>
+     * Worth doing because {@link io.github.rcrida.jcsp.solver.BranchAndBoundSolver} calls this at <em>every</em> search node, and
+     * almost none of the model changes between them: {@link #addRow} reads only a constraint's
+     * coefficients, operator and bound, all structural, and {@link #relevantVariables} collects from
+     * the same four linear constraint types -- so the variables and rows are fixed for a given
+     * constraint graph. Only the variables' own bounds move as domains narrow, and
+     * {@link #boundsOf} is re-read and re-applied on every call. JFR profiling of {@code
+     * LowAutocorrelation-015} put 21% of the entire solve inside {@link #build}, against 53% actually
+     * solving.
+     * <p>
+     * {@code cacheKey} is expected to be an identity token owned by one solver instance (see {@code
+     * BranchAndBoundSolver}'s own field), and the entry is held in {@code csp}'s per-{@code
+     * ConstraintGraph} auxiliary cache. That pair is what makes reuse safe: keying on the graph means
+     * learned nogoods -- which change {@link ConstraintSatisfactionProblem#getConstraints()}'s
+     * reference on almost every node but contribute no rows, being non-linear -- never invalidate it,
+     * while keying additionally on a per-solver token stops two solves of the same problem sharing one
+     * mutable model. {@code null} disables reuse entirely, which is what the two-argument overload
+     * above passes.
+     * <p>
+     * Reuse is skipped for a problem with assignment-relaxation rows (see {@link
+     * #addAssignmentRelaxationRows} and ADR-0020): those add fresh ojAlgo <em>variables</em> derived
+     * from each node's live domains, so they cannot be carried between nodes, and re-adding them to a
+     * retained model would accumulate. Such a problem falls back to a full rebuild per node, exactly
+     * as before.
+     */
+    public static Optional<LpBound> solve(@NonNull ConstraintSatisfactionProblem csp,
+                                           @NonNull LinearObjective objective,
+                                           @Nullable Object cacheKey) {
         List<Variable<?>> variables = List.copyOf(relevantVariables(csp, objective));
         if (variables.isEmpty()) {
             return Optional.of(new LpBound(objective.getConstant(), Map.of()));
         }
 
-        Map<Variable<?>, org.ojalgo.optimisation.Variable> ojVariables = new LinkedHashMap<>();
-        ExpressionsBasedModel model = build(csp, objective, variables, ojVariables);
+        ReusableModel reusable = cacheKey == null ? null : reusableModel(csp, objective, variables, cacheKey);
+        Map<Variable<?>, org.ojalgo.optimisation.Variable> ojVariables;
+        ExpressionsBasedModel model;
+        if (reusable == null) {
+            ojVariables = new LinkedHashMap<>();
+            model = build(csp, objective, variables, ojVariables);
+        } else {
+            // A copy per node, not the template itself: ojAlgo retains presolve state on a model it
+            // has solved, so mutating bounds and re-solving the same instance returns a valid but
+            // far weaker bound (measured: Knapsack-30-100-00 went from 605 nodes to 288,022).
+            model = reusable.model().copy();
+            ojVariables = new LinkedHashMap<>();
+            // The cached list, not the freshly computed one: it is what the retained model's variable
+            // order was built from, and the two agree by the invariant documented on reusableModel.
+            List<Variable<?>> cachedVariables = reusable.variables();
+            for (int i = 0; i < cachedVariables.size(); i++) {
+                Variable<?> variable = cachedVariables.get(i);
+                double[] bounds = boundsOf(csp, variable);
+                var ojVariable = model.getVariable(i).lower(bounds[0]).upper(bounds[1]);
+                ojVariables.put(variable, ojVariable);
+            }
+        }
 
         Optimisation.Result result = model.minimise();
         if (!result.getState().isFeasible()) {
@@ -107,6 +163,41 @@ public final class LpModelBuilder {
             solution.put(variable, ojVariables.get(variable).getValue().doubleValue());
         }
         return Optional.of(new LpBound(result.getValue() + objective.getConstant(), solution));
+    }
+
+    /** A structural model retained across nodes; see {@link #solve(ConstraintSatisfactionProblem, LinearObjective, Object)}. */
+    private record ReusableModel(LinearObjective objective, List<Variable<?>> variables,
+                                  Map<Variable<?>, org.ojalgo.optimisation.Variable> ojVariables,
+                                  ExpressionsBasedModel model) {
+    }
+
+    /**
+     * The retained model for {@code cacheKey}, or {@code null} when this problem cannot reuse one.
+     * A cached entry is reused only when it was built for the same {@code objective}, so a caller
+     * that changes objective mid-solve is rebuilt for rather than silently served a stale model.
+     * Matching on the objective alone is sufficient to keep {@link ReusableModel#variables} aligned
+     * with the retained model's own variable order, which the index-based lookup below depends on:
+     * {@link #relevantVariables} is a function of the objective's coefficient keys and the linear
+     * constraints, and the latter are fixed for the constraint graph this entry is already keyed on.
+     */
+    private static @Nullable ReusableModel reusableModel(ConstraintSatisfactionProblem csp,
+                                                          LinearObjective objective,
+                                                          List<Variable<?>> variables,
+                                                          Object cacheKey) {
+        AtomicReference<ReusableModel> holder =
+                csp.computeAuxiliaryCacheIfAbsent(cacheKey, ignored -> new AtomicReference<>());
+        ReusableModel cached = holder.get();
+        if (cached != null) {
+            return cached.objective().equals(objective) ? cached : null;
+        }
+        if (!findAssignmentLinkages(csp, objective).isEmpty()) {
+            return null;
+        }
+        Map<Variable<?>, org.ojalgo.optimisation.Variable> ojVariables = new LinkedHashMap<>();
+        ExpressionsBasedModel model = build(csp, objective, variables, ojVariables);
+        ReusableModel fresh = new ReusableModel(objective, variables, ojVariables, model);
+        holder.set(fresh);
+        return fresh;
     }
 
     private static ExpressionsBasedModel build(ConstraintSatisfactionProblem csp,
