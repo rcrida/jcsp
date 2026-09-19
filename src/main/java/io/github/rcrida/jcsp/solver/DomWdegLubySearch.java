@@ -9,6 +9,7 @@ import io.github.rcrida.jcsp.consistency.ConsistencyResult;
 import io.github.rcrida.jcsp.consistency.Inference;
 import io.github.rcrida.jcsp.solver.listener.SolverListener;
 import io.github.rcrida.jcsp.solver.backtrackingsearch.order.DomainValuesOrderer;
+import io.github.rcrida.jcsp.solver.backtrackingsearch.order.PhaseMemory;
 import io.github.rcrida.jcsp.solver.backtrackingsearch.selector.DomWdegVariableSelector;
 import io.github.rcrida.jcsp.variables.Variable;
 import lombok.Builder;
@@ -16,6 +17,7 @@ import lombok.Value;
 import lombok.extern.slf4j.Slf4j;
 import org.jspecify.annotations.NonNull;
 
+import java.util.List;
 import java.util.Optional;
 import java.util.stream.Stream;
 
@@ -54,7 +56,10 @@ import java.util.stream.Stream;
  * SolverListener} callback, or by reading the exception's own carried snapshot) still sees every
  * restart that had actually completed before the interruption, not zero.
  * A lightweight {@link BudgetExceeded} sentinel (pre-allocated, no stack trace) unwinds the
- * recursion when the budget is exhausted.
+ * recursion when the budget is exhausted. {@link #phaseMemory} survives a restart the same way, so
+ * each attempt re-enters the deepest path it previously reached rather than rediscovering it value
+ * by value -- see {@link PhaseMemory}. Only {@link #getSolution} consults it; {@link #getSolutions}
+ * has no restarts to recover from and keeps its existing value ordering exactly.
  * <p>
  * Both search methods check consistency <em>incrementally</em>, against {@link
  * ConstraintSatisfactionProblem#getConstraintsTouching} for the variable just assigned, rather than
@@ -106,6 +111,12 @@ public class DomWdegLubySearch implements Solver {
      * (typically via {@code SolverConfig.getStatistics()}) to read it back after the call.
      */
     @NonNull Statistics statistics;
+    /**
+     * Value memory shared across every Luby restart of one {@link #getSolution} call, alongside
+     * {@link #nogoodStore} and the selector's weights -- see {@link PhaseMemory}. Not consulted by
+     * {@link #getSolutions}, which never restarts.
+     */
+    @NonNull PhaseMemory phaseMemory;
     @NonNull SolverListener listener;
     @NonNull Cancellation cancellation;
     @NonNull RestartRandomization restartRandomization;
@@ -117,6 +128,7 @@ public class DomWdegLubySearch implements Solver {
         private SolverLimits limits = SolverLimits.unlimited();
         private NogoodStore nogoodStore = new NogoodStore();
         private Statistics statistics = new Statistics();
+        private PhaseMemory phaseMemory = new PhaseMemory();
         private SolverListener listener = SolverListener.NONE;
         private Cancellation cancellation = Cancellation.NEVER;
         private RestartRandomization restartRandomization = RestartRandomization.NONE;
@@ -124,7 +136,7 @@ public class DomWdegLubySearch implements Solver {
         public DomWdegLubySearch build() {
             if (lubyUnit <= 0) throw new IllegalArgumentException("lubyUnit must be positive, got: " + lubyUnit);
             if (maxRestarts <= 0) throw new IllegalArgumentException("maxRestarts must be positive, got: " + maxRestarts);
-            return new DomWdegLubySearch(lubyUnit, maxRestarts, domainValuesOrderer, inference, limits, nogoodStore, statistics, listener, cancellation, restartRandomization);
+            return new DomWdegLubySearch(lubyUnit, maxRestarts, domainValuesOrderer, inference, limits, nogoodStore, statistics, phaseMemory, listener, cancellation, restartRandomization);
         }
     }
 
@@ -256,7 +268,9 @@ public class DomWdegLubySearch implements Solver {
             return Optional.of(assignment);
         }
         Variable<?> variable = selector.select(csp, assignment);
-        for (Object value : domainValuesOrderer.order(csp, variable, assignment).toList()) {
+        List<Object> candidates = phaseMemory.prioritise(variable,
+                (List<Object>) domainValuesOrderer.order(csp, variable, assignment).toList());
+        for (Object value : candidates) {
             Assignment next = assignment.withValue((Variable<Object>) variable, value);
             switch (limits.checkStop(cancellation, next.getStatistics().getNodesExplored(), deadline)) {
                 case CANCELLED -> {
@@ -278,6 +292,7 @@ public class DomWdegLubySearch implements Solver {
                 if (++failures[0] >= budget) throw BudgetExceeded.INSTANCE;
                 continue;
             }
+            phaseMemory.recordIfDeepest(next.getValues());
             Optional<Assignment> result = searchOne(inferred.get(), next, selector, failures, budget, deadline);
             if (result.isPresent()) return result;
         }
