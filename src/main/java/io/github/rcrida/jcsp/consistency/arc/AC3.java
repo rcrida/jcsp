@@ -62,6 +62,22 @@ public class AC3 implements ConstraintConsistency {
         return arcIndex(problem).arcsByTarget().getOrDefault(variable, List.of());
     }
 
+    /**
+     * Exactly the variables {@link #seedQueue} can turn into queued arcs -- the {@code to} sides,
+     * since an arc {@code (X_k, X_i)} is only revisable when its support side {@code X_i} shrank.
+     * Waking this pass for any other variable could only ever produce an empty queue.
+     */
+    @Override
+    public Set<Variable<?>> variablesCovered(ConstraintSatisfactionProblem problem) {
+        return arcIndex(problem).arcsByTarget().keySet();
+    }
+
+    /** The revise queue requeues every arc a narrowing makes revisable, so a pass ends arc-consistent. */
+    @Override
+    public boolean convergesInternally() {
+        return true;
+    }
+
     private ArcIndex buildArcIndex(ConstraintSatisfactionProblem problem) {
         Map<Arc, List<BinaryConstraint<?, ?>>> arcConstraints = problem.getAllBinaryArcConstraints();
         Map<Variable<?>, List<Arc>> arcsByTarget = arcConstraints.keySet().stream()

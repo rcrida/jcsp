@@ -1,6 +1,10 @@
 package io.github.rcrida.jcsp.solver;
 
+import lombok.AccessLevel;
 import lombok.Builder;
+import lombok.EqualsAndHashCode;
+import lombok.Getter;
+import lombok.ToString;
 import lombok.Value;
 import lombok.extern.slf4j.Slf4j;
 import io.github.rcrida.jcsp.ConstraintSatisfactionProblem;
@@ -83,12 +87,16 @@ import io.github.rcrida.jcsp.variables.Variable;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicReference;
 
 /**
  * Runs a list of propagators -- AC3, AllDiff GAC, SumBoundConstraint bounds propagation,
@@ -141,6 +149,17 @@ public class FixpointPropagation {
      * explicitly, so the default only matters for a caller that builds one directly without either.
      */
     @Builder.Default @NonNull List<ConstraintConsistency> propagators = PROPAGATORS;
+
+    /**
+     * Identity token this instance's {@link Coverage} is memoized under, per {@link
+     * ConstraintSatisfactionProblem}. A field with a direct initializer and no {@code
+     * @Builder.Default} is invisible to the {@code @Builder}-generated builder (Lombok's own
+     * convention), which is exactly right: every instance gets its own fresh token. Excluded from
+     * {@code equals}/{@code hashCode}/{@code toString} so it can't affect this value class's
+     * identity, which is its {@link #propagators} list.
+     */
+    @EqualsAndHashCode.Exclude @ToString.Exclude @Getter(AccessLevel.NONE)
+    Object coverageCacheKey = new Object();
 
     public static final List<ConstraintConsistency> PROPAGATORS = List.of(
             FixpointConsistency.of(UnaryComparatorConstraint.class),
@@ -349,31 +368,184 @@ public class FixpointPropagation {
             @NonNull ConstraintSatisfactionProblem csp, @Nullable Set<Variable<?>> initialSeed,
             @NonNull SolverListener listener, @NonNull Statistics statistics, @NonNull Cancellation cancellation) {
         log.debug("applyFixpoint");
+        checkCancelled(csp, statistics, cancellation);
+        var current = csp;
+        var worklist = new Worklist(propagators, coverageFor(csp), initialSeed);
+        for (int i = worklist.next(); i >= 0; i = worklist.next()) {
+            checkCancelled(current, statistics, cancellation);
+            var propagator = propagators.get(i);
+            var beforePropagator = current;
+            var after = propagator.apply(current, worklist.takeDirty(i));
+            if (after.isEmpty()) return Optional.empty();
+            current = after.get();
+            if (current != beforePropagator) {
+                worklist.wake(i, changedVariables(beforePropagator.getVariableDomains(), current.getVariableDomains()));
+                logIfDomainSumReduced(propagator, beforePropagator, current, log.isDebugEnabled(), listener);
+            }
+        }
+        return Optional.of(current);
+    }
+
+    private static void checkCancelled(ConstraintSatisfactionProblem csp, Statistics statistics,
+                                        Cancellation cancellation) {
         if (cancellation.isCancelled()) {
             statistics.updateCurrentSearchSpace(csp.getSearchSpace());
             throw new SolverCancelledException(statistics);
         }
-        var current = csp;
-        Set<Variable<?>> changedVariables = initialSeed;
-        boolean changed = true;
-        while (changed) {
-            Map<Variable<?>, Domain<?>> before = current.getVariableDomains();
-            double domainSumBefore = domainSum(current);
-            for (var propagator : propagators) {
-                if (cancellation.isCancelled()) {
-                    statistics.updateCurrentSearchSpace(current.getSearchSpace());
-                    throw new SolverCancelledException(statistics);
-                }
-                var beforePropagator = current;
-                var after = propagator.apply(current, changedVariables);
-                if (after.isEmpty()) return Optional.empty();
-                current = after.get();
-                logIfDomainSumReduced(propagator, beforePropagator, current, log.isDebugEnabled(), listener);
+    }
+
+    /**
+     * The propagator worklist that replaced this class's original round-robin loop, in which every
+     * round ran all of {@link #propagators} in sequence and the loop repeated until a whole round
+     * failed to shrink {@link #domainSum}. That shape paid three costs this one does not: it invoked
+     * every propagator each round whether or not anything it watches had changed; it walked every
+     * variable's domain twice per round to compute {@link #domainSum} purely as a convergence test;
+     * and it diffed the whole domain map once per round to produce a single dirty set shared by
+     * every propagator, so a propagator running early in a round could not see changes made later in
+     * that same round until the next one.
+     * <p>
+     * Here each propagator instead carries its own accumulated dirty set and is woken only by
+     * variables it actually watches ({@link ConstraintConsistency#variablesCovered}). Termination is
+     * the worklist emptying rather than a domain-sum comparison. This reaches the identical fixpoint:
+     * every propagator is a monotone prune-only function of the domains, so the greatest fixpoint is
+     * independent of the order they run in, and waking every propagator that watches a changed
+     * variable -- including the one that just ran, whose own other constraints may now be revisable
+     * -- is what guarantees none is left with work outstanding when the list empties.
+     * <p>
+     * {@link #next} returns the <em>lowest-indexed</em> queued propagator rather than the
+     * least-recently-queued one, which preserves {@link #PROPAGATORS}' documented ordering: the
+     * expensive arc-consistency and nogood passes sit last precisely so the cheap bounds propagators
+     * narrow domains first, and a plain FIFO worklist would have discarded that (see the ordering
+     * comments on those two entries, both of which record measured regressions when moved earlier).
+     * It also means an expensive pass woken repeatedly while cheaper ones are still draining is
+     * reached just once, with the union of everything that woke it.
+     */
+    private static final class Worklist {
+        private static final int[] NO_WATCHERS = new int[0];
+
+        private final Map<Variable<?>, int[]> byVariable;
+        private final int[] alwaysWoken;
+        private final boolean[] queued;
+        private final boolean[] convergesInternally;
+        /** Per-propagator dirty variables; {@code null} for a queued propagator means "full scan". */
+        private final Set<Variable<?>>[] dirty;
+
+        @SuppressWarnings("unchecked")
+        Worklist(List<ConstraintConsistency> propagators, Coverage coverage,
+                  @Nullable Set<Variable<?>> initialSeed) {
+            this.byVariable = coverage.byVariable();
+            this.alwaysWoken = coverage.alwaysWoken();
+            this.queued = new boolean[propagators.size()];
+            this.convergesInternally = new boolean[propagators.size()];
+            for (int i = 0; i < propagators.size(); i++) {
+                convergesInternally[i] = propagators.get(i).convergesInternally();
             }
-            changed = domainSum(current) < domainSumBefore;
-            changedVariables = changed ? changedVariables(before, current.getVariableDomains()) : null;
+            this.dirty = new Set[propagators.size()];
+            Arrays.fill(queued, true);
+            if (initialSeed != null) {
+                for (int i = 0; i < propagators.size(); i++) dirty[i] = new HashSet<>(initialSeed);
+            }
         }
-        return Optional.of(current);
+
+        /** The lowest-indexed queued propagator, or {@code -1} when none remain. */
+        int next() {
+            for (int i = 0; i < queued.length; i++) {
+                if (queued[i]) {
+                    queued[i] = false;
+                    return i;
+                }
+            }
+            return -1;
+        }
+
+        /** Hands propagator {@code i} its accumulated dirty set and clears it. */
+        @Nullable Set<Variable<?>> takeDirty(int i) {
+            Set<Variable<?>> taken = dirty[i];
+            dirty[i] = null;
+            return taken;
+        }
+
+        /**
+         * Queues every propagator watching any of {@code changed}, unioning it into its dirty set --
+         * except {@code source} itself when it already converged internally ({@link
+         * ConstraintConsistency#convergesInternally}), since nothing it narrowed can give it more to
+         * do and re-entering it would re-propagate every constraint touching {@code changed} to
+         * discover exactly that.
+         */
+        void wake(int source, Set<Variable<?>> changed) {
+            int skip = convergesInternally[source] ? source : -1;
+            for (Variable<?> variable : changed) {
+                for (int watcher : byVariable.getOrDefault(variable, NO_WATCHERS)) {
+                    if (watcher != skip) wakeOne(watcher, changed);
+                }
+            }
+            // Not filtered by `skip`: a propagator in alwaysWoken reports no covered variables, and
+            // one that also converged internally would only be woken to find nothing to do -- correct,
+            // just wasteful, and no propagator today is both.
+            for (int watcher : alwaysWoken) wakeOne(watcher, changed);
+        }
+
+        private void wakeOne(int i, Set<Variable<?>> changed) {
+            if (queued[i]) {
+                // Already pending: null means a full scan is pending, which subsumes anything added.
+                if (dirty[i] != null) dirty[i].addAll(changed);
+            } else {
+                queued[i] = true;
+                dirty[i] = new HashSet<>(changed);
+            }
+        }
+    }
+
+    /** {@link Worklist}'s wake index: which propagators each variable's narrowing must re-run. */
+    private record Coverage(Map<Variable<?>, int[]> byVariable, int[] alwaysWoken) {
+    }
+
+    /**
+     * Builds {@link Coverage} once per constraint graph, memoized via {@link
+     * ConstraintSatisfactionProblem#computeAuxiliaryCacheIfAbsent} against {@link #coverageCacheKey}
+     * -- an identity token rather than {@code this}, since {@link FixpointPropagation} is a {@link
+     * Value} whose {@code equals} would compare the whole propagator list on every lookup. Safe to
+     * memoize because every {@link ConstraintConsistency#variablesCovered} that returns a set at all
+     * promises it is stable for a given graph; the ones that are not (nogoods) return {@code null}
+     * and land in {@link Coverage#alwaysWoken}.
+     */
+    private Coverage coverageFor(ConstraintSatisfactionProblem csp) {
+        // The holder is what goes through computeAuxiliaryCacheIfAbsent, not the Coverage itself:
+        // building one calls ConstraintConsistency#variablesCovered, and FixpointConsistency answers
+        // that from its own entry in this same cache -- a nested computeIfAbsent on one
+        // ConcurrentHashMap, which throws "Recursive update". Same holder pattern, same reason, as
+        // FixpointConsistency#filterCache.
+        AtomicReference<Coverage> holder =
+                csp.computeAuxiliaryCacheIfAbsent(coverageCacheKey, ignored -> new AtomicReference<>());
+        Coverage cached = holder.get();
+        if (cached != null) return cached;
+        Coverage fresh = buildCoverage(csp);
+        holder.set(fresh);
+        return fresh;
+    }
+
+    private Coverage buildCoverage(ConstraintSatisfactionProblem csp) {
+        Map<Variable<?>, List<Integer>> watchers = new HashMap<>();
+        List<Integer> always = new ArrayList<>();
+        for (int i = 0; i < propagators.size(); i++) {
+            Set<Variable<?>> covered = propagators.get(i).variablesCovered(csp);
+            if (covered == null) {
+                always.add(i);
+            } else {
+                for (Variable<?> variable : covered) {
+                    watchers.computeIfAbsent(variable, ignored -> new ArrayList<>()).add(i);
+                }
+            }
+        }
+        Map<Variable<?>, int[]> packed = new HashMap<>(watchers.size() * 2);
+        watchers.forEach((variable, indices) -> packed.put(variable, toIntArray(indices)));
+        return new Coverage(packed, toIntArray(always));
+    }
+
+    private static int[] toIntArray(List<Integer> values) {
+        int[] result = new int[values.size()];
+        for (int i = 0; i < result.length; i++) result[i] = values.get(i);
+        return result;
     }
 
     /**
@@ -411,32 +583,23 @@ public class FixpointPropagation {
             @NonNull ConstraintSatisfactionProblem csp, @Nullable Set<Variable<?>> initialSeed,
             @NonNull SolverListener listener, @NonNull Statistics statistics, @NonNull Cancellation cancellation) {
         log.debug("applyFixpointWithReason");
-        if (cancellation.isCancelled()) {
-            statistics.updateCurrentSearchSpace(csp.getSearchSpace());
-            throw new SolverCancelledException(statistics);
-        }
+        checkCancelled(csp, statistics, cancellation);
         var current = csp;
-        Set<Variable<?>> changedVariables = initialSeed;
-        boolean changed = true;
-        while (changed) {
-            Map<Variable<?>, Domain<?>> before = current.getVariableDomains();
-            double domainSumBefore = domainSum(current);
-            for (var propagator : propagators) {
-                if (cancellation.isCancelled()) {
-                    statistics.updateCurrentSearchSpace(current.getSearchSpace());
-                    throw new SolverCancelledException(statistics);
-                }
-                var beforePropagator = current;
-                ConsistencyResult after = propagator.applyWithReason(current, changedVariables);
-                if (after.isInfeasible()) {
-                    if (propagator == NogoodFixpointConsistency.INSTANCE) statistics.incrementNogoodRejections();
-                    return after;
-                }
-                current = after.problem();
+        var worklist = new Worklist(propagators, coverageFor(csp), initialSeed);
+        for (int i = worklist.next(); i >= 0; i = worklist.next()) {
+            checkCancelled(current, statistics, cancellation);
+            var propagator = propagators.get(i);
+            var beforePropagator = current;
+            ConsistencyResult after = propagator.applyWithReason(current, worklist.takeDirty(i));
+            if (after.isInfeasible()) {
+                if (propagator == NogoodFixpointConsistency.INSTANCE) statistics.incrementNogoodRejections();
+                return after;
+            }
+            current = after.problem();
+            if (current != beforePropagator) {
+                worklist.wake(i, changedVariables(beforePropagator.getVariableDomains(), current.getVariableDomains()));
                 logIfDomainSumReduced(propagator, beforePropagator, current, log.isDebugEnabled(), listener);
             }
-            changed = domainSum(current) < domainSumBefore;
-            changedVariables = changed ? changedVariables(before, current.getVariableDomains()) : null;
         }
         return ConsistencyResult.feasible(current);
     }

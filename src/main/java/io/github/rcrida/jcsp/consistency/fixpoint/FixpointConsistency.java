@@ -16,8 +16,10 @@ import lombok.extern.slf4j.Slf4j;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 
+import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Deque;
 import java.util.HashMap;
 import java.util.IdentityHashMap;
 import java.util.List;
@@ -154,6 +156,17 @@ public class FixpointConsistency implements ConstraintConsistency {
      * BinaryConstraint} instances, so this second check is a no-op for every non-binary {@link
      * #constraintType} (e.g. {@code AllDiffConstraint}, {@code SumBoundConstraint}).
      */
+    /**
+     * The variables of this type's own constraints, straight off {@link FilterCache#byVariable} --
+     * the same index {@link #relevant} already uses, so this costs nothing beyond what {@link #apply}
+     * would compute anyway. Exact and stable for a given constraint graph, since a constraint type's
+     * instances are fixed at CSP-build time.
+     */
+    @Override
+    public Set<Variable<?>> variablesCovered(ConstraintSatisfactionProblem csp) {
+        return filterCache(csp).byVariable().keySet();
+    }
+
     public boolean appliesTo(ConstraintSatisfactionProblem csp) {
         return !filteredConstraints(csp).isEmpty()
                 || csp.getAllBinaryConstraints().stream().anyMatch(constraintType::isInstance);
@@ -183,20 +196,17 @@ public class FixpointConsistency implements ConstraintConsistency {
             return Optional.of(csp);
         }
         DomainAccumulator domains = new DomainAccumulator(csp.getVariableDomains());
-        boolean changed = true;
-        while (changed) {
-            changed = false;
-            for (Propagatable constraint : constraints) {
-                var result = constraint.propagate(domains.view());
-                if (result.isEmpty()) {
-                    log.debug("{}: infeasible detected", name);
-                    return Optional.empty();
-                }
-                var updates = result.get();
-                if (!updates.isEmpty()) {
-                    domains.record(updates);
-                    changed = true;
-                }
+        ConstraintQueue queue = new ConstraintQueue(cache, constraints);
+        for (Propagatable constraint = queue.poll(); constraint != null; constraint = queue.poll()) {
+            var result = constraint.propagate(domains.view());
+            if (result.isEmpty()) {
+                log.debug("{}: infeasible detected", name);
+                return Optional.empty();
+            }
+            var updates = result.get();
+            if (!updates.isEmpty()) {
+                domains.record(updates);
+                queue.wake(updates.keySet());
             }
         }
         log.debug("{}: fixpoint reached", name);
@@ -247,26 +257,72 @@ public class FixpointConsistency implements ConstraintConsistency {
         List<Propagatable> constraints = relevant(cache, changedSinceLastRun);
         if (constraints.isEmpty()) return ConsistencyResult.feasible(csp);
         DomainAccumulator domains = new DomainAccumulator(csp.getVariableDomains());
-        boolean changed = true;
-        while (changed) {
-            changed = false;
-            for (Propagatable constraint : constraints) {
-                Optional<Map<Variable<?>, Domain<?>>> result = constraint.propagate(domains.view(), changedSinceLastRun);
-                if (result.isEmpty()) {
-                    NogoodConstraint reason = constraint.explainInfeasible(domains.view()).orElse(null);
-                    if (reason == null) {
-                        reason = RangeNogoodConstraint.fromCurrentBounds(
-                                ((Constraint) constraint).getVariables(), domains.view()).orElse(null);
-                    }
-                    return ConsistencyResult.infeasible(reason);
+        ConstraintQueue queue = new ConstraintQueue(cache, constraints);
+        for (Propagatable constraint = queue.poll(); constraint != null; constraint = queue.poll()) {
+            Optional<Map<Variable<?>, Domain<?>>> result = constraint.propagate(domains.view(), changedSinceLastRun);
+            if (result.isEmpty()) {
+                NogoodConstraint reason = constraint.explainInfeasible(domains.view()).orElse(null);
+                if (reason == null) {
+                    reason = RangeNogoodConstraint.fromCurrentBounds(
+                            ((Constraint) constraint).getVariables(), domains.view()).orElse(null);
                 }
-                var updates = result.get();
-                if (!updates.isEmpty()) {
-                    domains.record(updates);
-                    changed = true;
-                }
+                return ConsistencyResult.infeasible(reason);
+            }
+            var updates = result.get();
+            if (!updates.isEmpty()) {
+                domains.record(updates);
+                queue.wake(updates.keySet());
             }
         }
         return ConsistencyResult.feasible(domains.finish(csp));
+    }
+
+    /**
+     * Per-constraint worklist driving {@link #apply}/{@link #applyWithReason} to fixpoint.
+     * <p>
+     * Replaces the nested {@code while (changed) for (constraint : constraints)} loop both methods
+     * used until 2026-09-19, which re-propagated <em>every</em> relevant constraint on each pass
+     * until a whole pass changed nothing. Here a constraint is re-propagated only when one of its own
+     * variables has actually been narrowed since it last ran, which is the same
+     * dirty-tracking argument {@link #relevant} already applies to the call's entry point, extended
+     * to iterations within the call. On {@code driverlogw-09.xml.lzma} -- 17,447 constraints of this
+     * type over 650 variables, so roughly 27 constraints share each variable -- the old shape
+     * rescanned hundreds of constraints per pass to find the handful that could still prune.
+     * <p>
+     * Converging internally is also what lets {@link io.github.rcrida.jcsp.solver.FixpointPropagation}'s
+     * own propagator worklist skip re-waking this pass for changes it made itself (see {@link
+     * ConstraintConsistency#convergesInternally}): when this returns, no constraint of this type can
+     * prune further against the domains it produced.
+     */
+    private static final class ConstraintQueue {
+        private final FilterCache cache;
+        private final Deque<Propagatable> queue;
+        private final Set<Propagatable> queued = Collections.newSetFromMap(new IdentityHashMap<>());
+
+        ConstraintQueue(FilterCache cache, List<Propagatable> seed) {
+            this.cache = cache;
+            this.queue = new ArrayDeque<>(seed);
+            this.queued.addAll(seed);
+        }
+
+        @Nullable Propagatable poll() {
+            Propagatable next = queue.poll();
+            if (next != null) queued.remove(next);
+            return next;
+        }
+
+        void wake(Set<Variable<?>> narrowed) {
+            for (Variable<?> variable : narrowed) {
+                for (Propagatable constraint : cache.byVariable().getOrDefault(variable, List.of())) {
+                    if (queued.add(constraint)) queue.add(constraint);
+                }
+            }
+        }
+    }
+
+    /** This pass runs its own constraints to fixpoint before returning -- see {@link ConstraintQueue}. */
+    @Override
+    public boolean convergesInternally() {
+        return true;
     }
 }
