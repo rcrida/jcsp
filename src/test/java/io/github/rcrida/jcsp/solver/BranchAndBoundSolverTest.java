@@ -160,7 +160,7 @@ public class BranchAndBoundSolverTest {
         // The Statistics field is seeded into the root Assignment, so it's readable via this same
         // live reference even though the node limit meant no complete Assignment (improving or
         // otherwise) was ever returned.
-        assertThat(statistics.getNodesExplored().get()).isGreaterThan(0);
+        assertThat(statistics.getNodesExplored()).isGreaterThan(0);
     }
 
     // ── Nogood learning ──────────────────────────────────────────────────────
@@ -211,8 +211,8 @@ public class BranchAndBoundSolverTest {
 
         assertThat(solution).isPresent();
         assertThat(solution.get().getValue(x).orElseThrow()).isEqualTo(2);
-        assertThat(solution.get().getStatistics().getNogoodsLearned().get()).isGreaterThan(0);
-        assertThat(solution.get().getStatistics().getBacktracks().get()).isGreaterThan(0);
+        assertThat(solution.get().getStatistics().getNogoodsLearned()).isGreaterThan(0);
+        assertThat(solution.get().getStatistics().getBacktracks()).isGreaterThan(0);
         assertThat(store.size()).isGreaterThan(0);
     }
 
@@ -237,8 +237,8 @@ public class BranchAndBoundSolverTest {
 
         assertThat(solution).isPresent();
         assertThat(solution.get().getValue(x).orElseThrow()).isEqualTo(2);
-        assertThat(solution.get().getStatistics().getNogoodsLearned().get()).isZero();
-        assertThat(solution.get().getStatistics().getBacktracks().get()).isGreaterThan(0);
+        assertThat(solution.get().getStatistics().getNogoodsLearned()).isZero();
+        assertThat(solution.get().getStatistics().getBacktracks()).isGreaterThan(0);
         assertThat(store.apply(csp)).isEqualTo(csp);
     }
 
@@ -361,8 +361,8 @@ public class BranchAndBoundSolverTest {
         assertThat(plainSolutions).isNotEmpty();
         assertThat(linearObjective.applyAsDouble(lpSolutions.getLast())).isEqualTo(8.0);
         assertThat(plainObjective.applyAsDouble(plainSolutions.getLast())).isEqualTo(8.0);
-        assertThat(withLp.getStatistics().getNodesExplored().get())
-                .isLessThan(withoutLp.getStatistics().getNodesExplored().get());
+        assertThat(withLp.getStatistics().getNodesExplored())
+                .isLessThan(withoutLp.getStatistics().getNodesExplored());
     }
 
     // ── Fractional-variable branching (ADR-0009 Phase 3) ────────────────────

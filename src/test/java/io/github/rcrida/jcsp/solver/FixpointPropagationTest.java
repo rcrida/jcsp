@@ -51,7 +51,7 @@ public class FixpointPropagationTest {
         var statistics = new Statistics();
         var result = FixpointPropagation.FULL.applyFixpointWithReason(csp, null, SolverListener.NONE, statistics, Cancellation.NEVER);
         assertThat(result.isInfeasible()).isTrue();
-        assertThat(statistics.getNogoodRejections().get()).isEqualTo(1);
+        assertThat(statistics.getNogoodRejections()).isEqualTo(1);
     }
 
     @Test
@@ -65,7 +65,7 @@ public class FixpointPropagationTest {
         var statistics = new Statistics();
         var result = FixpointPropagation.FULL.applyFixpointWithReason(csp, null, SolverListener.NONE, statistics, Cancellation.NEVER);
         assertThat(result.isInfeasible()).isTrue();
-        assertThat(statistics.getNogoodRejections().get()).isZero();
+        assertThat(statistics.getNogoodRejections()).isZero();
     }
 
     @Test

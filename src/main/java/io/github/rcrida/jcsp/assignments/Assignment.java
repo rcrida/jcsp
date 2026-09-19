@@ -166,6 +166,10 @@ public record Assignment(@Singular Map<Variable<?>, Object> values, Statistics s
      * {@code constraint.getVariables().stream().anyMatch(values::containsKey)} built per candidate)
      * -- JFR profiling found the same stream-construction cost here that {@code
      * NogoodFixpointConsistency#relevant} had, fixed the same way there first.
+     * <p>
+     * The per-evaluation {@link Statistics#incrementConstraintChecks} below is deliberate despite
+     * this loop being that counter's only writer and running tens of millions of times per solve --
+     * batching it per call was measured as neutral and reverted; see {@link Statistics}' own Javadoc.
      */
     public boolean isConsistentAmong(@NonNull Collection<? extends Constraint> candidateConstraints) {
         for (Constraint constraint : candidateConstraints) {

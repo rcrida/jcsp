@@ -15,6 +15,22 @@ import java.util.concurrent.atomic.AtomicReference;
  * switched from {@code AtomicInteger} after a real run overflowed it) and shared across all
  * {@link Assignment} objects derived from the same root via
  * {@link Assignment#withValue}, so a single instance reflects the full cost of a search.
+ * <p>
+ * Every accessor returns a plain {@code long}, not the backing {@link AtomicLong}: the mutable
+ * counter is an implementation detail, and returning it handed callers the ability to {@code set}
+ * or {@code decrement} a counter this class means to be append-only. Keeping the representation
+ * private is also what lets it change without touching this class's published surface again.
+ * <p>
+ * {@link AtomicLong} deliberately, despite {@link #constraintChecks} being written tens of millions
+ * of times per solve. {@link java.util.concurrent.atomic.LongAdder} is no cheaper here (an
+ * uncontended {@code add} is a compare-and-swap loop against {@link AtomicLong#incrementAndGet}'s
+ * single fetch-and-add, its striping needs contention the backtracking chain never creates, and
+ * {@code sum} would slow {@link #getNodesExplored}, read once per search node by {@code
+ * SolverLimits#checkStop}). Batching the count per {@link Assignment#isConsistentAmong} call --
+ * a 70x reduction in atomic operations -- was implemented and measured as neutral on every workload
+ * tried, including the paths that genuinely share one instance across threads, and reverted; a
+ * {@code try}/{@code finally} variant of it was ~2% <em>worse</em>. This counter has never appeared
+ * in a JFR profile: the operation count is large, the cost is not.
  *
  * <ul>
  *   <li>{@link #nodesExplored} — variable assignments attempted (incremented by {@link Assignment#withValue}),
@@ -58,14 +74,42 @@ import java.util.concurrent.atomic.AtomicReference;
  */
 @Value
 public class Statistics {
-    AtomicLong nodesExplored = new AtomicLong();
-    AtomicLong constraintChecks = new AtomicLong();
-    AtomicLong backtracks = new AtomicLong();
-    AtomicLong restarts = new AtomicLong();
-    AtomicLong steps = new AtomicLong();
-    AtomicLong nogoodsLearned = new AtomicLong();
-    AtomicLong nogoodRejections = new AtomicLong();
+    @Getter(AccessLevel.NONE) AtomicLong nodesExplored = new AtomicLong();
+    @Getter(AccessLevel.NONE) AtomicLong constraintChecks = new AtomicLong();
+    @Getter(AccessLevel.NONE) AtomicLong backtracks = new AtomicLong();
+    @Getter(AccessLevel.NONE) AtomicLong restarts = new AtomicLong();
+    @Getter(AccessLevel.NONE) AtomicLong steps = new AtomicLong();
+    @Getter(AccessLevel.NONE) AtomicLong nogoodsLearned = new AtomicLong();
+    @Getter(AccessLevel.NONE) AtomicLong nogoodRejections = new AtomicLong();
     @Getter(AccessLevel.NONE) @ToString.Exclude AtomicReference<BigInteger> currentSearchSpace = new AtomicReference<>();
+
+    public long getNodesExplored() {
+        return nodesExplored.get();
+    }
+
+    public long getConstraintChecks() {
+        return constraintChecks.get();
+    }
+
+    public long getBacktracks() {
+        return backtracks.get();
+    }
+
+    public long getRestarts() {
+        return restarts.get();
+    }
+
+    public long getSteps() {
+        return steps.get();
+    }
+
+    public long getNogoodsLearned() {
+        return nogoodsLearned.get();
+    }
+
+    public long getNogoodRejections() {
+        return nogoodRejections.get();
+    }
 
     public void incrementNodesExplored() {
         nodesExplored.incrementAndGet();

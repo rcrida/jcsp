@@ -119,7 +119,7 @@ public class SetBranchingSolver extends SolverDecorator {
     private Stream<Assignment> branch(ConstraintSatisfactionProblem csp, Variable target, SetBoundedDomain domain,
                                        Object element, boolean forceIn, long deadline) {
         statistics.incrementNodesExplored();
-        if (limits.checkStop(cancellation, statistics.getNodesExplored().get(), deadline) != SolverLimits.StopReason.NONE) {
+        if (limits.checkStop(cancellation, statistics.getNodesExplored(), deadline) != SolverLimits.StopReason.NONE) {
             if (cancellation.isCancelled()) {
                 statistics.updateCurrentSearchSpace(csp.getSearchSpace());
             }

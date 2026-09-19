@@ -62,7 +62,7 @@ class BacktrackingSearchTest {
 
         var solutions = noInference.getSolutions(csp).toList();
         assertThat(solutions).hasSize(3);
-        assertThat(solutions.get(0).getStatistics().getBacktracks().get()).isPositive();
+        assertThat(solutions.get(0).getStatistics().getBacktracks()).isPositive();
     }
 
     @Test

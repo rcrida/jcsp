@@ -215,7 +215,7 @@ public class SetBranchingSolverTest {
                 .limits(SolverLimits.ofNodes(1)).statistics(statistics).build();
 
         assertThat(limited.getSolutions(csp).findFirst()).isEmpty();
-        assertThat(statistics.getNodesExplored().get()).isGreaterThan(0);
+        assertThat(statistics.getNodesExplored()).isGreaterThan(0);
     }
 
     @Test

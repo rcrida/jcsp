@@ -74,8 +74,8 @@ public class AustraliaMapColouringTest {
                                     WA, Colour.GREEN, NT, Colour.BLUE, Q, Colour.GREEN, NSW, Colour.BLUE, V, Colour.GREEN, SA, Colour.RED, T, Colour.RED)),
                             Assignment.of(Map.of(
                                     WA, Colour.BLUE, NT, Colour.GREEN, Q, Colour.BLUE, NSW, Colour.GREEN, V, Colour.BLUE, SA, Colour.RED, T, Colour.RED)));
-                    assertThat(value.getStatistics().getNodesExplored().get()).isLessThanOrEqualTo(6);
-                    assertThat(value.getStatistics().getConstraintChecks().get()).isLessThanOrEqualTo(418);
+                    assertThat(value.getStatistics().getNodesExplored()).isLessThanOrEqualTo(6);
+                    assertThat(value.getStatistics().getConstraintChecks()).isLessThanOrEqualTo(418);
                 }
         );
     }

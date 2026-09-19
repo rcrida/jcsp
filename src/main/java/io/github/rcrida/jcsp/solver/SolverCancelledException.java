@@ -23,7 +23,7 @@ public class SolverCancelledException extends RuntimeException {
     private final Statistics statistics;
 
     public SolverCancelledException(Statistics statistics) {
-        super("Solver cancelled after " + statistics.getNodesExplored().get() + " nodes");
+        super("Solver cancelled after " + statistics.getNodesExplored() + " nodes");
         this.statistics = statistics;
     }
 }

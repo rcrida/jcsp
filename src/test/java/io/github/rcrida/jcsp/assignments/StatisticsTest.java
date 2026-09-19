@@ -11,8 +11,8 @@ public class StatisticsTest {
     @Test
     void initialCountersAreZero() {
         val statistics = new Statistics();
-        assertThat(statistics.getNodesExplored().get()).isZero();
-        assertThat(statistics.getConstraintChecks().get()).isZero();
+        assertThat(statistics.getNodesExplored()).isZero();
+        assertThat(statistics.getConstraintChecks()).isZero();
     }
 
     @Test
@@ -42,28 +42,28 @@ public class StatisticsTest {
     void incrementNodesExplored() {
         val statistics = new Statistics();
         statistics.incrementNodesExplored();
-        assertThat(statistics.getNodesExplored().get()).isEqualTo(1);
+        assertThat(statistics.getNodesExplored()).isEqualTo(1);
     }
 
     @Test
     void incrementConstraintChecks() {
         val statistics = new Statistics();
         statistics.incrementConstraintChecks();
-        assertThat(statistics.getConstraintChecks().get()).isEqualTo(1);
+        assertThat(statistics.getConstraintChecks()).isEqualTo(1);
     }
 
     @Test
     void incrementBacktracks() {
         val statistics = new Statistics();
         statistics.incrementBacktracks();
-        assertThat(statistics.getBacktracks().get()).isEqualTo(1);
+        assertThat(statistics.getBacktracks()).isEqualTo(1);
     }
 
     @Test
     void addRestarts() {
         val statistics = new Statistics();
         statistics.addRestarts(3);
-        assertThat(statistics.getRestarts().get()).isEqualTo(3);
+        assertThat(statistics.getRestarts()).isEqualTo(3);
     }
 
     @Test
@@ -71,14 +71,14 @@ public class StatisticsTest {
         val statistics = new Statistics();
         statistics.incrementSteps();
         statistics.incrementSteps();
-        assertThat(statistics.getSteps().get()).isEqualTo(2);
+        assertThat(statistics.getSteps()).isEqualTo(2);
     }
 
     @Test
     void incrementNogoodsLearned() {
         val statistics = new Statistics();
         statistics.incrementNogoodsLearned();
-        assertThat(statistics.getNogoodsLearned().get()).isEqualTo(1);
+        assertThat(statistics.getNogoodsLearned()).isEqualTo(1);
     }
 
     @Test
@@ -86,7 +86,7 @@ public class StatisticsTest {
         val statistics = new Statistics();
         statistics.incrementNogoodRejections();
         statistics.incrementNogoodRejections();
-        assertThat(statistics.getNogoodRejections().get()).isEqualTo(2);
+        assertThat(statistics.getNogoodRejections()).isEqualTo(2);
     }
 
     @Test
@@ -103,13 +103,13 @@ public class StatisticsTest {
         b.addRestarts(2);
         b.updateCurrentSearchSpace(BigInteger.valueOf(99));
         a.add(b);
-        assertThat(a.getNodesExplored().get()).isEqualTo(1);
-        assertThat(a.getConstraintChecks().get()).isEqualTo(2);
-        assertThat(a.getBacktracks().get()).isEqualTo(1);
-        assertThat(a.getRestarts().get()).isEqualTo(2);
-        assertThat(a.getSteps().get()).isEqualTo(1);
-        assertThat(a.getNogoodsLearned().get()).isEqualTo(1);
-        assertThat(a.getNogoodRejections().get()).isEqualTo(1);
+        assertThat(a.getNodesExplored()).isEqualTo(1);
+        assertThat(a.getConstraintChecks()).isEqualTo(2);
+        assertThat(a.getBacktracks()).isEqualTo(1);
+        assertThat(a.getRestarts()).isEqualTo(2);
+        assertThat(a.getSteps()).isEqualTo(1);
+        assertThat(a.getNogoodsLearned()).isEqualTo(1);
+        assertThat(a.getNogoodRejections()).isEqualTo(1);
         assertThat(a.getCurrentSearchSpace()).contains(BigInteger.valueOf(99));
     }
 

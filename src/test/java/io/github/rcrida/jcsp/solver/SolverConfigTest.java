@@ -32,7 +32,7 @@ class SolverConfigTest {
 
         assertThat(solution).isPresent();
         assertThat(solution.get().getValue(x).orElseThrow()).isEqualTo(2);
-        assertThat(solution.get().getStatistics().getNogoodsLearned().get()).isZero();
+        assertThat(solution.get().getStatistics().getNogoodsLearned()).isZero();
     }
 
     @Test

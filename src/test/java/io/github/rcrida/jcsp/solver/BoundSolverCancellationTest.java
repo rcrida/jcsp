@@ -56,7 +56,7 @@ class BoundSolverCancellationTest {
         SolverListener listener = new SolverListener() {
             @Override
             public void onNodeExplored(Variable<?> variable, Object value, Assignment assignment) {
-                if (assignment.getStatistics().getNodesExplored().get() >= 5) {
+                if (assignment.getStatistics().getNodesExplored() >= 5) {
                     cancellation.cancel();
                 }
             }

@@ -83,8 +83,8 @@ public class CryptarithmeticTest {
         System.out.println(optionalSolution);
         assertThat(optionalSolution).hasValueSatisfying(value -> {
             assertThat(value.isSolution(csp)).isTrue();
-            assertThat(value.getStatistics().getNodesExplored().get()).isLessThanOrEqualTo(4500);
-            assertThat(value.getStatistics().getConstraintChecks().get()).isLessThanOrEqualTo(19000);
+            assertThat(value.getStatistics().getNodesExplored()).isLessThanOrEqualTo(4500);
+            assertThat(value.getStatistics().getConstraintChecks()).isLessThanOrEqualTo(19000);
         });
     }
 

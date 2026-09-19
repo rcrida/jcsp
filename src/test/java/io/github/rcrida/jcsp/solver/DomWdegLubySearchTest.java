@@ -117,7 +117,7 @@ class DomWdegLubySearchTest {
         // Genuine UNSAT carries no Statistics in its return value (Optional.empty()) -- the whole
         // point of the shared statistics field is that the caller already holds this same live
         // reference regardless, so it's still readable and reflects real search activity.
-        assertThat(statistics.getNodesExplored().get()).isGreaterThan(0);
+        assertThat(statistics.getNodesExplored()).isGreaterThan(0);
     }
 
     @Test
@@ -138,7 +138,7 @@ class DomWdegLubySearchTest {
 
         assertThat(limited.getSolutions(csp).findFirst()).isEmpty();
 
-        assertThat(statistics.getNodesExplored().get()).isGreaterThan(0);
+        assertThat(statistics.getNodesExplored()).isGreaterThan(0);
     }
 
     @Test
@@ -208,8 +208,8 @@ class DomWdegLubySearchTest {
 
         assertThat(solution).isPresent();
         assertThat(solution.get().getValue(x).orElseThrow()).isEqualTo(2);
-        assertThat(solution.get().getStatistics().getNogoodsLearned().get()).isZero();
-        assertThat(solution.get().getStatistics().getBacktracks().get()).isGreaterThan(0);
+        assertThat(solution.get().getStatistics().getNogoodsLearned()).isZero();
+        assertThat(solution.get().getStatistics().getBacktracks()).isGreaterThan(0);
         assertThat(store.apply(csp)).isEqualTo(csp);
     }
 
@@ -392,7 +392,7 @@ class DomWdegLubySearchTest {
         List<Assignment> solutions = solver.getSolutions(csp).toList();
         assertThat(solutions).hasSize(1);
         assertThat(solutions.get(0).getValue(x).orElseThrow()).isEqualTo(2);
-        assertThat(solutions.get(0).getStatistics().getNogoodsLearned().get()).isGreaterThan(0);
+        assertThat(solutions.get(0).getStatistics().getNogoodsLearned()).isGreaterThan(0);
     }
 
     @Test
@@ -655,9 +655,9 @@ class DomWdegLubySearchTest {
                 .extracting(e -> ((LimitExceededException) e).getStatistics())
                 .satisfies(rawStats -> {
                     Statistics stats = (Statistics) rawStats;
-                    assertThat(stats.getNodesExplored().get()).isEqualTo(2);
-                    assertThat(stats.getBacktracks().get()).isGreaterThan(0);
-                    assertThat(stats.getNogoodsLearned().get()).isGreaterThan(0);
+                    assertThat(stats.getNodesExplored()).isEqualTo(2);
+                    assertThat(stats.getBacktracks()).isGreaterThan(0);
+                    assertThat(stats.getNogoodsLearned()).isGreaterThan(0);
                 });
     }
 
@@ -702,7 +702,7 @@ class DomWdegLubySearchTest {
                 .extracting(e -> ((LimitExceededException) e).getStatistics())
                 .satisfies(rawStats -> {
                     Statistics stats = (Statistics) rawStats;
-                    assertThat(stats.getRestarts().get()).isEqualTo(2);
+                    assertThat(stats.getRestarts()).isEqualTo(2);
                 });
     }
 
@@ -733,8 +733,8 @@ class DomWdegLubySearchTest {
 
         assertThat(solutionA).isPresent();
         assertThat(solutionB).isPresent();
-        assertThat(solutionA.get().getStatistics().getNodesExplored().get())
-                .isEqualTo(solutionB.get().getStatistics().getNodesExplored().get());
+        assertThat(solutionA.get().getStatistics().getNodesExplored())
+                .isEqualTo(solutionB.get().getStatistics().getNodesExplored());
     }
 
     @Test
@@ -817,9 +817,9 @@ class DomWdegLubySearchTest {
         List<Assignment> solutions = solver.getSolutions(csp).toList();
 
         assertThat(solutions).hasSize(1);
-        assertThat(nodesExplored.get()).isEqualTo(solutions.get(0).getStatistics().getNodesExplored().get());
-        assertThat(backtracks.get()).isEqualTo(solutions.get(0).getStatistics().getBacktracks().get());
-        assertThat(nogoodsLearned.get()).isEqualTo(solutions.get(0).getStatistics().getNogoodsLearned().get());
+        assertThat(nodesExplored.get()).isEqualTo(solutions.get(0).getStatistics().getNodesExplored());
+        assertThat(backtracks.get()).isEqualTo(solutions.get(0).getStatistics().getBacktracks());
+        assertThat(nogoodsLearned.get()).isEqualTo(solutions.get(0).getStatistics().getNogoodsLearned());
         assertThat(nogoodsLearned.get()).isGreaterThan(0);
         assertThat(solutionsFound).containsExactly(solutions.get(0));
     }

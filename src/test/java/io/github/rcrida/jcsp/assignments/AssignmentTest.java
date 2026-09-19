@@ -66,7 +66,7 @@ public class AssignmentTest {
     void withValueIncrementsNodesExplored() {
         val assignment = Assignment.empty();
         val next = assignment.withValue(variable, value);
-        assertThat(assignment.getStatistics().getNodesExplored().get()).isEqualTo(1);
+        assertThat(assignment.getStatistics().getNodesExplored()).isEqualTo(1);
         assertThat(next.getStatistics()).isSameAs(assignment.getStatistics());
     }
 
@@ -111,8 +111,8 @@ public class AssignmentTest {
         val assignment2 = Assignment.empty();
         assignment2.getStatistics().incrementConstraintChecks();
         val merged = assignment1.merge(assignment2);
-        assertThat(merged.getStatistics().getNodesExplored().get()).isEqualTo(1);
-        assertThat(merged.getStatistics().getConstraintChecks().get()).isEqualTo(1);
+        assertThat(merged.getStatistics().getNodesExplored()).isEqualTo(1);
+        assertThat(merged.getStatistics().getConstraintChecks()).isEqualTo(1);
     }
 
     @Test
@@ -124,7 +124,7 @@ public class AssignmentTest {
                 .predicateConstraint(variable, (Predicate<Object>) v -> !v.equals(anotherValue))
                 .build();
         assignment.isConsistent(csp);
-        assertThat(assignment.getStatistics().getConstraintChecks().get()).isEqualTo(1);
+        assertThat(assignment.getStatistics().getConstraintChecks()).isEqualTo(1);
     }
 
     @Test
@@ -186,7 +186,7 @@ public class AssignmentTest {
                 .build();
         val theOnlyConstraint = csp.getConstraints().iterator().next();
         assertThat(assignment.isConsistentAmong(Set.of(theOnlyConstraint))).isFalse();
-        assertThat(assignment.getStatistics().getNogoodRejections().get()).isZero();
+        assertThat(assignment.getStatistics().getNogoodRejections()).isZero();
     }
 
     @Test
@@ -194,7 +194,7 @@ public class AssignmentTest {
         val assignment = Assignment.of(Map.of(variable, value));
         NogoodConstraint nogood = GroundNogoodConstraint.of(Map.of(variable, value));
         assertThat(assignment.isConsistentAmong(Set.of(nogood))).isFalse();
-        assertThat(assignment.getStatistics().getNogoodRejections().get()).isEqualTo(1);
+        assertThat(assignment.getStatistics().getNogoodRejections()).isEqualTo(1);
     }
 
     @Test

@@ -62,7 +62,7 @@ public class BacktrackingSearch implements Solver {
         return domainValuesOrderer.order(csp, variable, assignment)
                 .map(value -> assignment.withValue(variable, value))
                 .filter(next -> {
-                    if (limits.isNodeLimitExceeded(next.getStatistics().getNodesExplored().get())
+                    if (limits.isNodeLimitExceeded(next.getStatistics().getNodesExplored())
                             || limits.isTimeLimitExceeded(deadline)) {
                         limits.markLimitReached();
                         return false;

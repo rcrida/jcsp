@@ -191,7 +191,7 @@ public class DomWdegLubySearch implements Solver {
         return domainValuesOrderer.order(csp, variable, assignment)
                 .flatMap(value -> {
                     Assignment next = assignment.withValue((Variable<Object>) variable, value);
-                    if (limits.checkStop(cancellation, next.getStatistics().getNodesExplored().get(), deadline)
+                    if (limits.checkStop(cancellation, next.getStatistics().getNodesExplored(), deadline)
                             != SolverLimits.StopReason.NONE) {
                         if (cancellation.isCancelled()) {
                             statistics.updateCurrentSearchSpace(csp.getSearchSpace());
@@ -258,7 +258,7 @@ public class DomWdegLubySearch implements Solver {
         Variable<?> variable = selector.select(csp, assignment);
         for (Object value : domainValuesOrderer.order(csp, variable, assignment).toList()) {
             Assignment next = assignment.withValue((Variable<Object>) variable, value);
-            switch (limits.checkStop(cancellation, next.getStatistics().getNodesExplored().get(), deadline)) {
+            switch (limits.checkStop(cancellation, next.getStatistics().getNodesExplored(), deadline)) {
                 case CANCELLED -> {
                     statistics.updateCurrentSearchSpace(csp.getSearchSpace());
                     throw new SolverCancelledException(statistics);

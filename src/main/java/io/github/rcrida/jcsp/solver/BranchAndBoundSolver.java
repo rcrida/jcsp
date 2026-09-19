@@ -324,7 +324,7 @@ public class BranchAndBoundSolver implements Solver {
         return domainValuesOrderer.order(csp, variable, assignment)
                 .map(value -> assignment.withValue(variable, value))
                 .filter(next -> {
-                    if (limits.checkStop(cancellation, next.getStatistics().getNodesExplored().get(), deadline)
+                    if (limits.checkStop(cancellation, next.getStatistics().getNodesExplored(), deadline)
                             != SolverLimits.StopReason.NONE) {
                         if (cancellation.isCancelled()) {
                             statistics.updateCurrentSearchSpace(csp.getSearchSpace());

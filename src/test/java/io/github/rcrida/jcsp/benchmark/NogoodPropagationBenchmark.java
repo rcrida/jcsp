@@ -251,11 +251,11 @@ public final class NogoodPropagationBenchmark {
         }
         double avgMillis = millis.stream().mapToLong(Long::longValue).average().orElse(0);
         Statistics first = stats.isEmpty() ? null : stats.get(0);
-        String nodes = first == null ? "n/a (" + outcome + ")" : String.valueOf(first.getNodesExplored().get());
+        String nodes = first == null ? "n/a (" + outcome + ")" : String.valueOf(first.getNodesExplored());
         String nodesPerSec = (first == null || avgMillis == 0) ? "n/a"
-                : String.format("%.0f", first.getNodesExplored().get() / (avgMillis / 1000));
-        String backtracks = first == null ? "n/a" : String.valueOf(first.getBacktracks().get());
-        String nogoodsLearned = first == null ? "n/a" : String.valueOf(first.getNogoodsLearned().get());
+                : String.format("%.0f", first.getNodesExplored() / (avgMillis / 1000));
+        String backtracks = first == null ? "n/a" : String.valueOf(first.getBacktracks());
+        String nogoodsLearned = first == null ? "n/a" : String.valueOf(first.getNogoodsLearned());
         System.out.printf("%-35s avg=%.0fms trials=%s nodesExplored=%-8s nodes/sec=%-6s backtracks=%-6s nogoodsLearned=%s%n",
                 label, avgMillis, millis, nodes, nodesPerSec, backtracks, nogoodsLearned);
     }
@@ -307,7 +307,7 @@ public final class NogoodPropagationBenchmark {
         } catch (LimitExceededException ignored) {
             // statistics still holds the true cumulative count up to the point the limit fired.
         }
-        return statistics.getNodesExplored().get();
+        return statistics.getNodesExplored();
     }
 
     private static void compareRestartRandomization() {

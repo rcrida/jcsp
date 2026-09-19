@@ -22,7 +22,7 @@ public class LimitExceededException extends RuntimeException {
     private final Statistics statistics;
 
     public LimitExceededException(Statistics statistics) {
-        super("Solver limit exceeded after " + statistics.getNodesExplored().get() + " nodes");
+        super("Solver limit exceeded after " + statistics.getNodesExplored() + " nodes");
         this.statistics = statistics;
     }
 }
