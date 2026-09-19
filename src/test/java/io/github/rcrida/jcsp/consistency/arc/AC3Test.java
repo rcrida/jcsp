@@ -271,4 +271,38 @@ public class AC3Test {
         System.out.println(problem);
         assertThat(AC3.INSTANCE.apply(problem)).isEmpty();
     }
+
+    /**
+     * The contract {@link io.github.rcrida.jcsp.solver.FixpointPropagation}'s propagator worklist
+     * relies on to tell, in O(1), that a pass changed nothing and so woke nothing. An already
+     * arc-consistent problem must come back as the very same object, not an equal copy.
+     */
+    @Test
+    void apply_revisesNothing_returnsTheSameProblemInstance() {
+        Variable<Integer> x = Variable.Factory.INSTANCE.create("same_ref_x");
+        Variable<Integer> y = Variable.Factory.INSTANCE.create("same_ref_y");
+        val problem = ConstraintSatisfactionProblem.builder()
+                .variableDomain(x, IntRangeDomain.of(0, 3))
+                .variableDomain(y, IntRangeDomain.of(0, 3))
+                .constraint(BinaryComparatorConstraint.of(x, Operator.LEQ, y))
+                .build();
+        // Already arc-consistent: every value of each side has a support on the other.
+        assertThat(AC3.INSTANCE.apply(problem)).containsSame(problem);
+        assertThat(AC3.INSTANCE.apply(problem, null)).containsSame(problem);
+        assertThat(AC3.INSTANCE.applyWithReason(problem, null).problem()).isSameAs(problem);
+    }
+
+    @Test
+    void apply_revisesSomething_returnsANarrowedCopy() {
+        Variable<Integer> x = Variable.Factory.INSTANCE.create("narrowed_x");
+        Variable<Integer> y = Variable.Factory.INSTANCE.create("narrowed_y");
+        val problem = ConstraintSatisfactionProblem.builder()
+                .variableDomain(x, IntRangeDomain.of(0, 5))
+                .variableDomain(y, IntRangeDomain.of(0, 2))
+                .constraint(BinaryComparatorConstraint.of(x, Operator.LEQ, y))
+                .build();
+        val result = AC3.INSTANCE.apply(problem).orElseThrow();
+        assertThat(result).isNotSameAs(problem);
+        assertThat(result.getVariableDomains().get(x)).isEqualTo(IntRangeDomain.of(0, 2));
+    }
 }

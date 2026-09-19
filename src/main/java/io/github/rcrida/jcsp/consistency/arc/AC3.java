@@ -123,20 +123,20 @@ public class AC3 implements ConstraintConsistency {
         val index = arcIndex(problem);
         val arcConstraints = index.arcConstraints();
         val arcsByTarget = index.arcsByTarget();
-        val variableDomains = new HashMap<Variable<?>, Domain<?>>(problem.getVariableDomains());
+        val revisions = new Revisions(problem);
         while (!queue.isEmpty()) {
             val arc = queue.poll();
             val X_i = arc.getFrom();
             val X_j = arc.getTo();
             for (BinaryConstraint<?, ?> binaryConstraint : arcConstraints.get(arc)) {
-                val optionalRevisedD_i = revise(variableDomains, arc, binaryConstraint);
+                val optionalRevisedD_i = revise(revisions.view(), arc, binaryConstraint);
                 if (optionalRevisedD_i.isPresent()) {
                     val revisedD_i = optionalRevisedD_i.get();
                     if (revisedD_i.isEmpty()) {
                         log.debug("Domain of variable {} is empty after AC3", X_i);
                         return Optional.empty();
                     }
-                    variableDomains.put(X_i, revisedD_i);
+                    revisions.record(X_i, revisedD_i);
                     val X_iNeighbours = arcsByTarget.getOrDefault(X_i, List.of()).stream()
                             .filter(c -> !c.getFrom().equals(X_j))
                             .toList();
@@ -144,7 +144,47 @@ public class AC3 implements ConstraintConsistency {
                 }
             }
         }
-        return Optional.of(problem.withDomains(variableDomains));
+        return Optional.of(revisions.finish(problem));
+    }
+
+    /**
+     * Accumulates this traversal's narrowed domains, allocating nothing until the first arc actually
+     * revises something. Until 2026-09-19 both traversals instead copied every domain into a fresh
+     * {@link HashMap} on entry and handed the whole copy to {@link
+     * ConstraintSatisfactionProblem#withDomains} on exit -- two {@code O(variables)} copies plus a new
+     * {@link ConstraintSatisfactionProblem} on <em>every</em> call, including the overwhelmingly common
+     * one where no arc revises anything at all. Returning {@code problem} itself unchanged in that case
+     * also gives callers a correct {@code O(1)} reference-equality test for "this pass changed
+     * nothing", which {@link io.github.rcrida.jcsp.solver.FixpointPropagation}'s propagator worklist
+     * relies on to decide whether to wake anything -- {@link
+     * io.github.rcrida.jcsp.consistency.fixpoint.FixpointConsistency} already had this property via its
+     * own accumulator, and AC3 was the one propagator that did not.
+     */
+    private static final class Revisions {
+        private final Map<Variable<?>, Domain<?>> base;
+        private Map<Variable<?>, Domain<?>> working;
+        private Map<Variable<?>, Domain<?>> updates;
+
+        Revisions(ConstraintSatisfactionProblem problem) {
+            this.base = problem.getVariableDomains();
+        }
+
+        Map<Variable<?>, Domain<?>> view() {
+            return working != null ? working : base;
+        }
+
+        void record(Variable<?> variable, Domain<?> narrowed) {
+            if (working == null) {
+                working = new HashMap<>(base);
+                updates = new HashMap<>();
+            }
+            working.put(variable, narrowed);
+            updates.put(variable, narrowed);
+        }
+
+        ConstraintSatisfactionProblem finish(ConstraintSatisfactionProblem problem) {
+            return updates == null ? problem : problem.withDomains(updates);
+        }
     }
 
     /**
@@ -195,20 +235,20 @@ public class AC3 implements ConstraintConsistency {
         val index = arcIndex(problem);
         val arcConstraints = index.arcConstraints();
         val arcsByTarget = index.arcsByTarget();
-        val variableDomains = new HashMap<Variable<?>, Domain<?>>(problem.getVariableDomains());
+        val revisions = new Revisions(problem);
         while (!queue.isEmpty()) {
             val arc = queue.poll();
             val X_i = arc.getFrom();
             val X_j = arc.getTo();
             for (BinaryConstraint<?, ?> binaryConstraint : arcConstraints.get(arc)) {
-                val optionalRevisedD_i = revise(variableDomains, arc, binaryConstraint);
+                val optionalRevisedD_i = revise(revisions.view(), arc, binaryConstraint);
                 if (optionalRevisedD_i.isPresent()) {
                     val revisedD_i = optionalRevisedD_i.get();
                     if (revisedD_i.isEmpty()) {
-                        val reason = Propagatable.allSingletonReason(List.of(X_i, X_j), variableDomains);
+                        val reason = Propagatable.allSingletonReason(List.of(X_i, X_j), revisions.view());
                         return ConsistencyResult.infeasible(reason.isEmpty() ? null : GroundNogoodConstraint.of(reason));
                     }
-                    variableDomains.put(X_i, revisedD_i);
+                    revisions.record(X_i, revisedD_i);
                     val X_iNeighbours = arcsByTarget.getOrDefault(X_i, List.of()).stream()
                             .filter(c -> !c.getFrom().equals(X_j))
                             .toList();
@@ -216,7 +256,7 @@ public class AC3 implements ConstraintConsistency {
                 }
             }
         }
-        return ConsistencyResult.feasible(problem.withDomains(variableDomains));
+        return ConsistencyResult.feasible(revisions.finish(problem));
     }
 
     public Optional<ConstraintSatisfactionProblem> revise(ConstraintSatisfactionProblem problem, Arc arc) {
