@@ -191,20 +191,32 @@ public class SubCircuitConstraint extends NaryConstraint implements Propagatable
     }
 
     /**
-     * Whether {@code circuit} — already known to be a disjoint union of circuits — is just one of
-     * them, found by walking from any member and counting. Two or more means the successors have
-     * settled into separate tours, which this constraint forbids outright.
+     * Whether {@code circuit} is one circuit rather than several, found by walking from any member
+     * and counting. Anything else — separate tours, or a walk that never comes back — is infeasible:
+     * this constraint permits exactly one circuit, and the successors must be a permutation.
+     * <p>
+     * The step bound is load-bearing, not defensive. It is tempting to argue the walk must return to
+     * {@code start} because the successors are a permutation, but nothing here establishes that:
+     * {@link CircuitPropagation#duplicateSuccessorPass} is a single sweep, not a fixpoint, so when it
+     * prunes an <em>already-visited</em> node down to a singleton that node's value is never
+     * propagated onward. Two nodes can therefore end up fixed on the same successor — for instance
+     * {@code n0={2,5}, n3={2,5}, n4={5}}, where eliminating 5 leaves both {@code n0} and {@code n3}
+     * pointing at node 1. That is a rho shape, {@code start -> a -> b -> c -> a}, whose walk cycles
+     * forever without ever meeting {@code start}. An unbounded loop here hung
+     * {@code Mario-easy-4.xml.lzma} indefinitely, unresponsive to cancellation.
+     * <p>
+     * Reporting such a walk as not-a-single-circuit is sound rather than merely safe: it can only
+     * arise from two nodes sharing a successor, which already violates the permutation requirement.
      */
     private boolean isSingleCircuit(Set<Integer> circuit, Map<Variable<?>, Domain<?>> domains,
                                     Map<Variable<?>, Domain<?>> updated) {
         int start = circuit.iterator().next();
         int current = fixedNext(start, domains, updated);
-        int steps = 1;
-        while (current != start) {
+        for (int steps = 1; steps <= circuit.size(); steps++) {
+            if (current == start) return steps == circuit.size();
             current = fixedNext(current, domains, updated);
-            steps++;
         }
-        return steps == circuit.size();
+        return false;
     }
 
     /**

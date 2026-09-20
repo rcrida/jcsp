@@ -7,11 +7,14 @@ import io.github.rcrida.jcsp.variables.Variable;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+import java.time.Duration;
+
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.junit.jupiter.api.Assertions.assertTimeoutPreemptively;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
@@ -206,6 +209,36 @@ class SubCircuitConstraintTest {
         var result = constraint.propagate(domains(all, all, all, all));
         assertThat(result).isPresent();
         assertThat(result.get()).isEmpty();
+    }
+
+    @Test
+    void propagate_twoNodesLeftSharingASuccessor_terminatesAndIsInfeasible() {
+        // Regression: this hung indefinitely, unresponsive to cancellation, and took
+        // Mario-easy-4.xml.lzma with it.
+        //
+        // duplicateSuccessorPass is a single sweep. Nodes 1 and 4 are not singletons when their own
+        // index is visited, so nothing is pruned for them then; node 5's {5} is only reached later,
+        // and eliminating 5 leaves BOTH of them fixed on 2. In-degree two on node 2 makes a rho --
+        // 1 -> 2 -> 3 -> 4 -> 2 -- whose walk from node 1 never returns to its start.
+        //
+        // It is genuinely infeasible: two nodes sharing a successor is not a permutation.
+        var factory = Variable.Factory.INSTANCE;
+        Variable<Integer> t0 = factory.create("t0");
+        Variable<Integer> t1 = factory.create("t1");
+        Variable<Integer> t2 = factory.create("t2");
+        Variable<Integer> t3 = factory.create("t3");
+        Variable<Integer> t4 = factory.create("t4");
+        var wider = SubCircuitConstraint.of(List.of(t0, t1, t2, t3, t4));
+
+        Map<Variable<?>, Domain<?>> domains = new HashMap<>();
+        domains.put(t0, DiscreteDomain.of(2, 5));
+        domains.put(t1, DiscreteDomain.of(3));
+        domains.put(t2, DiscreteDomain.of(4));
+        domains.put(t3, DiscreteDomain.of(2, 5));
+        domains.put(t4, DiscreteDomain.of(5));
+
+        assertTimeoutPreemptively(Duration.ofSeconds(5), () ->
+                assertThat(wider.propagate(domains)).isEmpty());
     }
 
     // --- explainInfeasible ---
