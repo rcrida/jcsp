@@ -15,6 +15,7 @@ import java.util.Map;
 import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 public class BinaryComparatorConstraintTest {
     static final Variable.Factory F = Variable.Factory.INSTANCE;
@@ -25,8 +26,13 @@ public class BinaryComparatorConstraintTest {
 
     @Test void eq_satisfied()  { assertThat(BinaryComparatorConstraint.of(LEFT, Operator.EQ,  RIGHT).isSatisfiedBy(a(3, 3))).isTrue(); }
     @Test void eq_violated()   { assertThat(BinaryComparatorConstraint.of(LEFT, Operator.EQ,  RIGHT).isSatisfiedBy(a(3, 4))).isFalse(); }
-    @Test void neq_satisfied() { assertThat(BinaryComparatorConstraint.of(LEFT, Operator.NEQ, RIGHT).isSatisfiedBy(a(3, 4))).isTrue(); }
-    @Test void neq_violated()  { assertThat(BinaryComparatorConstraint.of(LEFT, Operator.NEQ, RIGHT).isSatisfiedBy(a(3, 3))).isFalse(); }
+    @Test void of_neq_isRejected() {
+        // NEQ has no bounds narrowing to offer, so accepting it would advertise propagation this
+        // class never performs. BinaryNotEqualsConstraint carries the real propagator.
+        assertThatThrownBy(() -> BinaryComparatorConstraint.of(LEFT, Operator.NEQ, RIGHT))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("BinaryNotEqualsConstraint");
+    }
     @Test void lt_satisfied()  { assertThat(BinaryComparatorConstraint.of(LEFT, Operator.LT,  RIGHT).isSatisfiedBy(a(2, 3))).isTrue(); }
     @Test void lt_violated()   { assertThat(BinaryComparatorConstraint.of(LEFT, Operator.LT,  RIGHT).isSatisfiedBy(a(3, 3))).isFalse(); }
     @Test void gt_satisfied()  { assertThat(BinaryComparatorConstraint.of(LEFT, Operator.GT,  RIGHT).isSatisfiedBy(a(4, 3))).isTrue(); }
@@ -113,7 +119,11 @@ public class BinaryComparatorConstraintTest {
     }
 
     @Test void propagate_neq_noChange() {
-        var result = BinaryComparatorConstraint.of(L, Operator.NEQ, R).propagate(domains(0.0, 10.0, 0.0, 10.0));
+        // Reached only via the builder, which bypasses of()'s rejection; the guard exists so NEQ
+        // cannot fall through to the EQ branch and narrow both sides to their intersection.
+        var result = BinaryComparatorConstraint.<Double>builder()
+                .left(L).operator(Operator.NEQ).right(R).build()
+                .propagate(domains(0.0, 10.0, 0.0, 10.0));
         assertThat(result).isPresent();
         assertThat(result.get()).isEmpty();
     }

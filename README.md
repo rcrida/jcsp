@@ -271,7 +271,7 @@ builder.offsetConstraint(v1, offset, Operator.EQ, v2)       // v1 + offset == v2
 builder.absoluteDifferenceConstraint(v1, v2, Operator.LEQ, bound)  // |v1 - v2| <= bound  (also EQ, GEQ, GT, LT, NEQ)
 builder.elementConstraint(index, result, array)             // result = array[index]  (1-based; array is a fixed List<T>)
 builder.elementVariableConstraint(index, result, vars)      // result = vars[index]   (1-based; vars is a List<Variable<T>>; use for permutation composition, channeling, etc.)
-builder.comparatorConstraint(v1, Operator.LEQ, v2)          // v1 <= v2  (any Comparable type; also EQ, NEQ, LT, GT, GEQ)
+builder.comparatorConstraint(v1, Operator.LEQ, v2)          // v1 <= v2  (any Comparable type; also EQ, LT, GT, GEQ -- NEQ is rejected, use notEqualsConstraint)
 builder.logicConstraint(b1, LogicOperator.OR,  b2)          // b1 || b2  (Boolean vars; AND, OR, XOR, NAND, NOR, XNOR)
 builder.biPredicateConstraint(v1, v2, biPredicate)          // biPredicate.test(v1, v2)
 builder.subsetConstraint(left, right)                       // left ⊆ right  (set variables — Variable<Set<E>>)

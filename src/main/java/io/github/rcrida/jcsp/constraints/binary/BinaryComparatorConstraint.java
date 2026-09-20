@@ -35,14 +35,28 @@ import java.util.Set;
  * a no-op and the ordering is enforced purely by {@code isSatisfiedBy} plus AC3 during search,
  * since {@link NumericBounds} has no notion of bounds for a type it can't convert to
  * {@code double}.
+ * <p>
+ * {@link Operator#NEQ} is not accepted -- see {@link #of}. Use {@link BinaryNotEqualsConstraint}.
  */
 @SuperBuilder
 @EqualsAndHashCode(callSuper = true)
 public class BinaryComparatorConstraint<T extends Comparable<T>> extends BinaryConstraint<T, T> implements Propagatable {
     @NonNull private final Operator operator;
 
+    /**
+     * @throws IllegalArgumentException for {@link Operator#NEQ}. Disequality belongs to
+     *         {@link BinaryNotEqualsConstraint}, which carries a real {@code O(1)} propagator and is
+     *         generic over any {@code T} rather than only {@link Comparable} ones. This class could
+     *         only ever have treated NEQ as a no-op -- there is no bounds narrowing to do, since
+     *         removing one interior value from a range leaves the range unchanged -- so accepting
+     *         the operator advertised propagation it never performed.
+     */
     public static <T extends Comparable<T>> BinaryComparatorConstraint<T> of(
             @NonNull Variable<T> left, @NonNull Operator operator, @NonNull Variable<T> right) {
+        if (operator == Operator.NEQ) {
+            throw new IllegalArgumentException(
+                    "BinaryComparatorConstraint does not support NEQ; use BinaryNotEqualsConstraint.of(left, right)");
+        }
         return BinaryComparatorConstraint.<T>builder()
                 .left(left).operator(operator).right(right).build();
     }
@@ -60,6 +74,9 @@ public class BinaryComparatorConstraint<T extends Comparable<T>> extends BinaryC
     @Override
     @SuppressWarnings("unchecked")
     public Optional<Map<Variable<?>, Domain<?>>> propagate(Map<Variable<?>, Domain<?>> domains) {
+        // Unreachable through of(), which rejects NEQ. Retained for the @SuperBuilder path, which
+        // bypasses that check: without it NEQ would fall through to the EQ branch below and narrow
+        // both sides to their intersection, which is not merely useless but wrong.
         if (operator == Operator.NEQ) return Optional.of(Map.of());
         Domain<?> lDomain = domains.get(getLeft());
         Domain<?> rDomain = domains.get(getRight());

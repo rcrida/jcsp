@@ -3,6 +3,7 @@ package io.github.rcrida.jcsp.parser.xcsp3;
 import io.github.rcrida.jcsp.constraints.Constraint;
 import io.github.rcrida.jcsp.constraints.Operator;
 import io.github.rcrida.jcsp.constraints.binary.BinaryComparatorConstraint;
+import io.github.rcrida.jcsp.constraints.binary.BinaryNotEqualsConstraint;
 import io.github.rcrida.jcsp.constraints.nary.PredicateConstraint;
 import io.github.rcrida.jcsp.variables.Variable;
 import org.jspecify.annotations.NonNull;
@@ -111,7 +112,7 @@ final class ChannelRecognizer implements ConstraintRecognizer {
 
         Variable<Boolean> leftIndicator = toIndicator(left.get(), "ChanL" + channelIndicatorCount);
         Variable<Boolean> rightIndicator = toIndicator(right.get(), "ChanR" + channelIndicatorCount++);
-        return Optional.of(BinaryComparatorConstraint.of(leftIndicator, operator, rightIndicator));
+        return Optional.of(BinaryRelationRecognizer.binaryRelation(leftIndicator, operator, rightIndicator));
     }
 
     private Optional<Operand> resolve(XNode<XVarInteger> node) {

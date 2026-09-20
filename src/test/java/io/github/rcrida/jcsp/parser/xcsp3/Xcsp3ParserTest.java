@@ -4,6 +4,7 @@ import io.github.rcrida.jcsp.ConstraintSatisfactionProblem;
 import io.github.rcrida.jcsp.assignments.Assignment;
 import io.github.rcrida.jcsp.constraints.binary.AbsoluteDifferenceConstraint;
 import io.github.rcrida.jcsp.constraints.binary.BinaryComparatorConstraint;
+import io.github.rcrida.jcsp.constraints.binary.BinaryNotEqualsConstraint;
 import io.github.rcrida.jcsp.constraints.binary.BinaryOffsetConstraint;
 import io.github.rcrida.jcsp.constraints.binary.SquareVariableConstraint;
 import io.github.rcrida.jcsp.constraints.nary.AbsoluteDifferenceVariableConstraint;
@@ -753,14 +754,15 @@ class Xcsp3ParserTest {
         }
     }
 
-    @Test void intensionDistancePairComparison_routesThroughBinaryComparatorConstraintOverAuxiliaries() throws IOException {
+    @Test void intensionDistancePairComparison_routesThroughBinaryRelationOverAuxiliaries() throws IOException {
         Xcsp3Instance instance = parseXml(
                 "<var id=\"a\"> 1..4 </var><var id=\"b\"> 1..4 </var><var id=\"c\"> 1..4 </var><var id=\"d\"> 1..4 </var>",
                 "<intension> ne(dist(a,b),dist(c,d)) </intension>");
-        // Two auxiliary-linking AbsoluteDifferenceVariableConstraints plus the comparator over them.
+        // Two auxiliary-linking AbsoluteDifferenceVariableConstraints plus the relation over them.
+        // The operator here is ne, so that relation is a BinaryNotEqualsConstraint.
         assertThat(instance.csp().getConstraints()).hasSize(3);
         assertThat(instance.csp().getConstraints()).filteredOn(c -> c instanceof AbsoluteDifferenceVariableConstraint<?>).hasSize(2);
-        assertThat(instance.csp().getConstraints()).anyMatch(c -> c instanceof BinaryComparatorConstraint<?>);
+        assertThat(instance.csp().getConstraints()).anyMatch(c -> c instanceof BinaryNotEqualsConstraint<?>);
         Set<Assignment> found = solutions(instance.csp());
         assertThat(found).isNotEmpty();
         for (Assignment a : found) {
@@ -780,7 +782,7 @@ class Xcsp3ParserTest {
                 "<var id=\"a\"> 1..3 </var><var id=\"c\"> 1..3 </var><var id=\"d\"> 1..3 </var>",
                 "<intension> ne(dist(a,5),dist(c,d)) </intension>");
         assertThat(instance.csp().getConstraints()).filteredOn(c -> c instanceof AbsoluteDifferenceVariableConstraint<?>).hasSize(2);
-        assertThat(instance.csp().getConstraints()).anyMatch(c -> c instanceof BinaryComparatorConstraint<?>);
+        assertThat(instance.csp().getConstraints()).anyMatch(c -> c instanceof BinaryNotEqualsConstraint<?>);
         Set<Assignment> found = solutions(instance.csp());
         assertThat(found).isNotEmpty();
         for (Assignment a : found) {
@@ -3993,14 +3995,16 @@ class Xcsp3ParserTest {
 
     // ---- intension eq/ne(compound-relation, variable) channel recognition (ChannelRecognizer) ----
 
-    @Test void intensionChannelNegated_routesThroughBinaryComparatorConstraint() throws IOException {
+    @Test void intensionChannelNegated_routesThroughBinaryNotEqualsConstraint() throws IOException {
         // QueenAttacking-06.xml.lzma's own shape: ne(and(ne(q,x),or(...)),b) -- "b is the negation
         // of whether q and x are a queen's-move apart". Simplified here to and(ne(x,y),or(eq(x,1),
         // eq(y,2))) against a plain channel variable b, with ne (not eq) as the outer operator.
         Xcsp3Instance instance = parseXml(
                 "<var id=\"x\"> 0..2 </var><var id=\"y\"> 0..2 </var><var id=\"b\"> 0..1 </var>",
                 "<intension> ne(and(ne(x,y),or(eq(x,1),eq(y,2))),b) </intension>");
-        assertThat(instance.csp().getConstraints()).anyMatch(c -> c instanceof BinaryComparatorConstraint);
+        // The outer operator is ne, which routes to the dedicated disequality constraint rather
+        // than BinaryComparatorConstraint -- see BinaryComparatorConstraint#of.
+        assertThat(instance.csp().getConstraints()).anyMatch(c -> c instanceof BinaryNotEqualsConstraint);
         Set<Assignment> solutions = solutions(instance.csp());
         assertThat(solutions).isNotEmpty();
         for (Assignment a : solutions) {

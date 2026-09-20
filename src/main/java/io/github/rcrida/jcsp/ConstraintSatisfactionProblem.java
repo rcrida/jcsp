@@ -956,11 +956,16 @@ public class ConstraintSatisfactionProblem {
         /**
          * Create a binary constraint that compares two variables of the same type: {@code left <op> right}.
          * Works with any {@link Comparable} type.
+         * <p>
+         * {@link Operator#NEQ} is not accepted -- use {@link #notEqualsConstraint(Variable, Variable)},
+         * which builds the dedicated disequality constraint. See
+         * {@link BinaryComparatorConstraint#of} for why.
          *
          * @param left     the left variable
          * @param operator the comparison operator (e.g. {@link Operator#LEQ}, {@link Operator#GT})
          * @param right    the right variable
          * @return the builder
+         * @throws IllegalArgumentException for {@link Operator#NEQ}
          */
         public <T extends Comparable<T>> ConstraintSatisfactionProblemBuilder comparatorConstraint(
                 @NonNull Variable<T> left, @NonNull Operator operator, @NonNull Variable<T> right) {

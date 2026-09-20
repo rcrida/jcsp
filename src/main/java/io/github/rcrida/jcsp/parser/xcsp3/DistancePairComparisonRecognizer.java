@@ -53,7 +53,7 @@ final class DistancePairComparisonRecognizer implements ConstraintRecognizer {
 
         Variable<Integer> auxLeft = handler.distanceAuxiliary(left.get().a(), left.get().b());
         Variable<Integer> auxRight = handler.distanceAuxiliary(right.get().a(), right.get().b());
-        return Optional.of(BinaryComparatorConstraint.of(auxLeft, operator, auxRight));
+        return Optional.of(BinaryRelationRecognizer.binaryRelation(auxLeft, operator, auxRight));
     }
 
     private Optional<DistancePairOperand> asDistancePairOperand(XNode<XVarInteger> node) {

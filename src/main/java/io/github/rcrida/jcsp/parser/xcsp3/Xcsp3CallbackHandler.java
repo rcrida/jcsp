@@ -1478,7 +1478,7 @@ final class Xcsp3CallbackHandler implements XCallbacks2 {
         if (condition instanceof ConditionVal val) {
             addOrReify(UnaryComparatorConstraint.of(count, mapOperator(val.operator), (int) val.k), id);
         } else if (condition instanceof ConditionVar var) {
-            addOrReify(BinaryComparatorConstraint.of(count, mapOperator(var.operator), variableFor(var.x)), id);
+            addOrReify(BinaryRelationRecognizer.binaryRelation(count, mapOperator(var.operator), variableFor(var.x)), id);
         } else {
             throw new UnsupportedXcsp3ConstraintException("Unsupported nValues condition: " + id);
         }

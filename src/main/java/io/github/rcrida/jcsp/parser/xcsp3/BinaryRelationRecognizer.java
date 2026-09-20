@@ -2,7 +2,9 @@ package io.github.rcrida.jcsp.parser.xcsp3;
 
 import io.github.rcrida.jcsp.constraints.Constraint;
 import io.github.rcrida.jcsp.constraints.Operator;
+import io.github.rcrida.jcsp.constraints.Constraint;
 import io.github.rcrida.jcsp.constraints.binary.BinaryComparatorConstraint;
+import io.github.rcrida.jcsp.constraints.binary.BinaryNotEqualsConstraint;
 import io.github.rcrida.jcsp.constraints.binary.BinaryOffsetConstraint;
 import io.github.rcrida.jcsp.variables.Variable;
 import org.jspecify.annotations.NonNull;
@@ -42,7 +44,7 @@ final class BinaryRelationRecognizer implements ConstraintRecognizer {
         Optional<Variable<Integer>> leftVar = handler.asVariable(left);
         Optional<Variable<Integer>> rightVar = handler.asVariable(right);
         if (leftVar.isPresent() && rightVar.isPresent()) {
-            return Optional.of(BinaryComparatorConstraint.of(leftVar.get(), operator, rightVar.get()));
+            return Optional.of(binaryRelation(leftVar.get(), operator, rightVar.get()));
         }
         // "var <op> var+k" rearranges to "var+k <flip(op)> var" to match BinaryOffsetConstraint's
         // fixed "left + offset <op> right" shape, which only ever applies the offset to the left side.
@@ -61,6 +63,18 @@ final class BinaryRelationRecognizer implements ConstraintRecognizer {
             return Optional.empty();
         }
         return handler.resolveVariable(left).flatMap(l -> handler.resolveVariable(right)
-                .map(r -> BinaryComparatorConstraint.of(l, operator, r)));
+                .map(r -> binaryRelation(l, operator, r)));
+    }
+
+    /**
+     * {@link Operator#NEQ} builds a {@link BinaryNotEqualsConstraint}; {@link
+     * BinaryComparatorConstraint} rejects that operator, having no bounds narrowing to offer for it.
+     * Shared by every parser site that picks a comparison operator at runtime, since any of them may
+     * be handed {@code ne}.
+     */
+    static <T extends Comparable<T>> Constraint binaryRelation(Variable<T> left, Operator operator, Variable<T> right) {
+        return operator == Operator.NEQ
+                ? BinaryNotEqualsConstraint.of(left, right)
+                : BinaryComparatorConstraint.of(left, operator, right);
     }
 }
