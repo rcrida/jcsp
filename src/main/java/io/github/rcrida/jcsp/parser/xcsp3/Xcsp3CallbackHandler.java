@@ -20,6 +20,7 @@ import io.github.rcrida.jcsp.constraints.nary.AtLeastNConstraint;
 import io.github.rcrida.jcsp.constraints.nary.Automaton;
 import io.github.rcrida.jcsp.constraints.nary.BinPackingConstraint;
 import io.github.rcrida.jcsp.constraints.nary.CircuitConstraint;
+import io.github.rcrida.jcsp.constraints.nary.SubCircuitConstraint;
 import io.github.rcrida.jcsp.constraints.nary.CountConstraint;
 import io.github.rcrida.jcsp.constraints.nary.CountVariableConstraint;
 import io.github.rcrida.jcsp.constraints.nary.CumulativeConstraint;
@@ -1922,11 +1923,34 @@ final class Xcsp3CallbackHandler implements XCallbacks2 {
 
     // ---- circuit ----------------------------------------------------------------------------------------------
 
+    /**
+     * XCSP3's {@code circuit} is a <em>sub</em>-circuit: a node may sit out by pointing at itself,
+     * and only the remaining nodes need form one circuit. It therefore maps to
+     * {@link SubCircuitConstraint}, not to {@link CircuitConstraint}, whose Hamiltonian
+     * (MiniZinc) reading admits no self-loops and rejects valid instances outright — see
+     * <a href="../../../../../../../docs/adr/0027-xcsp3-circuit-is-a-sub-circuit.md">ADR-0027</a>.
+     */
     @Override
     public void buildCtrCircuit(String id, XVarInteger[] list, int startIndex) {
         int offset = 1 - startIndex;
         List<Variable<Integer>> successors = Arrays.stream(list).map(v -> shiftVariable(v, offset)).toList();
-        addOrReify(CircuitConstraint.of(successors), id);
+        addOrReify(SubCircuitConstraint.of(successors), id);
+    }
+
+    /**
+     * The size-constrained forms of {@code circuit}, which additionally pin how many nodes the
+     * circuit runs through. Rejected explicitly rather than left to the library's own
+     * "not overridden" failure, so the message names the construct; supporting them needs a
+     * circuit-length term {@link SubCircuitConstraint} does not carry.
+     */
+    @Override
+    public void buildCtrCircuit(String id, XVarInteger[] list, int startIndex, int size) {
+        throw new UnsupportedXcsp3ConstraintException("circuit with a fixed size is not supported: " + id);
+    }
+
+    @Override
+    public void buildCtrCircuit(String id, XVarInteger[] list, int startIndex, XVarInteger size) {
+        throw new UnsupportedXcsp3ConstraintException("circuit with a variable size is not supported: " + id);
     }
 
     // ---- binPacking -------------------------------------------------------------------------------------------

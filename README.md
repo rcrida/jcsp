@@ -326,6 +326,7 @@ builder.atLeastNConstraintWithCounting(Set.of(b1, b2, b3), n)       // at least 
 builder.exactlyOneConstraint(Set.of(b1, b2, b3))                    // exactly one boolean is true
 builder.predicateConstraint(Set.of(v1, v2, v3), predicate)          // predicate.test(assignment) over a set of variables
 builder.circuitConstraint(List.of(s0, s1, s2))                      // Hamiltonian circuit: successors[i] is the 1-indexed next node after node i+1 (MiniZinc circuit)
+builder.subCircuitConstraint(List.of(s0, s1, s2))                   // circuit through some nodes only: successors[i] == i+1 means node i+1 sits out (XCSP3 circuit / Choco subCircuit)
 builder.diffnConstraint(xs, ys, widths, heights)                     // pairwise non-overlapping 2D rectangles; origin variables accept IntRangeDomain or IntervalDomain (MiniZinc diffn)
 builder.diffnVariableConstraint(xs, ys, widths, heights)             // diffn with variable rectangle widths/heights (e.g. a rotation choice), not just fixed sizes
 builder.regularConstraint(sequence, automaton)                       // sequence values must be accepted by the given DFA (MiniZinc regular); build the automaton with Automaton.of(numStates, initialState, acceptingStates, transitions)

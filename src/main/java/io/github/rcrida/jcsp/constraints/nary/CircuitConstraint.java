@@ -106,29 +106,7 @@ public class CircuitConstraint extends NaryConstraint implements Propagatable, B
 
     /** Step 2: singleton propagation — a fixed successor value is removed from all others. */
     private PassOutcome singletonPropagationPass(Map<Variable<?>, Domain<?>> domains, Map<Variable<?>, Domain<?>> updated) {
-        int n = successors.size();
-        for (int i = 0; i < n; i++) {
-            DiscreteDomain<Integer> domI = currentDomain(i, domains, updated);
-            if (domI.isSingleton()) {
-                int j = domI.singleValue().orElseThrow();
-                for (int k = 0; k < n; k++) {
-                    if (k == i) continue;
-                    DiscreteDomain<Integer> domK = currentDomain(k, domains, updated);
-                    if (domK.contains(j)) {
-                        DiscreteDomain<Integer> pruned = domK.toBuilder().delete(j).build();
-                        if (pruned.isEmpty()) {
-                            Map<Variable<?>, Object> reason = new HashMap<>();
-                            Propagatable.addIfSingleton(domI, successors.get(i), reason);
-                            Propagatable.addIfSingleton(domK, successors.get(k), reason);
-                            return PassOutcome.infeasible(reason);
-                        }
-                        log.debug("CircuitConstraint pruned duplicate successor {} from node {}", j, k + 1);
-                        updated.put(successors.get(k), pruned);
-                    }
-                }
-            }
-        }
-        return PassOutcome.FEASIBLE;
+        return CircuitPropagation.duplicateSuccessorPass(successors, domains, updated);
     }
 
     /** Step 3: sub-tour elimination — an unfinished chain's endpoint cannot close back to its start. */
@@ -184,11 +162,9 @@ public class CircuitConstraint extends NaryConstraint implements Propagatable, B
         return Optional.of(updated);
     }
 
-    @SuppressWarnings("unchecked")
     private DiscreteDomain<Integer> currentDomain(int i, Map<Variable<?>, Domain<?>> domains,
                                                   Map<Variable<?>, Domain<?>> updated) {
-        Variable<Integer> v = successors.get(i);
-        return (DiscreteDomain<Integer>) updated.getOrDefault(v, domains.get(v));
+        return CircuitPropagation.currentDomain(successors, i, domains, updated);
     }
 
     /**

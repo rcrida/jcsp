@@ -42,6 +42,7 @@ import io.github.rcrida.jcsp.constraints.nary.AmongVariableConstraint;
 import io.github.rcrida.jcsp.constraints.nary.Automaton;
 import io.github.rcrida.jcsp.constraints.nary.BinPackingConstraint;
 import io.github.rcrida.jcsp.constraints.nary.CircuitConstraint;
+import io.github.rcrida.jcsp.constraints.nary.SubCircuitConstraint;
 import io.github.rcrida.jcsp.constraints.nary.DiffnConstraint;
 import io.github.rcrida.jcsp.constraints.nary.DiffnVariableConstraint;
 import io.github.rcrida.jcsp.constraints.nary.RegularConstraint;
@@ -1100,6 +1101,22 @@ public class ConstraintSatisfactionProblem {
         public ConstraintSatisfactionProblemBuilder circuitConstraint(
                 @NonNull List<Variable<Integer>> successors) {
             return this.constraint(CircuitConstraint.of(successors));
+        }
+
+        /**
+         * Enforce that {@code successors} forms a single circuit through some of the nodes, with
+         * every node left out pointing at itself. Same 1-indexed convention as
+         * {@link #circuitConstraint}, but a value {@code i+1} at position {@code i} means node
+         * {@code i+1} sits out rather than being forbidden. Equivalent to XCSP3's {@code circuit}
+         * and Choco's {@code subCircuit}; prefer {@link #circuitConstraint} when every node must be
+         * visited.
+         *
+         * @param successors ordered list of successor variables (one per node, 1-indexed values)
+         * @return the builder
+         */
+        public ConstraintSatisfactionProblemBuilder subCircuitConstraint(
+                @NonNull List<Variable<Integer>> successors) {
+            return this.constraint(SubCircuitConstraint.of(successors));
         }
 
         /**

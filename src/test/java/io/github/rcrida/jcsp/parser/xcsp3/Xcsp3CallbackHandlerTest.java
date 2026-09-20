@@ -46,6 +46,18 @@ class Xcsp3CallbackHandlerTest {
                 .isInstanceOf(UnsupportedXcsp3ConstraintException.class);
     }
 
+    @Test void buildCtrCircuit_fixedSize_throws() {
+        Xcsp3CallbackHandler handler = new Xcsp3CallbackHandler();
+        assertThatThrownBy(() -> handler.buildCtrCircuit("c0", new XVarInteger[0], 0, 3))
+                .isInstanceOf(UnsupportedXcsp3ConstraintException.class);
+    }
+
+    @Test void buildCtrCircuit_variableSize_throws() {
+        Xcsp3CallbackHandler handler = new Xcsp3CallbackHandler();
+        assertThatThrownBy(() -> handler.buildCtrCircuit("c0", new XVarInteger[0], 0, (XVarInteger) null))
+                .isInstanceOf(UnsupportedXcsp3ConstraintException.class);
+    }
+
     @Test void applyMinimumCondition_unrecognisedConditionShape_throws() {
         Variable<Integer> x = Variable.Factory.INSTANCE.create("x");
         Xcsp3CallbackHandler handler = new Xcsp3CallbackHandler();
