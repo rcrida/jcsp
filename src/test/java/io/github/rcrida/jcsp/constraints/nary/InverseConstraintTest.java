@@ -162,14 +162,18 @@ public class InverseConstraintTest {
     @Test
     void explainInfeasible_pass1_allSingleton_returnsFullReason() {
         // g0={1}: only val=1 is a candidate, requiring f[0] to contain 1. f0={2} excludes it,
-        // so g0's only value is removed → g0 empty. f0 is singleton, so the reason is sound.
+        // so g0's only value is removed → g0 empty. The reason must cite g0 as well as f0: f0=2
+        // alone is perfectly consistent with the constraint (it merely forces invf[1]=1), and is
+        // only contradictory *given* g0's narrowed {1}. Citing f0 alone would assert the globally
+        // false "f0 can never be 2".
         var domains = Map.<Variable<?>, Domain<?>>of(
                 f0, DiscreteDomain.of(2),
                 f1, domain123(), f2, domain123(),
                 g0, DiscreteDomain.of(1),
                 g1, domain123(), g2, domain123());
         assertThat(constraint.propagate(domains)).isEmpty();
-        assertThat(constraint.explainInfeasible(domains)).contains(GroundNogoodConstraint.of(Map.of(f0, 2)));
+        assertThat(constraint.explainInfeasible(domains))
+                .contains(GroundNogoodConstraint.of(Map.of(f0, 2, g0, 1)));
     }
 
     @Test
@@ -189,14 +193,16 @@ public class InverseConstraintTest {
     @Test
     void explainInfeasible_pass2_allSingleton_returnsFullReason() {
         // f0={1}: pass 1 leaves g0 untouched (no support issue), but pass 2 finds f0's only
-        // value (1) unsupported by g0={2} → f0 emptied. g0 is singleton, so the reason is sound.
+        // value (1) unsupported by g0={2} → f0 emptied. Mirror of pass 1: the reason must cite the
+        // emptied f0 alongside the culprit g0, since g0=2 is contradictory only given f0's {1}.
         var domains = Map.<Variable<?>, Domain<?>>of(
                 f0, DiscreteDomain.of(1),
                 f1, domain123(), f2, domain123(),
                 g0, DiscreteDomain.of(2),
                 g1, domain123(), g2, domain123());
         assertThat(constraint.propagate(domains)).isEmpty();
-        assertThat(constraint.explainInfeasible(domains)).contains(GroundNogoodConstraint.of(Map.of(g0, 2)));
+        assertThat(constraint.explainInfeasible(domains))
+                .contains(GroundNogoodConstraint.of(Map.of(g0, 2, f0, 1)));
     }
 
     @Test

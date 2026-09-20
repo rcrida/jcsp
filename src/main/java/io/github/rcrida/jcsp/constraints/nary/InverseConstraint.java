@@ -79,7 +79,9 @@ public class InverseConstraint extends NaryConstraint implements Propagatable {
                 if (pruned.isEmpty()) {
                     Map<Variable<?>, Domain<?>> merged = new HashMap<>(domains);
                     merged.putAll(updated);
-                    return PassOutcome.infeasible(Propagatable.allSingletonReason(culprits, merged));
+                    Set<Variable<?>> cited = new HashSet<>(culprits);
+                    cited.add(invf.get(j));
+                    return PassOutcome.infeasible(Propagatable.allSingletonReason(cited, merged));
                 }
                 updated.put(invf.get(j), pruned);
             }
@@ -107,7 +109,9 @@ public class InverseConstraint extends NaryConstraint implements Propagatable {
                 if (pruned.isEmpty()) {
                     Map<Variable<?>, Domain<?>> merged = new HashMap<>(domains);
                     merged.putAll(updated);
-                    return PassOutcome.infeasible(Propagatable.allSingletonReason(culprits, merged));
+                    Set<Variable<?>> cited = new HashSet<>(culprits);
+                    cited.add(f.get(i));
+                    return PassOutcome.infeasible(Propagatable.allSingletonReason(cited, merged));
                 }
                 updated.put(f.get(i), pruned);
             }
@@ -133,10 +137,19 @@ public class InverseConstraint extends NaryConstraint implements Propagatable {
      * {@link #fPruningPass} helpers (threading pass 1's updates into pass 2 exactly as
      * {@code propagate} does) to find the same emptied domain. At that point, the emptied
      * variable's every candidate value was excluded by some variable on the opposite array — those
-     * "opposite" variables are the culprits. Sound only when every culprit is currently singleton,
-     * via {@link Propagatable#allSingletonReason}: a non-singleton excluding variable could still
-     * be assigned a value later that resolves the exclusion, so citing it as a nogood requires its
-     * value to already be pinned.
+     * "opposite" variables are the culprits.
+     * <p>
+     * The citation is the culprits <em>plus the emptied variable itself</em>. Omitting the latter is
+     * unsound: the wipeout follows from the culprits only relative to the candidates the emptied
+     * variable still had, which a <em>different</em> constraint sharing it may have narrowed, so the
+     * resulting nogood would forbid assignments that are legal under this constraint's own declared
+     * domains. {@code Blackhole-04-3-00.xml.lzma} reported a false {@code UNSATISFIABLE} under CDCL
+     * search before this fix — the same defect, and the same correction, as
+     * {@link io.github.rcrida.jcsp.constraints.binary.BinaryOffsetConstraint#explainInfeasible}.
+     * <p>
+     * Sound only when every cited variable is currently singleton, via
+     * {@link Propagatable#allSingletonReason}: a non-singleton one could still take a value later
+     * that resolves the exclusion, so citing it requires its value to already be pinned.
      */
     @Override
     public Optional<NogoodConstraint> explainInfeasible(@NonNull Map<Variable<?>, Domain<?>> domains) {
