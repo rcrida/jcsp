@@ -40,6 +40,42 @@ Interleaved A/B, fixed seed, on restart-heavy instances:
 | Bibd-sc-06-050-25-03-10 | 2,322 nodes, 799 ms | 1,663 nodes, 618 ms | -23% |
 | Bibd-sum-06-050-25-03-10 | 2,322 nodes, 725 ms | 1,663 nodes, 583 ms | -20% |
 
+## Extended to the optimization chain (2026-09-21)
+
+`BranchAndBoundSolver` now carries its own `PhaseMemory` too, recorded whenever the incumbent
+strictly improves and consulted when ordering candidate values.
+
+The recording rule has to differ, and the reason is worth stating because reusing
+`recordIfDeepest` here would silently do the wrong thing rather than fail. Every assignment this
+solver records is a *complete solution*, so they all tie on size — the depth gate's
+`size <= bestDepth` test would reject every improvement after the first and guide the rest of the
+search by the **worst** solution ever found. Depth is the right progress measure when the thing
+being recorded is a partial path; for optimization the ordering that matters is the objective, and
+the caller only reaches `recordSolution` after the bound has strictly improved. So an unconditional
+overwrite is the correct rule there, not a laxer one.
+
+This is the only part of avenue A that is cheap. The optimization chain still has no restarts at
+all (`restarts=0` on every instance measured), which the head-to-head against Choco identifies as
+the larger gap — Choco restarts 2-10 times on precisely the instances jcsp loses worst on. Adding
+them needs care that this change did not: `Xcsp3ProblemRunner` infers `OPTIMUM FOUND` from "stream
+drained and cancellation never fired", so a budgeted restart schedule that ends the stream without
+an exhaustive run would silently claim a proof it does not have. Restart-on-solution avoids that by
+construction — a restart that returns no improving solution *is* the exhaustive proof.
+
+Measured, fixed seeds, three per instance:
+
+| Instance | Before | After |
+|---|---|---|
+| Mario-easy-4 | 45,101 / 61,929 / 61,929 nodes | 21,736 / 21,818 / 21,736 |
+| PrizeCollecting-15-3-5-0 | optimality proven on 2 of 3 seeds | 3 of 3 |
+| Opd-07-007-003 | 53,836 nodes | 53,602 |
+| ChessboardColoration-07-07 | 851,733 nodes | 827,356 |
+
+Mario is the clear win, and the shape of it is as interesting as the size: the guided arm barely
+varies across seeds where the baseline swings between 45k and 62k. Steering by the incumbent damps
+the search's own randomness. The two instances that barely move are the ones whose gap to Choco is
+~250x, which restarts rather than value ordering would have to close.
+
 ## Rejected alternatives
 
 - **Recording on every descent that survived propagation**, the classic phase-saving form. Built

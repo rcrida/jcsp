@@ -66,4 +66,29 @@ class PhaseMemoryTest {
         memory.recordIfDeepest(Map.of(x, 2));
         assertThat(memory.prioritise(x, List.of(1, 2, 3))).containsExactly(3, 1, 2);
     }
+
+    // --- recordSolution: the optimization counterpart, ordered by objective rather than depth ---
+
+    @Test
+    void recordSolution_overwritesAtEqualSize_unlikeRecordIfDeepest() {
+        // The distinction that makes a separate method necessary: every solution is complete, so
+        // successive ones always tie on size. recordIfDeepest would keep the first one forever,
+        // which for branch-and-bound means guiding by the *worst* solution ever found.
+        var memory = new PhaseMemory();
+        memory.recordSolution(Map.of(x, 3, y, 4));
+        memory.recordSolution(Map.of(x, 1, y, 5));
+        assertThat(memory.prioritise(x, List.of(1, 2, 3))).containsExactly(1, 2, 3);
+        assertThat(memory.prioritise(y, List.of(4, 5))).containsExactly(5, 4);
+    }
+
+    @Test
+    void recordIfDeepest_atTheSameSize_keepsTheFirst() {
+        // The contrast, stated directly: identical calls through the depth-gated entry point keep
+        // the original values, which is correct for satisfaction and wrong for optimization.
+        var memory = new PhaseMemory();
+        memory.recordIfDeepest(Map.of(x, 3, y, 4));
+        memory.recordIfDeepest(Map.of(x, 1, y, 5));
+        assertThat(memory.prioritise(x, List.of(1, 2, 3))).containsExactly(3, 1, 2);
+        assertThat(memory.prioritise(y, List.of(4, 5))).containsExactly(4, 5);
+    }
 }

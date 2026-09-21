@@ -56,6 +56,21 @@ public final class PhaseMemory {
     }
 
     /**
+     * Adopts a complete solution's values as the path to replay, overwriting whatever was there.
+     * <p>
+     * The counterpart to {@link #recordIfDeepest} for optimization, where depth cannot be the test:
+     * every solution is complete, so they all tie on size and {@code recordIfDeepest} would keep the
+     * first one forever. The ordering that matters there is by objective instead, and the caller
+     * ({@link io.github.rcrida.jcsp.solver.BranchAndBoundSolver}) only reaches this after the
+     * incumbent has strictly improved -- so the newest solution is always the better guide and an
+     * unconditional overwrite is the right rule rather than a laxer one.
+     */
+    public void recordSolution(@NonNull Map<Variable<?>, Object> solution) {
+        bestDepth = solution.size();
+        bestPath.putAll(solution);
+    }
+
+    /**
      * {@code values} with this variable's remembered value moved to the front, or {@code values}
      * itself when there is nothing remembered, the remembered value is no longer in the candidate
      * list (propagation has since pruned it), or it is already first -- the common case once the

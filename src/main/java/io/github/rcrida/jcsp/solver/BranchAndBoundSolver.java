@@ -18,6 +18,7 @@ import io.github.rcrida.jcsp.consistency.Inference;
 import io.github.rcrida.jcsp.domains.BoundedDomain;
 import io.github.rcrida.jcsp.solver.listener.SolverListener;
 import io.github.rcrida.jcsp.solver.backtrackingsearch.order.DomainValuesOrderer;
+import io.github.rcrida.jcsp.solver.backtrackingsearch.order.PhaseMemory;
 import io.github.rcrida.jcsp.solver.backtrackingsearch.selector.UnassignedVariableSelector;
 import io.github.rcrida.jcsp.solver.lp.LpBound;
 import io.github.rcrida.jcsp.solver.lp.LpModelBuilder;
@@ -25,6 +26,7 @@ import io.github.rcrida.jcsp.variables.Variable;
 import org.jspecify.annotations.NonNull;
 
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.function.ToDoubleFunction;
@@ -141,6 +143,23 @@ public class BranchAndBoundSolver implements Solver {
     @Builder.Default
     @NonNull Cancellation cancellation = Cancellation.NEVER;
 
+    /**
+     * Values from the current incumbent, tried first when branching -- solution-guided search.
+     * <p>
+     * Branch-and-bound keeps descending after an improvement rather than restarting, and rebuilds
+     * each subsequent path from {@link #domainValuesOrderer} alone, which knows nothing about the
+     * solution just found. Since an improving solution is by construction the best region seen, its
+     * values are the best available guess for the next one, and replaying them steers the search
+     * back towards it instead of re-deriving the neighbourhood value by value.
+     * <p>
+     * Reordering candidate values cannot affect soundness or completeness -- every value is still
+     * tried, and the incumbent bound alone decides what gets pruned. It only changes the order
+     * improving solutions are discovered in, which is not something {@link #getSolutions} promises
+     * beyond their being improving.
+     */
+    @Builder.Default
+    @NonNull PhaseMemory phaseMemory = new PhaseMemory();
+
     @Override
     public Stream<Assignment> getSolutions(@NonNull ConstraintSatisfactionProblem csp) {
         log.info("Search space before branch-and-bound = {}", csp.getSearchSpace());
@@ -233,6 +252,7 @@ public class BranchAndBoundSolver implements Solver {
             return Stream.empty();
         }
         incumbent[0] = cost;
+        phaseMemory.recordSolution(solution.getValues());
         log.info("Found improving solution with cost {}: {}", cost, solution);
         listener.onIncumbentImproved(solution, cost);
         return Stream.of(solution);
@@ -336,7 +356,10 @@ public class BranchAndBoundSolver implements Solver {
                                                  double[] incumbent,
                                                  long deadline) {
         ConstraintSatisfactionProblem cspWithNogoods = nogoodStore.apply(csp);
-        return domainValuesOrderer.order(csp, variable, assignment)
+        @SuppressWarnings("unchecked")
+        List<T> candidates = (List<T>) phaseMemory.prioritise(variable,
+                (List<Object>) domainValuesOrderer.order(csp, variable, assignment).toList());
+        return candidates.stream()
                 .map(value -> assignment.withValue(variable, value))
                 .filter(next -> {
                     if (limits.checkStop(cancellation, next.getStatistics().getNodesExplored(), deadline)
