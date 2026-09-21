@@ -54,13 +54,15 @@ being recorded is a partial path; for optimization the ordering that matters is 
 the caller only reaches `recordSolution` after the bound has strictly improved. So an unconditional
 overwrite is the correct rule there, not a laxer one.
 
-This is the only part of avenue A that is cheap. The optimization chain still has no restarts at
-all (`restarts=0` on every instance measured), which the head-to-head against Choco identifies as
-the larger gap — Choco restarts 2-10 times on precisely the instances jcsp loses worst on. Adding
-them needs care that this change did not: `Xcsp3ProblemRunner` infers `OPTIMUM FOUND` from "stream
-drained and cancellation never fired", so a budgeted restart schedule that ends the stream without
-an exhaustive run would silently claim a proof it does not have. Restart-on-solution avoids that by
-construction — a restart that returns no improving solution *is* the exhaustive proof.
+This is the only part of avenue A that paid. The optimization chain still has no restarts at all
+(`restarts=0` on every instance measured), which the head-to-head against Choco identified as the
+larger gap — Choco restarts 2-10 times on precisely the instances jcsp loses worst on.
+
+**That lead was followed and did not pan out.** Restart-on-solution was built, measured and
+reverted: a uniform 7-43% node tax for no corpus gain. See
+[ADR-0028](0028-restart-on-solution-rejected-for-branch-and-bound.md), which also records why a
+budgeted restart schedule is not an option here (it would break the `OPTIMUM FOUND` inference) and
+why the Choco comparison does not transfer. Do not re-derive it from this paragraph.
 
 Measured, fixed seeds, three per instance:
 
