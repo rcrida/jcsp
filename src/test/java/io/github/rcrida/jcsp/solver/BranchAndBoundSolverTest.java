@@ -609,4 +609,101 @@ public class BranchAndBoundSolverTest {
                 .hasMessageContaining("unassignedVariableSelector")
                 .hasMessageContaining("contract_x");
     }
+
+    // --- objective cut: the incumbent applied as a constraint, not only as a branch-cut predicate ---
+
+    private static final Variable<Integer> CUT_X = F.create("cut_x");
+    private static final Variable<Integer> CUT_Y = F.create("cut_y");
+    private static final Variable<Integer> CUT_A = F.create("cut_a");
+
+    /**
+     * {@code cut_a} is pinned to 3, so once {@code cut_x} is decided the cut's own minimum
+     * achievable sum can already exceed its bound -- which is what makes the wipeout reachable
+     * without relying on any other propagator.
+     */
+    private static final ConstraintSatisfactionProblem CUT_CSP = ConstraintSatisfactionProblem.builder()
+            .variableDomain(CUT_X, IntRangeDomain.of(0, 3))
+            .variableDomain(CUT_Y, IntRangeDomain.of(0, 3))
+            .variableDomain(CUT_A, IntRangeDomain.of(3, 3))
+            .sumConstraint(Set.of(CUT_X, CUT_Y, CUT_A), Operator.GEQ, 3)
+            .build();
+
+    private static BranchAndBoundSolver cutSolver(ToDoubleFunction<Assignment> objective) {
+        return BranchAndBoundSolver.builder()
+                .objective(objective)
+                .unassignedVariableSelector(fixedOrder(CUT_X, CUT_Y, CUT_A))
+                .domainValuesOrderer(DefaultValueOrderer.INSTANCE)
+                .inference(narrowAssignedToSingleton())
+                .statistics(new io.github.rcrida.jcsp.assignments.Statistics())
+                .build();
+    }
+
+    private static LinearObjective cutObjective(double xCoefficient, double constant) {
+        return LinearObjective.builder()
+                .coefficient(CUT_X, xCoefficient).coefficient(CUT_Y, 1.0).coefficient(CUT_A, 1.0)
+                .constant(constant)
+                .build();
+    }
+
+    @Test
+    void integralLinearObjective_cutPrunesASubtreeItsOwnBoundAlreadyRefutes() {
+        // x=0,y=0,a=3 costs 3 and is found first. The cut is then x+y+a <= 2, whose minimum over
+        // the x=1 node's own domains (x pinned to 1, y >= 0, a = 3) is already 4 -- so that whole
+        // subtree goes without any other propagator being consulted.
+        var improving = cutSolver(cutObjective(1.0, 0.0)).getSolutions(CUT_CSP).toList();
+
+        assertThat(improving).hasSize(1);
+        assertThat(improving.getFirst().getValues())
+                .containsEntry(CUT_X, 0).containsEntry(CUT_Y, 0).containsEntry(CUT_A, 3);
+    }
+
+    @Test
+    void fractionalCoefficient_skipsTheCutAndStillFindsTheSameOptimum() {
+        // A non-integral coefficient cannot be expressed exactly as an integer LinearBoundConstraint,
+        // so no cut is built at all -- the search must still be correct, just less pruned.
+        var improving = cutSolver(cutObjective(0.5, 0.0)).getSolutions(CUT_CSP).toList();
+
+        assertThat(improving.getLast().getValues())
+                .containsEntry(CUT_X, 0).containsEntry(CUT_Y, 0).containsEntry(CUT_A, 3);
+    }
+
+    /** As {@link #CUT_CSP}, but {@code cut_x} cannot be zero -- see the test below for why. */
+    private static final ConstraintSatisfactionProblem CUT_CSP_NONZERO_X = ConstraintSatisfactionProblem.builder()
+            .variableDomain(CUT_X, IntRangeDomain.of(1, 3))
+            .variableDomain(CUT_Y, IntRangeDomain.of(0, 3))
+            .variableDomain(CUT_A, IntRangeDomain.of(3, 3))
+            .sumConstraint(Set.of(CUT_X, CUT_Y, CUT_A), Operator.GEQ, 3)
+            .build();
+
+    @Test
+    void fractionalIncumbent_skipsTheCutViaTheBoundRatherThanACoefficient() {
+        // The bound's own integrality test, which a fractional *constant* can never reach: the
+        // constant cancels out of incumbent - constant - 1, leaving sum(c*x) - 1, so with whole
+        // coefficients the bound is always whole. It takes a fractional coefficient on a variable
+        // that is non-zero in the incumbent -- hence cut_x >= 1 here, where cut_x = 0 in CUT_CSP
+        // leaves 0.5 * 0 whole and falls through to the coefficient check instead.
+        var improving = cutSolver(cutObjective(0.5, 0.0)).getSolutions(CUT_CSP_NONZERO_X).toList();
+
+        assertThat(improving.getLast().getValues())
+                .containsEntry(CUT_X, 1).containsEntry(CUT_Y, 0).containsEntry(CUT_A, 3);
+    }
+
+    @Test
+    void coefficientTooLargeForAnInt_skipsTheCutRatherThanWrappingIt() {
+        // 1e18 is a whole number, so the rint test alone would accept it and the cast would wrap to
+        // a meaningless bound. The magnitude test is what stops that being a wrong cut.
+        var improving = cutSolver(cutObjective(1e18, 0.0)).getSolutions(CUT_CSP).toList();
+
+        assertThat(improving.getLast().getValues()).containsEntry(CUT_A, 3);
+    }
+
+    @Test
+    void nonLinearObjective_isLeftEntirelyAlone() {
+        // No LinearObjective means no coefficients to read, so there is nothing to cut with.
+        var improving = cutSolver(a -> a.getValues().values().stream()
+                .mapToDouble(v -> ((Integer) v).doubleValue()).sum()).getSolutions(CUT_CSP).toList();
+
+        assertThat(improving.getLast().getValues())
+                .containsEntry(CUT_X, 0).containsEntry(CUT_Y, 0).containsEntry(CUT_A, 3);
+    }
 }

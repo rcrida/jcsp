@@ -14,8 +14,11 @@ import io.github.rcrida.jcsp.assignments.NogoodStore;
 import io.github.rcrida.jcsp.assignments.SolverLimits;
 import io.github.rcrida.jcsp.assignments.Statistics;
 import io.github.rcrida.jcsp.consistency.ConsistencyResult;
+import io.github.rcrida.jcsp.constraints.Operator;
+import io.github.rcrida.jcsp.constraints.nary.LinearBoundConstraint;
 import io.github.rcrida.jcsp.consistency.Inference;
 import io.github.rcrida.jcsp.domains.BoundedDomain;
+import io.github.rcrida.jcsp.domains.Domain;
 import io.github.rcrida.jcsp.solver.listener.SolverListener;
 import io.github.rcrida.jcsp.solver.backtrackingsearch.order.DomainValuesOrderer;
 import io.github.rcrida.jcsp.solver.backtrackingsearch.order.PhaseMemory;
@@ -24,12 +27,14 @@ import io.github.rcrida.jcsp.solver.lp.LpBound;
 import io.github.rcrida.jcsp.solver.lp.LpModelBuilder;
 import io.github.rcrida.jcsp.variables.Variable;
 import org.jspecify.annotations.NonNull;
+import org.jspecify.annotations.Nullable;
 
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.function.ToDoubleFunction;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Stream;
 
 /**
@@ -123,6 +128,20 @@ public class BranchAndBoundSolver implements Solver {
     @EqualsAndHashCode.Exclude @ToString.Exclude @Getter(AccessLevel.NONE)
     Object lpModelCacheKey = new Object();
 
+    /**
+     * Single-slot cache for {@link #objectiveCut}'s constraint, keyed on the incumbent it was built
+     * for. The incumbent changes only when a strictly better solution is found -- rare relative to
+     * the per-node rate this is consulted at -- so rebuilding the constraint (which copies a
+     * variable set) at every node would be pure waste. Same field conventions and rationale as
+     * {@link #lpModelCacheKey}: direct initializer so Lombok's builder never sees it, and excluded
+     * from this value class's identity.
+     */
+    @EqualsAndHashCode.Exclude @ToString.Exclude @Getter(AccessLevel.NONE)
+    AtomicReference<ObjectiveCut> objectiveCutCache = new AtomicReference<>();
+
+    /** The cut constraint built for one incumbent value; see {@link #objectiveCutCache}. */
+    private record ObjectiveCut(double incumbent, @Nullable LinearBoundConstraint<Integer> constraint) {}
+
     @NonNull UnassignedVariableSelector unassignedVariableSelector;
     @NonNull DomainValuesOrderer domainValuesOrderer;
     @NonNull Inference inference;
@@ -175,6 +194,18 @@ public class BranchAndBoundSolver implements Solver {
         if (assignment.isComplete(csp) || isDiscreteComplete(csp, assignment)) {
             return resolveComplete(csp, assignment, incumbent);
         }
+        ConstraintSatisfactionProblem cutCsp = applyObjectiveCut(csp, incumbent[0]);
+        if (cutCsp == null) {
+            return Stream.empty();
+        }
+        return searchCut(cutCsp, assignment, incumbent, deadline);
+    }
+
+    /** {@link #search}'s continuation once the objective cut has been folded into {@code csp}. */
+    private Stream<Assignment> searchCut(ConstraintSatisfactionProblem csp,
+                                         Assignment assignment,
+                                         double[] incumbent,
+                                         long deadline) {
         Variable<?> variable;
         if (objective instanceof LinearObjective linearObjective) {
             Optional<LpBound> bound = LpModelBuilder.solve(csp, linearObjective, lpModelCacheKey);
@@ -191,6 +222,98 @@ public class BranchAndBoundSolver implements Solver {
         }
         requireDiscrete(csp, variable);
         return searchValues(variable, csp, assignment, incumbent, deadline);
+    }
+
+    /**
+     * Narrows {@code csp}'s domains by the <em>objective cut</em> {@code sum(c_v * v) <= incumbent -
+     * constant - 1}, or {@code null} when that already wipes a domain out and the whole subtree can
+     * be pruned.
+     * <p>
+     * This is the incumbent expressed as a <em>constraint</em> rather than only as the branch-cut
+     * predicate {@link #search} already applies. The distinction is the point: a branch cut rejects
+     * one node, whereas narrowing a domain is information every other propagator then compounds
+     * with, via the ordinary fixpoint the child node's {@link #inference} runs. Without it the
+     * incumbent is invisible to {@link io.github.rcrida.jcsp.constraints.nary.AllDiffConstraint},
+     * {@link io.github.rcrida.jcsp.constraints.nary.GlobalCardinalityConstraint} and every other
+     * propagator, no matter how good it gets.
+     * <p>
+     * Sound because it removes only assignments whose cost is at least the incumbent, and those are
+     * by definition not improving -- the only thing {@link #getSolutions} ever promises to emit.
+     * <p>
+     * Restricted to a wholly integral {@link LinearObjective} (every coefficient and the constant),
+     * which is what makes the strict {@code < incumbent} expressible exactly as {@code <= incumbent
+     * - 1} with no epsilon. A non-integral objective is left alone rather than approximated: the
+     * cut would have to be loosened by an epsilon to stay sound, and a wrong one here silently
+     * discards the true optimum instead of failing.
+     */
+    private @Nullable ConstraintSatisfactionProblem applyObjectiveCut(ConstraintSatisfactionProblem csp, double incumbent) {
+        if (!(objective instanceof LinearObjective linearObjective) || incumbent == Double.MAX_VALUE) {
+            return csp;
+        }
+        LinearBoundConstraint<Integer> constraint = cutFor(linearObjective, incumbent, csp);
+        if (constraint == null) {
+            return csp;
+        }
+        Optional<Map<Variable<?>, Domain<?>>> narrowed = constraint.propagate(csp.getVariableDomains());
+        if (narrowed.isEmpty()) {
+            return null;
+        }
+        return narrowed.get().isEmpty() ? csp : csp.withDomains(narrowed.get());
+    }
+
+    /**
+     * The cut constraint for {@code incumbent}, from {@link #objectiveCutCache} when it was already
+     * built for that same incumbent. A {@code null} entry is cached too, so a non-integral objective
+     * is diagnosed once rather than re-examined at every node.
+     */
+    private @Nullable LinearBoundConstraint<Integer> cutFor(LinearObjective objective, double incumbent,
+                                                            ConstraintSatisfactionProblem csp) {
+        ObjectiveCut cached = objectiveCutCache.get();
+        if (cached != null && cached.incumbent() == incumbent) {
+            return cached.constraint();
+        }
+        LinearBoundConstraint<Integer> built = buildCut(objective, incumbent, csp);
+        objectiveCutCache.set(new ObjectiveCut(incumbent, built));
+        return built;
+    }
+
+    /**
+     * The cut as a {@link LinearBoundConstraint}, or {@code null} when this objective can't be
+     * expressed as one exactly -- see {@link #applyObjectiveCut} for why an inexact cut is not worth
+     * having. The bound is {@code incumbent - constant - 1}: one strictly better than the incumbent,
+     * which for a wholly integral objective is exactly representable rather than an epsilon away.
+     * <p>
+     * A {@link BoundedDomain} anywhere in the objective disqualifies it outright, for two separate
+     * reasons that happen to coincide: {@code -1} is not the next representable improvement over a
+     * continuous cost, and an {@code Integer}-bounded {@link LinearBoundConstraint} dispatches to
+     * integer propagation, which cannot read a continuous domain at all. The MIPLIB {@code flugpl}
+     * instance (see {@code FlugplTest}) is exactly this mixed integer/continuous shape.
+     */
+    @SuppressWarnings("unchecked")
+    private static @Nullable LinearBoundConstraint<Integer> buildCut(LinearObjective objective, double incumbent,
+                                                                     ConstraintSatisfactionProblem csp) {
+        double bound = incumbent - objective.getConstant() - 1;
+        if (!isExactInt(bound)) {
+            return null;
+        }
+        Map<Variable<Integer>, Integer> coefficients = new HashMap<>();
+        for (var entry : objective.getCoefficients().entrySet()) {
+            if (!isExactInt(entry.getValue()) || csp.getDomain(entry.getKey()) instanceof BoundedDomain<?>) {
+                return null;
+            }
+            coefficients.put((Variable<Integer>) entry.getKey(), entry.getValue().intValue());
+        }
+        return LinearBoundConstraint.of(coefficients, Operator.LEQ, (int) bound);
+    }
+
+    /**
+     * Whether {@code value} is a whole number that survives a cast to {@code int} unchanged. The
+     * magnitude test is not redundant with the first: it rejects an infinity (which {@link
+     * Math#rint} reports as already whole) and a large finite value (which the cast would silently
+     * wrap), either of which would otherwise produce a wrong cut rather than no cut.
+     */
+    private static boolean isExactInt(double value) {
+        return value == Math.rint(value) && Math.abs(value) <= Integer.MAX_VALUE;
     }
 
     /**

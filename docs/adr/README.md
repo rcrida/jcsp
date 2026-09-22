@@ -25,7 +25,7 @@ Each ADR is `NNNN-title-in-kebab-case.md`, numbered sequentially, using this tem
 ```markdown
 # NNNN. Title
 
-**Status**: Accepted | Proposed | Superseded by NNNN
+**Status**: Accepted | Proposed | Rejected | Superseded by NNNN
 
 ## Context
 
@@ -43,6 +43,14 @@ What else was considered (or tried and reverted) and why it lost.
 
 What this decision makes easy, what it makes hard, and what it obligates future changes to do.
 ```
+
+Add the new ADR to the Index below in the same commit that adds the file — the index is the only
+place the set is discoverable as a whole, and it has silently fallen several ADRs behind before.
+
+**Rejected** is for an approach that was actually built and reverted, not one dismissed on paper
+(that belongs in the winning ADR's Rejected alternatives section). Such an ADR is worth writing
+precisely because the code is gone: without it the next person re-derives the same idea from the
+same reasoning and re-does the work to find out it doesn't pay.
 
 An ADR is a record of a decision at the time it was made — later changes that revise the decision
 get a new ADR that marks the old one **Superseded by NNNN**, rather than rewriting history in
@@ -77,3 +85,9 @@ section instead.
 | [0021](0021-bitset-indexed-gac-for-table-constraints.md) | Bitset-indexed GAC for NaryTuplesConstraint | Implemented |
 | [0022](0022-bitset-and-residue-arc-consistency-ac3bitrm.md) | Bitset+residue arc consistency (AC3bit+rm) | Accepted |
 | [0023](0023-subset-sum-gac-for-linear-equality-constraints.md) | Subset-sum GAC for linear equality constraints | Accepted |
+| [0024](0024-propagator-worklist.md) | Propagator worklist instead of a round-robin fixpoint | Accepted |
+| [0025](0025-lp-model-reuse-across-search-nodes.md) | Reuse the LP model across search nodes by copying, not mutating | Accepted |
+| [0026](0026-solution-guided-phase-saving.md) | Solution-guided phase saving, recorded from the deepest path only | Accepted |
+| [0027](0027-xcsp3-circuit-is-a-sub-circuit.md) | XCSP3's `circuit` is a sub-circuit, not a Hamiltonian circuit | Accepted |
+| [0028](0028-restart-on-solution-rejected-for-branch-and-bound.md) | Restart-on-solution for branch-and-bound, built and rejected | Rejected |
+| [0029](0029-objective-cut-as-a-propagated-constraint.md) | Apply the incumbent as a propagated constraint, not only as a branch cut | Accepted |
