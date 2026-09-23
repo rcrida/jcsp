@@ -1,6 +1,7 @@
 package io.github.rcrida.jcsp.constraints.nary;
 
 import io.github.rcrida.jcsp.assignments.Assignment;
+import io.github.rcrida.jcsp.consistency.DomainOverlay;
 import io.github.rcrida.jcsp.consistency.Propagatable;
 import io.github.rcrida.jcsp.domains.DiscreteDomain;
 import io.github.rcrida.jcsp.domains.Domain;
@@ -77,11 +78,10 @@ public class InverseConstraint extends NaryConstraint implements Propagatable {
             if (builder != null) {
                 DiscreteDomain<Integer> pruned = builder.build();
                 if (pruned.isEmpty()) {
-                    Map<Variable<?>, Domain<?>> merged = new HashMap<>(domains);
-                    merged.putAll(updated);
                     Set<Variable<?>> cited = new HashSet<>(culprits);
                     cited.add(invf.get(j));
-                    return PassOutcome.infeasible(Propagatable.allSingletonReason(cited, merged));
+                    return PassOutcome.infeasible(
+                            Propagatable.allSingletonReason(cited, DomainOverlay.of(domains, updated)));
                 }
                 updated.put(invf.get(j), pruned);
             }
@@ -107,11 +107,10 @@ public class InverseConstraint extends NaryConstraint implements Propagatable {
             if (builder != null) {
                 DiscreteDomain<Integer> pruned = builder.build();
                 if (pruned.isEmpty()) {
-                    Map<Variable<?>, Domain<?>> merged = new HashMap<>(domains);
-                    merged.putAll(updated);
                     Set<Variable<?>> cited = new HashSet<>(culprits);
                     cited.add(f.get(i));
-                    return PassOutcome.infeasible(Propagatable.allSingletonReason(cited, merged));
+                    return PassOutcome.infeasible(
+                            Propagatable.allSingletonReason(cited, DomainOverlay.of(domains, updated)));
                 }
                 updated.put(f.get(i), pruned);
             }

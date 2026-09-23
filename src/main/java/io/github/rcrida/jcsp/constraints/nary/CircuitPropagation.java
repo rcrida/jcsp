@@ -1,5 +1,6 @@
 package io.github.rcrida.jcsp.constraints.nary;
 
+import io.github.rcrida.jcsp.consistency.DomainOverlay;
 import io.github.rcrida.jcsp.consistency.Propagatable;
 import io.github.rcrida.jcsp.domains.DiscreteDomain;
 import io.github.rcrida.jcsp.domains.Domain;
@@ -32,9 +33,7 @@ final class CircuitPropagation {
 
     static Map<Variable<?>, Domain<?>> merged(Map<Variable<?>, Domain<?>> domains,
                                               Map<Variable<?>, Domain<?>> updated) {
-        Map<Variable<?>, Domain<?>> all = new HashMap<>(domains);
-        all.putAll(updated);
-        return all;
+        return DomainOverlay.of(domains, updated);
     }
 
     /**

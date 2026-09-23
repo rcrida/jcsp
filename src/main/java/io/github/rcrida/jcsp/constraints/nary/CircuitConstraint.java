@@ -1,6 +1,7 @@
 package io.github.rcrida.jcsp.constraints.nary;
 
 import io.github.rcrida.jcsp.assignments.Assignment;
+import io.github.rcrida.jcsp.consistency.DomainOverlay;
 import io.github.rcrida.jcsp.consistency.Propagatable;
 import io.github.rcrida.jcsp.constraints.BinaryDecomposable;
 import io.github.rcrida.jcsp.constraints.binary.BinaryConstraint;
@@ -131,9 +132,8 @@ public class CircuitConstraint extends NaryConstraint implements Propagatable, B
             if (visited.contains(current)) {
                 if (visited.size() < n) {
                     List<Variable<Integer>> chainVars = visited.stream().map(successors::get).toList();
-                    Map<Variable<?>, Domain<?>> currentDomains = new HashMap<>(domains);
-                    currentDomains.putAll(updated);
-                    return PassOutcome.infeasible(Propagatable.allSingletonReason(chainVars, currentDomains));
+                    return PassOutcome.infeasible(
+                            Propagatable.allSingletonReason(chainVars, DomainOverlay.of(domains, updated)));
                 }
             } else {
                 chainStart.put(current, start);

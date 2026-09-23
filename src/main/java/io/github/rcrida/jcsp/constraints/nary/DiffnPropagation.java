@@ -1,5 +1,6 @@
 package io.github.rcrida.jcsp.constraints.nary;
 
+import io.github.rcrida.jcsp.consistency.DomainOverlay;
 import io.github.rcrida.jcsp.consistency.Propagatable;
 import io.github.rcrida.jcsp.constraints.NumericBounds;
 import io.github.rcrida.jcsp.domains.BoundedDomain;
@@ -10,7 +11,6 @@ import io.github.rcrida.jcsp.variables.Variable;
 import lombok.extern.slf4j.Slf4j;
 import org.jspecify.annotations.Nullable;
 
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -160,9 +160,7 @@ final class DiffnPropagation {
 
     static Map<Variable<?>, Object> buildReason(Failure failure,
             Map<Variable<?>, Domain<?>> domains, Map<Variable<?>, Domain<?>> updated) {
-        Map<Variable<?>, Domain<?>> current = new HashMap<>(domains);
-        current.putAll(updated);
-        return Propagatable.allSingletonReason(failure.culprits(), current);
+        return Propagatable.allSingletonReason(failure.culprits(), DomainOverlay.of(domains, updated));
     }
 
     @SuppressWarnings("unchecked")

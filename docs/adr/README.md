@@ -92,3 +92,4 @@ section instead.
 | [0028](0028-restart-on-solution-rejected-for-branch-and-bound.md) | Restart-on-solution for branch-and-bound, built and rejected | Rejected |
 | [0029](0029-objective-cut-as-a-propagated-constraint.md) | Apply the incumbent as a propagated constraint, not only as a branch cut | Accepted |
 | [0030](0030-nogood-learning-is-not-cdcl.md) | Nogood learning is not CDCL, and the gap explains why it does not pay | Accepted |
+| [0031](0031-domain-overlays-instead-of-whole-map-copies.md) | Overlay the narrowings instead of copying the whole domain map; views and a div/mod propagator both target the wrong cost | Accepted |

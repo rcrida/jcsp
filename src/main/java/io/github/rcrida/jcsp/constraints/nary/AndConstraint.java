@@ -1,6 +1,7 @@
 package io.github.rcrida.jcsp.constraints.nary;
 
 import io.github.rcrida.jcsp.assignments.Assignment;
+import io.github.rcrida.jcsp.consistency.DomainOverlay;
 import io.github.rcrida.jcsp.consistency.Propagatable;
 import io.github.rcrida.jcsp.constraints.Constraint;
 import io.github.rcrida.jcsp.domains.Domain;
@@ -79,6 +80,10 @@ public class AndConstraint extends NaryConstraint implements Propagatable {
      * (additionally needs {@link #failingConjunct}/{@link #domainsAtFailure} to ask the conjunct that
      * actually failed for its own reason), mirroring the shared-outcome pattern {@link
      * InverseConstraint} already uses for its own two-pass propagation.
+     * <p>
+     * Both {@link #diff} and {@link #domainsAtFailure} carry only the narrowings made during the
+     * fixpoint, the latter as a {@link DomainOverlay} over the caller's own domains — the whole
+     * problem's domains are never copied, on either path.
      */
     private record FixpointResult(boolean infeasible, Map<Variable<?>, Domain<?>> diff,
                                    @Nullable Propagatable failingConjunct,
@@ -93,27 +98,27 @@ public class AndConstraint extends NaryConstraint implements Propagatable {
     }
 
     private FixpointResult runFixpoint(Map<Variable<?>, Domain<?>> domains) {
-        Map<Variable<?>, Domain<?>> current = new HashMap<>(domains);
+        Map<Variable<?>, Domain<?>> narrowed = new HashMap<>();
+        Map<Variable<?>, Domain<?>> current = DomainOverlay.of(domains, narrowed);
         boolean changed = true;
         while (changed) {
             changed = false;
             for (Constraint c : conjuncts) {
                 if (!(c instanceof Propagatable p)) continue;
                 Optional<Map<Variable<?>, Domain<?>>> result = p.propagate(current);
-                if (result.isEmpty()) return FixpointResult.infeasible(p, Map.copyOf(current));
+                if (result.isEmpty()) {
+                    return FixpointResult.infeasible(p, DomainOverlay.of(domains, Map.copyOf(narrowed)));
+                }
                 for (var entry : result.get().entrySet()) {
                     if (!entry.getValue().equals(current.get(entry.getKey()))) {
-                        current.put(entry.getKey(), entry.getValue());
+                        narrowed.put(entry.getKey(), entry.getValue());
                         changed = true;
                     }
                 }
             }
         }
-        Map<Variable<?>, Domain<?>> diff = new HashMap<>();
-        for (var entry : current.entrySet()) {
-            if (!entry.getValue().equals(domains.get(entry.getKey()))) diff.put(entry.getKey(), entry.getValue());
-        }
-        return FixpointResult.feasible(diff);
+        narrowed.entrySet().removeIf(entry -> entry.getValue().equals(domains.get(entry.getKey())));
+        return FixpointResult.feasible(narrowed);
     }
 
     @Override
