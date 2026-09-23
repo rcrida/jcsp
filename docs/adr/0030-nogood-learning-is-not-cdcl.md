@@ -195,7 +195,8 @@ numbers are real but measure an *unusable* quantity, because the conflict sets t
 are not sound to jump on. The soundness condition should have been derived before instrumenting,
 not after: a cheap probe run in the wrong order still costs a wrong conclusion.
 
-This simplifies the options rather than adding to them. Only *removing* learning stays cheap.
+This simplifies the options rather than adding to them. Only *removing* learning stays cheap — and that is
+what was done: see "Acted on" below.
 
 **And the remaining option cannot be justified by a cheap measurement.** The obvious way to decide
 whether antecedent tracking is worth building is to measure what sound backjumping would buy first.
@@ -210,6 +211,45 @@ recorded here and should be treated as such. The structural argument is at least
 mechanisms measured (per-conflict learning, arity gating, GCC explanations, restart recording) all
 vary *what is stored*, all are neutral, and the diagnosis says the defect is *where search goes
 after a failure*. Nothing that changes that is reachable without antecedent tracking.
+
+## Acted on (2026-09-23)
+
+`SolverConfig#nogoodLearningEnabled` became a tri-state `Boolean` and **the library default is now off**.
+`TRUE`/`FALSE` remain an explicit caller choice that always wins; `null` means "library's choice" and is
+resolved by the new `SolverConfig#learningEnabled()`. The tri-state exists so this default can change again
+without breaking a caller who deliberately asked for one behaviour.
+
+The measurement, whole corpus, 20s budget, CDCL on versus off:
+
+| | |
+|---|---|
+| Solved | **72 either way**, the same 72 |
+| Wall-clock on the 33 instances both solve | geomean **0.859**, median 0.938 |
+| Faster without / neutral / slower | **18 / 14 / 1** |
+
+Multi-seed confirmation on the movers: `LangfordBin-08` 15.0s to 5.5-5.8s and `Mario-easy-4` 3.1-3.3s to
+1.2-1.5s, both stable across three seeds; `ChessboardColoration-07-07` goes `SATISFIABLE` to `OPTIMUM FOUND`
+on three seeds of three.
+
+The one apparent counterexample did not survive repetition. `Sat-flat200-00-clause` — the corpus's only
+genuinely SAT-shaped instance, and independently the one this ADR's backjump probe put at 99.2% jump
+availability — looked 1.34x slower without learning on a single run. Across three seeds it is 6228/6281/6350ms
+with learning against 5772/5513/5861ms without: **faster without, consistently**. So no instance here reliably
+benefits, and "CDCL pays on SAT-shaped problems" is untested rather than supported: four corpus instances
+carry clause-shaped constraints and only one is a SAT instance.
+
+Learning stays available and fully tested, because "never pays" is a claim about this corpus, not about clause
+learning.
+
+**A side effect worth recording.** Turning the mechanism off by default dropped five classes below the 100%
+coverage gate — `DiffnVariableConstraint`, `DistinctVectorsConstraint`, `FixpointConsistency`,
+`Solver.Factory`'s reason-deriving `Inference`, and `FixpointPropagation.Worklist`. Every one was a CDCL
+explanation path covered only *incidentally*, by learning happening to be the default. They now have explicit
+tests, which is a better state than before: a supported mode's coverage should not depend on it being the
+default. One of those tests also corrected a wrong belief — the second axis pass in
+`DiffnVariableConstraint#explainInfeasible` looked unreachable ("cannot separate" seems to imply "compulsory
+parts overlap", which the first pass would have caught), but `mandatoryOverlap` additionally requires both
+compulsory parts to be non-empty, so a rectangle whose origin range is wide relative to its width reaches it.
 
 ## Rejected alternatives
 

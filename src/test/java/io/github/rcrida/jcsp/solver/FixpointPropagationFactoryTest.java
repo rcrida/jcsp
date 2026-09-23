@@ -88,7 +88,7 @@ public class FixpointPropagationFactoryTest {
 
     @Test
     void forProblem_includesNogoodFixpointConsistencyWhenNogoodsAlreadyPresentEvenIfLearningDisabled() {
-        // SolverConfig#isNogoodLearningEnabled() only documents disabling CDCL (no explanation
+        // SolverConfig#learningEnabled() only documents disabling CDCL (no explanation
         // computation, no accumulation of newly-learned nogoods) -- it never meant "stop
         // propagating nogoods the caller already put on the problem" via .nogood(...)/withNogoods().
         Variable<Integer> x = F.create("preseedx"), y = F.create("preseedy");

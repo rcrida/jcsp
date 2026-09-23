@@ -294,7 +294,7 @@ public class FixpointPropagation {
          * @param nogoodLearningEnabled whether {@link NogoodFixpointConsistency#INSTANCE} should be
          *                              included when {@code csp} itself has no nogoods yet -- a
          *                              config-level decision ({@code
-         *                              SolverConfig#isNogoodLearningEnabled()}), not re-derived from
+         *                              SolverConfig#learningEnabled()}), not re-derived from
          *                              current emptiness, since nogoods <em>learned</em> during the
          *                              solve accumulate over the course of a solve under this same
          *                              filtered list. This is independent of nogoods already present

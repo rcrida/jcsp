@@ -6,6 +6,7 @@ import io.github.rcrida.jcsp.solver.listener.SolverListener;
 import lombok.Builder;
 import lombok.Value;
 import org.jspecify.annotations.NonNull;
+import org.jspecify.annotations.Nullable;
 
 import java.util.concurrent.ThreadLocalRandom;
 
@@ -15,8 +16,15 @@ import java.util.concurrent.ThreadLocalRandom;
  * used to be separate parameters (and separate overloads for "with" and "without" each), which
  * doesn't scale as more knobs get added.
  * <p>
- * {@code SolverConfig.builder().build()} reproduces {@code createSolver}'s previous unconfigured
- * defaults exactly: unlimited search, nogood learning (CDCL) enabled.
+ * {@code SolverConfig.builder().build()} gives unlimited search and, since 2026-09-23, nogood
+ * learning (CDCL) <em>off</em> -- see {@link #learningEnabled()} for the measurement behind that
+ * change, and [ADR-0030] for why.
+ * <p>
+ * {@link #nogoodLearningEnabled} is a tri-state {@link Boolean}: {@code TRUE}/{@code FALSE} are a
+ * caller's explicit choice and always win, while {@code null} (the default) means "no opinion --
+ * let the library decide". That distinction exists so the library's own default can change
+ * without breaking a caller who deliberately asked for one behaviour. Read it through
+ * {@link #learningEnabled()} rather than the raw getter, which reports only what was configured.
  * <p>
  * {@link #nogoodLearningEnabled} affects both chains -- the satisfaction chain's {@link
  * DomWdegLubySearch} and the optimization chain's {@link BranchAndBoundSolver}, which also folds a
@@ -74,10 +82,40 @@ import java.util.concurrent.ThreadLocalRandom;
 @Builder
 public class SolverConfig {
     @Builder.Default @NonNull SolverLimits limits = SolverLimits.unlimited();
-    @Builder.Default boolean nogoodLearningEnabled = true;
+    /**
+     * {@code null} means "library's choice"; {@code TRUE}/{@code FALSE} are an explicit override.
+     * Resolve it via {@link #learningEnabled()} -- this raw accessor reports what was configured,
+     * not what will happen.
+     */
+    @Builder.Default @Nullable Boolean nogoodLearningEnabled = null;
     @Builder.Default @NonNull Statistics statistics = new Statistics();
     @Builder.Default @NonNull SolverListener listener = SolverListener.NONE;
     @Builder.Default @NonNull Cancellation cancellation = Cancellation.NEVER;
     @Builder.Default @NonNull RestartRandomization restartRandomization =
             RestartRandomization.seeded(ThreadLocalRandom.current().nextLong());
+
+    /**
+     * Whether nogood learning actually runs: an explicit {@link #nogoodLearningEnabled} if the
+     * caller set one, otherwise the library's own default, which is currently <em>off</em>.
+     * <p>
+     * That default is measured, not assumed. Across the bundled 85-instance XCSP3 corpus, enabling
+     * learning solves exactly the same 72 instances as disabling it, while costing wall-clock on
+     * the instances that do solve: 18 faster without it, 14 unaffected, and <b>none reliably
+     * slower</b> (geometric mean 0.86, with {@code LangfordBin-08} 15.0s to 5.6s and {@code
+     * Mario-easy-4} 3.2s to 1.3s, each stable across three seeds). {@code
+     * ChessboardColoration-07-07} additionally goes from {@code SATISFIABLE} to {@code OPTIMUM
+     * FOUND} without it, on three seeds of three. The mechanism is not merely neutral here: it is
+     * a net cost, because the clauses it learns essentially never fire -- see ADR-0030 for why
+     * that is structural rather than a defect in the explanations.
+     * <p>
+     * It stays available, and this returns {@code true} the moment a caller asks for it, because
+     * "never pays" is a statement about this corpus rather than about clause learning. The one
+     * instance that appeared to benefit ({@code Sat-flat200-00-clause}, the only genuinely
+     * SAT-shaped instance present) did not survive repetition -- it is 8% faster <em>without</em>
+     * learning across three seeds -- so a problem shape where CDCL earns its keep is untested here
+     * rather than ruled out.
+     */
+    public boolean learningEnabled() {
+        return Boolean.TRUE.equals(nogoodLearningEnabled);
+    }
 }

@@ -249,6 +249,29 @@ public class DiffnVariableConstraintTest {
     }
 
     @Test
+    void explainInfeasible_failureFoundOnlyByTheSecondAxisPass() {
+        // Reaches the y-then-x pass, which the x-then-y pass above never gets to. The two look
+        // mutually exclusive -- "x cannot separate" sounds like it implies "x compulsory parts
+        // overlap", which would have tripped the first pass -- but mandatoryOverlap additionally
+        // requires both compulsory parts to be NON-EMPTY. Rectangle 0's x origin ([0,5]) is wide
+        // relative to its width (2), so its compulsory x part is empty and the first pass returns
+        // no failure, while x still cannot separate and the mandatory y overlap forces it to.
+        Variable<Integer> x0 = F.create("sx0"), y0 = F.create("sy0"), w0 = F.create("sw0"), h0 = F.create("sh0");
+        Variable<Integer> x1 = F.create("sx1"), y1 = F.create("sy1"), w1 = F.create("sw1"), h1 = F.create("sh1");
+        var c = DiffnVariableConstraint.of(List.of(x0, x1), List.of(y0, y1), List.of(w0, w1), List.of(h0, h1));
+        var d = domains(
+                x0, IntRangeDomain.of(0, 5), x1, IntRangeDomain.of(0, 1),
+                w0, IntRangeDomain.of(2, 2), w1, IntRangeDomain.of(7, 7),
+                y0, IntRangeDomain.of(2, 2), y1, IntRangeDomain.of(2, 2),
+                h0, IntRangeDomain.of(2, 2), h1, IntRangeDomain.of(2, 2));
+
+        assertThat(c.propagate(d)).isEmpty();
+        // The citation itself may decline (x0 is not singleton); what matters is that the second
+        // pass is the one that detects the failure at all.
+        c.explainInfeasible(d);
+    }
+
+    @Test
     void explainInfeasible_widthNotSingleton_returnsEmptyReason() {
         // Same as propagate_variableWidths_mandatoryXOverlapForcesYSeparation but widths stay
         // non-singleton in the returned domains, so the x-axis mandatory-overlap check's own

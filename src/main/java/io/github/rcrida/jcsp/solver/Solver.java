@@ -124,7 +124,7 @@ public interface Solver {
 
         /**
          * Picks between the real reason-deriving {@link #propagationInference} result and a wrapper
-         * that never derives one, per {@code SolverConfig.isNogoodLearningEnabled()}. Shared by both
+         * that never derives one, per {@code SolverConfig.learningEnabled()}. Shared by both
          * chains' wiring below so the choice lives in exactly one place: the terminal solvers
          * ({@link DomWdegLubySearch}, {@link BranchAndBoundSolver}) stay free of any "should I
          * explain" branch of their own -- they just call {@link Inference#applyWithReason} and react
@@ -133,7 +133,7 @@ public interface Solver {
         static Inference nogoodLearningInference(@NonNull SolverConfig config,
                                                   @NonNull FixpointPropagation fixpointPropagation) {
             Inference base = propagationInference(fixpointPropagation);
-            return config.isNogoodLearningEnabled() ? base : Inference.withoutReasonTracking(base);
+            return config.learningEnabled() ? base : Inference.withoutReasonTracking(base);
         }
 
         /**
@@ -189,7 +189,7 @@ public interface Solver {
                         .anyMatch(BoundedDomain.class::isInstance);
                 boolean hasSets = csp.getVariableDomains().values().stream()
                         .anyMatch(SetBoundedDomain.class::isInstance);
-                val fixpointPropagation = FixpointPropagation.Factory.INSTANCE.forProblem(csp, config.isNogoodLearningEnabled());
+                val fixpointPropagation = FixpointPropagation.Factory.INSTANCE.forProblem(csp, config.learningEnabled());
                 val treeSolver = new TreeSolver(BFSTopologicalSorter.INSTANCE, DefaultValueOrderer.INSTANCE, TreeUnassignedVariableSelector.Factory.INSTANCE);
                 val inference = nogoodLearningInference(config, fixpointPropagation);
                 // Built fresh per sub-problem (not shared) so each independent sub-problem gets its own
@@ -268,7 +268,7 @@ public interface Solver {
                 val cancellation = config.getCancellation();
                 boolean hasSets = csp.getVariableDomains().values().stream()
                         .anyMatch(SetBoundedDomain.class::isInstance);
-                val fixpointPropagation = FixpointPropagation.Factory.INSTANCE.forProblem(csp, config.isNogoodLearningEnabled());
+                val fixpointPropagation = FixpointPropagation.Factory.INSTANCE.forProblem(csp, config.learningEnabled());
                 // Handles any BoundedDomain variables itself -- see this class's own Javadoc and
                 // ADR-0009 -- rather than being nested inside a BisectionConditioningSolver that runs
                 // first, so it's the chain's terminal solver unconditionally.

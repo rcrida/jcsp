@@ -191,6 +191,33 @@ public class DistinctVectorsConstraintTest {
     }
 
     @Test
+    void explainInfeasible_skipsPairsThatProvablyDiffer_beforeCitingTheEqualOne() {
+        // The first two pairs (A,B) and (A,C) have disjoint domains, so they provably differ and
+        // must be stepped over; only (B,C) is forced equal. The existing forced-equal test cites on
+        // its very first pair and so never exercises the skip.
+        var c = DistinctVectorsConstraint.of(List.of(List.of(a0), List.of(b0), List.of(c0)));
+        Map<Variable<?>, Domain<?>> domains = Map.of(
+                a0, IntRangeDomain.of(5, 5), b0, IntRangeDomain.of(1, 1), c0, IntRangeDomain.of(1, 1));
+
+        assertThat(c.propagate(domains)).isEmpty();
+        assertThat(c.explainInfeasible(domains)).contains(GroundNogoodConstraint.of(Map.of(b0, 1, c0, 1)));
+    }
+
+    @Test
+    void explainInfeasible_pairStillAmbiguous_keepsLookingRatherThanCiting() {
+        // The third classification outcome, distinct from both tests around it: the pair is neither
+        // guaranteed to differ (domains overlap) nor fully decided (both positions non-singleton),
+        // so ambiguousCount() > 0 and this pair yields no citation. Neither "forced equal" nor
+        // "guaranteed differ" reaches that combination -- the latter short-circuits on
+        // guaranteedDiffer() before the count is even consulted.
+        var c = DistinctVectorsConstraint.of(List.of(List.of(a0), List.of(b0)));
+        Map<Variable<?>, Domain<?>> domains = Map.of(
+                a0, IntRangeDomain.of(1, 2), b0, IntRangeDomain.of(1, 2));
+
+        assertThat(c.explainInfeasible(domains)).isEmpty();
+    }
+
+    @Test
     void explainInfeasible_feasible_returnsEmpty() {
         var c = DistinctVectorsConstraint.of(List.of(List.of(a0, a1), List.of(b0, b1)));
         Map<Variable<?>, Domain<?>> domains = Map.of(

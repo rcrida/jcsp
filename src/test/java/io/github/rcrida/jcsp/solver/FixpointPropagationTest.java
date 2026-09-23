@@ -137,4 +137,29 @@ public class FixpointPropagationTest {
         assertThat(captured[0].beforeSum()).isEqualTo(5.0); // IntRangeDomain.of(1,5) has 5 values
         assertThat(captured[0].afterSum()).isEqualTo(2.0);  // IntRangeDomain.of(1,2) has 2 values
     }
+
+    @Test
+    void propagatorThatDoesNotConvergeInternally_isRewokenByItsOwnNarrowing() {
+        // Worklist#wake skips re-queueing the propagator that caused a change only when that
+        // propagator converges internally; one that does not must be woken by its own narrowing.
+        // NogoodFixpointConsistency is the only such propagator, so this branch is reachable only
+        // when nogoods are in play -- which stopped being the default when nogood learning did.
+        Variable<Integer> x = Variable.Factory.INSTANCE.create("wlx");
+        Variable<Integer> y = Variable.Factory.INSTANCE.create("wly");
+        ConstraintSatisfactionProblem csp = ConstraintSatisfactionProblem.builder()
+                .variableDomain(x, IntRangeDomain.of(1, 2))
+                .variableDomain(y, IntRangeDomain.of(1, 2))
+                .notEqualsConstraint(x, y)
+                // Unit nogood: forbids x=1 outright, so the nogood propagator itself narrows x to
+                // {2}, which must then wake the arc consistency that pins y to 1.
+                .nogood(GroundNogoodConstraint.of(Map.of(x, 1)))
+                .build();
+
+        var result = FixpointPropagation.FULL.applyFixpoint(csp, null,
+                SolverListener.NONE, new Statistics(), Cancellation.NEVER);
+
+        assertThat(result).isPresent();
+        assertThat(result.get().getDomain(x).singleValue()).contains(2);
+        assertThat(result.get().getDomain(y).singleValue()).contains(1);
+    }
 }
