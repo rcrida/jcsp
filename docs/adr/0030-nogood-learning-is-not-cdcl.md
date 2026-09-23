@@ -79,7 +79,8 @@ Two coherent directions, and the current design is neither:
 - **Down to nogood recording from restarts** (Lecoutre, Saïs, Tabary & Vidal 2007): record the
   decision path at each restart, no implication graph required. Cheap, fits the existing
   architecture, and is what Choco actually runs — see the Choco note below. This gives up
-  per-conflict learning in exchange for not paying for it.
+  per-conflict learning in exchange for not paying for it. **Built and measured (2026-09-23) — see
+  "The down option was tried" below. It is neutral, not a win.**
 - **Up to decision levels and backjumping**: antecedent tracking, 1UIP analysis, asserting clauses,
   watched-literal propagation. This is the real fix and a large change; ADR-0002's
   nogood-as-constraint model is upstream of it, since a `Constraint` receives `propagate(domains)`
@@ -99,6 +100,46 @@ middle is what this ADR rules out.
   (`ChessboardColoration`) needs repetition before it counts.
 - **Whether learning ever pays here.** `driverlogw-09`'s 51 fires show the mechanism is not inert
   everywhere; the corpus says it does not change an outcome anywhere.
+
+## The down option was tried (2026-09-23)
+
+Restart nogood recording was implemented in `DomWdegLubySearch`: as the Luby budget exception
+unwinds, one clause per already-refuted candidate at each level of the abandoned path. Sound because
+those candidates were genuinely exhausted; the candidate the budget *interrupted* is excluded, since
+nothing about it was proven.
+
+It was reverted. The result is worth keeping because it refines this ADR's own diagnosis.
+
+**The clauses fire.** That was the prediction, and it held. A restart nogood describes the prefix the
+next restart is about to retrace — search descends from the root with the same selector and the same
+`PhaseMemory` — so it targets the one state most likely to recur, unlike a per-conflict clause
+describing a state chronological backtracking has already passed. On `driverlogw-09` the hit profile
+went from "arity 10-50 only, 2-23%" to firing across nearly every arity, including 100% at arities
+1, 3, 4 and 5.
+
+**Firing did not help.** Whole corpus: 70 solved against HEAD's 71, and the single differing
+instance (`MarketSplit-01`) is UNKNOWN in both arms across three separate seeds — a boundary
+instance that happens to solve at one seed, not an effect of the change. `constraintChecks` over the
+instances neither arm solves: geometric mean 0.982, i.e. neutral. Per-instance the picture is mixed
+rather than positive: `driverlogw-09` pays +24% constraint checks for the same node count,
+`KnightTour-06-int` trades 18% fewer nodes for 4% more total work, `Steiner3-08` gains ~2.5%, and
+instances with `restarts=0` are untouched by construction.
+
+**So "clauses never fire" was a real defect and not the whole story.** Fixing it produced clauses
+that do fire and still changed no outcome. Two things this exposes:
+
+- An nld-nogood at depth *d* has arity *d+1*, so on a deep search it reproduces exactly the
+  too-wide clauses that do not fire — `qwh-o30-h374-01` learns 3,049 of arity >200. The mechanism
+  is self-limiting on the problems that most need help.
+- Restart nogoods shift *where* failures are detected: from inference to the cheap
+  `isConsistentAmong` check. Only inference failures drain the Luby budget, so the budget drains
+  more slowly and the restart schedule silently stretches. `DomWdegLubySearchTest`'s
+  `restartsStatisticRecordedIncrementally_notOnlyOnSuccess` caught this as 1 restart where it
+  expected 2 — a real semantic interaction, not a test artifact, and one any future attempt must
+  account for.
+
+This strengthens the case for the remaining two options rather than settling between them: with the
+cheap direction now measured as neutral, what is left is real backjumping or removing learning.
 
 ## Rejected alternatives
 

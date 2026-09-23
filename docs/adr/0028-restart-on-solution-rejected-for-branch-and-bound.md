@@ -1,6 +1,21 @@
 # ADR-0028: Restart-on-solution for branch-and-bound, built and rejected
 
-**Status:** Rejected (2026-09-21)
+**Status:** Rejected (2026-09-21) — **but the experiment was incomplete; see the note below**
+
+> **This measured half a mechanism.** Choco pairs `setRestartOnSolution(true)` with
+> `setNogoodOnRestart(true)`, and the second is what makes the first affordable: restart nogoods
+> forbid the abandoned prefix so the next descent cannot re-explore it. jcsp does carry its
+> `NogoodStore` across restarts, so the protection was nominally present — but
+> [ADR-0030](0030-nogood-learning-is-not-cdcl.md) later measured that those per-conflict clauses
+> essentially never fire. So the re-descent this ADR charges restarts for was, in practice,
+> **unguarded**, and the 7-43% node cost recorded below is the cost of an unprotected restart
+> rather than of restarts as such.
+>
+> The rejection therefore stands only for *restart-on-solution without working restart nogoods*.
+> Whether restarts pay when paired with nogoods that actually fire is untested, and that pairing is
+> the form the literature and Choco both use. If restart recording is shown to fire and pay on the
+> satisfaction chain — which already restarts, so it tests the mechanism without rebuilding
+> anything here — this decision should be reopened.
 
 ## Context
 
