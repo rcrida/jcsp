@@ -414,11 +414,19 @@ InitialAssignmentFactory factory = FallbackAssignmentFactory.builder()
 <dependency>
     <groupId>io.github.rcrida</groupId>
     <artifactId>jcsp</artifactId>
-    <version>2.45.0</version>
+    <version>3.0.0</version>
 </dependency>
 ```
 
 jcsp pulls in [ojAlgo](https://www.ojalgo.org/) (MIT-licensed) as a transitive compile-scope dependency, used for the LP relaxation behind `LinearObjective`-driven optimization (see above), and [xcsp3-tools](https://github.com/xcsp3team/XCSP3-Java-Tools) (MIT-licensed) as a transitive compile-scope dependency, used for `Xcsp3Parser` (see above).
+
+### Upgrading from 2.x
+
+Three changes need attention; everything else is source- and behaviour-compatible.
+
+- **Nogood learning (CDCL) is now off by default.** `SolverConfig.nogoodLearningEnabled` became a tri-state `Boolean` where unset means off — measured as a net cost across the bundled corpus (same 72 instances solved either way, 18 faster without it, none reliably slower). Pass `nogoodLearningEnabled(true)` to keep 2.x behaviour. See [ADR-0030](docs/adr/0030-nogood-learning-is-not-cdcl.md).
+- **`SolverConfig.isNogoodLearningEnabled()` is gone.** Lombok generates `getNogoodLearningEnabled()` for the `Boolean`, which reports what was *configured*; call `learningEnabled()` for what the solver will actually *do*.
+- **`BinaryComparatorConstraint.of(x, Operator.NEQ, y)` now throws `IllegalArgumentException`.** It previously built a constraint that advertised propagation it never performed — disequality has no bounds narrowing to offer. Use `notEqualsConstraint(x, y)` (`BinaryNotEqualsConstraint`), which propagates properly and is generic over any `T`, not just `Comparable`.
 
 ## Building
 

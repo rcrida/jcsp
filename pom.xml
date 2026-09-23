@@ -6,7 +6,7 @@
 
     <groupId>io.github.rcrida</groupId>
     <artifactId>jcsp</artifactId>
-    <version>2.45.0</version>
+    <version>3.0.0</version>
     <packaging>jar</packaging>
 
     <name>jcsp</name>
