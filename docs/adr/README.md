@@ -91,3 +91,4 @@ section instead.
 | [0027](0027-xcsp3-circuit-is-a-sub-circuit.md) | XCSP3's `circuit` is a sub-circuit, not a Hamiltonian circuit | Accepted |
 | [0028](0028-restart-on-solution-rejected-for-branch-and-bound.md) | Restart-on-solution for branch-and-bound, built and rejected | Rejected |
 | [0029](0029-objective-cut-as-a-propagated-constraint.md) | Apply the incumbent as a propagated constraint, not only as a branch cut | Accepted |
+| [0030](0030-nogood-learning-is-not-cdcl.md) | Nogood learning is not CDCL, and the gap explains why it does not pay | Accepted |

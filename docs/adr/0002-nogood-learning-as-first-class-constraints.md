@@ -2,6 +2,14 @@
 
 **Status**: Accepted
 
+> **Later measurement qualifies this — see
+> [ADR-0030](0030-nogood-learning-is-not-cdcl.md).** The decision below (a nogood as a real
+> constraint in the fixpoint) stands and is sound, but the learned clauses were never measured for
+> whether they fire. They largely do not: three instances learn 8,648/6,939/3,062 clauses and fire
+> **none** of them, and disabling learning across the whole corpus solves the same 71 instances.
+> ADR-0030 sets out why — this design has no implication graph, so no clause is *asserting* and
+> there is no backjump for one to drive, which is where CDCL's benefit actually comes from.
+
 ## Context
 
 Backtracking search benefits from CDCL-style nogood learning: when a branch fails, recording *why*
