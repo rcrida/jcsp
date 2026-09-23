@@ -84,7 +84,8 @@ Two coherent directions, and the current design is neither:
 - **Up to decision levels and backjumping**: antecedent tracking, 1UIP analysis, asserting clauses,
   watched-literal propagation. This is the real fix and a large change; ADR-0002's
   nogood-as-constraint model is upstream of it, since a `Constraint` receives `propagate(domains)`
-  rather than literal-watch notifications.
+  rather than literal-watch notifications. **Not optional as a prerequisite** — see "Backjumping
+  needs the same prerequisite" below: even plain conflict-directed backjumping requires it.
 
 Today's scheme pays per-conflict explanation cost for restart-recording's weaker benefit. That
 middle is what this ADR rules out.
@@ -140,6 +141,56 @@ that do fire and still changed no outcome. Two things this exposes:
 
 This strengthens the case for the remaining two options rather than settling between them: with the
 cheap direction now measured as neutral, what is left is real backjumping or removing learning.
+
+## Backjumping needs the same prerequisite (2026-09-23)
+
+The two options above were framed as "cheap" and "expensive". That framing is wrong, and the
+correction matters: **conflict-directed backjumping is not soundly implementable on this codebase
+either**, for the same missing ingredient.
+
+CBJ looked like the affordable middle — no clause learning, no implication graph, just a conflict
+set per variable and a jump to its deepest member. The information appeared to be already computed
+and discarded: `explainInfeasible` returns a `NogoodConstraint` whose `getVariables()` reads like a
+culprit set, and this codebase's immutable per-frame `ConstraintSatisfactionProblem` removes CBJ's
+usual implementation cost entirely (there is no trail to unwind — returning up the stack restores
+state for free).
+
+It is unsound. Counterexample:
+
+```
+path: v1=a, v2=b
+  v2=b propagates, narrowing v3's domain {1,2,3} -> {2}
+  search picks v3, tries 2, fails with reason {v3=2, v1=a}
+  conflict set at v3's node = {v1}        (v3 removed; v2 never cited)
+  v2 is absent -> CBJ skips v2's remaining values
+```
+
+`v2=c` may leave `v3 = {1,2,3}`, and `v3=1` may solve with `v1=a`. The solution is missed.
+
+The nogood `{v3=2, v1=a}` is *sound as a nogood* — that combination really is infeasible. It is not
+a complete *conflict set*, because `v2` caused the narrowing that produced the failure without
+appearing in it. And it structurally cannot appear: `explainInfeasible` cites the failing
+constraint's own `getVariables()`, so it can never name a variable outside that constraint's scope.
+A chain of propagations across constraints loses the trail at the first hop.
+
+A conservative conflict set — every assigned variable propagation depended on — is, without
+tracking, *all* of them, which is chronological backtracking. So:
+
+- **Graph-based backjumping** (Dechter) is sound without antecedent tracking, jumping to the deepest
+  variable adjacent in the constraint graph. But propagation flows transitively, so the safe target
+  approaches the connected component, which on these instances is close to everything.
+- **Everything else that changes search trajectory needs antecedent tracking**, which is the same
+  prerequisite CDCL needs. Having built it, one would build the stronger mechanism.
+
+**A measurement note worth keeping.** A probe was written first — recording, per node exhaustion,
+how far a CBJ jump *would* travel and how many untried sibling branches it would skip. It reported
+a strong signal (`Sat-flat200-00-clause` 99.2% of exhaustions jumpable, mean 12.3 branches skipped;
+`driverlogw-09` 70%, mean 61.2; `Steiner3-08` 2.5%, mean 0.09 as a clean negative control). Those
+numbers are real but measure an *unusable* quantity, because the conflict sets they were built from
+are not sound to jump on. The soundness condition should have been derived before instrumenting,
+not after: a cheap probe run in the wrong order still costs a wrong conclusion.
+
+This simplifies the options rather than adding to them. Only *removing* learning stays cheap.
 
 ## Rejected alternatives
 
