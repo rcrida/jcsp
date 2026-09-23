@@ -177,8 +177,13 @@ A conservative conflict set — every assigned variable propagation depended on 
 tracking, *all* of them, which is chronological backtracking. So:
 
 - **Graph-based backjumping** (Dechter) is sound without antecedent tracking, jumping to the deepest
-  variable adjacent in the constraint graph. But propagation flows transitively, so the safe target
-  approaches the connected component, which on these instances is close to everything.
+  variable adjacent in the constraint graph — but adjacency is only sufficient without propagation.
+  Under propagation a non-adjacent variable can narrow a domain through a chain (the same
+  counterexample above), so the sound target is the *reachable* set. Measured on this corpus, that
+  is the whole problem: `driverlogw-09` 650 variables in 1 component, `qwh-o30-h374-01` 900 in 1,
+  `Bibd-sc-06` 1,050 in 1, `Steiner3-08` 27 in 1, `Sat-flat200-00-clause` 600 in 3 with the largest
+  holding 99%. A conflict set spanning every variable makes the jump target the immediately
+  preceding decision, so graph-based backjumping skips zero levels here. Closed by measurement.
 - **Everything else that changes search trajectory needs antecedent tracking**, which is the same
   prerequisite CDCL needs. Having built it, one would build the stronger mechanism.
 
@@ -191,6 +196,20 @@ are not sound to jump on. The soundness condition should have been derived befor
 not after: a cheap probe run in the wrong order still costs a wrong conclusion.
 
 This simplifies the options rather than adding to them. Only *removing* learning stays cheap.
+
+**And the remaining option cannot be justified by a cheap measurement.** The obvious way to decide
+whether antecedent tracking is worth building is to measure what sound backjumping would buy first.
+That measurement does not exist: a *static* conservative conflict set is the connected component,
+measured above as the whole problem and therefore useless; a *dynamic* one — which path variables
+actually caused the narrowings that led to this failure — is antecedent tracking itself. So the
+experiment that would justify the work requires doing the work.
+
+That leaves this the one decision in this investigation resting on a structural argument and the
+literature rather than on a local measurement, which is a weaker footing than everything else
+recorded here and should be treated as such. The structural argument is at least clear: the four
+mechanisms measured (per-conflict learning, arity gating, GCC explanations, restart recording) all
+vary *what is stored*, all are neutral, and the diagnosis says the defect is *where search goes
+after a failure*. Nothing that changes that is reachable without antecedent tracking.
 
 ## Rejected alternatives
 
