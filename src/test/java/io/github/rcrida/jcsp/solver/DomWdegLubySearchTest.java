@@ -18,6 +18,7 @@ import org.junit.jupiter.api.Test;
 
 import java.time.Duration;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
@@ -231,6 +232,67 @@ class DomWdegLubySearchTest {
                 .build();
 
         assertThat(tightSolver.getSolution(csp)).isPresent();
+    }
+
+    @Test
+    void stagnantRestartsEventuallyResetTheAccumulatedWeights() {
+        // Six variables pairwise different over five values: unsatisfiable, and big enough
+        // (5^6 nodes) that a one-failure Luby budget is exceeded again and again rather than the
+        // tree being exhausted. At most five variables can ever be assigned, so bestDepth reaches
+        // 5 in the first restart and then plateaus — every later restart is stagnant, and the run
+        // of them trips STAGNANT_RESTART_LIMIT and resets the weights.
+        var builder = ConstraintSatisfactionProblem.builder();
+        List<Variable<Integer>> vars = new ArrayList<>();
+        for (int i = 0; i < 6; i++) {
+            Variable<Integer> v = VF.create("v" + i);
+            vars.add(v);
+            builder.variableDomain(v, IntRangeDomain.of(1, 5));
+        }
+        for (int i = 0; i < vars.size(); i++) {
+            for (int j = i + 1; j < vars.size(); j++) {
+                builder.notEqualsConstraint(vars.get(i), vars.get(j));
+            }
+        }
+        ConstraintSatisfactionProblem csp = builder.build();
+
+        DomWdegLubySearch solver = DomWdegLubySearch.builder()
+                .lubyUnit(1)
+                .maxRestarts(40)
+                .domainValuesOrderer(LeastConstrainingValueOrderer.INSTANCE)
+                .inference(Solver.Factory.FULL_PROPAGATION_INFERENCE)
+                .build();
+
+        assertThat(solver.getSolution(csp)).isEmpty();
+    }
+
+    @Test
+    void aRestartThatReachesANewDeepestAssignmentClearsTheStagnationCount() {
+        // Four variables pairwise different over three values: unsatisfiable, but only provably so
+        // below three successful descents (binary ≠ gives no root-level Hall reasoning). So the
+        // first restart records depth 3 before exhausting its one-failure budget, and the second
+        // restart sees bestDepth > 0 — the progress branch — rather than counting as stagnant.
+        Variable<Integer> w = VF.create("w");
+        Variable<Integer> x = VF.create("x");
+        Variable<Integer> y = VF.create("y");
+        Variable<Integer> z = VF.create("z");
+        ConstraintSatisfactionProblem csp = ConstraintSatisfactionProblem.builder()
+                .variableDomain(w, IntRangeDomain.of(1, 3))
+                .variableDomain(x, IntRangeDomain.of(1, 3))
+                .variableDomain(y, IntRangeDomain.of(1, 3))
+                .variableDomain(z, IntRangeDomain.of(1, 3))
+                .notEqualsConstraint(w, x).notEqualsConstraint(w, y).notEqualsConstraint(w, z)
+                .notEqualsConstraint(x, y).notEqualsConstraint(x, z)
+                .notEqualsConstraint(y, z)
+                .build();
+
+        DomWdegLubySearch solver = DomWdegLubySearch.builder()
+                .lubyUnit(1)
+                .maxRestarts(5)
+                .domainValuesOrderer(LeastConstrainingValueOrderer.INSTANCE)
+                .inference(Solver.Factory.FULL_PROPAGATION_INFERENCE)
+                .build();
+
+        assertThat(solver.getSolution(csp)).isEmpty();
     }
 
     @Test

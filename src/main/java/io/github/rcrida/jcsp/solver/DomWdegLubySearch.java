@@ -44,7 +44,11 @@ import java.util.stream.Stream;
  * <b>{@link #getSolution}</b> overrides the default and applies Luby restarts: it uses the
  * sequence 1, 1, 2, 1, 1, 2, 4, … (multiplied by {@link #lubyUnit}) as per-restart failure
  * budgets, preserving weights across restarts so accumulated failure knowledge steers each new
- * attempt. Returns {@link Optional#empty()} either when the problem is genuinely unsatisfiable
+ * attempt — except after {@link #STAGNANT_RESTART_LIMIT} consecutive restarts that fail to reach a
+ * new deepest assignment, when {@link DomWdegVariableSelector#resetWeights} discards them so the
+ * restarts become independent draws again rather than variations on one doomed ordering (see
+ * {@code docs/adr/0032-adaptive-weight-reset-on-stagnant-restarts.md}).
+ * Returns {@link Optional#empty()} either when the problem is genuinely unsatisfiable
  * (a restart exhausted its budget on the full tree) or when {@link #maxRestarts} restarts were
  * used without completing a full traversal; the two cases are not distinguished. Either way, the
  * {@link #statistics} field (a shared token seeded into every restart's root {@link Assignment},
@@ -95,6 +99,16 @@ public class DomWdegLubySearch implements Solver {
 
     public static final int DEFAULT_LUBY_UNIT = 100;
     public static final int DEFAULT_MAX_RESTARTS = 512;
+
+    /**
+     * Consecutive restarts that may fail to reach a new deepest assignment before {@link
+     * #getSolution} resets the selector's accumulated weights. Chosen from the corpus rather than
+     * tuned: the two instances closest to being affected finish in 17 and 30 restarts in total, so
+     * a limit of 32 cannot fire on either, while a stuck {@code Bibd} run plateaus for 158
+     * consecutive restarts at one depth and so resets several times. See
+     * <a href="../../../../../../../docs/adr/0032-adaptive-weight-reset-on-stagnant-restarts.md">ADR-0032</a>.
+     */
+    private static final int STAGNANT_RESTART_LIMIT = 32;
 
     // No @Builder.Default — defaults are set in DomWdegLubySearchBuilder below.
     int lubyUnit;
@@ -161,7 +175,18 @@ public class DomWdegLubySearch implements Solver {
     public Optional<Assignment> getSolution(@NonNull ConstraintSatisfactionProblem csp) {
         var selector = new DomWdegVariableSelector(csp.getConstraints());
         long deadline = limits.deadlineNanos();
+        int deepestSeen = 0;
+        int stagnantRestarts = 0;
         for (int k = 1; k <= maxRestarts; k++) {
+            if (phaseMemory.bestDepth() > deepestSeen) {
+                deepestSeen = phaseMemory.bestDepth();
+                stagnantRestarts = 0;
+            } else if (++stagnantRestarts >= STAGNANT_RESTART_LIMIT) {
+                log.debug("dom/wdeg+Luby: {} restarts without progress at restart {}, resetting weights",
+                        STAGNANT_RESTART_LIMIT, k);
+                selector.resetWeights();
+                stagnantRestarts = 0;
+            }
             selector.reseedTieBreak(restartRandomization.randomFor(k));
             long budget = (long) lubyUnit * luby(k);
             int[] failures = {0};

@@ -37,6 +37,15 @@ public final class PhaseMemory {
     private int bestDepth;
 
     /**
+     * Size of the deepest assignment recorded so far, or {@code 0} before anything is. Read by
+     * {@link io.github.rcrida.jcsp.solver.DomWdegLubySearch#getSolution} as its progress signal:
+     * a restart that fails to raise it explored no further than its predecessors did.
+     */
+    public int bestDepth() {
+        return bestDepth;
+    }
+
+    /**
      * Adopts {@code assignment}'s values as the path to replay, but only when it is strictly deeper
      * than any seen before -- solution-guided search (Demirović et al.), not the every-descent
      * variant of classic phase saving.

@@ -85,6 +85,55 @@ class DomWdegVariableSelectorTest {
     }
 
     @Test
+    void resetWeightsRevertsAccumulatedWeightsToTheirInitialValue() {
+        // Sizes chosen so the winner flips on weight alone: with every weight 1, v2's ratio is
+        // 8/2=4.0 and v3's is 3/1=3.0, so v3 wins. Incrementing c12 lifts v2's wdeg to 3
+        // (8/3≈2.67), so v2 wins. Resetting must put v3 back in front.
+        when(c12.getVariables()).thenReturn(Set.of(v1, v2));
+        when(c23.getVariables()).thenReturn(Set.of(v2, v3));
+        var selector = new DomWdegVariableSelector(Set.of(c12, c23));
+
+        when(nextAssignment.isAssigned(v2)).thenReturn(false);
+        selector.incrementWeights(v1, nextAssignment); // c12 weight → 2
+
+        when(csp.getVariableDomains()).thenReturn(Map.of(v2, d2, v3, d3));
+        when(assignment.isAssigned(v1)).thenReturn(false);
+        when(assignment.isAssigned(v2)).thenReturn(false);
+        when(assignment.isAssigned(v3)).thenReturn(false);
+        when(d2.size()).thenReturn(8);
+        when(d3.size()).thenReturn(3);
+
+        assertThat(selector.select(csp, assignment)).isEqualTo(v2);
+
+        selector.resetWeights();
+
+        assertThat(selector.select(csp, assignment)).isEqualTo(v3);
+    }
+
+    @Test
+    void resetWeightsAlsoClearsTheLastConflictVariable() {
+        // Last-conflict reasoning short-circuits select entirely, so v2 is returned regardless of
+        // ratio. After a reset the selector must fall back to the ratio, which v3 wins.
+        when(c12.getVariables()).thenReturn(Set.of(v1, v2));
+        when(c23.getVariables()).thenReturn(Set.of(v2, v3));
+        var selector = new DomWdegVariableSelector(Set.of(c12, c23));
+
+        when(csp.getVariableDomains()).thenReturn(Map.of(v2, d2, v3, d3));
+        when(assignment.isAssigned(v2)).thenReturn(false);
+        selector.recordConflict(v2);
+
+        assertThat(selector.select(csp, assignment)).isEqualTo(v2);
+
+        selector.resetWeights();
+        when(assignment.isAssigned(v1)).thenReturn(false);
+        when(assignment.isAssigned(v3)).thenReturn(false);
+        when(d2.size()).thenReturn(8);
+        when(d3.size()).thenReturn(3);
+
+        assertThat(selector.select(csp, assignment)).isEqualTo(v3);
+    }
+
+    @Test
     void incrementWeightsSkipsConstraintsWithNoUnassignedNeighbour() {
         // c23 involves v2+v3. When we fail on v2 (with v3 already assigned in nextAssignment),
         // c23 has no unassigned neighbour for v2, so its weight must NOT be incremented.

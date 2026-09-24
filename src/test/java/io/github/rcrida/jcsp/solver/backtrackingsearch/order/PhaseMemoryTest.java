@@ -42,6 +42,24 @@ class PhaseMemoryTest {
     }
 
     @Test
+    void bestDepth_startsAtZeroAndTracksOnlyTheDeepestRecording() {
+        var memory = new PhaseMemory();
+        assertThat(memory.bestDepth()).isZero();
+        memory.recordIfDeepest(Map.of(x, 3, y, 7));
+        assertThat(memory.bestDepth()).isEqualTo(2);
+        memory.recordIfDeepest(Map.of(x, 1)); // shallower: leaves the depth alone
+        assertThat(memory.bestDepth()).isEqualTo(2);
+    }
+
+    @Test
+    void bestDepth_followsRecordSolutionEvenWhenItIsNotDeeper() {
+        var memory = new PhaseMemory();
+        memory.recordIfDeepest(Map.of(x, 3, y, 7));
+        memory.recordSolution(Map.of(x, 1));
+        assertThat(memory.bestDepth()).isEqualTo(1);
+    }
+
+    @Test
     void shallowerAssignment_doesNotOverwriteTheDeepestPath() {
         var memory = new PhaseMemory();
         memory.recordIfDeepest(Map.of(x, 3, y, 7));

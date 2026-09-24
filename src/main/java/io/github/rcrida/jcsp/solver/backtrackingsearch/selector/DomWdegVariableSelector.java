@@ -123,6 +123,22 @@ public class DomWdegVariableSelector implements UnassignedVariableSelector {
     }
 
     /**
+     * Returns every constraint weight to its initial {@code 1} and clears the last-conflict
+     * variable, so the next {@link #select} is guided by domain sizes alone rather than by failures
+     * accumulated before this point.
+     * <p>
+     * Called only by {@link io.github.rcrida.jcsp.solver.DomWdegLubySearch#getSolution}, and only
+     * after a run of restarts that made no progress -- weights surviving a restart is what makes
+     * each one build on the last, so discarding them pays only once that accumulation is
+     * demonstrably steering every restart back into the same dead region. Affects variable ordering
+     * alone, so it cannot change soundness or completeness.
+     */
+    public void resetWeights() {
+        weights.replaceAll((constraint, weight) -> 1L);
+        lastConflictVariable = null;
+    }
+
+    /**
      * Records {@code variable} as the site of the most recent search failure -- call this at
      * every backtrack/domain-wipeout site, both the {@link #incrementWeights} sites (an inference
      * pass detected a domain wipeout) and the plain direct-consistency-violation sites that
