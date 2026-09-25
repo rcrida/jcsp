@@ -132,6 +132,7 @@ final class Xcsp3CallbackHandler implements XCallbacks2 {
     private final Map<String, Variable<Integer>> variablesByName = new LinkedHashMap<>();
     private final Map<String, Variable<String>> symbolicVariablesByName = new LinkedHashMap<>();
     private final Map<String, int[]> boundsByName = new LinkedHashMap<>();
+    private final Map<Variable<Integer>, DiscreteDomain<Integer>> declaredDomains = new LinkedHashMap<>();
     private final Map<String, Variable<Integer>> shiftedVariables = new LinkedHashMap<>();
     private final Map<String, Variable<Boolean>> booleanIndicators = new LinkedHashMap<>();
     private final Map<Integer, Variable<Integer>> constantVariables = new LinkedHashMap<>();
@@ -187,10 +188,12 @@ final class Xcsp3CallbackHandler implements XCallbacks2 {
             new InSetRecognizer(this),
             new NaryEqualityRecognizer(this),
             new DistanceOfPairRecognizer(this),
-            new AndRecognizer(this::recognizeConstraint),
-            new OrRecognizer(this, this::recognizeConstraint),
+            new OrRecognizer(this, this::recognizeConstraint, true),
             new BooleanProductChannelRecognizer(this),
             new ProductRecognizer(this),
+            new TabulationRecognizer(this),
+            new AndRecognizer(this::recognizeConstraint),
+            new OrRecognizer(this, this::recognizeConstraint, false),
             new RelationSumRecognizer(this, this::recognizeConstraint),
             new ChannelRecognizer(this, this::recognizeConstraint));
 
@@ -351,11 +354,42 @@ final class Xcsp3CallbackHandler implements XCallbacks2 {
         registerVariable(x, NumericDiscreteDomain.of(boxed), min, max);
     }
 
-    private void registerVariable(XVarInteger x, Domain<Integer> domain, int min, int max) {
+    /** {@code domain} is narrowed to {@link DiscreteDomain} rather than {@link Domain} because both
+     *  callers build one, and {@link #declaredDomains} needs it enumerable for {@link
+     *  TabulationRecognizer}; an {@code instanceof} here would be a permanently-true test. */
+    private void registerVariable(XVarInteger x, DiscreteDomain<Integer> domain, int min, int max) {
         Variable<Integer> variable = Variable.Factory.INSTANCE.create(x.id());
         variablesByName.put(x.id(), variable);
         boundsByName.put(x.id(), new int[]{min, max});
+        declaredDomains.put(variable, domain);
         builder.variableDomain(variable, domain);
+    }
+
+    /**
+     * A declared variable's own domain as built, or {@code null} for one whose domain isn't
+     * enumerable. Package-private for {@link TabulationRecognizer}, which needs the exact value set
+     * (not just {@link #boundsByName}'s span) to enumerate a constraint's tuples: a gapped domain
+     * would otherwise generate supports for values the variable can never take.
+     */
+    @Nullable DiscreteDomain<Integer> declaredDomain(Variable<Integer> variable) {
+        return declaredDomains.get(variable);
+    }
+
+    /** The {@link Variable} a declared XCSP3 name maps to, or {@code null} if it isn't an integer
+     *  variable this handler registered. Package-private for {@link TabulationRecognizer}. */
+    @Nullable Variable<Integer> variableForName(String name) {
+        return variablesByName.get(name);
+    }
+
+    /**
+     * {@code tree} as a per-assignment predicate, for {@link TabulationRecognizer} to test each
+     * candidate tuple against. Deliberately the same {@link IntensionExpressionEvaluator} entry
+     * point {@link #genericIntensionConstraint} uses, so a tabulated constraint accepts exactly
+     * what the unpropagated fallback would have -- tabulation changes how a constraint propagates,
+     * never what it means.
+     */
+    Predicate<Assignment> intensionPredicate(XNode<XVarInteger> tree) {
+        return IntensionExpressionEvaluator.toPredicate(tree, variablesByName);
     }
 
     // Package-private: BooleanProductChannelRecognizer needs a variable's declared bounds to check

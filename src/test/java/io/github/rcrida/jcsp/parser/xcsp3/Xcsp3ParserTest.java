@@ -10,6 +10,7 @@ import io.github.rcrida.jcsp.constraints.binary.SquareVariableConstraint;
 import io.github.rcrida.jcsp.constraints.nary.AbsoluteDifferenceVariableConstraint;
 import io.github.rcrida.jcsp.constraints.nary.AndConstraint;
 import io.github.rcrida.jcsp.constraints.nary.AtLeastNConstraint;
+import io.github.rcrida.jcsp.constraints.nary.NaryTuplesConstraint;
 import io.github.rcrida.jcsp.constraints.nary.CountConstraint;
 import io.github.rcrida.jcsp.constraints.nary.GlobalCardinalityConstraint;
 import io.github.rcrida.jcsp.constraints.nary.LinearBooleanBoundConstraint;
@@ -221,7 +222,7 @@ class Xcsp3ParserTest {
                 "<var id=\"x\"> 0..2 </var><var id=\"y\"> 0..2 </var><var id=\"z\"> 0..2 </var>",
                 "<intension> iff(eq(x,1),eq(add(y,z),3)) </intension>");
         assertThat(instance.csp().getConstraints())
-                .anyMatch(c -> c instanceof ReifiedConstraint rc && rc.getBody() instanceof SumBoundConstraint<?>);
+                .anyMatch(c -> c instanceof NaryTuplesConstraint);
         Set<Assignment> solutions = solutions(instance.csp());
         for (Assignment a : solutions) {
             int x = digitOf(a, "x");
@@ -240,7 +241,7 @@ class Xcsp3ParserTest {
                 "<var id=\"x\"> 0..2 </var><var id=\"y\"> 0..2 </var><var id=\"w\"> 0..1 </var>",
                 "<intension> iff(eq(add(x,y),1),eq(w,1)) </intension>");
         assertThat(instance.csp().getConstraints())
-                .anyMatch(c -> c instanceof ReifiedConstraint rc && rc.getBody() instanceof SumBoundConstraint<?>);
+                .anyMatch(c -> c instanceof NaryTuplesConstraint);
         Set<Assignment> solutions = solutions(instance.csp());
         for (Assignment a : solutions) {
             int x = digitOf(a, "x");
@@ -316,7 +317,7 @@ class Xcsp3ParserTest {
                 "<var id=\"a\"> 0..2 </var><var id=\"b\"> 0..2 </var><var id=\"x\"> 0..4 </var><var id=\"y\"> 0..1 </var>",
                 "<intension> iff(le(add(a,b),x),eq(y,1)) </intension>");
         assertThat(instance.csp().getConstraints())
-                .anyMatch(c -> c instanceof ReifiedConstraint rc && rc.getBody() instanceof SumVariableConstraint<?>);
+                .anyMatch(c -> c instanceof NaryTuplesConstraint);
         Set<Assignment> solutions = solutions(instance.csp());
         for (Assignment s : solutions) {
             int a = digitOf(s, "a");
@@ -340,7 +341,7 @@ class Xcsp3ParserTest {
         Xcsp3Instance instance = parseXml(
                 "<var id=\"x\"> 0..2 </var><var id=\"y\"> 0 1 </var>",
                 "<intension> iff(eq(x,1),y) </intension>");
-        assertThat(instance.csp().getConstraints()).anyMatch(c -> c instanceof BinaryComparatorConstraint<?>);
+        assertThat(instance.csp().getConstraints()).anyMatch(c -> c instanceof NaryTuplesConstraint);
         Set<Assignment> solutions = solutions(instance.csp());
         for (Assignment a : solutions) {
             int x = digitOf(a, "x");
@@ -463,7 +464,7 @@ class Xcsp3ParserTest {
         Xcsp3Instance instance = parseXml(
                 "<var id=\"x\"> 0..2 </var><var id=\"y\"> 0 1 </var><var id=\"t\"> 0..4 </var>",
                 "<intension> eq(mul(add(x,1),y),t) </intension>");
-        assertThat(instance.csp().getConstraints().iterator().next()).isInstanceOf(PredicateConstraint.class);
+        assertThat(instance.csp().getConstraints().iterator().next()).isInstanceOf(NaryTuplesConstraint.class);
         Set<Assignment> found = solutions(instance.csp());
         assertThat(found).isNotEmpty();
         for (Assignment a : found) {
@@ -544,7 +545,7 @@ class Xcsp3ParserTest {
         Xcsp3Instance instance = parseXml(
                 "<var id=\"x\"> 1..3 </var><var id=\"y\"> 1..3 </var><var id=\"z\"> 1..9 </var>",
                 "<intension> ne(mul(x,y),z) </intension>");
-        assertThat(instance.csp().getConstraints().iterator().next()).isInstanceOf(PredicateConstraint.class);
+        assertThat(instance.csp().getConstraints().iterator().next()).isInstanceOf(NaryTuplesConstraint.class);
         Set<Assignment> found = solutions(instance.csp());
         assertThat(found).isNotEmpty();
         for (Assignment a : found) {
@@ -585,7 +586,7 @@ class Xcsp3ParserTest {
                 "<var id=\"x\"> 1..3 </var><var id=\"y\"> 1..3 </var>"
                         + "<var id=\"z\"> 1..9 </var><var id=\"w\"> 1..9 </var>",
                 "<intension> eq(mul(x,y),z,w) </intension>");
-        assertThat(instance.csp().getConstraints().iterator().next()).isInstanceOf(PredicateConstraint.class);
+        assertThat(instance.csp().getConstraints().iterator().next()).isInstanceOf(NaryTuplesConstraint.class);
         Set<Assignment> found = solutions(instance.csp());
         assertThat(found).isNotEmpty();
         for (Assignment a : found) {
@@ -602,7 +603,7 @@ class Xcsp3ParserTest {
         Xcsp3Instance instance = parseXml(
                 "<var id=\"x\"> 1..3 </var><var id=\"y\"> 1..3 </var><var id=\"z\"> 1..12 </var>",
                 "<intension> eq(mul(x,add(y,1)),z) </intension>");
-        assertThat(instance.csp().getConstraints().iterator().next()).isInstanceOf(PredicateConstraint.class);
+        assertThat(instance.csp().getConstraints().iterator().next()).isInstanceOf(NaryTuplesConstraint.class);
         Set<Assignment> found = solutions(instance.csp());
         assertThat(found).isNotEmpty();
         for (Assignment a : found) {
@@ -672,7 +673,7 @@ class Xcsp3ParserTest {
         Xcsp3Instance instance = parseXml(
                 "<var id=\"x\"> 1..3 </var><var id=\"y\"> 1..3 </var><var id=\"z\"> 1..27 </var>",
                 "<intension> eq(mul(x,x,y),z) </intension>");
-        assertThat(instance.csp().getConstraints().iterator().next()).isInstanceOf(PredicateConstraint.class);
+        assertThat(instance.csp().getConstraints().iterator().next()).isInstanceOf(NaryTuplesConstraint.class);
         Set<Assignment> found = solutions(instance.csp());
         assertThat(found).isNotEmpty();
         for (Assignment a : found) {
@@ -694,7 +695,7 @@ class Xcsp3ParserTest {
                 "<var id=\"x\"> 1..3 </var><var id=\"y\"> 1..3 </var>"
                         + "<var id=\"z\"> 1..4 </var><var id=\"w\"> 1..4 </var>",
                 "<intension> eq(mul(x,y),add(z,w)) </intension>");
-        assertThat(instance.csp().getConstraints()).anyMatch(c -> c instanceof PredicateConstraint);
+        assertThat(instance.csp().getConstraints()).anyMatch(c -> c instanceof NaryTuplesConstraint);
         Set<Assignment> found = solutions(instance.csp());
         assertThat(found).isNotEmpty();
         for (Assignment a : found) {
@@ -746,7 +747,7 @@ class Xcsp3ParserTest {
         Xcsp3Instance instance = parseXml(
                 "<var id=\"x\"> 1..3 </var><var id=\"y\"> 1..5 </var><var id=\"t\"> 0..4 </var>",
                 "<intension> eq(dist(add(x,1),y),t) </intension>");
-        assertThat(instance.csp().getConstraints().iterator().next()).isInstanceOf(PredicateConstraint.class);
+        assertThat(instance.csp().getConstraints().iterator().next()).isInstanceOf(NaryTuplesConstraint.class);
         Set<Assignment> found = solutions(instance.csp());
         assertThat(found).isNotEmpty();
         for (Assignment a : found) {
@@ -809,7 +810,7 @@ class Xcsp3ParserTest {
         // Not iterator().next(): div(x,6)'s own auxiliary-linking LinearVariableConstraint is added
         // (as a side effect of successfully resolving the first dist operand) before the top-level
         // PredicateConstraint, so it iterates first.
-        assertThat(instance.csp().getConstraints()).anyMatch(c -> c instanceof PredicateConstraint);
+        assertThat(instance.csp().getConstraints()).anyMatch(c -> c instanceof NaryTuplesConstraint);
         Set<Assignment> found = solutions(instance.csp());
         assertThat(found).isNotEmpty();
         for (Assignment a : found) {
@@ -827,7 +828,7 @@ class Xcsp3ParserTest {
         Xcsp3Instance instance = parseXml(
                 "<var id=\"x\"> 1..6 </var><var id=\"y\"> 1..6 </var><var id=\"z\"> 1..3 </var>",
                 "<intension> eq(dist(div(x,6),div(y,z)),1) </intension>");
-        assertThat(instance.csp().getConstraints()).anyMatch(c -> c instanceof PredicateConstraint);
+        assertThat(instance.csp().getConstraints()).anyMatch(c -> c instanceof NaryTuplesConstraint);
         Set<Assignment> found = solutions(instance.csp());
         assertThat(found).isNotEmpty();
         for (Assignment a : found) {
@@ -842,7 +843,7 @@ class Xcsp3ParserTest {
         Xcsp3Instance instance = parseXml(
                 "<var id=\"a\"> 1..3 </var><var id=\"b\"> 1..3 </var><var id=\"c\"> 1..3 </var>",
                 "<intension> eq(dist(a,b,c),1) </intension>");
-        assertThat(instance.csp().getConstraints().iterator().next()).isInstanceOf(PredicateConstraint.class);
+        assertThat(instance.csp().getConstraints().iterator().next()).isInstanceOf(NaryTuplesConstraint.class);
         Set<Assignment> found = solutions(instance.csp());
         assertThat(found).isNotEmpty();
     }
@@ -873,7 +874,7 @@ class Xcsp3ParserTest {
         Xcsp3Instance instance = parseXml(
                 "<var id=\"a\"> 1..3 </var><var id=\"b\"> 1..3 </var><var id=\"c\"> 1..3 </var><var id=\"d\"> 1..3 </var>",
                 "<intension> ne(dist(a,b),add(c,d)) </intension>");
-        assertThat(instance.csp().getConstraints()).anyMatch(c -> c instanceof PredicateConstraint);
+        assertThat(instance.csp().getConstraints()).anyMatch(c -> c instanceof NaryTuplesConstraint);
         Set<Assignment> found = solutions(instance.csp());
         assertThat(found).isNotEmpty();
         for (Assignment a : found) {
@@ -1023,14 +1024,41 @@ class Xcsp3ParserTest {
         Xcsp3Instance instance = parseXml(
                 "<var id=\"x\"> 0..2 </var><var id=\"y\"> 0..2 </var><var id=\"z\"> 0..3 </var>",
                 "<intension> or(and(eq(x,1),eq(y,2)),eq(z,3)) </intension>");
-        assertThat(instance.csp().getConstraints()).anyMatch(c -> c instanceof AtLeastNConstraint);
-        assertThat(instance.csp().getConstraints()).anyMatch(c -> c.getRelation().contains("AND"));
+        // Tabulated as one table over (x, y, z) rather than decomposed into a reified AndConstraint
+        // plus a sibling indicator under an AtLeastNConstraint -- the shape this test was written
+        // for, still exercised above the tabulation cap by
+        // intensionOrNestedChild_aboveTabulationCap_stillDecomposesRecursively below.
+        assertThat(instance.csp().getConstraints()).anyMatch(c -> c instanceof NaryTuplesConstraint);
         Set<Assignment> found = solutions(instance.csp());
         assertThat(found).isNotEmpty();
         for (Assignment a : found) {
             boolean left = digitOf(a, "x") == 1 && digitOf(a, "y") == 2;
             assertThat(left || digitOf(a, "z") == 3).isTrue();
         }
+    }
+
+    @Test void intensionOrNestedChild_aboveTabulationCap_stillDecomposesRecursively() throws IOException {
+        // The same or(and(...), ...) shape as above, but over three 0..49 domains: the or's own
+        // scope would need a 3 * 50^4-bit support index, past TabulationRecognizer's ceiling, so it
+        // declines and the recursive decomposition this shape was originally written for runs --
+        // one AtLeastNConstraint over a reified indicator per disjunct. The nested and(...) spans
+        // only x and y, is comfortably under the ceiling, and is tabulated inside its own
+        // indicator, which is exactly the intended layering. Asserts structure only: enumerating
+        // 50^3 assignments would buy nothing the below-cap test above doesn't already pin.
+        Xcsp3Instance instance = parseXml(
+                "<var id=\"x\"> 0..49 </var><var id=\"y\"> 0..49 </var><var id=\"z\"> 0..49 </var>",
+                "<intension> or(and(eq(x,1),eq(y,2)),eq(z,3)) </intension>");
+        assertThat(instance.csp().getConstraints()).anyMatch(c -> c instanceof AtLeastNConstraint);
+    }
+
+    @Test void intensionAnd_aboveTabulationCap_stillBuildsAnAndConstraint() throws IOException {
+        // and(...) spanning all three 0..49 variables needs the same out-of-reach index as the or
+        // above, so AndRecognizer keeps the shape rather than tabulation claiming it.
+        Xcsp3Instance instance = parseXml(
+                "<var id=\"x\"> 0..49 </var><var id=\"y\"> 0..49 </var><var id=\"z\"> 0..49 </var>",
+                "<intension> and(eq(x,1),eq(y,2),eq(z,3)) </intension>");
+        assertThat(instance.csp().getConstraints().iterator().next()).isInstanceOf(AndConstraint.class);
+        assertThat(instance.csp().getConstraints()).noneMatch(c -> c instanceof NaryTuplesConstraint);
     }
 
     @Test void intensionOrNonLiteralOperand_recognizesViaFullRecursiveChain() throws IOException {
@@ -1048,7 +1076,7 @@ class Xcsp3ParserTest {
         Xcsp3Instance instance = parseXml(
                 "<var id=\"x\"> 0..3 </var><var id=\"y\"> 0..3 </var><var id=\"z\"> 0..3 </var>",
                 "<intension> or(eq(add(x,y),5),eq(z,2)) </intension>");
-        assertThat(instance.csp().getConstraints()).anyMatch(c -> c instanceof AtLeastNConstraint);
+        assertThat(instance.csp().getConstraints()).anyMatch(c -> c instanceof NaryTuplesConstraint);
         Set<Assignment> found = solutions(instance.csp());
         assertThat(found).isNotEmpty();
         for (Assignment a : found) {
@@ -1066,7 +1094,7 @@ class Xcsp3ParserTest {
         Xcsp3Instance instance = parseXml(
                 "<var id=\"x\"> 0..2 </var><var id=\"y\"> 0..2 </var><var id=\"z\"> 0..2 </var><var id=\"w\"> 0..1 </var>",
                 "<intension> or(eq(x,y,z),eq(w,1)) </intension>");
-        assertThat(instance.csp().getConstraints()).anyMatch(c -> c instanceof AtLeastNConstraint);
+        assertThat(instance.csp().getConstraints()).anyMatch(c -> c instanceof NaryTuplesConstraint);
         assertThat(instance.csp().getConstraints()).noneMatch(c -> c instanceof PredicateConstraint);
         Set<Assignment> found = solutions(instance.csp());
         assertThat(found).isNotEmpty();
@@ -1085,7 +1113,7 @@ class Xcsp3ParserTest {
         Xcsp3Instance instance = parseXml(
                 "<var id=\"x\"> 0..3 </var><var id=\"y\"> 0..3 </var><var id=\"z\"> 0..3 </var>",
                 "<intension> or(eq(x,1),eq(y,2),eq(z,3)) </intension>");
-        assertThat(instance.csp().getConstraints()).anyMatch(c -> c instanceof AtLeastNConstraint);
+        assertThat(instance.csp().getConstraints()).anyMatch(c -> c instanceof NaryTuplesConstraint);
         Set<Assignment> found = solutions(instance.csp());
         assertThat(found).isNotEmpty();
         for (Assignment a : found) {
@@ -2907,7 +2935,7 @@ class Xcsp3ParserTest {
         Xcsp3Instance instance = parseXml(
                 "<var id=\"x\"> 1..3 </var><var id=\"z\"> 0..15 </var>",
                 "<intension> eq(z,add(mul(x,2),5)) </intension>");
-        assertThat(instance.csp().getConstraints().iterator().next()).isInstanceOf(PredicateConstraint.class);
+        assertThat(instance.csp().getConstraints().iterator().next()).isInstanceOf(NaryTuplesConstraint.class);
         Set<Assignment> solutions = solutions(instance.csp());
         assertThat(solutions).isNotEmpty();
         for (Assignment a : solutions) {
@@ -2931,7 +2959,7 @@ class Xcsp3ParserTest {
         Xcsp3Instance instance = parseXml(
                 "<var id=\"x\"> 0..9 </var>",
                 "<intension> eq(pow(x,3),8) </intension>");
-        assertThat(instance.csp().getConstraints().iterator().next()).isInstanceOf(UnaryPredicateConstraint.class);
+        assertThat(instance.csp().getConstraints().iterator().next()).isInstanceOf(NaryTuplesConstraint.class);
         Set<Assignment> solutions = solutions(instance.csp());
         assertThat(solutions).isNotEmpty();
         for (Assignment a : solutions) {
@@ -3027,7 +3055,7 @@ class Xcsp3ParserTest {
         Xcsp3Instance instance = parseXml(
                 "<var id=\"x\"> 0..3 </var><var id=\"y\"> 0..3 </var>",
                 "<intension> in(x,set(1,y)) </intension>");
-        assertThat(instance.csp().getConstraints().iterator().next()).isInstanceOf(PredicateConstraint.class);
+        assertThat(instance.csp().getConstraints().iterator().next()).isInstanceOf(NaryTuplesConstraint.class);
         Set<Assignment> found = solutions(instance.csp());
         assertThat(found).isNotEmpty();
         for (Assignment a : found) {
@@ -3126,7 +3154,7 @@ class Xcsp3ParserTest {
         Xcsp3Instance instance = parseXml(
                 "<var id=\"x\"> -3..5 </var>",
                 "<intension> eq(div(x,3),1) </intension>");
-        assertThat(instance.csp().getConstraints().iterator().next()).isInstanceOf(UnaryPredicateConstraint.class);
+        assertThat(instance.csp().getConstraints().iterator().next()).isInstanceOf(NaryTuplesConstraint.class);
         Set<Assignment> found = solutions(instance.csp());
         assertThat(found).isNotEmpty();
         for (Assignment a : found) {
@@ -3140,7 +3168,7 @@ class Xcsp3ParserTest {
         Xcsp3Instance instance = parseXml(
                 "<var id=\"x\"> 0..9 </var><var id=\"y\"> 1..3 </var>",
                 "<intension> eq(div(x,y),2) </intension>");
-        assertThat(instance.csp().getConstraints().iterator().next()).isInstanceOf(PredicateConstraint.class);
+        assertThat(instance.csp().getConstraints().iterator().next()).isInstanceOf(NaryTuplesConstraint.class);
         Set<Assignment> found = solutions(instance.csp());
         assertThat(found).isNotEmpty();
         for (Assignment a : found) {
@@ -3158,7 +3186,7 @@ class Xcsp3ParserTest {
         Xcsp3Instance instance = parseXml(
                 "<var id=\"x\"> 0..9 </var>",
                 "<intension> eq(div(x,-2),-2) </intension>");
-        assertThat(instance.csp().getConstraints().iterator().next()).isInstanceOf(UnaryPredicateConstraint.class);
+        assertThat(instance.csp().getConstraints().iterator().next()).isInstanceOf(NaryTuplesConstraint.class);
         Set<Assignment> found = solutions(instance.csp());
         assertThat(found).isNotEmpty();
         for (Assignment a : found) {
@@ -3297,7 +3325,7 @@ class Xcsp3ParserTest {
         Xcsp3Instance instance = parseXml(
                 "<var id=\"x\"> 0..10 </var><var id=\"y\"> -10..10 </var>",
                 "<intension> eq(div(neg(x),2),y) </intension>");
-        assertThat(instance.csp().getConstraints()).anyMatch(c -> c instanceof PredicateConstraint);
+        assertThat(instance.csp().getConstraints()).anyMatch(c -> c instanceof NaryTuplesConstraint);
         Set<Assignment> found = solutions(instance.csp());
         assertThat(found).isNotEmpty();
         for (Assignment a : found) {
@@ -3329,7 +3357,7 @@ class Xcsp3ParserTest {
         Xcsp3Instance instance = parseXml(
                 "<var id=\"x\"> -10..10 </var><var id=\"y\"> -5..5 </var><var id=\"z\"> -10..10 </var>",
                 "<intension> eq(dist(sub(x,mul(y,2)),z),3) </intension>");
-        assertThat(instance.csp().getConstraints().iterator().next()).isInstanceOf(PredicateConstraint.class);
+        assertThat(instance.csp().getConstraints().iterator().next()).isInstanceOf(NaryTuplesConstraint.class);
         Set<Assignment> found = solutions(instance.csp());
         assertThat(found).isNotEmpty();
         for (Assignment a : found) {
@@ -3343,7 +3371,7 @@ class Xcsp3ParserTest {
         Xcsp3Instance instance = parseXml(
                 "<var id=\"x\"> -5..5 </var><var id=\"y\"> -10..10 </var><var id=\"z\"> -10..10 </var>",
                 "<intension> eq(dist(sub(mul(x,2),y),z),3) </intension>");
-        assertThat(instance.csp().getConstraints().iterator().next()).isInstanceOf(PredicateConstraint.class);
+        assertThat(instance.csp().getConstraints().iterator().next()).isInstanceOf(NaryTuplesConstraint.class);
         Set<Assignment> found = solutions(instance.csp());
         assertThat(found).isNotEmpty();
         for (Assignment a : found) {
@@ -3450,7 +3478,7 @@ class Xcsp3ParserTest {
         Xcsp3Instance instance = parseXml(
                 "<var id=\"c\"> 0..5 </var><var id=\"a\"> 0..3 </var><var id=\"b\"> 0..3 </var><var id=\"r\"> 0..9 </var>",
                 "<intension> eq(mod(add(c,mul(a,b)),10),r) </intension>");
-        assertThat(instance.csp().getConstraints().iterator().next()).isInstanceOf(PredicateConstraint.class);
+        assertThat(instance.csp().getConstraints().iterator().next()).isInstanceOf(NaryTuplesConstraint.class);
         Set<Assignment> found = solutions(instance.csp());
         assertThat(found).isNotEmpty();
         for (Assignment a : found) {
@@ -3471,7 +3499,7 @@ class Xcsp3ParserTest {
         Xcsp3Instance instance = parseXml(
                 "<var id=\"x\"> 0..10 </var><var id=\"y\"> -10..10 </var><var id=\"z\"> -10..10 </var>",
                 "<intension> eq(add(y,z),mul(x,2)) </intension>");
-        assertThat(instance.csp().getConstraints()).anyMatch(c -> c instanceof PredicateConstraint);
+        assertThat(instance.csp().getConstraints()).anyMatch(c -> c instanceof NaryTuplesConstraint);
         Set<Assignment> found = solutions(instance.csp());
         assertThat(found).isNotEmpty();
         for (Assignment a : found) {
@@ -3493,7 +3521,7 @@ class Xcsp3ParserTest {
                 "<var id=\"x0\"> 0..35 </var><var id=\"x1\"> 0..35 </var>",
                 "<intension> or(and(eq(dist(div(x0,6),div(x1,6)),1),eq(dist(mod(x0,6),mod(x1,6)),2)),"
                         + "and(eq(dist(div(x0,6),div(x1,6)),2),eq(dist(mod(x0,6),mod(x1,6)),1))) </intension>");
-        assertThat(instance.csp().getConstraints()).anyMatch(c -> c instanceof AtLeastNConstraint);
+        assertThat(instance.csp().getConstraints()).anyMatch(c -> c instanceof NaryTuplesConstraint);
         Set<Assignment> found = solutions(instance.csp());
         assertThat(found).isNotEmpty();
         for (Assignment a : found) {
@@ -3537,7 +3565,7 @@ class Xcsp3ParserTest {
         Xcsp3Instance instance = parseXml(
                 "<var id=\"x\"> 0..3 </var><var id=\"y\"> 0..3 </var><var id=\"z\"> 0..3 </var>",
                 "<intension> and(eq(x,1),or(eq(y,2),eq(z,3))) </intension>");
-        assertThat(instance.csp().getConstraints().iterator().next()).isInstanceOf(AndConstraint.class);
+        assertThat(instance.csp().getConstraints().iterator().next()).isInstanceOf(NaryTuplesConstraint.class);
         Set<Assignment> found = solutions(instance.csp());
         assertThat(found).isNotEmpty();
         for (Assignment a : found) {
@@ -3553,7 +3581,7 @@ class Xcsp3ParserTest {
         Xcsp3Instance instance = parseXml(
                 "<var id=\"x\"> 0..3 </var><var id=\"y\"> 0..3 </var><var id=\"z\"> 0..9 </var>",
                 "<intension> or(and(eq(x,1),eq(y,1)),and(eq(x,2),eq(y,2)),eq(z,9)) </intension>");
-        assertThat(instance.csp().getConstraints()).anyMatch(c -> c instanceof AtLeastNConstraint);
+        assertThat(instance.csp().getConstraints()).anyMatch(c -> c instanceof NaryTuplesConstraint);
         Set<Assignment> found = solutions(instance.csp());
         assertThat(found).isNotEmpty();
         for (Assignment a : found) {
@@ -3572,7 +3600,7 @@ class Xcsp3ParserTest {
                 "<var id=\"x\"> 0..3 </var><var id=\"y\"> 0..3 </var>"
                         + "<var id=\"z\"> 0..3 </var><var id=\"w\"> 0..3 </var>",
                 "<intension> and(eq(x,1),eq(y,z,w)) </intension>");
-        assertThat(instance.csp().getConstraints().iterator().next()).isInstanceOf(AndConstraint.class);
+        assertThat(instance.csp().getConstraints().iterator().next()).isInstanceOf(NaryTuplesConstraint.class);
         assertThat(instance.csp().getConstraints()).noneMatch(c -> c instanceof PredicateConstraint);
         Set<Assignment> found = solutions(instance.csp());
         assertThat(found).isNotEmpty();
@@ -3619,7 +3647,7 @@ class Xcsp3ParserTest {
         Xcsp3Instance instance = parseXml(
                 "<var id=\"x\"> 1..3 </var><var id=\"y\"> 1..3 </var><var id=\"z\"> 1..3 </var>",
                 "<intension> and(ne(x,y),lt(y,z)) </intension>");
-        assertThat(instance.csp().getConstraints().iterator().next()).isInstanceOf(AndConstraint.class);
+        assertThat(instance.csp().getConstraints().iterator().next()).isInstanceOf(NaryTuplesConstraint.class);
         Set<Assignment> solutions = solutions(instance.csp());
         assertThat(solutions).isNotEmpty();
         for (Assignment a : solutions) {
@@ -3634,7 +3662,7 @@ class Xcsp3ParserTest {
         Xcsp3Instance instance = parseXml(
                 "<var id=\"x\"> 1..3 </var><var id=\"y\"> 1..9 </var>",
                 "<intension> eq(mul(x,2),y) </intension>");
-        assertThat(instance.csp().getConstraints().iterator().next()).isInstanceOf(PredicateConstraint.class);
+        assertThat(instance.csp().getConstraints().iterator().next()).isInstanceOf(NaryTuplesConstraint.class);
         Set<Assignment> solutions = solutions(instance.csp());
         assertThat(solutions).isNotEmpty();
         for (Assignment a : solutions) {
@@ -3773,7 +3801,7 @@ class Xcsp3ParserTest {
         Xcsp3Instance instance = parseXml(
                 "<var id=\"x\"> 1..3 </var><var id=\"y\"> 1..3 </var><var id=\"z\"> 1..3 </var><var id=\"w\"> 0..15 </var>",
                 "<intension> eq(w,add(mul(x,y),z)) </intension>");
-        assertThat(instance.csp().getConstraints().iterator().next()).isInstanceOf(PredicateConstraint.class);
+        assertThat(instance.csp().getConstraints().iterator().next()).isInstanceOf(NaryTuplesConstraint.class);
         Set<Assignment> solutions = solutions(instance.csp());
         assertThat(solutions).isNotEmpty();
         for (Assignment a : solutions) {
@@ -3791,7 +3819,7 @@ class Xcsp3ParserTest {
         Xcsp3Instance instance = parseXml(
                 "<var id=\"x\"> 1..3 </var><var id=\"w\"> 0..3 </var><var id=\"v\"> 0..30 </var>",
                 "<intension> eq(v,add(mul(div(x,2),3),w)) </intension>");
-        assertThat(instance.csp().getConstraints().iterator().next()).isInstanceOf(PredicateConstraint.class);
+        assertThat(instance.csp().getConstraints().iterator().next()).isInstanceOf(NaryTuplesConstraint.class);
         Set<Assignment> solutions = solutions(instance.csp());
         assertThat(solutions).isNotEmpty();
         for (Assignment a : solutions) {
@@ -3805,7 +3833,7 @@ class Xcsp3ParserTest {
         Xcsp3Instance instance = parseXml(
                 "<var id=\"x\"> 1..3 </var><var id=\"y\"> 1..3 </var><var id=\"z\"> 1..3 </var><var id=\"w\"> 0..3 </var><var id=\"v\"> 0..30 </var>",
                 "<intension> eq(v,add(mul(x,y,z),w)) </intension>");
-        assertThat(instance.csp().getConstraints().iterator().next()).isInstanceOf(PredicateConstraint.class);
+        assertThat(instance.csp().getConstraints().iterator().next()).isInstanceOf(NaryTuplesConstraint.class);
         Set<Assignment> solutions = solutions(instance.csp());
         assertThat(solutions).isNotEmpty();
         for (Assignment a : solutions) {
@@ -3831,7 +3859,7 @@ class Xcsp3ParserTest {
         Xcsp3Instance instance = parseXml(
                 "<var id=\"x\"> 0..5 </var><var id=\"y\"> 0..5 </var><var id=\"z\"> -10..10 </var>",
                 "<intension> eq(z,add(x,neg(mul(y,2)))) </intension>");
-        assertThat(instance.csp().getConstraints().iterator().next()).isInstanceOf(PredicateConstraint.class);
+        assertThat(instance.csp().getConstraints().iterator().next()).isInstanceOf(NaryTuplesConstraint.class);
         Set<Assignment> solutions = solutions(instance.csp());
         assertThat(solutions).isNotEmpty();
         for (Assignment a : solutions) {
@@ -3857,7 +3885,7 @@ class Xcsp3ParserTest {
         Xcsp3Instance instance = parseXml(
                 "<var id=\"x\"> 0..5 </var><var id=\"y\"> 0..5 </var><var id=\"w\"> 0..5 </var><var id=\"z\"> -10..15 </var>",
                 "<intension> eq(z,add(x,sub(y,mul(w,2)))) </intension>");
-        assertThat(instance.csp().getConstraints().iterator().next()).isInstanceOf(PredicateConstraint.class);
+        assertThat(instance.csp().getConstraints().iterator().next()).isInstanceOf(NaryTuplesConstraint.class);
         Set<Assignment> solutions = solutions(instance.csp());
         assertThat(solutions).isNotEmpty();
         for (Assignment a : solutions) {
@@ -3872,7 +3900,7 @@ class Xcsp3ParserTest {
         Xcsp3Instance instance = parseXml(
                 "<var id=\"x\"> 0..5 </var><var id=\"y\"> 0..5 </var><var id=\"w\"> 0..5 </var><var id=\"z\"> -10..15 </var>",
                 "<intension> eq(z,add(x,sub(mul(y,2),w))) </intension>");
-        assertThat(instance.csp().getConstraints().iterator().next()).isInstanceOf(PredicateConstraint.class);
+        assertThat(instance.csp().getConstraints().iterator().next()).isInstanceOf(NaryTuplesConstraint.class);
         Set<Assignment> solutions = solutions(instance.csp());
         assertThat(solutions).isNotEmpty();
         for (Assignment a : solutions) {
@@ -3884,7 +3912,7 @@ class Xcsp3ParserTest {
         Xcsp3Instance instance = parseXml(
                 "<var id=\"x\"> 0..3 </var><var id=\"y\"> 0..3 </var><var id=\"z\"> 0..9 </var>",
                 "<intension> eq(z,add(x,y,2)) </intension>");
-        assertThat(instance.csp().getConstraints().iterator().next()).isInstanceOf(PredicateConstraint.class);
+        assertThat(instance.csp().getConstraints().iterator().next()).isInstanceOf(NaryTuplesConstraint.class);
         Set<Assignment> solutions = solutions(instance.csp());
         assertThat(solutions).isNotEmpty();
         for (Assignment a : solutions) {
@@ -3904,7 +3932,7 @@ class Xcsp3ParserTest {
         Xcsp3Instance instance = parseXml(
                 "<var id=\"x\"> 0..3 </var><var id=\"y\"> 0..3 </var>",
                 "<intension> eq(add(le(2,x),le(3,y)),1) </intension>");
-        assertThat(instance.csp().getConstraints()).anyMatch(c -> c instanceof LinearBooleanBoundConstraint);
+        assertThat(instance.csp().getConstraints()).anyMatch(c -> c instanceof NaryTuplesConstraint);
         Set<Assignment> solutions = solutions(instance.csp());
         assertThat(solutions).isNotEmpty();
         for (Assignment a : solutions) {
@@ -3923,7 +3951,7 @@ class Xcsp3ParserTest {
         Xcsp3Instance instance = parseXml(
                 "<var id=\"x\"> 0..1 </var><var id=\"y\"> 0..1 </var><var id=\"z\"> 0..1 </var>",
                 "<intension> ge(add(eq(x,1),eq(y,1),eq(z,1)),2) </intension>");
-        assertThat(instance.csp().getConstraints()).anyMatch(c -> c instanceof LinearBooleanBoundConstraint);
+        assertThat(instance.csp().getConstraints()).anyMatch(c -> c instanceof NaryTuplesConstraint);
         Set<Assignment> solutions = solutions(instance.csp());
         assertThat(solutions).hasSize(4); // C(3,2)+C(3,3) = 3+1 = 4 ways to have >=2 of 3 booleans true
         for (Assignment a : solutions) {
@@ -3938,7 +3966,7 @@ class Xcsp3ParserTest {
         Xcsp3Instance instance = parseXml(
                 "<var id=\"x\"> 0..3 </var><var id=\"y\"> 0..3 </var><var id=\"z\"> 0..1 </var>",
                 "<intension> eq(z,add(le(2,x),le(3,y))) </intension>");
-        assertThat(instance.csp().getConstraints()).anyMatch(c -> c instanceof LinearBooleanVariableConstraint);
+        assertThat(instance.csp().getConstraints()).anyMatch(c -> c instanceof NaryTuplesConstraint);
         Set<Assignment> solutions = solutions(instance.csp());
         assertThat(solutions).isNotEmpty();
         for (Assignment a : solutions) {
@@ -3952,7 +3980,7 @@ class Xcsp3ParserTest {
         Xcsp3Instance instance = parseXml(
                 "<var id=\"x\"> 0..3 </var><var id=\"y\"> 0..3 </var><var id=\"z\"> 0..3 </var>",
                 "<intension> eq(add(le(2,x),le(2,y),le(2,z)),2) </intension>");
-        assertThat(instance.csp().getConstraints()).anyMatch(c -> c instanceof LinearBooleanBoundConstraint);
+        assertThat(instance.csp().getConstraints()).anyMatch(c -> c instanceof NaryTuplesConstraint);
         Set<Assignment> solutions = solutions(instance.csp());
         assertThat(solutions).isNotEmpty();
         for (Assignment a : solutions) {
@@ -3970,7 +3998,7 @@ class Xcsp3ParserTest {
         Xcsp3Instance instance = parseXml(
                 "<var id=\"x\"> 0..3 </var><var id=\"y\"> 0..3 </var><var id=\"z\"> 0..9 </var>",
                 "<intension> eq(z,add(le(2,x),y)) </intension>");
-        assertThat(instance.csp().getConstraints().iterator().next()).isInstanceOf(PredicateConstraint.class);
+        assertThat(instance.csp().getConstraints().iterator().next()).isInstanceOf(NaryTuplesConstraint.class);
         Set<Assignment> solutions = solutions(instance.csp());
         assertThat(solutions).isNotEmpty();
         for (Assignment a : solutions) {
@@ -4004,7 +4032,7 @@ class Xcsp3ParserTest {
                 "<intension> ne(and(ne(x,y),or(eq(x,1),eq(y,2))),b) </intension>");
         // The outer operator is ne, which routes to the dedicated disequality constraint rather
         // than BinaryComparatorConstraint -- see BinaryComparatorConstraint#of.
-        assertThat(instance.csp().getConstraints()).anyMatch(c -> c instanceof BinaryNotEqualsConstraint);
+        assertThat(instance.csp().getConstraints()).anyMatch(c -> c instanceof NaryTuplesConstraint);
         Set<Assignment> solutions = solutions(instance.csp());
         assertThat(solutions).isNotEmpty();
         for (Assignment a : solutions) {
@@ -4022,7 +4050,7 @@ class Xcsp3ParserTest {
         Xcsp3Instance instance = parseXml(
                 "<var id=\"x\"> 0..2 </var><var id=\"y\"> 0..2 </var><var id=\"b\"> 0..1 </var>",
                 "<intension> eq(and(ne(x,y),eq(x,1)),b) </intension>");
-        assertThat(instance.csp().getConstraints()).anyMatch(c -> c instanceof BinaryComparatorConstraint);
+        assertThat(instance.csp().getConstraints()).anyMatch(c -> c instanceof NaryTuplesConstraint);
         Set<Assignment> solutions = solutions(instance.csp());
         assertThat(solutions).isNotEmpty();
         for (Assignment a : solutions) {
@@ -4042,7 +4070,7 @@ class Xcsp3ParserTest {
         Xcsp3Instance instance = parseXml(
                 "<var id=\"x\"> 1..2 </var><var id=\"y\"> 1..2 </var><var id=\"w\"> 1..2 </var><var id=\"z\"> 0..10 </var>",
                 "<intension> lt(mul(x,y,w),z) </intension>");
-        assertThat(instance.csp().getConstraints().iterator().next()).isInstanceOf(PredicateConstraint.class);
+        assertThat(instance.csp().getConstraints().iterator().next()).isInstanceOf(NaryTuplesConstraint.class);
         Set<Assignment> solutions = solutions(instance.csp());
         assertThat(solutions).isNotEmpty();
         for (Assignment a : solutions) {
@@ -4057,7 +4085,7 @@ class Xcsp3ParserTest {
         Xcsp3Instance instance = parseXml(
                 "<var id=\"x\"> 1..2 </var><var id=\"y\"> 1..2 </var><var id=\"w\"> 1..2 </var><var id=\"b\"> 0..8 </var>",
                 "<intension> ne(mul(x,y,w),b) </intension>");
-        assertThat(instance.csp().getConstraints().iterator().next()).isInstanceOf(PredicateConstraint.class);
+        assertThat(instance.csp().getConstraints().iterator().next()).isInstanceOf(NaryTuplesConstraint.class);
         Set<Assignment> solutions = solutions(instance.csp());
         assertThat(solutions).isNotEmpty();
         for (Assignment a : solutions) {
@@ -4085,7 +4113,10 @@ class Xcsp3ParserTest {
                 "<var id=\"x\"> 0..2 </var><var id=\"y\"> 0..2 </var><var id=\"a\"> 0..2 </var>"
                         + "<var id=\"p\"> 1..2 </var><var id=\"q\"> 1..2 </var><var id=\"r\"> 1..2 </var>",
                 "<intension> ne(and(ne(x,y),eq(x,1)),or(mul(p,q,r),eq(a,1))) </intension>");
-        assertThat(instance.csp().getConstraints().iterator().next()).isInstanceOf(PredicateConstraint.class);
+        // The left side's and(...) is now tabulated and so resolves, where it previously failed --
+        // leaving a reified table rather than the whole intension falling back. The semantics
+        // asserted below are what this test ultimately pins, and they are unchanged.
+        assertThat(instance.csp().getConstraints()).anyMatch(c -> c instanceof NaryTuplesConstraint);
         Set<Assignment> solutions = solutions(instance.csp());
         assertThat(solutions).isNotEmpty();
         for (Assignment assignment : solutions) {
@@ -4119,7 +4150,7 @@ class Xcsp3ParserTest {
         Xcsp3Instance instance = parseXml(
                 "<var id=\"x\"> 1..3 </var><var id=\"y\"> 1..3 </var>",
                 "<intension> eq(mul(x,2),mul(y,3)) </intension>");
-        assertThat(instance.csp().getConstraints().iterator().next()).isInstanceOf(PredicateConstraint.class);
+        assertThat(instance.csp().getConstraints().iterator().next()).isInstanceOf(NaryTuplesConstraint.class);
         Set<Assignment> solutions = solutions(instance.csp());
         assertThat(solutions).isNotEmpty();
         for (Assignment a : solutions) {
@@ -4161,7 +4192,7 @@ class Xcsp3ParserTest {
         Xcsp3Instance instance = parseXml(
                 "<var id=\"x\"> 0..9 </var><var id=\"y\"> 0..9 </var><var id=\"a\"> 1..3 </var><var id=\"b\"> 1..3 </var>",
                 "<intension> eq(x,y,mul(a,b)) </intension>");
-        assertThat(instance.csp().getConstraints().iterator().next()).isInstanceOf(PredicateConstraint.class);
+        assertThat(instance.csp().getConstraints().iterator().next()).isInstanceOf(NaryTuplesConstraint.class);
         Set<Assignment> found = solutions(instance.csp());
         assertThat(found).isNotEmpty();
         for (Assignment a : found) {
@@ -4379,5 +4410,99 @@ class Xcsp3ParserTest {
         Files.writeString(file, "<instance format=\"XCSP3\" type=\"CSP\"><variables><var id=\"x\"> 0..3 <</variables></instance>");
         assertThatThrownBy(() -> Xcsp3Parser.parse(file))
                 .isInstanceOf(IOException.class);
+    }
+
+    // ---- above the tabulation cap -------------------------------------------------------------
+    // TabulationRecognizer sits ahead of RelationSumRecognizer/ChannelRecognizer/AndRecognizer/
+    // OrRecognizer and claims any scope it can afford a table for, so the small-domain versions of
+    // the tests above now assert a NaryTuplesConstraint. These siblings widen the same models past
+    // MAX_INDEX_BITS so tabulation declines and the recognizer each one was written for runs
+    // instead. Structure only: the cap is checked before the Cartesian product is walked, so these
+    // cost a parse and nothing more, and the semantics are already pinned by the below-cap
+    // versions.
+
+    @Test void intensionSumOfRelations_constantTarget_aboveTabulationCap() throws IOException {
+        Xcsp3Instance instance = parseXml(
+                "<var id=\"x\"> 0..299 </var><var id=\"y\"> 0..299 </var>",
+                "<intension> eq(add(le(2,x),le(3,y)),1) </intension>");
+        assertThat(instance.csp().getConstraints()).anyMatch(c -> c instanceof LinearBooleanBoundConstraint);
+    }
+
+    @Test void intensionSumOfRelations_geOperatorSwapsAddToSecondOperand_aboveTabulationCap() throws IOException {
+        Xcsp3Instance instance = parseXml(
+                "<var id=\"x\"> 0..49 </var><var id=\"y\"> 0..49 </var><var id=\"z\"> 0..49 </var>",
+                "<intension> ge(add(eq(x,1),eq(y,1),eq(z,1)),2) </intension>");
+        assertThat(instance.csp().getConstraints()).anyMatch(c -> c instanceof LinearBooleanBoundConstraint);
+    }
+
+    @Test void intensionSumOfRelations_variableTarget_aboveTabulationCap() throws IOException {
+        Xcsp3Instance instance = parseXml(
+                "<var id=\"x\"> 0..49 </var><var id=\"y\"> 0..49 </var><var id=\"z\"> 0..49 </var>",
+                "<intension> eq(z,add(le(2,x),le(3,y))) </intension>");
+        assertThat(instance.csp().getConstraints()).anyMatch(c -> c instanceof LinearBooleanVariableConstraint);
+    }
+
+    @Test void intensionSumOfThreeRelations_aboveTabulationCap() throws IOException {
+        Xcsp3Instance instance = parseXml(
+                "<var id=\"x\"> 0..49 </var><var id=\"y\"> 0..49 </var><var id=\"z\"> 0..49 </var>",
+                "<intension> eq(add(le(2,x),le(2,y),le(2,z)),2) </intension>");
+        assertThat(instance.csp().getConstraints()).anyMatch(c -> c instanceof LinearBooleanBoundConstraint);
+    }
+
+    @Test void intensionChannelNegated_aboveTabulationCap() throws IOException {
+        Xcsp3Instance instance = parseXml(
+                "<var id=\"x\"> 0..49 </var><var id=\"y\"> 0..49 </var><var id=\"b\"> 0..49 </var>",
+                "<intension> ne(and(ne(x,y),or(eq(x,1),eq(y,2))),b) </intension>");
+        assertThat(instance.csp().getConstraints()).anyMatch(c -> c instanceof BinaryNotEqualsConstraint);
+    }
+
+    @Test void intensionChannelEquals_aboveTabulationCap() throws IOException {
+        Xcsp3Instance instance = parseXml(
+                "<var id=\"x\"> 0..49 </var><var id=\"y\"> 0..49 </var><var id=\"b\"> 0..49 </var>",
+                "<intension> eq(and(ne(x,y),eq(x,1)),b) </intension>");
+        assertThat(instance.csp().getConstraints()).anyMatch(c -> c instanceof BinaryComparatorConstraint<?>);
+    }
+
+    @Test void intensionChannelRightSideUnrecognizable_aboveTabulationCap() throws IOException {
+        Xcsp3Instance instance = parseXml(
+                // Every sub-scope must clear the cap, not just the whole tree's: OrRecognizer
+                // recurses, so a child like mul(p,q,r) is offered to tabulation on its own and
+                // would be claimed there while the outer node was still declining.
+                "<var id=\"x\"> 0..299 </var><var id=\"y\"> 0..299 </var><var id=\"a\"> 0..299 </var>"
+                        + "<var id=\"p\"> 1..300 </var><var id=\"q\"> 1..300 </var><var id=\"r\"> 1..300 </var>",
+                "<intension> ne(and(ne(x,y),eq(x,1)),or(mul(p,q,r),eq(a,1))) </intension>");
+        assertThat(instance.csp().getConstraints()).anyMatch(c -> c instanceof PredicateConstraint);
+    }
+
+    @Test void intensionIffOneSideCompoundSum_aboveTabulationCap() throws IOException {
+        Xcsp3Instance instance = parseXml(
+                "<var id=\"x\"> 0..49 </var><var id=\"y\"> 0..49 </var><var id=\"z\"> 0..49 </var>",
+                "<intension> iff(eq(x,1),eq(add(y,z),3)) </intension>");
+        assertThat(instance.csp().getConstraints())
+                .anyMatch(c -> c instanceof ReifiedConstraint rc && rc.getBody() instanceof SumBoundConstraint<?>);
+    }
+
+    @Test void intensionIffLeftSideCompoundSum_aboveTabulationCap() throws IOException {
+        Xcsp3Instance instance = parseXml(
+                "<var id=\"x\"> 0..49 </var><var id=\"y\"> 0..49 </var><var id=\"w\"> 0..49 </var>",
+                "<intension> iff(eq(add(x,y),1),eq(w,1)) </intension>");
+        assertThat(instance.csp().getConstraints())
+                .anyMatch(c -> c instanceof ReifiedConstraint rc && rc.getBody() instanceof SumBoundConstraint<?>);
+    }
+
+    @Test void intensionIffOperandConstantFirstCompoundSum_aboveTabulationCap() throws IOException {
+        Xcsp3Instance instance = parseXml(
+                "<var id=\"a\"> 0..19 </var><var id=\"b\"> 0..19 </var>"
+                        + "<var id=\"x\"> 0..19 </var><var id=\"y\"> 0..19 </var>",
+                "<intension> iff(le(add(a,b),x),eq(y,1)) </intension>");
+        assertThat(instance.csp().getConstraints())
+                .anyMatch(c -> c instanceof ReifiedConstraint rc && rc.getBody() instanceof SumVariableConstraint<?>);
+    }
+
+    @Test void intensionIffOperandBareVariable_aboveTabulationCap() throws IOException {
+        Xcsp3Instance instance = parseXml(
+                "<var id=\"x\"> 0..299 </var><var id=\"y\"> 0..299 </var>",
+                "<intension> iff(eq(x,1),y) </intension>");
+        assertThat(instance.csp().getConstraints()).anyMatch(c -> c instanceof BinaryComparatorConstraint<?>);
     }
 }

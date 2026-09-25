@@ -50,10 +50,25 @@ final class OrRecognizer implements ConstraintRecognizer {
      */
     private int orIndicatorCount;
 
+    /**
+     * When true, this instance only ever offers the auxiliary-free {@link #recognizeOrOfLiterals}
+     * fast path and declines every other {@code or}, leaving it to a later recognizer.
+     * <p>
+     * The registry holds two instances either side of {@link TabulationRecognizer} for exactly this
+     * reason: the fast path produces a {@link RelationLogicConstraint} with no auxiliary variables
+     * and must keep winning, while the decomposition below reifies every disjunct into a fresh
+     * indicator and is what tabulation exists to displace. Registering one instance before
+     * tabulation and one after is what separates them, since a single recognizer cannot be half
+     * ahead of another.
+     */
+    private final boolean literalsOnly;
+
     OrRecognizer(@NonNull Xcsp3CallbackHandler handler,
-                 @NonNull Function<XNode<XVarInteger>, Optional<Constraint>> dispatch) {
+                 @NonNull Function<XNode<XVarInteger>, Optional<Constraint>> dispatch,
+                 boolean literalsOnly) {
         this.handler = handler;
         this.dispatch = dispatch;
+        this.literalsOnly = literalsOnly;
     }
 
     @Override
@@ -66,6 +81,7 @@ final class OrRecognizer implements ConstraintRecognizer {
             Optional<Constraint> literalOr = recognizeOrOfLiterals((XNodeParent<XVarInteger>) node);
             if (literalOr.isPresent()) return literalOr;
         }
+        if (literalsOnly) return Optional.empty();
         return ConstraintRecognizer.resolveEachChild(node, dispatch).map(constraints -> {
             Set<Variable<Boolean>> indicators = new LinkedHashSet<>();
             for (Constraint c : constraints) {

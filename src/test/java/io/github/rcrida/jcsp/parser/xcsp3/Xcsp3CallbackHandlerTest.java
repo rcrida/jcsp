@@ -1,11 +1,16 @@
 package io.github.rcrida.jcsp.parser.xcsp3;
 
+import io.github.rcrida.jcsp.assignments.Assignment;
+import io.github.rcrida.jcsp.constraints.Constraint;
 import io.github.rcrida.jcsp.constraints.Operator;
 import io.github.rcrida.jcsp.variables.Variable;
 import org.junit.jupiter.api.Test;
 import org.xcsp.common.Condition;
 import org.xcsp.common.Types.TypeExpr;
 import org.xcsp.common.Types.TypeFlag;
+import org.xcsp.common.predicates.XNode;
+import io.github.rcrida.jcsp.constraints.unary.UnaryPredicateConstraint;
+import java.util.List;
 import org.xcsp.common.predicates.XNodeLeaf;
 import org.xcsp.common.predicates.XNodeParent;
 import org.xcsp.parser.entries.XVariables.XVarInteger;
@@ -279,5 +284,31 @@ class Xcsp3CallbackHandlerTest {
     @Test void combineVariablePlusConstant_variablePresentConstantAbsent_declines() {
         Variable<Integer> v = Variable.Factory.INSTANCE.create("combine_v");
         assertThat(Xcsp3CallbackHandler.combineVariablePlusConstant(Optional.of(v), Optional.empty())).isEmpty();
+    }
+
+    @Test void genericIntensionConstraint_singleVariableAboveTabulationCap_isUnaryPredicate() {
+        // The one-variable arm of the generic fallback. Reaching it needs a tree no recognizer
+        // claims AND a scope TabulationRecognizer declines: mul(x,x,x) is a cube, which
+        // ProductRecognizer refuses because its factor set cannot hold one variable three times,
+        // and 4096 values put the table's support index over the ceiling.
+        XVarInteger x = XcspTestNodes.var("x", 0, 4095);
+        Xcsp3CallbackHandler handler = XcspTestNodes.handlerWith(x);
+        XNode<XVarInteger> cube = new XNodeParent<>(TypeExpr.MUL,
+                List.of(new XNodeLeaf<>(TypeExpr.VAR, x),
+                        new XNodeLeaf<>(TypeExpr.VAR, x),
+                        new XNodeLeaf<>(TypeExpr.VAR, x)));
+        XNodeParent<XVarInteger> tree =
+                new XNodeParent<>(TypeExpr.EQ, cube, new XNodeLeaf<>(TypeExpr.LONG, 8L));
+
+        handler.buildCtrIntension("c0", new XVarInteger[]{x}, tree);
+
+        Constraint built = handler.toInstance().csp().getConstraints().iterator().next();
+        assertThat(built).isInstanceOf(UnaryPredicateConstraint.class);
+        // Evaluate it, not just its type: the predicate is a lambda closing over the variable, and
+        // only invoking it proves the fallback wires the right variable into the right expression.
+        Variable<Integer> variable = handler.toInstance().csp().getVariableDomains().keySet().stream()
+                .map(v -> (Variable<Integer>) v).findFirst().orElseThrow();
+        assertThat(built.isSatisfiedBy(Assignment.of(Map.of(variable, 2)))).isTrue();
+        assertThat(built.isSatisfiedBy(Assignment.of(Map.of(variable, 3)))).isFalse();
     }
 }
