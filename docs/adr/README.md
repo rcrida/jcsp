@@ -94,3 +94,4 @@ section instead.
 | [0030](0030-nogood-learning-is-not-cdcl.md) | Nogood learning is not CDCL, and the gap explains why it does not pay | Accepted |
 | [0031](0031-domain-overlays-instead-of-whole-map-copies.md) | Overlay the narrowings instead of copying the whole domain map; views and a div/mod propagator both target the wrong cost | Accepted |
 | [0032](0032-adaptive-weight-reset-on-stagnant-restarts.md) | Reset dom/wdeg weights after 32 restarts without progress, so restarts stop being variations on one doomed ordering | Accepted |
+| [0033](0033-search-space-metrics-that-mean-something.md) | Replace the one-node search-space snapshot with a stable root figure and a depth-first progress estimate | Accepted |

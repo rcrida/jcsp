@@ -177,7 +177,12 @@ public class DomWdegLubySearch implements Solver {
         long deadline = limits.deadlineNanos();
         int deepestSeen = 0;
         int stagnantRestarts = 0;
+        // Fallback for a directly-constructed solver: in the full chain PropagationFixpointSolver
+        // has already recorded the post-preprocessing figure, and first-write-wins keeps it.
+        statistics.updateRootSearchSpace(csp.getSearchSpace());
+        SearchProgress progress = new SearchProgress();
         for (int k = 1; k <= maxRestarts; k++) {
+            progress.reset();
             if (phaseMemory.bestDepth() > deepestSeen) {
                 deepestSeen = phaseMemory.bestDepth();
                 stagnantRestarts = 0;
@@ -192,7 +197,7 @@ public class DomWdegLubySearch implements Solver {
             int[] failures = {0};
             try {
                 Assignment root = Assignment.builder().statistics(statistics).listener(listener).cancellation(cancellation).build();
-                Optional<Assignment> result = searchOne(csp, root, selector, failures, budget, deadline);
+                Optional<Assignment> result = searchOne(csp, root, selector, failures, budget, deadline, 1.0, progress);
                 if (result.isPresent()) {
                     log.info("dom/wdeg+Luby: solution found at restart {}", k);
                     return result;
@@ -208,6 +213,10 @@ public class DomWdegLubySearch implements Solver {
                 throw new LimitExceededException(statistics);
             } catch (SolverCancelledException e) {
                 log.info("dom/wdeg+Luby: cancelled at restart {}", k);
+                // Also recorded here because cancellation can be detected inside inference rather
+                // than at this class's own check; first-write-wins keeps whichever fired first.
+                statistics.getRootSearchSpace()
+                        .ifPresent(root -> statistics.updateRemainingSearchSpace(progress.remainingOf(root)));
                 throw e;
             }
         }
@@ -287,7 +296,9 @@ public class DomWdegLubySearch implements Solver {
                                            @NonNull DomWdegVariableSelector selector,
                                            int[] failures,
                                            long budget,
-                                           long deadline) {
+                                           long deadline,
+                                           double weight,
+                                           SearchProgress progress) {
         if (assignment.isComplete(csp)) {
             listener.onSolutionFound(assignment);
             return Optional.of(assignment);
@@ -295,11 +306,14 @@ public class DomWdegLubySearch implements Solver {
         Variable<?> variable = selector.select(csp, assignment);
         List<Object> candidates = phaseMemory.prioritise(variable,
                 (List<Object>) domainValuesOrderer.order(csp, variable, assignment).toList());
+        double childWeight = weight / candidates.size();
         for (Object value : candidates) {
             Assignment next = assignment.withValue((Variable<Object>) variable, value);
             switch (limits.checkStop(cancellation, next.getStatistics().getNodesExplored(), deadline)) {
                 case CANCELLED -> {
                     statistics.updateCurrentSearchSpace(csp.getSearchSpace());
+                    statistics.getRootSearchSpace()
+                            .ifPresent(root -> statistics.updateRemainingSearchSpace(progress.remainingOf(root)));
                     throw new SolverCancelledException(statistics);
                 }
                 case LIMIT_EXCEEDED -> throw LimitsExceeded.INSTANCE;
@@ -310,16 +324,20 @@ public class DomWdegLubySearch implements Solver {
                 next.getStatistics().incrementBacktracks();
                 selector.recordConflict(variable);
                 listener.onBacktrack(variable, next);
+                progress.complete(childWeight);
                 continue;
             }
             Optional<ConstraintSatisfactionProblem> inferred = inferOrExplain(cspWithNogoods, variable, next, selector);
             if (inferred.isEmpty()) {
+                progress.complete(childWeight);
                 if (++failures[0] >= budget) throw BudgetExceeded.INSTANCE;
                 continue;
             }
             phaseMemory.recordIfDeepest(next.getValues());
-            Optional<Assignment> result = searchOne(inferred.get(), next, selector, failures, budget, deadline);
+            Optional<Assignment> result =
+                    searchOne(inferred.get(), next, selector, failures, budget, deadline, childWeight, progress);
             if (result.isPresent()) return result;
+            progress.complete(childWeight);
         }
         return Optional.empty();
     }

@@ -209,6 +209,20 @@ try {
 
 `getSolutions()` truncates the stream silently when a limit is hit — useful for anytime search where partial results are acceptable.
 
+**How far did it get?** When a solve stops early, `Statistics` reports two figures. `getRootSearchSpace()` is the problem's search space once preprocessing propagation has converged, before any search node — stable across runs, so it answers "how much did propagation shrink this problem". `getRemainingSearchSpace()` scales that by the unexplored fraction of the depth-first descent in progress when the solve stopped, so their ratio is real progress:
+
+```java
+stats.getRootSearchSpace().ifPresent(root ->
+    stats.getRemainingSearchSpace().ifPresent(left ->
+        System.out.printf("%s%% of the tree still unexplored%n",
+            new BigDecimal(left).multiply(BigDecimal.valueOf(100))
+                    .divide(new BigDecimal(root), 6, RoundingMode.HALF_UP))));
+```
+
+On the bundled `Steiner3-08` instance that prints `99.999995%` after twelve seconds and 1.6 million nodes — the search had barely started, which the node count alone does not convey. On the satisfaction chain the estimate covers the restart in progress, since restarts re-descend from the root and keep no record of what earlier ones refuted.
+
+`getCurrentSearchSpace()` is **deprecated since 3.1.0, for removal in 4.0.0**: it sampled whichever single node the search happened to occupy when the clock stopped, which is not a measure of remaining work — three runs of one build on that same instance reported 216, 746,496 and 10,077,696.
+
 **Cancellation** — a `Cancellation` token lets a caller stop a solve from *outside*, e.g. from a `SolverListener` callback that observes something worth stopping for:
 
 ```java
@@ -414,7 +428,7 @@ InitialAssignmentFactory factory = FallbackAssignmentFactory.builder()
 <dependency>
     <groupId>io.github.rcrida</groupId>
     <artifactId>jcsp</artifactId>
-    <version>3.0.0</version>
+    <version>3.1.0</version>
 </dependency>
 ```
 

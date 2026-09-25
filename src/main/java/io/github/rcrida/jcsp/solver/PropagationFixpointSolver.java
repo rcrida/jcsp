@@ -88,6 +88,7 @@ public class PropagationFixpointSolver extends SolverDecorator {
             }
         }
         log.debug("PropagationFixpoint converged; domain-sum={}", FixpointPropagation.domainSum(current));
+        statistics.updateRootSearchSpace(current.getSearchSpace());
         return Optional.of(current);
     }
 }

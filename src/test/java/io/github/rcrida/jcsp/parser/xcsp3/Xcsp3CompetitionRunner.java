@@ -6,6 +6,8 @@ import java.io.ByteArrayInputStream;
 import java.io.File;
 import java.io.IOException;
 import java.io.PrintStream;
+import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.net.URISyntaxException;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
@@ -94,7 +96,7 @@ public final class Xcsp3CompetitionRunner {
         return Paths.get(resource.toURI());
     }
 
-    private static final String ROW_FORMAT = "%-32s %-8s %-20s %-10s %-24s %-14s %-14s %s";
+    private static final String ROW_FORMAT = "%-32s %-8s %-20s %-10s %-24s %-14s %-14s %-14s %s";
 
     static void run(Path directory, long timeLimitSeconds, PrintStream out) throws IOException, InterruptedException {
         List<Path> instances;
@@ -102,7 +104,7 @@ public final class Xcsp3CompetitionRunner {
             instances = files.filter(Xcsp3CompetitionRunner::isXcsp3Instance).sorted().toList();
         }
         String header = ROW_FORMAT.formatted("Instance", "Time(s)", "Result", "Check", "Model (xcsp3->csp)",
-                "Space Before", "Space After", "Statistics");
+                "Space Before", "Space At Root", "Space Left", "Statistics");
         out.println(header);
         out.println("-".repeat(header.length()));
         int solved = 0, unknown = 0, failed = 0, checkMismatches = 0;
@@ -110,7 +112,8 @@ public final class Xcsp3CompetitionRunner {
             Result result = runOne(instance, timeLimitSeconds);
             out.println(ROW_FORMAT.formatted(instanceName(instance), "%.2f".formatted(result.elapsedSeconds()),
                     result.summary(), result.crossCheck(), result.model(),
-                    formatSearchSpace(result.searchSpaceBefore()), formatSearchSpace(result.searchSpaceAfter()),
+                    formatSearchSpace(result.searchSpaceBefore()), formatSearchSpace(result.searchSpaceAtRoot()),
+                    formatSpaceLeftPercent(result.searchSpaceAtRoot(), result.searchSpaceLeft()),
                     result.statsLine()));
             switch (category(result.summary())) {
                 case SOLVED -> solved++;
@@ -134,7 +137,7 @@ public final class Xcsp3CompetitionRunner {
     }
 
     private record Result(double elapsedSeconds, String summary, String statsLine, String crossCheck, String model,
-                           String searchSpaceBefore, String searchSpaceAfter) {}
+                           String searchSpaceBefore, String searchSpaceAtRoot, String searchSpaceLeft) {}
 
     /**
      * Compacts a raw (potentially very long -- {@link io.github.rcrida.jcsp.ConstraintSatisfactionProblem#getSearchSpace()}
@@ -148,6 +151,24 @@ public final class Xcsp3CompetitionRunner {
         }
         String mantissa = raw.charAt(0) + "." + raw.substring(1, 4);
         return mantissa + "e" + (raw.length() - 1);
+    }
+
+    /**
+     * Unexplored space as a percentage of the space at the root, which is the readable form: both
+     * figures routinely run to twenty-plus digits and {@link #formatSearchSpace} compacts them to
+     * the same three significant figures, hiding exactly the difference this column exists to show.
+     * Six decimal places because a hard instance sits very close to 100% -- {@code Steiner3-08}
+     * leaves 99.999902% after 20 seconds, and fewer places would round that to a flat 100%.
+     */
+    private static String formatSpaceLeftPercent(String atRoot, String left) {
+        if (!atRoot.chars().allMatch(Character::isDigit) || !left.chars().allMatch(Character::isDigit)) {
+            return "(no search-space)";
+        }
+        BigDecimal root = new BigDecimal(atRoot);
+        if (root.signum() == 0) return "(no search-space)";
+        return new BigDecimal(left).multiply(BigDecimal.valueOf(100))
+                .divide(root, 6, RoundingMode.HALF_UP)
+                .toPlainString() + "%";
     }
 
     private enum Category {SOLVED, UNKNOWN, FAILED}
@@ -196,12 +217,13 @@ public final class Xcsp3CompetitionRunner {
         if (!finished) {
             process.destroyForcibly();
             return new Result(elapsedSeconds, "HUNG (killed after " + elapsedSeconds + "s)", "(no stats -- process killed)", "-", model,
-                    "(no search-space)", "(no search-space)");
+                    "(no search-space)", "(no search-space)", "(no search-space)");
         }
         String output = new String(process.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
         String summary = firstResultLine(output);
         return new Result(elapsedSeconds, summary, statsLine(output), crossCheck(instance, summary, output), model,
-                cLine(output, "c search-space-before: "), cLine(output, "c search-space-after: "));
+                cLine(output, "c search-space-before: "), cLine(output, "c search-space-at-root: "),
+                cLine(output, "c search-space-remaining: "));
     }
 
     /**
@@ -289,8 +311,12 @@ public final class Xcsp3CompetitionRunner {
      * Picks {@code prefix}'s own {@code c} line out of a captured child transcript, stripped of the
      * prefix itself -- unlike {@link #statsLine}, which keeps its {@code "c stats: "} prefix since
      * it's displayed as-is in the table's own labeled Statistics column. Used for {@link
-     * Xcsp3ProblemRunner#solve}'s two {@code c search-space-before:}/{@code c search-space-after:}
-     * lines, each destined for its own already-labeled table column.
+     * Xcsp3ProblemRunner#solve}'s {@code c search-space-before:}, {@code c search-space-at-root:}
+     * and {@code c search-space-remaining:} lines, each destined for its own already-labeled table
+     * column. Deliberately not {@code c search-space-after:}, which is deprecated for removal in
+     * 4.0.0 — it samples one arbitrary search node rather than measuring remaining work, so it is
+     * useless for the before/after comparisons this table exists to support (see
+     * {@code docs/adr/0033-search-space-metrics-that-mean-something.md}).
      */
     private static String cLine(String output, String prefix) {
         return output.lines()

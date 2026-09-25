@@ -39,6 +39,29 @@ public class StatisticsTest {
     }
 
     @Test
+    void initialRootAndRemainingSearchSpacesAreEmpty() {
+        val statistics = new Statistics();
+        assertThat(statistics.getRootSearchSpace()).isEmpty();
+        assertThat(statistics.getRemainingSearchSpace()).isEmpty();
+    }
+
+    @Test
+    void updateRootSearchSpace_firstCallWins_soPreprocessingBeatsATerminalSolversFallback() {
+        val statistics = new Statistics();
+        statistics.updateRootSearchSpace(BigInteger.valueOf(500));
+        statistics.updateRootSearchSpace(BigInteger.valueOf(999));
+        assertThat(statistics.getRootSearchSpace()).contains(BigInteger.valueOf(500));
+    }
+
+    @Test
+    void updateRemainingSearchSpace_firstCallWins_soTheEstimateAtCancellationSurvivesUnwinding() {
+        val statistics = new Statistics();
+        statistics.updateRemainingSearchSpace(BigInteger.valueOf(30));
+        statistics.updateRemainingSearchSpace(BigInteger.valueOf(1));
+        assertThat(statistics.getRemainingSearchSpace()).contains(BigInteger.valueOf(30));
+    }
+
+    @Test
     void incrementNodesExplored() {
         val statistics = new Statistics();
         statistics.incrementNodesExplored();

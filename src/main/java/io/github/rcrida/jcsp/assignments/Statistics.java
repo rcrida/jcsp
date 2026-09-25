@@ -69,7 +69,26 @@ import java.util.concurrent.atomic.AtomicReference;
  *       @ToString.Exclude}) since {@code Xcsp3ProblemRunner} (and any other caller) already has
  *       its own dedicated, clearer place to report it (a separate {@code c search-space-after:}
  *       line) rather than folding a potentially very large number into the same line as the other
- *       seven counters.</li>
+ *       seven counters. <b>Deprecated since 3.1.0, for removal in 4.0.0</b>: it samples the one
+ *       node search happened to occupy when the clock stopped, which is not a measure of remaining
+ *       work — three runs of one build on {@code Steiner3-08} reported 216, 746,496 and 10,077,696.
+ *       The two fields below replace it.</li>
+ *   <li>{@link #rootSearchSpace} — the whole problem's search space once the chain's one-time
+ *       preprocessing fixpoint converged, recorded before any search node is explored, so it is
+ *       stable across runs of the same instance and answers "how much did propagation shrink this
+ *       problem". Written by {@link io.github.rcrida.jcsp.solver.PropagationFixpointSolver}, with
+ *       {@link io.github.rcrida.jcsp.solver.DomWdegLubySearch} recording its own root as a fallback
+ *       for a directly-constructed solver that never ran the chain's preprocessing.</li>
+ *   <li>{@link #remainingSearchSpace} — {@link #rootSearchSpace} scaled by the unexplored fraction
+ *       of the depth-first descent in progress when an incomplete solve stopped. Recorded by both
+ *       terminal solvers: {@code DomWdegLubySearch} accumulates directly in its recursion, and
+ *       {@code BranchAndBoundSolver}, whose search is a lazy {@link java.util.stream.Stream},
+ *       attaches the same accounting to each child sub-stream's {@link
+ *       java.util.stream.Stream#onClose} — {@code flatMap} consumes a mapped stream fully and then
+ *       closes it, so that fires exactly when a child subtree is finished with. On the satisfaction
+ *       chain it is scoped to the restart in progress, since restarts re-descend from the root and
+ *       keep no record of what earlier ones refuted, so their explored fractions overlap and cannot
+ *       be summed.</li>
  * </ul>
  */
 @Value
@@ -82,6 +101,8 @@ public class Statistics {
     @Getter(AccessLevel.NONE) AtomicLong nogoodsLearned = new AtomicLong();
     @Getter(AccessLevel.NONE) AtomicLong nogoodRejections = new AtomicLong();
     @Getter(AccessLevel.NONE) @ToString.Exclude AtomicReference<BigInteger> currentSearchSpace = new AtomicReference<>();
+    @Getter(AccessLevel.NONE) @ToString.Exclude AtomicReference<BigInteger> rootSearchSpace = new AtomicReference<>();
+    @Getter(AccessLevel.NONE) @ToString.Exclude AtomicReference<BigInteger> remainingSearchSpace = new AtomicReference<>();
 
     public long getNodesExplored() {
         return nodesExplored.get();
@@ -147,7 +168,15 @@ public class Statistics {
      * {@link AtomicReference} directly the way every other field's generated getter does — this one
      * field is nullable-by-design rather than always-meaningful, so {@link Optional} is the honest
      * shape for callers.
+     *
+     * @deprecated this samples one arbitrary search node rather than measuring remaining work, so
+     *             two runs of one instance can differ by many orders of magnitude — measured on
+     *             {@code Steiner3-08}, three runs of the same build reported 216, 746,496 and
+     *             10,077,696. Use {@link #getRootSearchSpace} for a figure that is stable across
+     *             runs, or {@link #getRemainingSearchSpace} for unexplored work. Scheduled for
+     *             removal in 4.0.0.
      */
+    @Deprecated(since = "3.1.0", forRemoval = true)
     public Optional<BigInteger> getCurrentSearchSpace() {
         return Optional.ofNullable(currentSearchSpace.get());
     }
@@ -172,9 +201,52 @@ public class Statistics {
      * io.github.rcrida.jcsp.solver.IndependentSubproblemSolver} runs multiple subproblems
      * concurrently sharing one {@link Statistics} instance and more than one independently detects
      * cancellation.
+     *
+     * @deprecated paired with {@link #getCurrentSearchSpace}; see that method for why the figure
+     *             misleads and what to read instead. Scheduled for removal in 4.0.0.
      */
+    @Deprecated(since = "3.1.0", forRemoval = true)
     public void updateCurrentSearchSpace(BigInteger searchSpace) {
         currentSearchSpace.compareAndSet(null, searchSpace);
+    }
+
+    /**
+     * Search space of the whole problem once the chain's one-time preprocessing fixpoint has
+     * converged, before any search node is explored — {@link Optional#empty()} if preprocessing
+     * never completed (it proved infeasibility, or was cancelled).
+     * <p>
+     * Unlike {@link #getCurrentSearchSpace}, this does not depend on where a solve happened to be
+     * interrupted, so it is stable across runs of the same instance and is the honest answer to
+     * "how much did propagation shrink this problem".
+     */
+    public Optional<BigInteger> getRootSearchSpace() {
+        return Optional.ofNullable(rootSearchSpace.get());
+    }
+
+    /** Records {@link #getRootSearchSpace}; first write wins, so a decomposed subproblem solved
+     *  later cannot overwrite the whole problem's figure. */
+    public void updateRootSearchSpace(BigInteger searchSpace) {
+        rootSearchSpace.compareAndSet(null, searchSpace);
+    }
+
+    /**
+     * Estimated search space still unexplored by the restart in progress when an incomplete solve
+     * stopped, or {@link Optional#empty()} when no such estimate was recorded.
+     * <p>
+     * Scoped to the current restart, not the whole solve: a restart abandons its subtree and
+     * re-descends from the root, and with nogood learning off (the default — see
+     * {@code docs/adr/0030-nogood-learning-is-not-cdcl.md}) nothing records which regions earlier
+     * restarts refuted, so the explored fractions of separate restarts overlap and cannot be summed.
+     * Read it as "how far into this descent the search had got", not as total work remaining.
+     */
+    public Optional<BigInteger> getRemainingSearchSpace() {
+        return Optional.ofNullable(remainingSearchSpace.get());
+    }
+
+    /** Records {@link #getRemainingSearchSpace}; first write wins, matching
+     *  {@link #updateCurrentSearchSpace}'s deepest-snapshot rule. */
+    public void updateRemainingSearchSpace(BigInteger searchSpace) {
+        remainingSearchSpace.compareAndSet(null, searchSpace);
     }
 
     void add(Statistics other) {

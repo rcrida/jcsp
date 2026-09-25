@@ -184,13 +184,19 @@ public class BranchAndBoundSolver implements Solver {
         log.info("Search space before branch-and-bound = {}", csp.getSearchSpace());
         double[] incumbent = {Double.MAX_VALUE};
         long deadline = limits.deadlineNanos();
-        return search(csp, Assignment.builder().statistics(statistics).listener(listener).cancellation(cancellation).build(), incumbent, deadline);
+        // Fallback for a directly-constructed solver; in the full chain PropagationFixpointSolver
+        // has already recorded the post-preprocessing figure and first-write-wins keeps it.
+        statistics.updateRootSearchSpace(csp.getSearchSpace());
+        return search(csp, Assignment.builder().statistics(statistics).listener(listener).cancellation(cancellation).build(),
+                incumbent, deadline, 1.0, new SearchProgress());
     }
 
     private Stream<Assignment> search(ConstraintSatisfactionProblem csp,
                                        Assignment assignment,
                                        double[] incumbent,
-                                       long deadline) {
+                                       long deadline,
+                                       double weight,
+                                       SearchProgress progress) {
         if (assignment.isComplete(csp) || isDiscreteComplete(csp, assignment)) {
             return resolveComplete(csp, assignment, incumbent);
         }
@@ -198,14 +204,16 @@ public class BranchAndBoundSolver implements Solver {
         if (cutCsp == null) {
             return Stream.empty();
         }
-        return searchCut(cutCsp, assignment, incumbent, deadline);
+        return searchCut(cutCsp, assignment, incumbent, deadline, weight, progress);
     }
 
     /** {@link #search}'s continuation once the objective cut has been folded into {@code csp}. */
     private Stream<Assignment> searchCut(ConstraintSatisfactionProblem csp,
                                          Assignment assignment,
                                          double[] incumbent,
-                                         long deadline) {
+                                         long deadline,
+                                         double weight,
+                                         SearchProgress progress) {
         Variable<?> variable;
         if (objective instanceof LinearObjective linearObjective) {
             Optional<LpBound> bound = LpModelBuilder.solve(csp, linearObjective, lpModelCacheKey);
@@ -221,7 +229,7 @@ public class BranchAndBoundSolver implements Solver {
             variable = unassignedVariableSelector.select(csp, assignment);
         }
         requireDiscrete(csp, variable);
-        return searchValues(variable, csp, assignment, incumbent, deadline);
+        return searchValues(variable, csp, assignment, incumbent, deadline, weight, progress);
     }
 
     /**
@@ -477,11 +485,14 @@ public class BranchAndBoundSolver implements Solver {
                                                  ConstraintSatisfactionProblem csp,
                                                  Assignment assignment,
                                                  double[] incumbent,
-                                                 long deadline) {
+                                                 long deadline,
+                                                 double weight,
+                                                 SearchProgress progress) {
         ConstraintSatisfactionProblem cspWithNogoods = nogoodStore.apply(csp);
         @SuppressWarnings("unchecked")
         List<T> candidates = (List<T>) phaseMemory.prioritise(variable,
                 (List<Object>) domainValuesOrderer.order(csp, variable, assignment).toList());
+        double childWeight = weight / candidates.size();
         return candidates.stream()
                 .map(value -> assignment.withValue(variable, value))
                 .filter(next -> {
@@ -489,24 +500,32 @@ public class BranchAndBoundSolver implements Solver {
                             != SolverLimits.StopReason.NONE) {
                         if (cancellation.isCancelled()) {
                             statistics.updateCurrentSearchSpace(csp.getSearchSpace());
+                            statistics.getRootSearchSpace().ifPresent(
+                                    root -> statistics.updateRemainingSearchSpace(progress.remainingOf(root)));
                         }
+                        progress.complete(childWeight);
                         return false;
                     }
                     if (!next.isConsistentAmong(cspWithNogoods.getConstraintsTouching(variable))) {
                         next.getStatistics().incrementBacktracks();
                         listener.onBacktrack(variable, next);
+                        progress.complete(childWeight);
                         return false;
                     }
                     return true;
                 })
                 .flatMap(next -> {
+                    Stream<Assignment> child;
                     try {
-                        return inferOrExplain(cspWithNogoods, variable, next)
-                                .map(inferred -> search(inferred, next, incumbent, deadline))
+                        child = inferOrExplain(cspWithNogoods, variable, next)
+                                .map(inferred -> search(inferred, next, incumbent, deadline, childWeight, progress))
                                 .orElseGet(Stream::empty);
                     } catch (SolverCancelledException e) {
-                        return Stream.empty();
+                        child = Stream.empty();
                     }
+                    // flatMap consumes each mapped stream fully and then closes it (try-with-resources
+                    // in ReferencePipeline), so this fires exactly when this child's subtree is done.
+                    return child.onClose(() -> progress.complete(childWeight));
                 });
     }
 

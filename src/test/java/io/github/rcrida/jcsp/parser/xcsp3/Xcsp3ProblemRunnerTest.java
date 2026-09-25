@@ -162,7 +162,10 @@ class Xcsp3ProblemRunnerTest {
         assertThat(lines.get(0)).isEqualTo("c search-space-before: 256");
         assertThat(lines.get(1)).isEqualTo("s UNKNOWN");
         assertThat(lines.get(2)).startsWith("c stats: Statistics(");
-        assertThat(lines.get(3)).isEqualTo("c search-space-after: 256");
+        // Asserted by content rather than index: a cancelled solve reports the stable
+        // post-preprocessing figure and the deprecated node sample, plus, when search actually
+        // began, the unexplored-fraction estimate.
+        assertThat(lines).contains("c search-space-at-root: 256", "c search-space-after: 256");
     }
 
     // ---- optimization chain -------------------------------------------------------------------------------------

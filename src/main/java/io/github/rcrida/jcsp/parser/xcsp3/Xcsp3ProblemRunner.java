@@ -112,6 +112,8 @@ public final class Xcsp3ProblemRunner {
             solveOptimization(instance, cancellation, listener, restartRandomization, stats, out);
         }
         out.println("c stats: " + stats);
+        stats.getRootSearchSpace().ifPresent(space -> out.println("c search-space-at-root: " + space));
+        stats.getRemainingSearchSpace().ifPresent(space -> out.println("c search-space-remaining: " + space));
         stats.getCurrentSearchSpace().ifPresent(searchSpace -> out.println("c search-space-after: " + searchSpace));
     }
 
