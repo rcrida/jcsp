@@ -4,6 +4,7 @@ import io.github.rcrida.jcsp.assignments.Assignment;
 import io.github.rcrida.jcsp.consistency.Propagatable;
 import io.github.rcrida.jcsp.constraints.NumericBounds;
 import io.github.rcrida.jcsp.constraints.Operator;
+import io.github.rcrida.jcsp.domains.DiscreteDomain;
 import io.github.rcrida.jcsp.domains.Domain;
 import io.github.rcrida.jcsp.variables.Variable;
 import lombok.EqualsAndHashCode;
@@ -14,6 +15,7 @@ import org.jspecify.annotations.NonNull;
 import java.util.ArrayList;
 import java.util.EnumSet;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -71,9 +73,10 @@ public class ProductVariableConstraint<N extends Number> extends NaryConstraint 
     }
 
     /**
-     * {@link ProductConstraint#propagate}'s exact interval-arithmetic narrowing (only for {@code
-     * EQ}/{@code LEQ}/{@code GEQ}, only when every factor's domain has a strictly positive
-     * minimum), generalised two ways: {@code target}'s <em>current</em> bounds stand in for the
+     * {@link ProductConstraint#propagate}'s narrowing — {@link ProductPropagation}'s signed interval
+     * arithmetic for every operator it handles ({@code EQ}/{@code LEQ}/{@code GEQ}), with the
+     * strictly-positive-factor restriction applying only to {@code LEQ}/{@code GEQ} — generalised
+     * two ways: {@code target}'s <em>current</em> bounds stand in for the
      * fixed {@code bound} when narrowing the factors, and -- unlike {@link ProductConstraint},
      * which has no target to narrow -- {@link #target} itself is also narrowed to {@code
      * [productMin, productMax]}, the same "{@code leqLike} raises the lower bound, {@code geqLike}
@@ -94,15 +97,16 @@ public class ProductVariableConstraint<N extends Number> extends NaryConstraint 
         int n = vars.size();
         double[] mins = new double[n];
         double[] maxs = new double[n];
+        boolean allPositive = true;
         for (int i = 0; i < n; i++) {
             Domain<N> dom = (Domain<N>) domains.get(vars.get(i));
             mins[i] = NumericBounds.min(dom);
             maxs[i] = NumericBounds.max(dom);
-            if (mins[i] <= 0) return Optional.of(Map.of());
+            allPositive &= mins[i] > 0;
         }
 
-        double productMin = 1.0, productMax = 1.0;
-        for (int i = 0; i < n; i++) { productMin *= mins[i]; productMax *= maxs[i]; }
+        double[] product = ProductPropagation.range(mins, maxs);
+        double productMin = product[0], productMax = product[1];
 
         Domain<N> targetDomain = (Domain<N>) domains.get(target);
         double tLo = NumericBounds.min(targetDomain), tHi = NumericBounds.max(targetDomain);
@@ -112,9 +116,34 @@ public class ProductVariableConstraint<N extends Number> extends NaryConstraint 
         if (leqLike && productMin > tHi) return Optional.empty();
         if (geqLike && productMax < tLo) return Optional.empty();
 
+        if (operator == Operator.EQ && targetDomain instanceof DiscreteDomain<N> discreteTarget
+                && ProductPropagation.eqCoverageEligible(vars, domains)) {
+            return eqCoverage(vars, discreteTarget, domains);
+        }
+
         Map<Variable<?>, Domain<?>> updated = new HashMap<>();
         for (int i = 0; i < n; i++) {
             Domain<N> dom = (Domain<N>) domains.get(vars.get(i));
+
+            // EQ narrows from both sides at once: factor == target / (product of the others), which
+            // is sound for any signs once the divisor is known not to straddle zero.
+            if (operator == Operator.EQ) {
+                double[] others = ProductPropagation.rangeExcluding(mins, maxs, i);
+                if (ProductPropagation.straddlesZero(others)) continue;
+                double[] allowed = ProductPropagation.divide(tLo, tHi, others[0], others[1]);
+                Optional<Domain<N>> narrowed = NumericBounds.narrow(dom,
+                        Math.max(mins[i], allowed[0]), Math.min(maxs[i], allowed[1]));
+                if (narrowed.isPresent()) {
+                    if (narrowed.get().isEmpty()) return Optional.empty();
+                    updated.put(vars.get(i), narrowed.get());
+                }
+                continue;
+            }
+
+            // LEQ/GEQ stay gated on every factor being positive. Their one-sided clips read the
+            // complementary product's single favourable extreme, which only bounds a factor that
+            // cannot itself be negative -- otherwise the clip would cut values that do satisfy.
+            if (!allPositive) continue;
 
             // Upper-bound pass: product <= target's max -- clip each factor's max to tHi / othersMinProduct.
             if (leqLike) {
@@ -130,11 +159,12 @@ public class ProductVariableConstraint<N extends Number> extends NaryConstraint 
             if (geqLike) {
                 double newMin = tLo * maxs[i] / productMax;
                 if (newMin > mins[i]) {
-                    // newMin > mins[i] guarantees narrow returns present (same argument as
-                    // ProductConstraint#propagate); may be empty for discrete gap domains.
-                    Domain<N> raised = NumericBounds.narrow(dom, newMin, maxs[i]).orElseThrow();
-                    if (raised.isEmpty()) return Optional.empty();
-                    updated.put(vars.get(i), raised);
+                    // newMin > mins[i] guarantees narrow returns present, and the result is never
+                    // empty: tLo <= productMax (the guard above) puts newMin at or below maxs[i], so
+                    // the domain's own maximum always survives. Only EQ could empty it, by running
+                    // the clip above first and leaving dom narrower than maxs[i] -- and EQ now
+                    // returns before reaching here.
+                    updated.put(vars.get(i), NumericBounds.narrow(dom, newMin, maxs[i]).orElseThrow());
                 }
             }
         }
@@ -148,6 +178,48 @@ public class ProductVariableConstraint<N extends Number> extends NaryConstraint 
         }
 
         return Optional.of(updated);
+    }
+
+    /**
+     * Exact GAC for {@code product == target} over enumerable factor domains: keeps each factor
+     * value that participates in some combination whose product the target's domain admits, and
+     * narrows {@code target} to the products actually reachable.
+     * <p>
+     * Reaches what no bounds pass can when a factor's domain excludes zero but its hull does not --
+     * {@code {-1, 1}} being the motivating case, where dividing by the complementary factor's
+     * {@code [-1, 1]} hull is unbounded and every interval rule gives up.
+     */
+    @SuppressWarnings("unchecked")
+    private Optional<Map<Variable<?>, Domain<?>>> eqCoverage(List<Variable<N>> vars,
+                                                              DiscreteDomain<N> targetDomain,
+                                                              Map<Variable<?>, Domain<?>> domains) {
+        Set<Object> targetValues = new HashSet<>(targetDomain.toList());
+        ProductPropagation.Coverage<N> coverage = ProductPropagation.eqCoverage(vars, domains,
+                candidate -> containsNumerically(targetValues, candidate));
+        if (coverage == null) return Optional.empty();
+
+        Map<Variable<?>, Domain<?>> updated = ProductPropagation.updates();
+        for (int i = 0; i < vars.size(); i++) {
+            DiscreteDomain<N> dom = (DiscreteDomain<N>) domains.get(vars.get(i));
+            ProductPropagation.putIfNarrowed(updated, vars.get(i),
+                    ProductPropagation.retain(dom, coverage.supportedFactorValues().get(i)));
+        }
+        // Never empty: the sweep only reports products this target's own value set accepted, so a
+        // non-null coverage guarantees at least one target value keeps support.
+        Set<N> keepTargets = new LinkedHashSet<>();
+        for (N value : targetDomain.toList()) {
+            if (coverage.reachableProducts().contains(value.doubleValue())) keepTargets.add(value);
+        }
+        ProductPropagation.putIfNarrowed(updated, target, ProductPropagation.retain(targetDomain, keepTargets));
+        return Optional.of(updated);
+    }
+
+    /** Whether any of {@code values} equals {@code candidate} once widened to {@code double}. */
+    private static boolean containsNumerically(Set<Object> values, double candidate) {
+        for (Object value : values) {
+            if (((Number) value).doubleValue() == candidate) return true;
+        }
+        return false;
     }
 
     /**

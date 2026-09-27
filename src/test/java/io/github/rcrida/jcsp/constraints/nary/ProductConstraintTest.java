@@ -7,6 +7,7 @@ import io.github.rcrida.jcsp.domains.DiscreteDomain;
 import io.github.rcrida.jcsp.domains.Domain;
 import io.github.rcrida.jcsp.domains.IntRangeDomain;
 import io.github.rcrida.jcsp.domains.IntervalDomain;
+import io.github.rcrida.jcsp.domains.NumericDiscreteDomain;
 import io.github.rcrida.jcsp.solver.Solver;
 import io.github.rcrida.jcsp.variables.Variable;
 import org.junit.jupiter.api.Test;
@@ -295,5 +296,51 @@ public class ProductConstraintTest {
         // (1,12),(2,6),(3,4),(4,3),(6,2),(12,1)
         assertThat(solutions).hasSize(6);
         assertThat(solutions).allMatch(a -> a.getValue(x).orElseThrow() * a.getValue(y).orElseThrow() == 12);
+    }
+
+    // --- propagate: signed factors and coverage ------------------------------------------------
+
+    @Test void propagate_eq_complementaryProductStraddlesZero_leavesThatFactorAlone() {
+        // Narrowing x needs bound / y, and y's [-1,1] hull contains zero, so the quotient is
+        // unbounded. Continuous domains keep eqCoverage ineligible.
+        var result = ProductConstraint.of(Set.of(X, Y), Operator.EQ, 1.0).propagate(intervals(-1, 1, -1, 1));
+        assertThat(result).isPresent();
+        assertThat(result.get()).doesNotContainKeys(X, Y);
+    }
+
+    @Test void propagate_eq_boundAboveTheWholeProductRange_isInfeasible() {
+        // x * 2 == 100 needs x at 50, and [5,6]*[2,2] only reaches 12, so the range guard settles it
+        // before any per-factor division runs.
+        assertThat(ProductConstraint.of(Set.of(X, Y), Operator.EQ, 100.0).propagate(intervals(5, 6, 2, 2)))
+                .isEmpty();
+    }
+
+    @Test void propagate_eq_divisionEmptiesAGappedFactor_isInfeasible() {
+        // [1,10]*[2,2] spans [2,20] around the bound 6, so the range guard passes -- but x must then
+        // be 6/2 == 3, which falls in x's {1,10} gap, emptying it. The continuous y keeps eqCoverage
+        // ineligible, which is what routes this through the division pass at all.
+        Map<Variable<?>, Domain<?>> domains = Map.of(
+                X, NumericDiscreteDomain.of(1.0, 10.0), Y, IntervalDomain.of(2, 2));
+        assertThat(ProductConstraint.of(Set.of(X, Y), Operator.EQ, 6.0).propagate(domains)).isEmpty();
+    }
+
+    @Test void propagate_eq_signedDiscreteFactors_coverageFindsTheSupportedValues() {
+        // x * y == 1 over {-1,0,1}: only (-1,-1) and (1,1) work, so 0 loses support on both sides --
+        // a pruning no interval rule can reach, since each factor's hull contains zero.
+        Variable<Integer> a = F.create("cov_a");
+        Variable<Integer> b = F.create("cov_b");
+        Map<Variable<?>, Domain<?>> domains = Map.of(a, IntRangeDomain.of(-1, 1), b, IntRangeDomain.of(-1, 1));
+        var result = ProductConstraint.of(Set.of(a, b), Operator.EQ, 1).propagate(domains);
+        assertThat(result).isPresent();
+        assertThat(result.get().get(a).contains(0)).isFalse();
+        assertThat(result.get().get(a).contains(1)).isTrue();
+        assertThat(result.get().get(a).contains(-1)).isTrue();
+    }
+
+    @Test void propagate_eq_coverageFindsNoCombination_isInfeasible() {
+        Variable<Integer> a = F.create("covx_a");
+        Variable<Integer> b = F.create("covx_b");
+        Map<Variable<?>, Domain<?>> domains = Map.of(a, IntRangeDomain.of(1, 2), b, IntRangeDomain.of(1, 2));
+        assertThat(ProductConstraint.of(Set.of(a, b), Operator.EQ, 7).propagate(domains)).isEmpty();
     }
 }

@@ -6,6 +6,7 @@ import io.github.rcrida.jcsp.constraints.Operator;
 import io.github.rcrida.jcsp.domains.DiscreteDomain;
 import io.github.rcrida.jcsp.domains.Domain;
 import io.github.rcrida.jcsp.domains.IntRangeDomain;
+import io.github.rcrida.jcsp.domains.NumericDiscreteDomain;
 import io.github.rcrida.jcsp.domains.IntervalDomain;
 import io.github.rcrida.jcsp.solver.Solver;
 import io.github.rcrida.jcsp.variables.Variable;
@@ -49,10 +50,75 @@ class ProductVariableConstraintTest {
 
     // --- propagate: non-positive domain ---
 
-    @Test void propagate_zeroFactorMin_returnsEmptyMap() {
+    @Test void propagate_zeroFactorMin_stillNarrowsTheTargetToTheAchievableRange() {
+        // [0,5] * [1,3] reaches [0,15], so a target of [0,20] loses its top end. The factors
+        // themselves are left alone: GEQ's one-sided clip is only sound for a strictly positive
+        // complementary product, which a factor whose own minimum is 0 cannot guarantee.
         var result = ProductVariableConstraint.of(Set.of(X, Y), Operator.GEQ, T).propagate(intervals(0, 5, 1, 3, 0, 20));
         assertThat(result).isPresent();
-        assertThat(result.get()).isEmpty();
+        assertThat(result.get()).containsOnlyKeys(T);
+        assertThat(tDom(result.get()).getMax()).isEqualTo(15.0);
+    }
+
+    @Test void propagate_eq_complementaryProductStraddlesZero_leavesThatFactorAlone() {
+        // Narrowing x needs target / y, and y's [-1,1] hull contains zero, so the quotient is
+        // unbounded and the factor is left untouched -- the exact shape eqCoverage exists for, but
+        // these domains are continuous so coverage cannot run.
+        var result = ProductVariableConstraint.of(Set.of(X, Y), Operator.EQ, T)
+                .propagate(intervals(-1, 1, -1, 1, -1, 1));
+        assertThat(result).isPresent();
+        assertThat(result.get()).doesNotContainKeys(X, Y);
+    }
+
+    @Test void propagate_eq_targetAboveTheWholeProductRange_isInfeasible() {
+        // x * 2 == 100 needs x at 50, and [5,6]*[2,2] only reaches 12, so the range guard settles it
+        // before any per-factor division runs.
+        var result = ProductVariableConstraint.of(Set.of(X, Y), Operator.EQ, T)
+                .propagate(intervals(5, 6, 2, 2, 100, 100));
+        assertThat(result).isEmpty();
+    }
+
+    @Test void propagate_eq_divisionEmptiesAGappedFactor_isInfeasible() {
+        // [1,10]*[2,2] spans [2,20] around the target 6, so the range guards both pass -- but x must
+        // then be 6/2 == 3, which falls in x's {1,10} gap, emptying it. The continuous y keeps
+        // eqCoverage ineligible, which is what routes this through the division pass at all.
+        Map<Variable<?>, Domain<?>> domains = Map.of(
+                X, NumericDiscreteDomain.of(1.0, 10.0), Y, IntervalDomain.of(2, 2),
+                T, NumericDiscreteDomain.of(6.0));
+        assertThat(ProductVariableConstraint.of(Set.of(X, Y), Operator.EQ, T).propagate(domains)).isEmpty();
+    }
+
+    @Test void propagate_eq_gappedTargetOutsideTheProductRange_isInfeasible() {
+        // Factors span [5,10], but the target can only be 0 or 20, so nothing survives. Continuous
+        // factors keep eqCoverage ineligible, so this exercises the bounds path's target narrowing.
+        Map<Variable<?>, Domain<?>> domains = Map.of(
+                X, IntervalDomain.of(1, 2), Y, IntervalDomain.of(5, 5),
+                T, NumericDiscreteDomain.of(0.0, 20.0));
+        assertThat(ProductVariableConstraint.of(Set.of(X, Y), Operator.EQ, T).propagate(domains)).isEmpty();
+    }
+
+    @Test void propagate_eq_discreteFactorsOverTheCoverageCap_fallsBackToBounds() {
+        // 40 * 40 * 40 combinations is past the coverage ceiling, so the interval path runs instead
+        // and still narrows the target to the achievable product range.
+        Variable<Integer> a = F.create("cap_a");
+        Variable<Integer> b = F.create("cap_b");
+        Variable<Integer> c = F.create("cap_c");
+        Variable<Integer> t = F.create("cap_t");
+        Map<Variable<?>, Domain<?>> domains = Map.of(
+                a, IntRangeDomain.of(1, 40), b, IntRangeDomain.of(1, 40),
+                c, IntRangeDomain.of(1, 40), t, IntRangeDomain.of(0, 1_000_000));
+        var result = ProductVariableConstraint.of(Set.of(a, b, c), Operator.EQ, t).propagate(domains);
+        assertThat(result).isPresent();
+        assertThat(result.get()).containsKey(t);
+    }
+
+    @Test void propagate_negativeFactors_productRangeIsSignCorrect() {
+        // [-4,-2] * [1,3] spans [-12,-2], which no product-of-mins/product-of-maxes shortcut gives:
+        // that would have read [-4, -6], an inverted range.
+        var result = ProductVariableConstraint.of(Set.of(X, Y), Operator.GEQ, T)
+                .propagate(intervals(-4, -2, 1, 3, -100, 100));
+        assertThat(result).isPresent();
+        assertThat(tDom(result.get()).getMax()).isEqualTo(-2.0);
     }
 
     // --- propagate: non-propagating operators ---

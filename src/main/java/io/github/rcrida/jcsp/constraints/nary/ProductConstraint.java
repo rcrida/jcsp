@@ -3,6 +3,7 @@ package io.github.rcrida.jcsp.constraints.nary;
 import io.github.rcrida.jcsp.consistency.Propagatable;
 import io.github.rcrida.jcsp.constraints.NumericBounds;
 import io.github.rcrida.jcsp.constraints.Operator;
+import io.github.rcrida.jcsp.domains.DiscreteDomain;
 import io.github.rcrida.jcsp.domains.Domain;
 import io.github.rcrida.jcsp.variables.Variable;
 import lombok.EqualsAndHashCode;
@@ -26,16 +27,17 @@ import java.util.stream.Collectors;
  * For partial assignments the constraint is optimistically satisfied — only evaluated
  * once all variables are assigned.
  * <p>
- * Propagation applies interval-arithmetic bounds narrowing for EQ, LEQ, and GEQ operators,
- * but only when all variable domains have strictly positive minimums. Domains that include zero
- * or negative values receive no narrowing (non-monotone multiplication makes tight bounds
- * propagation unsound without case analysis).
+ * Propagation runs for EQ, LEQ, and GEQ, over {@link ProductPropagation}'s signed interval
+ * arithmetic, so the whole-product feasibility check is correct whatever the factor signs.
  * <p>
- * Upper-bound pass (EQ/LEQ): clips each variable's maximum to
- * {@code bound * min(var) / productMin} where {@code productMin} is the product of all domain
- * minimums. Lower-bound pass (EQ/GEQ): raises each variable's minimum to
- * {@code bound * max(var) / productMax} where {@code productMax} is the product of all domain
- * maximums.
+ * EQ narrows each factor to {@code bound / (product of the others)} — sound for any signs, skipped
+ * for a factor whose complementary product {@link ProductPropagation#straddlesZero} (the quotient
+ * is then unbounded) — and, when the factors are enumerable and few enough, instead runs
+ * {@link ProductPropagation#eqCoverage} for exact GAC via {@link #eqCoverage}. LEQ/GEQ stay
+ * restricted to strictly positive factor minimums: their one-sided clips read the complementary
+ * product's single favourable extreme, which only bounds a factor that cannot itself be negative.
+ * Upper-bound pass (LEQ): clips each variable's maximum to {@code bound * min(var) / productMin}.
+ * Lower-bound pass (GEQ): raises each variable's minimum to {@code bound * max(var) / productMax}.
  */
 @SuperBuilder
 @EqualsAndHashCode(callSuper = true)
@@ -75,27 +77,52 @@ public class ProductConstraint<N extends Number> extends UniformNaryConstraint<N
         int n = vars.size();
         double[] mins = new double[n];
         double[] maxs = new double[n];
+        boolean allPositive = true;
         for (int i = 0; i < n; i++) {
             Domain<N> dom = (Domain<N>) domains.get(vars.get(i));
             mins[i] = NumericBounds.min(dom);
             maxs[i] = NumericBounds.max(dom);
-            if (mins[i] <= 0) return Optional.of(Map.of());
+            allPositive &= mins[i] > 0;
         }
 
-        double productMin = 1.0, productMax = 1.0;
-        for (int i = 0; i < n; i++) { productMin *= mins[i]; productMax *= maxs[i]; }
+        double[] product = ProductPropagation.range(mins, maxs);
+        double productMin = product[0], productMax = product[1];
         double k = bound.doubleValue();
 
         if ((operator == Operator.EQ  && (k < productMin || k > productMax)) ||
             (operator == Operator.LEQ && k < productMin) ||
             (operator == Operator.GEQ && k > productMax)) return Optional.empty();
 
+        if (operator == Operator.EQ && ProductPropagation.eqCoverageEligible(vars, domains)) {
+            return eqCoverage(vars, k, domains);
+        }
+
         Map<Variable<?>, Domain<?>> updated = new HashMap<>();
         for (int i = 0; i < n; i++) {
             Domain<N> dom = (Domain<N>) domains.get(vars.get(i));
 
+            // EQ narrows from both sides at once: factor == k / (product of the others), sound for
+            // any signs once the divisor is known not to straddle zero.
+            if (operator == Operator.EQ) {
+                double[] others = ProductPropagation.rangeExcluding(mins, maxs, i);
+                if (ProductPropagation.straddlesZero(others)) continue;
+                double[] allowed = ProductPropagation.divide(k, k, others[0], others[1]);
+                Optional<Domain<N>> narrowed = NumericBounds.narrow(dom,
+                        Math.max(mins[i], allowed[0]), Math.min(maxs[i], allowed[1]));
+                if (narrowed.isPresent()) {
+                    if (narrowed.get().isEmpty()) return Optional.empty();
+                    updated.put(vars.get(i), narrowed.get());
+                }
+                continue;
+            }
+
+            // LEQ/GEQ stay gated on every factor being positive: their one-sided clips read the
+            // complementary product's single favourable extreme, which only bounds a factor that
+            // cannot itself be negative.
+            if (!allPositive) continue;
+
             // Upper-bound pass: product ≤ k — clip each variable's max to k / othersMinProduct
-            if (operator == Operator.EQ || operator == Operator.LEQ) {
+            if (operator == Operator.LEQ) {
                 double newMax = k * mins[i] / productMin;
                 if (newMax < maxs[i]) {
                     // mins[i] > 0 and k >= productMin guarantee newMax >= mins[i]; narrow returns present
@@ -105,15 +132,36 @@ public class ProductConstraint<N extends Number> extends UniformNaryConstraint<N
             }
 
             // Lower-bound pass: product ≥ k — raise each variable's min to k / othersMaxProduct
-            if (operator == Operator.EQ || operator == Operator.GEQ) {
+            if (operator == Operator.GEQ) {
                 double newMin = k * maxs[i] / productMax;
                 if (newMin > mins[i]) {
-                    // newMin > mins[i] guarantees narrow returns present; may be empty for discrete gap domains
-                    Domain<N> raised = (Domain<N>) NumericBounds.narrow(dom, newMin, maxs[i]).orElseThrow();
-                    if (raised.isEmpty()) return Optional.empty();
-                    updated.put(vars.get(i), raised);
+                    // newMin > mins[i] guarantees narrow returns present, and never empty: k <=
+                    // productMax (the guard above) puts newMin at or below maxs[i], so the domain's
+                    // own maximum survives. Only EQ could empty it, by running the clip above first
+                    // and leaving dom narrower than maxs[i] -- and EQ now returns before here.
+                    updated.put(vars.get(i), (Domain<N>) NumericBounds.narrow(dom, newMin, maxs[i]).orElseThrow());
                 }
             }
+        }
+        return Optional.of(updated);
+    }
+
+    /**
+     * Exact GAC for {@code product == bound} over enumerable factor domains -- {@link
+     * ProductVariableConstraint#eqCoverage}'s constant-bound counterpart, reaching what no interval
+     * rule can when a factor's domain excludes zero but its hull does not.
+     */
+    @SuppressWarnings("unchecked")
+    private Optional<Map<Variable<?>, Domain<?>>> eqCoverage(List<Variable<N>> vars, double bound,
+                                                              Map<Variable<?>, Domain<?>> domains) {
+        ProductPropagation.Coverage<N> coverage =
+                ProductPropagation.eqCoverage(vars, domains, candidate -> candidate == bound);
+        if (coverage == null) return Optional.empty();
+        Map<Variable<?>, Domain<?>> updated = ProductPropagation.updates();
+        for (int i = 0; i < vars.size(); i++) {
+            DiscreteDomain<N> dom = (DiscreteDomain<N>) domains.get(vars.get(i));
+            ProductPropagation.putIfNarrowed(updated, vars.get(i),
+                    ProductPropagation.retain(dom, coverage.supportedFactorValues().get(i)));
         }
         return Optional.of(updated);
     }

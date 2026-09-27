@@ -96,3 +96,4 @@ section instead.
 | [0032](0032-adaptive-weight-reset-on-stagnant-restarts.md) | Reset dom/wdeg weights after 32 restarts without progress, so restarts stop being variations on one doomed ordering | Accepted |
 | [0033](0033-search-space-metrics-that-mean-something.md) | Replace the one-node search-space snapshot with a stable root figure and a depth-first progress estimate | Accepted |
 | [0034](0034-tabulating-small-scope-intension-constraints.md) | Compile small-scope intension constraints into GAC tables instead of reified decompositions | Accepted |
+| [0035](0035-signed-interval-and-coverage-product-propagation.md) | Signed interval arithmetic plus EQ coverage for product constraints, instead of giving up on any non-positive factor | Accepted |

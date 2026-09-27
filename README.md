@@ -321,7 +321,7 @@ builder.maxConstraint(Set.of(v1, v2, v3), Operator.LEQ, 10)         // max(v1, v
 builder.maxConstraint(Set.of(v1, v2, v3), Operator.EQ, target)      // max(v1, v2, v3) == target  (target is a variable, not a constant)
 builder.minConstraint(Set.of(v1, v2, v3), Operator.GEQ, 0)          // min(v1, v2, v3) >= 0  (also EQ, LEQ, LT, GT)
 builder.minConstraint(Set.of(v1, v2, v3), Operator.EQ, target)      // min(v1, v2, v3) == target  (target is a variable, not a constant)
-builder.productConstraint(Set.of(v1, v2, v3), Operator.EQ, 24)      // v1*v2*v3 == 24  (also LEQ, GEQ; requires strictly positive domain mins)
+builder.productConstraint(Set.of(v1, v2, v3), Operator.EQ, 24)      // v1*v2*v3 == 24  (EQ propagates for any signs; LEQ, GEQ require strictly positive domain mins)
 builder.divisionConstraint(dividend, divisor, Operator.EQ, 3)        // dividend/divisor == 3  (also LEQ, GEQ; requires strictly positive domain mins for both)
 builder.linearConstraint(Map.of(v1, 2, v2, 3), Operator.LEQ, 10)    // 2*v1 + 3*v2 <= 10  (weighted sum / linear)
 builder.linearConstraint(Map.of(v1, 2, v2, 3), Operator.LEQ, target) // 2*v1 + 3*v2 <= target  (target is a variable, not a constant)
