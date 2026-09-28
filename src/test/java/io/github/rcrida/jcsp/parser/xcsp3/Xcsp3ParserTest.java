@@ -12,6 +12,7 @@ import io.github.rcrida.jcsp.constraints.nary.AndConstraint;
 import io.github.rcrida.jcsp.constraints.nary.AtLeastNConstraint;
 import io.github.rcrida.jcsp.constraints.nary.NaryTuplesConstraint;
 import io.github.rcrida.jcsp.constraints.nary.CountConstraint;
+import io.github.rcrida.jcsp.constraints.nary.CumulativeVariableConstraint;
 import io.github.rcrida.jcsp.constraints.nary.GlobalCardinalityConstraint;
 import io.github.rcrida.jcsp.constraints.nary.LinearBooleanBoundConstraint;
 import io.github.rcrida.jcsp.constraints.nary.LinearBooleanVariableConstraint;
@@ -2329,6 +2330,49 @@ class Xcsp3ParserTest {
             assertThat(digitOf(a, "b") == 1).as("y0=%d, y1=%d", y0, y1).isEqualTo(separated);
         }
         assertThat(sols).hasSize(16); // all 4x4 y0,y1 combos, b determined (not free) by separation
+    }
+
+    @Test void noOverlap2D_stripWidthConstraints_tightenTheProjectionCapacities() throws IOException {
+        // y in 0..3 with heights up to 4 reads as a strip 7 tall from the domains alone, but
+        // y + h <= 5 caps every rectangle's reach at 5 jointly. Same for x + w <= 5. The strip
+        // constraints are declared *after* the noOverlap here, which only works because the
+        // projections are deferred to the end of parsing.
+        Xcsp3Instance instance = parseXml(
+                "<var id=\"x0\"> 0..3 </var><var id=\"y0\"> 0..3 </var>"
+                        + "<var id=\"w0\"> 2 4 </var><var id=\"h0\"> 2 4 </var>",
+                "<noOverlap><origins> (x0,y0) </origins><lengths> (w0,h0) </lengths></noOverlap>"
+                        + "<intension> le(x0,sub(5,w0)) </intension>"
+                        + "<intension> le(y0,sub(5,h0)) </intension>");
+        assertThat(capacities(instance)).containsExactly(5.0, 5.0);
+    }
+
+    @Test void noOverlap2D_withoutStripConstraints_fallsBackToDomainDerivedCapacities() throws IOException {
+        // Nothing caps x + w jointly, so the loosest sound bound is all there is: 3 + 4 = 7.
+        Xcsp3Instance instance = parseXml(
+                "<var id=\"x0\"> 0..3 </var><var id=\"y0\"> 0..3 </var>"
+                        + "<var id=\"w0\"> 2 4 </var><var id=\"h0\"> 2 4 </var>",
+                "<noOverlap><origins> (x0,y0) </origins><lengths> (w0,h0) </lengths></noOverlap>");
+        assertThat(capacities(instance)).containsExactly(7.0, 7.0);
+    }
+
+    @Test void noOverlap2D_reifiedStripConstraint_doesNotTightenTheCapacity() throws IOException {
+        // A reified x + w <= 5 may well be false, so it caps nothing; the domain-derived 7 stands.
+        Xcsp3Instance instance = parseXml(
+                "<var id=\"x0\"> 0..3 </var><var id=\"y0\"> 0..3 </var>"
+                        + "<var id=\"w0\"> 2 4 </var><var id=\"h0\"> 2 4 </var><var id=\"b\"> 0..1 </var>",
+                "<noOverlap><origins> (x0,y0) </origins><lengths> (w0,h0) </lengths></noOverlap>"
+                        + "<intension reifiedBy=\"b\"> le(x0,sub(5,w0)) </intension>"
+                        + "<intension> le(y0,sub(5,h0)) </intension>");
+        // capacityY (from y + h <= 5) tightens to 5; capacityX stays at the domain-derived 7.
+        assertThat(capacities(instance)).containsExactlyInAnyOrder(5.0, 7.0);
+    }
+
+    /** Every redundant axis-projection capacity the parser derived, in constraint order. */
+    private static List<Double> capacities(Xcsp3Instance instance) {
+        return instance.csp().getConstraints().stream()
+                .filter(CumulativeVariableConstraint.class::isInstance)
+                .map(c -> ((CumulativeVariableConstraint) c).getLimit())
+                .toList();
     }
 
     @Test void noOverlap2D_higherDimensionality_throwsUnsupported() {

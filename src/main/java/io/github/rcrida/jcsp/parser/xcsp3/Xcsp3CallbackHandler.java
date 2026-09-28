@@ -88,6 +88,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.EnumSet;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -197,6 +198,28 @@ final class Xcsp3CallbackHandler implements XCallbacks2 {
             new RelationSumRecognizer(this, this::recognizeConstraint),
             new ChannelRecognizer(this, this::recognizeConstraint));
 
+    /**
+     * Upper bounds on {@code a + b} for each pair of variables some unreified two-variable
+     * {@link SumBoundConstraint} caps, recorded as those constraints are added so that
+     * {@link #axisCapacity} can consult them. The strip-width idiom {@code le(x[i], sub(W, w[i]))}
+     * is the one that matters: it bounds a rectangle's reach <em>jointly</em> at {@code W}, which
+     * the two domains' independent maxima cannot express and would overstate.
+     */
+    private final Map<Set<Variable<?>>, Double> pairSumUpperBounds = new HashMap<>();
+
+    /**
+     * A 2D {@code noOverlap} awaiting {@link #flushPendingNoOverlaps}, holding everything its
+     * constraints need to be built after the whole instance is parsed -- including the
+     * {@link #currentReification} in force when its callback fired, which is out of scope by then.
+     */
+    private record PendingNoOverlap(String id, @Nullable XReification reification,
+                                    List<Variable<? extends Number>> xs, List<Variable<? extends Number>> ys,
+                                    List<Variable<? extends Number>> ws, List<Variable<? extends Number>> hs,
+                                    XVarInteger[][] origins, XVarInteger[][] lengths) {
+    }
+
+    private final List<PendingNoOverlap> pendingNoOverlaps = new ArrayList<>();
+
     Xcsp3CallbackHandler() {
         // By default xcsp3-tools "recognizes" simple intension/count/sum/etc. shapes and routes
         // them to more specific callbacks (buildCtrPrimitive, buildCtrExactly, buildCtrAmong, ...)
@@ -213,6 +236,7 @@ final class Xcsp3CallbackHandler implements XCallbacks2 {
 
     Xcsp3Instance toInstance() {
         flushPendingSingleValueCounts();
+        flushPendingNoOverlaps();
         Set<String> declaredVariableNames = new LinkedHashSet<>(variablesByName.keySet());
         declaredVariableNames.addAll(symbolicVariablesByName.keySet());
         return new Xcsp3Instance(builder.build(), objective, maximize,
@@ -264,8 +288,30 @@ final class Xcsp3CallbackHandler implements XCallbacks2 {
      * uncovered (a bare {@code TypeReification} has no fourth constant to exercise it with).
      */
     private void addOrReify(Constraint body, String id) {
-        XReification reification = currentReification;
+        addOrReify(body, id, currentReification);
+    }
+
+    /**
+     * Notes {@code body}'s cap on its two variables' sum in {@link #pairSumUpperBounds}, for the
+     * shapes that state one unconditionally: a two-variable {@link SumBoundConstraint} under
+     * {@link Operator#LEQ} or {@link Operator#EQ}. Only ever called for a constraint added
+     * outright -- a reified one may well be false, so its bound holds of nothing.
+     */
+    private void recordPairSumUpperBound(Constraint body) {
+        if (!(body instanceof SumBoundConstraint<?> sum) || sum.getVariables().size() != 2) return;
+        if (sum.getOperator() != Operator.LEQ && sum.getOperator() != Operator.EQ) return;
+        pairSumUpperBounds.merge(Set.copyOf(sum.getVariables()), sum.getBound().doubleValue(), Math::min);
+    }
+
+    /**
+     * {@link #addOrReify(Constraint, String)} against an explicitly supplied {@code reification}
+     * rather than whichever constraint is being loaded right now -- for a constraint posted after
+     * its own callback has returned, which is to say {@link #flushPendingNoOverlaps}'s deferred
+     * projections, whose originating {@link #currentReification} is long out of scope by then.
+     */
+    private void addOrReify(Constraint body, String id, @Nullable XReification reification) {
         if (reification == null) {
+            recordPairSumUpperBound(body);
             builder.constraint(body);
             return;
         }
@@ -1808,10 +1854,19 @@ final class Xcsp3CallbackHandler implements XCallbacks2 {
      * later by a previously-learned nogood). Sound regardless of the instance: since diffn already
      * guarantees non-overlap, any rectangles sharing an x-slice are necessarily non-overlapping in
      * y, so their combined heights can never exceed the total y-span any rectangle could ever
-     * occupy -- {@code capacityY = max_i(y_max[i] + h_max[i]) - min_i(y_min[i])} is therefore
-     * always a valid (if not always tight) capacity for the x-axis projection, derived purely from
-     * domains already parsed at this point, with no XML recognition of a "container" needed
-     * (symmetrically for {@code capacityX}).
+     * occupy -- any upper bound on that span is therefore a valid capacity for the x-axis
+     * projection (symmetrically for {@code capacityX}), with no XML recognition of a "container"
+     * needed.
+     * <p>
+     * How tight that bound is decides whether the projections are worth anything, which is why
+     * nothing is posted here: the whole constraint is deferred to {@link #flushPendingNoOverlaps}.
+     * Per-variable domain maxima alone give {@code max_i(y_max[i] + h_max[i]) - min_i(y_min[i])},
+     * and on a strip-packing instance that is wildly loose -- {@code StripPacking-C1P1} declares
+     * {@code y in 0..19} with heights up to 12 and so reports 31 for a strip that is 20 tall,
+     * leaving a relaxation with 58% slack on an instance whose rectangles tile their strip exactly.
+     * The strip's real height is stated jointly, as the {@code y[i] + h[i] <= 20} constraints that
+     * {@link #recordPairSumUpperBound} collects, and those can sit anywhere in the file relative to
+     * this constraint -- so the capacities can only be computed once parsing is over.
      */
     @Override
     public void buildCtrNoOverlap(String id, XVarInteger[][] origins, XVarInteger[][] lengths, boolean zeroIgnored) {
@@ -1822,30 +1877,51 @@ final class Xcsp3CallbackHandler implements XCallbacks2 {
         List<Variable<? extends Number>> ys = Arrays.stream(origins).<Variable<? extends Number>>map(row -> variableFor(row[1])).toList();
         List<Variable<? extends Number>> ws = Arrays.stream(lengths).<Variable<? extends Number>>map(row -> variableFor(row[0])).toList();
         List<Variable<? extends Number>> hs = Arrays.stream(lengths).<Variable<? extends Number>>map(row -> variableFor(row[1])).toList();
-
-        double capacityY = axisCapacity(origins, lengths, 1, 1);
-        double capacityX = axisCapacity(origins, lengths, 0, 0);
-        CumulativeVariableConstraint xProjection = CumulativeVariableConstraint.of(
-                List.copyOf(xs), List.copyOf(ws), List.copyOf(hs), capacityY);
-        CumulativeVariableConstraint yProjection = CumulativeVariableConstraint.of(
-                List.copyOf(ys), List.copyOf(hs), List.copyOf(ws), capacityX);
-
-        if (currentReification == null) {
-            builder.constraint(DiffnVariableConstraint.of(xs, ys, ws, hs));
-            builder.constraint(xProjection);
-            builder.constraint(yProjection);
-            return;
-        }
-        Set<Constraint> conjuncts = new LinkedHashSet<>();
-        conjuncts.add(DiffnVariableConstraint.of(xs, ys, ws, hs));
-        conjuncts.add(xProjection);
-        conjuncts.add(yProjection);
-        addOrReify(AndConstraint.of(conjuncts), id);
+        pendingNoOverlaps.add(new PendingNoOverlap(id, currentReification, xs, ys, ws, hs, origins, lengths));
     }
 
     /**
-     * {@code max_i(origins[i][originIdx].max + lengths[i][lengthIdx].max) - min_i(origins[i][originIdx].min)}
-     * -- see {@link #buildCtrNoOverlap}'s own Javadoc for what this bounds and why it's sound.
+     * Posts every deferred 2D {@code noOverlap}'s {@link DiffnVariableConstraint} and its two
+     * redundant {@link CumulativeVariableConstraint} projections, once the whole instance has been
+     * parsed -- see {@link #buildCtrNoOverlap(String, XVarInteger[][], XVarInteger[][], boolean)}
+     * for why the capacities can only be derived at this point.
+     */
+    private void flushPendingNoOverlaps() {
+        for (PendingNoOverlap pending : pendingNoOverlaps) {
+            double capacityY = axisCapacity(pending.origins(), pending.lengths(), 1, 1);
+            double capacityX = axisCapacity(pending.origins(), pending.lengths(), 0, 0);
+            Constraint diffn = DiffnVariableConstraint.of(pending.xs(), pending.ys(), pending.ws(), pending.hs());
+            Constraint xProjection = CumulativeVariableConstraint.of(
+                    List.copyOf(pending.xs()), List.copyOf(pending.ws()), List.copyOf(pending.hs()), capacityY);
+            Constraint yProjection = CumulativeVariableConstraint.of(
+                    List.copyOf(pending.ys()), List.copyOf(pending.hs()), List.copyOf(pending.ws()), capacityX);
+
+            if (pending.reification() == null) {
+                builder.constraint(diffn);
+                builder.constraint(xProjection);
+                builder.constraint(yProjection);
+                continue;
+            }
+            Set<Constraint> conjuncts = new LinkedHashSet<>();
+            conjuncts.add(diffn);
+            conjuncts.add(xProjection);
+            conjuncts.add(yProjection);
+            addOrReify(AndConstraint.of(conjuncts), pending.id(), pending.reification());
+        }
+        pendingNoOverlaps.clear();
+    }
+
+    /**
+     * {@code max_i(reach_i) - min_i(origins[i][originIdx].min)}, where {@code reach_i} is the
+     * furthest point rectangle {@code i} can extend to along this axis -- see
+     * {@link #buildCtrNoOverlap(String, XVarInteger[][], XVarInteger[][], boolean)}'s own Javadoc
+     * for what this bounds and why it's sound.
+     * <p>
+     * {@code origins[i].max + lengths[i].max} is the bound available from the two domains alone,
+     * and it is loose whenever the two cannot take their maxima together: a strip of width
+     * {@code W} is declared as {@code x[i] + w[i] <= W}, which caps every rectangle's reach at
+     * {@code W} however wide the individual domains are. {@link #pairSumUpperBounds} carries
+     * exactly those joint caps, so the tighter of the two is used.
      */
     private double axisCapacity(XVarInteger[][] origins, XVarInteger[][] lengths, int originIdx, int lengthIdx) {
         double maxReach = Double.NEGATIVE_INFINITY;
@@ -1853,7 +1929,11 @@ final class Xcsp3CallbackHandler implements XCallbacks2 {
         for (int i = 0; i < origins.length; i++) {
             int[] originBounds = boundsByName.get(origins[i][originIdx].id());
             int[] lengthBounds = boundsByName.get(lengths[i][lengthIdx].id());
-            maxReach = Math.max(maxReach, originBounds[1] + lengthBounds[1]);
+            double reach = originBounds[1] + lengthBounds[1];
+            Double jointCap = pairSumUpperBounds.get(Set.copyOf(
+                    List.of(variableFor(origins[i][originIdx]), variableFor(lengths[i][lengthIdx]))));
+            if (jointCap != null) reach = Math.min(reach, jointCap);
+            maxReach = Math.max(maxReach, reach);
             minStart = Math.min(minStart, originBounds[0]);
         }
         return maxReach - minStart;

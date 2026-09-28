@@ -9,6 +9,7 @@ import io.github.rcrida.jcsp.domains.IntervalDomain;
 import io.github.rcrida.jcsp.domains.IntRangeDomain;
 import io.github.rcrida.jcsp.variables.Variable;
 import lombok.EqualsAndHashCode;
+import lombok.Getter;
 import lombok.Singular;
 import lombok.experimental.SuperBuilder;
 import org.jspecify.annotations.NonNull;
@@ -57,7 +58,13 @@ public class CumulativeVariableConstraint extends NaryConstraint implements Prop
     @Singular("start")    private final List<Variable<?>> starts;
     @Singular("duration") private final List<Variable<?>> durations;
     @Singular("resource") private final List<Variable<?>> resources;
-    private final double limit;
+
+    /**
+     * Readable because a redundant projection's capacity is derived rather than stated -- see
+     * {@code Xcsp3CallbackHandler#axisCapacity}, whose whole job is to make this as tight as the
+     * instance allows, and which is only testable if the result can be read back.
+     */
+    @Getter private final double limit;
 
     public static CumulativeVariableConstraint of(@NonNull List<Variable<?>> starts,
                                                     @NonNull List<Variable<?>> durations,
