@@ -23,7 +23,7 @@ import java.util.Set;
  * <p>
  * Each constraint carries a weight initialised to 1. When MAC inference causes a domain
  * wipeout, the weights of all active constraints on the failing variable are incremented
- * (see {@link #incrementWeights}). The selector picks the unassigned variable with the
+ * (see {@link #onConflict}). The selector picks the unassigned variable with the
  * smallest ratio of {@code domainSize / weightedDegree}, where weighted degree is the sum
  * of weights of constraints that involve the variable and at least one other unassigned
  * variable. Variables with no active constraints get ratio {@code Double.MAX_VALUE} and are
@@ -31,7 +31,7 @@ import java.util.Set;
  * <p>
  * The constructor's {@code constraints} set is fixed for the life of the instance and indexed
  * once into {@link #constraintsByVariable}, rather than re-derived from the live CSP on every
- * {@link #select}/{@link #incrementWeights} call: {@link NogoodConstraint}s are never active
+ * {@link #select}/{@link #onConflict} call: {@link NogoodConstraint}s are never active
  * (see below) and {@code csp.getConstraints()} in production always includes every nogood
  * learned so far (up to {@code 20 * variableCount}, see {@link io.github.rcrida.jcsp.assignments.NogoodStore}), so re-scanning it
  * per unassigned variable per node would mean re-discovering and discarding every one of those
@@ -40,14 +40,14 @@ import java.util.Set;
  * Instances are stateful and not thread-safe. Create one per solve call; weights accumulate
  * across Luby restarts within the same call.
  * <p>
- * {@link #reseedTieBreak} lets a caller (namely {@link
+ * {@link #onRestart} lets a caller (namely {@link
  * io.github.rcrida.jcsp.solver.DomWdegLubySearch#getSolution}, once per Luby restart, via a
  * configured {@link RestartRandomization}) control how ties in {@link #select}'s minimum ratio are
  * broken. Left unseeded ({@code null}, the default), ties are broken by {@code
  * csp.getVariableDomains()}'s iteration order (a {@code LinkedHashMap}, so this is the
  * first-declared tied variable, deterministically) -- today's exact behaviour, unchanged.
  * <p>
- * {@link #recordConflict} implements last-conflict reasoning (Lecoutre, Saïs, Tabary &amp; Vion
+ * {@link #onValueRejected} implements last-conflict reasoning (Lecoutre, Saïs, Tabary &amp; Vion
  * 2009): {@link #select} checks it first, ahead of the dom/wdeg ratio computation (and its own
  * tie-break) entirely, and immediately re-selects the most recently failed variable as long as it's
  * still unassigned. This is a different mechanism from dom/wdeg's own weight accumulation, not a
@@ -57,7 +57,7 @@ import java.util.Set;
  * nearby) to fail fast and prune a larger subtree, instead of wasting nodes on other variables
  * before naturally working back around to the same bottleneck.
  */
-public class DomWdegVariableSelector implements UnassignedVariableSelector {
+public class DomWdegVariableSelector implements AdaptiveVariableSelector {
 
     /**
      * Keyed by object identity, not {@link Constraint#equals}/{@link Constraint#hashCode}: the
@@ -101,9 +101,11 @@ public class DomWdegVariableSelector implements UnassignedVariableSelector {
     /**
      * Increments the weight of every constraint that involves {@code variable} and at least
      * one other variable that is still unassigned in {@code nextAssignment} (the assignment
-     * after {@code variable} was assigned). Call this whenever MAC inference returns empty.
+     * after {@code variable} was assigned) -- dom/wdeg's response to
+     * {@link AdaptiveVariableSelector#onConflict}, which MAC inference returning empty raises.
      */
-    public void incrementWeights(@NonNull Variable<?> variable, @NonNull Assignment nextAssignment) {
+    @Override
+    public void onConflict(@NonNull Variable<?> variable, @NonNull Assignment nextAssignment) {
         for (Constraint c : constraintsByVariable.getOrDefault(variable, List.of())) {
             if (isActive(c, variable, nextAssignment)) {
                 weights.merge(c, 1L, Long::sum);
@@ -113,40 +115,44 @@ public class DomWdegVariableSelector implements UnassignedVariableSelector {
 
     /**
      * Sets (or clears, via {@code null}) the {@link Random} used to break ties in {@link #select}'s
-     * minimum ratio. Called once per Luby restart by {@link
-     * io.github.rcrida.jcsp.solver.DomWdegLubySearch#getSolution}, with whatever the configured
-     * {@link RestartRandomization} returns for that restart -- {@code null} for {@link
-     * RestartRandomization#NONE}, restoring today's deterministic first-tied-candidate behaviour.
+     * minimum ratio -- dom/wdeg's response to {@link AdaptiveVariableSelector#onRestart}, raised
+     * once per Luby restart by {@link io.github.rcrida.jcsp.solver.DomWdegLubySearch#getSolution}
+     * with whatever the configured {@link RestartRandomization} returns for that restart. {@code
+     * null}, for {@link RestartRandomization#NONE}, restores deterministic first-tied-candidate
+     * behaviour.
      */
-    public void reseedTieBreak(@Nullable Random random) {
+    @Override
+    public void onRestart(@Nullable Random random) {
         this.tieBreakRandom = random;
     }
 
     /**
      * Returns every constraint weight to its initial {@code 1} and clears the last-conflict
      * variable, so the next {@link #select} is guided by domain sizes alone rather than by failures
-     * accumulated before this point.
+     * accumulated before this point -- dom/wdeg's response to
+     * {@link AdaptiveVariableSelector#onStagnation}.
      * <p>
-     * Called only by {@link io.github.rcrida.jcsp.solver.DomWdegLubySearch#getSolution}, and only
+     * Raised only by {@link io.github.rcrida.jcsp.solver.DomWdegLubySearch#getSolution}, and only
      * after a run of restarts that made no progress -- weights surviving a restart is what makes
      * each one build on the last, so discarding them pays only once that accumulation is
      * demonstrably steering every restart back into the same dead region. Affects variable ordering
      * alone, so it cannot change soundness or completeness.
      */
-    public void resetWeights() {
+    @Override
+    public void onStagnation() {
         weights.replaceAll((constraint, weight) -> 1L);
         lastConflictVariable = null;
     }
 
     /**
-     * Records {@code variable} as the site of the most recent search failure -- call this at
-     * every backtrack/domain-wipeout site, both the {@link #incrementWeights} sites (an inference
-     * pass detected a domain wipeout) and the plain direct-consistency-violation sites that
-     * precede inference (see {@link io.github.rcrida.jcsp.solver.DomWdegLubySearch}'s own call
-     * sites for both). See this class's own Javadoc for why this is a different mechanism from
-     * {@link #incrementWeights}, not a substitute for it.
+     * Records {@code variable} as the site of the most recent search failure -- dom/wdeg's
+     * response to {@link AdaptiveVariableSelector#onValueRejected}, which every rejected candidate
+     * raises, whether an inference pass detected the wipeout (the {@link #onConflict} sites) or the
+     * direct consistency check that precedes inference did. See this class's own Javadoc for why
+     * last-conflict is a different mechanism from the weighting, not a substitute for it.
      */
-    public void recordConflict(@NonNull Variable<?> variable) {
+    @Override
+    public void onValueRejected(@NonNull Variable<?> variable) {
         lastConflictVariable = variable;
     }
 

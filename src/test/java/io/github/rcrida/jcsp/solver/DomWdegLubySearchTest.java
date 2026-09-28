@@ -12,6 +12,7 @@ import io.github.rcrida.jcsp.constraints.nary.NogoodConstraint;
 import io.github.rcrida.jcsp.domains.IntRangeDomain;
 import io.github.rcrida.jcsp.domains.NumericDiscreteDomain;
 import io.github.rcrida.jcsp.solver.backtrackingsearch.order.LeastConstrainingValueOrderer;
+import io.github.rcrida.jcsp.solver.backtrackingsearch.selector.AdaptiveVariableSelector;
 import io.github.rcrida.jcsp.solver.listener.SolverListener;
 import io.github.rcrida.jcsp.variables.Variable;
 import org.junit.jupiter.api.Test;
@@ -938,5 +939,68 @@ class DomWdegLubySearchTest {
                 .build();
 
         assertThat(solver.getSolutions(csp).toList()).isEmpty();
+    }
+
+    // ── injected variable ordering ──────────────────────────────────────────
+
+    /**
+     * A selector that ignores every hook and always picks the last-declared unassigned variable --
+     * the opposite end of {@code getVariableDomains()} from where dom/wdeg's tie-break starts, and
+     * about as far from dom/wdeg as an ordering gets.
+     */
+    private static final AdaptiveVariableSelector.Factory LAST_DECLARED = constraints -> (csp, assignment) -> {
+        Variable<?> last = null;
+        for (Variable<?> v : csp.getVariableDomains().keySet()) {
+            if (!assignment.isAssigned(v)) last = v;
+        }
+        return last;
+    };
+
+    @Test
+    void injectedSelectorFactory_ordersTheSearchWithoutChangingItsAnswers() {
+        Variable<Integer> a = VF.create("inj_a"), b = VF.create("inj_b"), c = VF.create("inj_c");
+        var csp = ConstraintSatisfactionProblem.builder()
+                .variableDomain(a, IntRangeDomain.of(1, 3))
+                .variableDomain(b, IntRangeDomain.of(1, 3))
+                .variableDomain(c, IntRangeDomain.of(1, 3))
+                .allDiffConstraint(Set.of(a, b, c))
+                .build();
+
+        List<Assignment> byDefault = DomWdegLubySearch.builder()
+                .domainValuesOrderer(LeastConstrainingValueOrderer.INSTANCE)
+                .inference(Solver.Factory.FULL_PROPAGATION_INFERENCE)
+                .build().getSolutions(csp).toList();
+        List<Assignment> injected = DomWdegLubySearch.builder()
+                .domainValuesOrderer(LeastConstrainingValueOrderer.INSTANCE)
+                .inference(Solver.Factory.FULL_PROPAGATION_INFERENCE)
+                .selectorFactory(LAST_DECLARED)
+                .build().getSolutions(csp).toList();
+
+        // Six permutations either way: an ordering decides what is explored when, never what is
+        // reachable. Compared as sets, since the order solutions arrive in is exactly what differs.
+        assertThat(injected).hasSize(6).containsExactlyInAnyOrderElementsOf(byDefault);
+    }
+
+    @Test
+    void injectedSelectorFactory_isConsultedByTheRestartingSearchToo() {
+        Variable<Integer> a = VF.create("injr_a"), b = VF.create("injr_b");
+        var csp = ConstraintSatisfactionProblem.builder()
+                .variableDomain(a, IntRangeDomain.of(1, 2))
+                .variableDomain(b, IntRangeDomain.of(1, 2))
+                .notEqualsConstraint(a, b)
+                .build();
+
+        AtomicInteger built = new AtomicInteger();
+        AdaptiveVariableSelector.Factory counting = constraints -> {
+            built.incrementAndGet();
+            return LAST_DECLARED.createSelector(constraints);
+        };
+
+        assertThat(DomWdegLubySearch.builder()
+                .domainValuesOrderer(LeastConstrainingValueOrderer.INSTANCE)
+                .inference(Solver.Factory.FULL_PROPAGATION_INFERENCE)
+                .selectorFactory(counting)
+                .build().getSolution(csp)).isPresent();
+        assertThat(built).hasValue(1);
     }
 }

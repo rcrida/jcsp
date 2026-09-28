@@ -35,7 +35,8 @@ it should be on by default.
   is safe to call concurrently, so one instance can be shared across `IndependentSubproblemSolver`'s
   concurrently-solved subproblems.
 - **`DomWdegVariableSelector`** gains mutable `tieBreakRandom` state and `reseedTieBreak(@Nullable
-  Random)`. `select()` now collects *every* variable tied at the minimum dom/wdeg ratio (previously a
+  Random)` (renamed `onRestart` in 3.1.0, when it became a hook on `AdaptiveVariableSelector` —
+  see [ADR-0038](0038-injectable-variable-selector-factory.md)). `select()` now collects *every* variable tied at the minimum dom/wdeg ratio (previously a
   plain `Stream.min(Comparator.comparingDouble(...))`, which silently kept whichever tied candidate
   was encountered first) and, when a `Random` is set, picks uniformly among the tied set; `null`
   reproduces the exact old first-encountered behaviour.

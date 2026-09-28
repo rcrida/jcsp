@@ -207,6 +207,7 @@ public interface Solver {
                             .listener(config.getListener())
                             .cancellation(cancellation)
                             .restartRandomization(config.getRestartRandomization())
+                            .selectorFactory(config.getVariableSelectorFactory())
                             // Effectively unbounded: getSolution() now reaches Luby-restart search directly
                             // (see BoundSolver#getSolution below), so DEFAULT_MAX_RESTARTS's cap would silently
                             // turn SolverLimits.unlimited() into a bounded search. SolverLimits (node/time)

@@ -59,7 +59,7 @@ class DomWdegVariableSelectorTest {
     }
 
     @Test
-    void incrementWeightsBoostsActiveConstraint() {
+    void onConflictBoostsActiveConstraint() {
         // After incrementing c12 (active: v1 assigned, v2 still unassigned),
         // c12.weight becomes 2. v2's ratio drops to domain/2, so v2 beats v3.
         when(c12.getVariables()).thenReturn(Set.of(v1, v2));
@@ -69,7 +69,7 @@ class DomWdegVariableSelectorTest {
         // nextAssignment: v1 is the just-assigned variable (excluded by !v.equals(variable));
         // only v2 (the unassigned neighbour in c12) is actually queried.
         when(nextAssignment.isAssigned(v2)).thenReturn(false);
-        selector.incrementWeights(v1, nextAssignment); // c12 weight → 2
+        selector.onConflict(v1, nextAssignment); // c12 weight → 2
 
         // Now select: v2 unassigned, v3 unassigned; v1 is excluded from csp.getVariableDomains()
         // (not a live decision variable here) but still globally unassigned, so c12 stays active.
@@ -85,7 +85,7 @@ class DomWdegVariableSelectorTest {
     }
 
     @Test
-    void resetWeightsRevertsAccumulatedWeightsToTheirInitialValue() {
+    void onStagnationRevertsAccumulatedWeightsToTheirInitialValue() {
         // Sizes chosen so the winner flips on weight alone: with every weight 1, v2's ratio is
         // 8/2=4.0 and v3's is 3/1=3.0, so v3 wins. Incrementing c12 lifts v2's wdeg to 3
         // (8/3≈2.67), so v2 wins. Resetting must put v3 back in front.
@@ -94,7 +94,7 @@ class DomWdegVariableSelectorTest {
         var selector = new DomWdegVariableSelector(Set.of(c12, c23));
 
         when(nextAssignment.isAssigned(v2)).thenReturn(false);
-        selector.incrementWeights(v1, nextAssignment); // c12 weight → 2
+        selector.onConflict(v1, nextAssignment); // c12 weight → 2
 
         when(csp.getVariableDomains()).thenReturn(Map.of(v2, d2, v3, d3));
         when(assignment.isAssigned(v1)).thenReturn(false);
@@ -105,13 +105,13 @@ class DomWdegVariableSelectorTest {
 
         assertThat(selector.select(csp, assignment)).isEqualTo(v2);
 
-        selector.resetWeights();
+        selector.onStagnation();
 
         assertThat(selector.select(csp, assignment)).isEqualTo(v3);
     }
 
     @Test
-    void resetWeightsAlsoClearsTheLastConflictVariable() {
+    void onStagnationAlsoClearsTheLastConflictVariable() {
         // Last-conflict reasoning short-circuits select entirely, so v2 is returned regardless of
         // ratio. After a reset the selector must fall back to the ratio, which v3 wins.
         when(c12.getVariables()).thenReturn(Set.of(v1, v2));
@@ -120,11 +120,11 @@ class DomWdegVariableSelectorTest {
 
         when(csp.getVariableDomains()).thenReturn(Map.of(v2, d2, v3, d3));
         when(assignment.isAssigned(v2)).thenReturn(false);
-        selector.recordConflict(v2);
+        selector.onValueRejected(v2);
 
         assertThat(selector.select(csp, assignment)).isEqualTo(v2);
 
-        selector.resetWeights();
+        selector.onStagnation();
         when(assignment.isAssigned(v1)).thenReturn(false);
         when(assignment.isAssigned(v3)).thenReturn(false);
         when(d2.size()).thenReturn(8);
@@ -134,7 +134,7 @@ class DomWdegVariableSelectorTest {
     }
 
     @Test
-    void incrementWeightsSkipsConstraintsWithNoUnassignedNeighbour() {
+    void onConflictSkipsConstraintsWithNoUnassignedNeighbour() {
         // c23 involves v2+v3. When we fail on v2 (with v3 already assigned in nextAssignment),
         // c23 has no unassigned neighbour for v2, so its weight must NOT be incremented.
         when(c12.getVariables()).thenReturn(Set.of(v1, v2));
@@ -146,7 +146,7 @@ class DomWdegVariableSelectorTest {
         when(nextAssignment.isAssigned(v3)).thenReturn(true);
         when(nextAssignment.isAssigned(v1)).thenReturn(false);
 
-        selector.incrementWeights(v2, nextAssignment);
+        selector.onConflict(v2, nextAssignment);
         // c12 connects v1+v2; v1 is unassigned → c12 weight becomes 2
         // c23 connects v2+v3; v3 IS assigned → c23 weight stays 1
 
@@ -189,7 +189,7 @@ class DomWdegVariableSelectorTest {
         var selector = new DomWdegVariableSelector(Set.of(c12, nogood));
 
         when(nextAssignment.isAssigned(v2)).thenReturn(false);
-        selector.incrementWeights(v1, nextAssignment); // c12 weight -> 2; nogood skipped entirely
+        selector.onConflict(v1, nextAssignment); // c12 weight -> 2; nogood skipped entirely
 
         when(csp.getVariableDomains()).thenReturn(Map.of(v2, d2, v3, d3));
         when(assignment.isAssigned(v1)).thenReturn(false);
@@ -203,7 +203,7 @@ class DomWdegVariableSelectorTest {
 
     @Test
     void tiedVariablesAreBrokenDeterministicallyWithoutReseeding() {
-        // v1 and v3 are both unconstrained → both ratio=MAX_VALUE, a genuine tie. No reseedTieBreak
+        // v1 and v3 are both unconstrained → both ratio=MAX_VALUE, a genuine tie. No onRestart
         // call at all: tieBreakRandom stays null, so repeated calls must deterministically return
         // the same tied candidate every time (today's exact behaviour, unchanged) -- which candidate
         // that is depends on csp.getVariableDomains()'s iteration order, not asserted here.
@@ -222,7 +222,7 @@ class DomWdegVariableSelectorTest {
     }
 
     @Test
-    void reseedTieBreakNullRestoresDeterministicChoice() {
+    void onRestartNullRestoresDeterministicChoice() {
         var selector = new DomWdegVariableSelector(Set.of());
 
         when(csp.getVariableDomains()).thenReturn(Map.of(v1, d1, v3, d3));
@@ -235,15 +235,15 @@ class DomWdegVariableSelectorTest {
 
         Random random = mock(Random.class);
         when(random.nextInt(2)).thenReturn(1); // pick whichever candidate is second in iteration order
-        selector.reseedTieBreak(random);
+        selector.onRestart(random);
         assertThat(selector.select(csp, assignment)).isNotEqualTo(deterministicChoice);
 
-        selector.reseedTieBreak(null);
+        selector.onRestart(null);
         assertThat(selector.select(csp, assignment)).isEqualTo(deterministicChoice); // back to deterministic
     }
 
     @Test
-    void reseedTieBreakPicksAmongTiedCandidatesByRandomIndex() {
+    void onRestartPicksAmongTiedCandidatesByRandomIndex() {
         var selector = new DomWdegVariableSelector(Set.of());
         Random random = mock(Random.class);
         when(random.nextInt(2)).thenReturn(0, 1);
@@ -254,7 +254,7 @@ class DomWdegVariableSelectorTest {
         when(d1.size()).thenReturn(1);
         when(d3.size()).thenReturn(1);
 
-        selector.reseedTieBreak(random);
+        selector.onRestart(random);
         Variable<?> first = selector.select(csp, assignment);  // nextInt(2) -> 0
         Variable<?> second = selector.select(csp, assignment); // nextInt(2) -> 1
 
@@ -264,7 +264,7 @@ class DomWdegVariableSelectorTest {
     }
 
     @Test
-    void reseedTieBreakSkipsRandomDrawWhenOnlyOneCandidate() {
+    void onRestartSkipsRandomDrawWhenOnlyOneCandidate() {
         // c12 weight=1 (initial): v1: domain=1, wdeg=1 -> ratio=1.0 (unique winner)
         // v2: domain=4, wdeg=1 -> ratio=4.0
         when(c12.getVariables()).thenReturn(Set.of(v1, v2));
@@ -277,7 +277,7 @@ class DomWdegVariableSelectorTest {
         when(d1.size()).thenReturn(1);
         when(d2.size()).thenReturn(4);
 
-        selector.reseedTieBreak(random);
+        selector.onRestart(random);
         assertThat(selector.select(csp, assignment)).isEqualTo(v1);
         verifyNoInteractions(random); // no tie -> the shared Random is never drawn from
     }
@@ -285,9 +285,9 @@ class DomWdegVariableSelectorTest {
     // ── last-conflict reasoning ───────────────────────────────────────────────
 
     @Test
-    void recordConflict_thenSelect_overridesNormalRatioComputation() {
+    void onValueRejected_thenSelect_overridesNormalRatioComputation() {
         // c12 connects v1,v2, giving both wdeg=1. d1.size()=10 -> ratio=10.0, d2.size()=1 ->
-        // ratio=1.0: normal dom/wdeg would pick v2 (smaller ratio). recordConflict(v1) must make
+        // ratio=1.0: normal dom/wdeg would pick v2 (smaller ratio). onValueRejected(v1) must make
         // select() return v1 regardless, proving the override actually bypasses the ratio
         // computation rather than coincidentally agreeing with it.
         when(c12.getVariables()).thenReturn(Set.of(v1, v2));
@@ -296,12 +296,12 @@ class DomWdegVariableSelectorTest {
         when(csp.getVariableDomains()).thenReturn(Map.of(v1, d1, v2, d2));
         when(assignment.isAssigned(v1)).thenReturn(false);
 
-        selector.recordConflict(v1);
+        selector.onValueRejected(v1);
         assertThat(selector.select(csp, assignment)).isEqualTo(v1);
     }
 
     @Test
-    void recordConflict_variableSubsequentlyAssigned_fallsBackToNormalRatio() {
+    void onValueRejected_variableSubsequentlyAssigned_fallsBackToNormalRatio() {
         // v1 is now assigned in `assignment` -- the recorded last-conflict variable is no longer a
         // valid choice, so select() must fall through to the normal dom/wdeg computation (over just
         // v2, the only unassigned variable in csp.getVariableDomains(); v1 is excluded by the same
@@ -315,12 +315,12 @@ class DomWdegVariableSelectorTest {
         when(assignment.isAssigned(v2)).thenReturn(false);
         when(d2.size()).thenReturn(1);
 
-        selector.recordConflict(v1);
+        selector.onValueRejected(v1);
         assertThat(selector.select(csp, assignment)).isEqualTo(v2);
     }
 
     @Test
-    void recordConflict_variableNotInCsp_fallsBackToNormalRatio() {
+    void onValueRejected_variableNotInCsp_fallsBackToNormalRatio() {
         // The recorded last-conflict variable (v1) isn't part of this csp's own variable domains
         // at all -- select() must not return it regardless (and must not throw), falling through to
         // the normal dom/wdeg computation over the variables that actually are present.
@@ -330,7 +330,7 @@ class DomWdegVariableSelectorTest {
         when(assignment.isAssigned(v2)).thenReturn(false);
         when(d2.size()).thenReturn(3);
 
-        selector.recordConflict(v1);
+        selector.onValueRejected(v1);
         assertThat(selector.select(csp, assignment)).isEqualTo(v2);
     }
 

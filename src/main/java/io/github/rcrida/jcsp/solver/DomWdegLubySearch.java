@@ -10,6 +10,7 @@ import io.github.rcrida.jcsp.consistency.Inference;
 import io.github.rcrida.jcsp.solver.listener.SolverListener;
 import io.github.rcrida.jcsp.solver.backtrackingsearch.order.DomainValuesOrderer;
 import io.github.rcrida.jcsp.solver.backtrackingsearch.order.PhaseMemory;
+import io.github.rcrida.jcsp.solver.backtrackingsearch.selector.AdaptiveVariableSelector;
 import io.github.rcrida.jcsp.solver.backtrackingsearch.selector.DomWdegVariableSelector;
 import io.github.rcrida.jcsp.variables.Variable;
 import lombok.Builder;
@@ -26,9 +27,9 @@ import java.util.stream.Stream;
  * <p>
  * Each constraint has a weight (initially 1). When MAC inference causes a domain wipeout the
  * weights of active constraints on the failing variable are bumped (via
- * {@link DomWdegVariableSelector#incrementWeights}). The variable selector then picks
+ * {@link AdaptiveVariableSelector#onConflict}). The variable selector then picks
  * {@code argmin(domainSize / weightedDegree)}, steering search away from costly failure regions.
- * Every backtrack site here also calls {@link DomWdegVariableSelector#recordConflict} (last-conflict
+ * Every rejected candidate here also raises {@link AdaptiveVariableSelector#onValueRejected} (last-conflict
  * reasoning, Lecoutre et al. 2009): the selector immediately re-picks the most recently failed
  * variable ahead of the ratio computation, as long as it's still unassigned, rather than waiting
  * for wdeg's own slower, aggregate weight accumulation to steer back to it. See {@link
@@ -45,7 +46,7 @@ import java.util.stream.Stream;
  * sequence 1, 1, 2, 1, 1, 2, 4, … (multiplied by {@link #lubyUnit}) as per-restart failure
  * budgets, preserving weights across restarts so accumulated failure knowledge steers each new
  * attempt — except after {@link #STAGNANT_RESTART_LIMIT} consecutive restarts that fail to reach a
- * new deepest assignment, when {@link DomWdegVariableSelector#resetWeights} discards them so the
+ * new deepest assignment, when {@link AdaptiveVariableSelector#onStagnation} discards them so the
  * restarts become independent draws again rather than variations on one doomed ordering (see
  * {@code docs/adr/0032-adaptive-weight-reset-on-stagnant-restarts.md}).
  * Returns {@link Optional#empty()} either when the problem is genuinely unsatisfiable
@@ -134,6 +135,13 @@ public class DomWdegLubySearch implements Solver {
     @NonNull SolverListener listener;
     @NonNull Cancellation cancellation;
     @NonNull RestartRandomization restartRandomization;
+    /**
+     * Builds this search's variable ordering, once per {@link #getSolutions}/{@link #getSolution}
+     * call -- a factory rather than a selector because an {@link AdaptiveVariableSelector}
+     * accumulates state about the search it is watching, so two calls must not share one. Defaults
+     * to {@link AdaptiveVariableSelector.Factory#INSTANCE}, dom/wdeg.
+     */
+    AdaptiveVariableSelector.@NonNull Factory selectorFactory;
 
     /** Partial builder: sets defaults and validates preconditions in {@link #build}. */
     public static class DomWdegLubySearchBuilder {
@@ -146,11 +154,12 @@ public class DomWdegLubySearch implements Solver {
         private SolverListener listener = SolverListener.NONE;
         private Cancellation cancellation = Cancellation.NEVER;
         private RestartRandomization restartRandomization = RestartRandomization.NONE;
+        private AdaptiveVariableSelector.Factory selectorFactory = AdaptiveVariableSelector.Factory.INSTANCE;
 
         public DomWdegLubySearch build() {
             if (lubyUnit <= 0) throw new IllegalArgumentException("lubyUnit must be positive, got: " + lubyUnit);
             if (maxRestarts <= 0) throw new IllegalArgumentException("maxRestarts must be positive, got: " + maxRestarts);
-            return new DomWdegLubySearch(lubyUnit, maxRestarts, domainValuesOrderer, inference, limits, nogoodStore, statistics, phaseMemory, listener, cancellation, restartRandomization);
+            return new DomWdegLubySearch(lubyUnit, maxRestarts, domainValuesOrderer, inference, limits, nogoodStore, statistics, phaseMemory, listener, cancellation, restartRandomization, selectorFactory);
         }
     }
 
@@ -166,14 +175,14 @@ public class DomWdegLubySearch implements Solver {
 
     @Override
     public Stream<Assignment> getSolutions(@NonNull ConstraintSatisfactionProblem csp) {
-        var selector = new DomWdegVariableSelector(csp.getConstraints());
+        var selector = selectorFactory.createSelector(csp.getConstraints());
         long deadline = limits.deadlineNanos();
         return searchStream(csp, Assignment.builder().statistics(statistics).listener(listener).cancellation(cancellation).build(), selector, deadline);
     }
 
     @Override
     public Optional<Assignment> getSolution(@NonNull ConstraintSatisfactionProblem csp) {
-        var selector = new DomWdegVariableSelector(csp.getConstraints());
+        var selector = selectorFactory.createSelector(csp.getConstraints());
         long deadline = limits.deadlineNanos();
         int deepestSeen = 0;
         int stagnantRestarts = 0;
@@ -189,10 +198,10 @@ public class DomWdegLubySearch implements Solver {
             } else if (++stagnantRestarts >= STAGNANT_RESTART_LIMIT) {
                 log.debug("dom/wdeg+Luby: {} restarts without progress at restart {}, resetting weights",
                         STAGNANT_RESTART_LIMIT, k);
-                selector.resetWeights();
+                selector.onStagnation();
                 stagnantRestarts = 0;
             }
-            selector.reseedTieBreak(restartRandomization.randomFor(k));
+            selector.onRestart(restartRandomization.randomFor(k));
             long budget = (long) lubyUnit * luby(k);
             int[] failures = {0};
             try {
@@ -227,7 +236,7 @@ public class DomWdegLubySearch implements Solver {
     @SuppressWarnings("unchecked")
     private Stream<Assignment> searchStream(@NonNull ConstraintSatisfactionProblem csp,
                                             @NonNull Assignment assignment,
-                                            @NonNull DomWdegVariableSelector selector,
+                                            @NonNull AdaptiveVariableSelector selector,
                                             long deadline) {
         if (assignment.isComplete(csp)) {
             listener.onSolutionFound(assignment);
@@ -247,7 +256,7 @@ public class DomWdegLubySearch implements Solver {
                     ConstraintSatisfactionProblem cspWithNogoods = nogoodStore.apply(csp);
                     if (!next.isConsistentAmong(cspWithNogoods.getConstraintsTouching(variable))) {
                         next.getStatistics().incrementBacktracks();
-                        selector.recordConflict(variable);
+                        selector.onValueRejected(variable);
                         listener.onBacktrack(variable, next);
                         return Stream.empty();
                     }
@@ -273,11 +282,11 @@ public class DomWdegLubySearch implements Solver {
     private Optional<ConstraintSatisfactionProblem> inferOrExplain(ConstraintSatisfactionProblem cspWithNogoods,
                                                                     Variable<?> variable,
                                                                     Assignment next,
-                                                                    DomWdegVariableSelector selector) {
+                                                                    AdaptiveVariableSelector selector) {
         ConsistencyResult inferred = inference.applyWithReason(cspWithNogoods, variable, next);
         if (inferred.isInfeasible()) {
-            selector.incrementWeights(variable, next);
-            selector.recordConflict(variable);
+            selector.onConflict(variable, next);
+            selector.onValueRejected(variable);
             if (inferred.reason() != null) {
                 nogoodStore.record(inferred.reason());
                 next.getStatistics().incrementNogoodsLearned();
@@ -293,7 +302,7 @@ public class DomWdegLubySearch implements Solver {
     @SuppressWarnings("unchecked")
     private Optional<Assignment> searchOne(@NonNull ConstraintSatisfactionProblem csp,
                                            @NonNull Assignment assignment,
-                                           @NonNull DomWdegVariableSelector selector,
+                                           @NonNull AdaptiveVariableSelector selector,
                                            int[] failures,
                                            long budget,
                                            long deadline,
@@ -322,7 +331,7 @@ public class DomWdegLubySearch implements Solver {
             ConstraintSatisfactionProblem cspWithNogoods = nogoodStore.apply(csp);
             if (!next.isConsistentAmong(cspWithNogoods.getConstraintsTouching(variable))) {
                 next.getStatistics().incrementBacktracks();
-                selector.recordConflict(variable);
+                selector.onValueRejected(variable);
                 listener.onBacktrack(variable, next);
                 progress.complete(childWeight);
                 continue;

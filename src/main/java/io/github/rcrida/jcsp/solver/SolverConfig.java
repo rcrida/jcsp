@@ -3,6 +3,7 @@ package io.github.rcrida.jcsp.solver;
 import io.github.rcrida.jcsp.assignments.SolverLimits;
 import io.github.rcrida.jcsp.assignments.Statistics;
 import io.github.rcrida.jcsp.solver.listener.SolverListener;
+import io.github.rcrida.jcsp.solver.backtrackingsearch.selector.AdaptiveVariableSelector;
 import lombok.Builder;
 import lombok.Value;
 import org.jspecify.annotations.NonNull;
@@ -93,6 +94,18 @@ public class SolverConfig {
     @Builder.Default @NonNull Cancellation cancellation = Cancellation.NEVER;
     @Builder.Default @NonNull RestartRandomization restartRandomization =
             RestartRandomization.seeded(ThreadLocalRandom.current().nextLong());
+
+    /**
+     * How {@link DomWdegLubySearch} orders the variables it branches on. Defaults to
+     * {@link AdaptiveVariableSelector.Factory#INSTANCE}, dom/wdeg with last-conflict; supply
+     * another to search the same problem in a different order. A factory rather than a selector
+     * because each solve needs its own -- see {@link AdaptiveVariableSelector.Factory}.
+     * <p>
+     * Affects only the order in which assignments are visited, never which ones are: a complete
+     * search still finds a solution if one exists and still proves unsatisfiability if none does.
+     */
+    @Builder.Default AdaptiveVariableSelector.@NonNull Factory variableSelectorFactory =
+            AdaptiveVariableSelector.Factory.INSTANCE;
 
     /**
      * Whether nogood learning actually runs: an explicit {@link #nogoodLearningEnabled} if the

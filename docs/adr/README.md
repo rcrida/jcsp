@@ -99,3 +99,4 @@ section instead.
 | [0035](0035-signed-interval-and-coverage-product-propagation.md) | Signed interval arithmetic plus EQ coverage for product constraints, instead of giving up on any non-positive factor | Accepted |
 | [0036](0036-joint-bounds-for-redundant-cumulative-capacity.md) | Derive a 2D noOverlap's redundant cumulative capacity from the instance's joint strip bounds, after parsing | Accepted |
 | [0037](0037-energetic-reasoning-for-cumulative-constraints.md) | Energetic reasoning for cumulative constraints, where timetabling has no compulsory part to work from | Accepted |
+| [0038](0038-injectable-variable-selector-factory.md) | Inject the satisfaction chain's variable ordering as a factory, on its own interface | Accepted |

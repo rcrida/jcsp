@@ -33,7 +33,9 @@ a 1050-variable problem. The search was not inching forward; it was re-running o
 `DomWdegLubySearch#getSolution` tracks the deepest assignment `PhaseMemory` has recorded. A restart
 that fails to raise it counts as stagnant, and after `STAGNANT_RESTART_LIMIT` (32) consecutive
 stagnant restarts the selector's weights are returned to 1 via
-`DomWdegVariableSelector#resetWeights`, which also clears the last-conflict variable. Any restart
+`DomWdegVariableSelector#resetWeights` (renamed `onStagnation` in 3.1.0, when it became a hook on
+`AdaptiveVariableSelector` — see [ADR-0038](0038-injectable-variable-selector-factory.md)), which
+also clears the last-conflict variable. Any restart
 that reaches a new deepest assignment clears the counter.
 
 Weight accumulation across restarts is otherwise unchanged, so an instance making progress — or
