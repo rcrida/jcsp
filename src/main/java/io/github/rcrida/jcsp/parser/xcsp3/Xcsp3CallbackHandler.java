@@ -220,6 +220,9 @@ final class Xcsp3CallbackHandler implements XCallbacks2 {
 
     private final List<PendingNoOverlap> pendingNoOverlaps = new ArrayList<>();
 
+    /** Unreified tables, scanned by {@link #taskEnergyFloors} for linked width/height pairs. */
+    private final List<NaryTuplesConstraint> unreifiedTables = new ArrayList<>();
+
     Xcsp3CallbackHandler() {
         // By default xcsp3-tools "recognizes" simple intension/count/sum/etc. shapes and routes
         // them to more specific callbacks (buildCtrPrimitive, buildCtrExactly, buildCtrAmong, ...)
@@ -297,6 +300,61 @@ final class Xcsp3CallbackHandler implements XCallbacks2 {
      * {@link Operator#LEQ} or {@link Operator#EQ}. Only ever called for a constraint added
      * outright -- a reified one may well be false, so its bound holds of nothing.
      */
+    /**
+     * Notes an unreified table over two or more variables, so {@link #taskEnergyFloors} can read a
+     * linked pair's real minimum product off it. Only ever called for a constraint added outright,
+     * for the same reason {@link #recordPairSumUpperBound} is.
+     */
+    private void recordSizeTable(Constraint body) {
+        if (body instanceof NaryTuplesConstraint table) unreifiedTables.add(table);
+    }
+
+    /**
+     * A lower bound on {@code width * height} for each rectangle, read off whichever unreified
+     * table lists both variables together -- XCSP3's rotation idiom, whose two tuples
+     * {@code (0,a,b)} and {@code (1,b,a)} pin the area at {@code a*b} however the rectangle is
+     * turned. The redundant projections would otherwise have to take each rectangle's energy as
+     * {@code min(width) * min(height)}, which on {@code StripPacking-C1P1} reports 220 units of
+     * load for a strip packed to exactly 400 of 400.
+     * <p>
+     * Empty when no rectangle has such a table, which leaves the projections on the domain minima
+     * they always used.
+     */
+    private List<Double> taskEnergyFloors(List<Variable<? extends Number>> widths,
+                                          List<Variable<? extends Number>> heights) {
+        List<Double> floors = new ArrayList<>(widths.size());
+        boolean anyFound = false;
+        for (int i = 0; i < widths.size(); i++) {
+            double floor = 0.0;
+            for (NaryTuplesConstraint table : unreifiedTables) {
+                Double tableFloor = minimumProduct(table, widths.get(i), heights.get(i));
+                if (tableFloor == null) continue;
+                floor = Math.max(floor, tableFloor);
+                anyFound = true;
+            }
+            floors.add(floor);
+        }
+        return anyFound ? floors : List.of();
+    }
+
+    /**
+     * The smallest {@code width * height} any tuple of {@code table} allows, or {@code null} when
+     * the table does not constrain both variables (and so says nothing about their product).
+     */
+    private static @Nullable Double minimumProduct(NaryTuplesConstraint table,
+                                                   Variable<?> width, Variable<?> height) {
+        // A table always has at least one tuple (NaryTuplesConstraint#of rejects an empty one), so
+        // the loop runs and the result is a real product rather than the initial infinity.
+        double smallest = Double.POSITIVE_INFINITY;
+        for (Assignment tuple : table.getTuples()) {
+            Object w = tuple.getValues().get(width);
+            Object h = tuple.getValues().get(height);
+            if (!(w instanceof Number wide) || !(h instanceof Number high)) return null;
+            smallest = Math.min(smallest, wide.doubleValue() * high.doubleValue());
+        }
+        return smallest;
+    }
+
     private void recordPairSumUpperBound(Constraint body) {
         if (!(body instanceof SumBoundConstraint<?> sum) || sum.getVariables().size() != 2) return;
         if (sum.getOperator() != Operator.LEQ && sum.getOperator() != Operator.EQ) return;
@@ -312,6 +370,7 @@ final class Xcsp3CallbackHandler implements XCallbacks2 {
     private void addOrReify(Constraint body, String id, @Nullable XReification reification) {
         if (reification == null) {
             recordPairSumUpperBound(body);
+            recordSizeTable(body);
             builder.constraint(body);
             return;
         }
@@ -1891,10 +1950,15 @@ final class Xcsp3CallbackHandler implements XCallbacks2 {
             double capacityY = axisCapacity(pending.origins(), pending.lengths(), 1, 1);
             double capacityX = axisCapacity(pending.origins(), pending.lengths(), 0, 0);
             Constraint diffn = DiffnVariableConstraint.of(pending.xs(), pending.ys(), pending.ws(), pending.hs());
+            // Each projection's capacity is the *other* axis's extent, and its own axis's extent is
+            // exactly the horizon its tasks cannot run past -- the same joint bound, used twice.
+            List<Double> energyFloors = taskEnergyFloors(pending.ws(), pending.hs());
             Constraint xProjection = CumulativeVariableConstraint.of(
-                    List.copyOf(pending.xs()), List.copyOf(pending.ws()), List.copyOf(pending.hs()), capacityY);
+                    List.copyOf(pending.xs()), List.copyOf(pending.ws()), List.copyOf(pending.hs()),
+                    capacityY, energyFloors, capacityX);
             Constraint yProjection = CumulativeVariableConstraint.of(
-                    List.copyOf(pending.ys()), List.copyOf(pending.hs()), List.copyOf(pending.ws()), capacityX);
+                    List.copyOf(pending.ys()), List.copyOf(pending.hs()), List.copyOf(pending.ws()),
+                    capacityX, energyFloors, capacityY);
 
             if (pending.reification() == null) {
                 builder.constraint(diffn);

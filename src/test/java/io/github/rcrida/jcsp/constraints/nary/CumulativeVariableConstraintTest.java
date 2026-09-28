@@ -5,10 +5,12 @@ import io.github.rcrida.jcsp.assignments.Assignment;
 import io.github.rcrida.jcsp.domains.Domain;
 import io.github.rcrida.jcsp.domains.IntervalDomain;
 import io.github.rcrida.jcsp.domains.IntRangeDomain;
+import io.github.rcrida.jcsp.domains.NumericDiscreteDomain;
 import io.github.rcrida.jcsp.solver.Solver;
 import io.github.rcrida.jcsp.variables.Variable;
 import org.junit.jupiter.api.Test;
 
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -368,5 +370,83 @@ public class CumulativeVariableConstraintTest {
                 .cumulativeVariableConstraint(List.of(s1, s2), List.of(d1, d2), List.of(r1, r2), 1)
                 .build();
         assertThat(Solver.Factory.INSTANCE.createSolver(csp).getSolutions()).hasSize(6);
+    }
+
+    // ---- energetic reasoning ------------------------------------------------------------------
+
+    /** Start, duration and resource domains for one scenario, with the sizes pinned to constants. */
+    private Map<Variable<?>, Domain<?>> taskDomains(List<Variable<?>> starts, List<Variable<?>> durations,
+                                                    List<Variable<?>> resources, int[][] startRanges,
+                                                    int[] fixedDurations, int[] fixedResources) {
+        Map<Variable<?>, Domain<?>> domains = new LinkedHashMap<>();
+        for (int i = 0; i < starts.size(); i++) {
+            domains.put(starts.get(i), IntRangeDomain.of(startRanges[i][0], startRanges[i][1]));
+            domains.put(durations.get(i), IntRangeDomain.of(fixedDurations[i], fixedDurations[i]));
+            domains.put(resources.get(i), IntRangeDomain.of(fixedResources[i], fixedResources[i]));
+        }
+        return domains;
+    }
+
+    /**
+     * {@link CumulativeConstraintTest}'s partial-overlap window, with the sizes as pinned
+     * variables: four tasks that all have slack enough to avoid a compulsory part, no overloaded
+     * task interval between them, and 15 units of work that must land in a window holding 14.
+     */
+    @Test
+    void propagate_windowOverloadedOnlyByPartialOverlaps_isInfeasible() {
+        List<Variable<?>> starts = List.of(F.create("vn_s0"), F.create("vn_s1"), F.create("vn_s2"), F.create("vn_s3"));
+        List<Variable<?>> durations = List.of(F.create("vn_d0"), F.create("vn_d1"), F.create("vn_d2"), F.create("vn_d3"));
+        List<Variable<?>> resources = List.of(F.create("vn_r0"), F.create("vn_r1"), F.create("vn_r2"), F.create("vn_r3"));
+        var constraint = CumulativeVariableConstraint.of(starts, durations, resources, 2);
+        var domains = taskDomains(starts, durations, resources,
+                new int[][]{{2, 6}, {1, 6}, {2, 5}, {4, 8}}, new int[]{3, 3, 3, 2}, new int[]{2, 1, 2, 1});
+        assertThat(constraint.propagate(domains)).isEmpty();
+        // Non-singleton starts can't be cited as a ground reason, so no reason is produced -- what
+        // this pins is that the energetic branch is the one reached.
+        assertThat(constraint.explainInfeasible(domains)).isEmpty();
+    }
+
+    /**
+     * A rotatable 2x12 rectangle starting at 0 on a strip 12 long: its width and height domains
+     * both reach down to 2, so their minima put its energy at 4 against a real area of 24. With the
+     * floor supplied it no longer fits the window it cannot leave; without it, nothing is detected.
+     * The horizon is what makes the window contain it at all -- {@code lst + maxDuration} alone
+     * would let this task run to 12 and the floor would never apply.
+     */
+    @Test
+    void propagate_energyFloor_catchesWhatTheDomainMinimaHide() {
+        Variable<?> start = F.create("nrjf_s"), duration = F.create("nrjf_d"), resource = F.create("nrjf_r");
+        Map<Variable<?>, Domain<?>> domains = Map.of(
+                start, IntRangeDomain.of(0, 0),
+                duration, NumericDiscreteDomain.of(2, 12),
+                resource, NumericDiscreteDomain.of(2, 12));
+        assertThat(CumulativeVariableConstraint.of(List.of(start), List.of(duration), List.of(resource), 2)
+                .propagate(domains)).isPresent();
+        assertThat(CumulativeVariableConstraint.of(List.of(start), List.of(duration), List.of(resource), 2,
+                List.of(24.0), 2.0).propagate(domains)).isEmpty();
+    }
+
+    @Test
+    void of_minEnergiesOfTheWrongLength_asserts() {
+        Variable<?> s = F.create("nrje_s"), d = F.create("nrje_d"), r = F.create("nrje_r");
+        assertThatThrownBy(() -> CumulativeVariableConstraint.of(
+                List.of(s), List.of(d), List.of(r), 1, List.of(1.0, 2.0), Double.POSITIVE_INFINITY))
+                .isInstanceOf(AssertionError.class);
+    }
+
+    /**
+     * Fixed blocks at [0,3) and [8,11) squeeze the third task into [3,6], and its start domain has
+     * a hole exactly there -- so narrowing leaves nothing, which is how a crossing of the energetic
+     * bounds reports itself.
+     */
+    @Test
+    void propagate_energeticBoundsFallInADomainGap_isInfeasible() {
+        List<Variable<?>> starts = List.of(F.create("vg_a"), F.create("vg_c"), F.create("vg_b"));
+        List<Variable<?>> durations = List.of(F.create("vg_da"), F.create("vg_dc"), F.create("vg_db"));
+        List<Variable<?>> resources = List.of(F.create("vg_ra"), F.create("vg_rc"), F.create("vg_rb"));
+        Map<Variable<?>, Domain<?>> domains = new LinkedHashMap<>(taskDomains(starts, durations, resources,
+                new int[][]{{0, 0}, {8, 8}, {0, 0}}, new int[]{3, 3, 2}, new int[]{1, 1, 1}));
+        domains.put(starts.get(2), NumericDiscreteDomain.of(0, 9));
+        assertThat(CumulativeVariableConstraint.of(starts, durations, resources, 1).propagate(domains)).isEmpty();
     }
 }

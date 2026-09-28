@@ -2,8 +2,10 @@ package io.github.rcrida.jcsp.constraints.nary;
 
 import io.github.rcrida.jcsp.ConstraintSatisfactionProblem;
 import io.github.rcrida.jcsp.assignments.Assignment;
+import io.github.rcrida.jcsp.domains.Domain;
 import io.github.rcrida.jcsp.domains.IntervalDomain;
 import io.github.rcrida.jcsp.domains.IntRangeDomain;
+import io.github.rcrida.jcsp.domains.NumericDiscreteDomain;
 import io.github.rcrida.jcsp.solver.Solver;
 import io.github.rcrida.jcsp.variables.Variable;
 import org.junit.jupiter.api.BeforeEach;
@@ -452,5 +454,56 @@ public class CumulativeConstraintTest {
         // so newEst=0 (boundary, not open-forbidden) and newLst=5 (also boundary):
         // no tightening is reported by the propagator.
         assertThat(result.get()).isEmpty();
+    }
+
+    // ---- energetic reasoning ------------------------------------------------------------------
+
+    /**
+     * Four loose tasks -- every one has {@code lst >= est + duration}, so not one of them has a
+     * compulsory part and timetabling has nothing to say. Nor is any task interval overloaded, so
+     * the energy-overload check passes too. But [2,9) has room for 14 units of work and the four
+     * tasks must place 15 of them inside it however they are arranged.
+     */
+    @Test
+    void propagate_windowOverloadedOnlyByPartialOverlaps_isInfeasible() {
+        Variable<Integer> t0 = F.create("nrj_t0"), t1 = F.create("nrj_t1");
+        Variable<Integer> t2 = F.create("nrj_t2"), t3 = F.create("nrj_t3");
+        var constraint = CumulativeConstraint.of(List.of(t0, t1, t2, t3),
+                List.of(3, 3, 3, 2), List.of(2, 1, 2, 1), 2);
+        var domains = energeticDomains(t0, t1, t2, t3);
+        assertThat(constraint.propagate(domains)).isEmpty();
+    }
+
+    @Test
+    void explainInfeasible_energeticOverload_citesTheTasksSharingTheWindow() {
+        Variable<Integer> t0 = F.create("nrjx_t0"), t1 = F.create("nrjx_t1");
+        Variable<Integer> t2 = F.create("nrjx_t2"), t3 = F.create("nrjx_t3");
+        var constraint = CumulativeConstraint.of(List.of(t0, t1, t2, t3),
+                List.of(3, 3, 3, 2), List.of(2, 1, 2, 1), 2);
+        // Non-singleton starts can't be cited as a ground reason, so the reason is empty -- what
+        // matters is that the energetic branch is the one that produced it.
+        assertThat(constraint.explainInfeasible(energeticDomains(t0, t1, t2, t3))).isEmpty();
+    }
+
+    private static Map<Variable<?>, Domain<?>> energeticDomains(
+            Variable<Integer> t0, Variable<Integer> t1, Variable<Integer> t2, Variable<Integer> t3) {
+        return Map.of(t0, IntRangeDomain.of(2, 6), t1, IntRangeDomain.of(1, 6),
+                t2, IntRangeDomain.of(2, 5), t3, IntRangeDomain.of(4, 8));
+    }
+
+    /**
+     * Two fixed blocks at [0,3) and [8,11) squeeze a third task into [3,6], and its start domain
+     * has a hole exactly there -- so narrowing leaves nothing and the constraint is infeasible,
+     * which no bound comparison on its own would have noticed.
+     */
+    @Test
+    void propagate_energeticBoundsFallInADomainGap_isInfeasible() {
+        Variable<Integer> blockA = F.create("gap_a"), blockC = F.create("gap_c"), free = F.create("gap_b");
+        var constraint = CumulativeConstraint.of(List.of(blockA, blockC, free),
+                List.of(3, 3, 2), List.of(1, 1, 1), 1);
+        var domains = Map.<Variable<?>, Domain<?>>of(
+                blockA, IntRangeDomain.of(0, 0), blockC, IntRangeDomain.of(8, 8),
+                free, NumericDiscreteDomain.of(0, 9));
+        assertThat(constraint.propagate(domains)).isEmpty();
     }
 }

@@ -8,6 +8,7 @@ import io.github.rcrida.jcsp.domains.Domain;
 import io.github.rcrida.jcsp.domains.IntervalDomain;
 import io.github.rcrida.jcsp.domains.IntRangeDomain;
 import io.github.rcrida.jcsp.variables.Variable;
+import lombok.Builder;
 import lombok.EqualsAndHashCode;
 import lombok.Getter;
 import lombok.Singular;
@@ -60,24 +61,58 @@ public class CumulativeVariableConstraint extends NaryConstraint implements Prop
     @Singular("resource") private final List<Variable<?>> resources;
 
     /**
-     * Readable because a redundant projection's capacity is derived rather than stated -- see
-     * {@code Xcsp3CallbackHandler#axisCapacity}, whose whole job is to make this as tight as the
-     * instance allows, and which is only testable if the result can be read back.
+     * Readable, like {@link #minEnergies} and {@link #horizon}, because a redundant projection's
+     * capacity is derived from the instance rather than stated by it -- see
+     * {@code Xcsp3CallbackHandler#axisCapacity}, whose whole job is to make these as tight as the
+     * instance allows, and which is only testable if the results can be read back.
      */
     @Getter private final double limit;
+
+    /**
+     * Optional per-task lower bounds on {@code duration * resource}, for a caller that knows the
+     * two are linked -- a rotatable rectangle keeps its area whichever way round it goes, which
+     * {@code min(duration) * min(resource)} cannot express. Empty means "no better bound known",
+     * and {@link CumulativePropagation} then works from the domain minima alone. See
+     * {@link CumulativePropagation}'s own Javadoc for what this buys and why it is sound.
+     */
+    @Getter @Singular("minEnergy") private final List<Double> minEnergies;
+
+    /**
+     * An upper bound on where any task may end, when the caller knows one that a task's own start
+     * and duration domains do not give jointly -- a rectangle on a strip of width {@code W} obeys
+     * {@code start + duration <= W} however wide it turns out to be, where the two domains' maxima
+     * taken separately run well past {@code W}. Defaults to no bound.
+     */
+    @Getter @Builder.Default private final double horizon = Double.POSITIVE_INFINITY;
 
     public static CumulativeVariableConstraint of(@NonNull List<Variable<?>> starts,
                                                     @NonNull List<Variable<?>> durations,
                                                     @NonNull List<Variable<?>> resources,
                                                     double limit) {
+        return of(starts, durations, resources, limit, List.of(), Double.POSITIVE_INFINITY);
+    }
+
+    /**
+     * {@link #of(List, List, List, double)} with the two hints a caller may hold that the task
+     * variables themselves cannot express -- see {@link #minEnergies} and {@link #horizon}.
+     */
+    public static CumulativeVariableConstraint of(@NonNull List<Variable<?>> starts,
+                                                    @NonNull List<Variable<?>> durations,
+                                                    @NonNull List<Variable<?>> resources,
+                                                    double limit,
+                                                    @NonNull List<Double> minEnergies,
+                                                    double horizon) {
         assert starts.size() == durations.size() && starts.size() == resources.size()
                 : "starts, durations and resources must have equal length";
-        var b = CumulativeVariableConstraint.builder().limit(limit);
+        assert minEnergies.isEmpty() || minEnergies.size() == starts.size()
+                : "minEnergies, when given, must have one entry per task";
+        var b = CumulativeVariableConstraint.builder().limit(limit).horizon(horizon);
         for (int i = 0; i < starts.size(); i++) {
             b.variable(starts.get(i)).start(starts.get(i));
             b.variable(durations.get(i)).duration(durations.get(i));
             b.variable(resources.get(i)).resource(resources.get(i));
         }
+        minEnergies.forEach(b::minEnergy);
         return b.build();
     }
 
@@ -139,20 +174,30 @@ public class CumulativeVariableConstraint extends NaryConstraint implements Prop
         if (energyOverload(est, lct, dmin, rmin).isPresent()) return Optional.empty();
 
         // Tighten each task's start window (never the duration/resource variables themselves)
-        Map<Variable<?>, Domain<?>> updated = new HashMap<>();
+        double[] newEst = est.clone();
+        double[] newLst = lst.clone();
         for (int i = 0; i < n; i++) {
             var window = taskWindow(i, est, lst, dmin, rmin, events);
             if (!window.feasible()) return Optional.empty();
-            double newEst = window.newEst();
-            double newLst = window.newLst();
-            if (newEst != est[i] || newLst != lst[i]) {
-                var dom = domains.get(starts.get(i));
-                if (dom instanceof BoundedDomain<?>) {
-                    updated.put(starts.get(i), IntervalDomain.of(newEst, newLst));
-                } else {
-                    updated.put(starts.get(i), IntRangeDomain.of((int) newEst, (int) newLst));
-                }
-            }
+            newEst[i] = window.newEst();
+            newLst[i] = window.newLst();
+        }
+
+        // Energetic reasoning, over the bounds timetabling just tightened -- the pass that acts
+        // where no task has a compulsory part and timetabling above can say nothing at all.
+        var energetic = CumulativePropagation.energetic(tasks(newEst, newLst, dmin, rmin, domains));
+        if (!energetic.feasible()) return Optional.empty();
+
+        // narrow (rather than rebuilding a range from the new bounds) so a start domain that had
+        // values removed from its interior keeps them removed, and so an energetic bound landing
+        // between two integers still excludes the value it rules out.
+        Map<Variable<?>, Domain<?>> updated = new HashMap<>();
+        for (int i = 0; i < n; i++) {
+            Optional<Domain<Number>> narrowed = NumericBounds.narrow(
+                    (Domain<Number>) domains.get(starts.get(i)), energetic.est()[i], energetic.lst()[i]);
+            if (narrowed.isEmpty()) continue;
+            if (narrowed.get().isEmpty()) return Optional.empty();
+            updated.put(starts.get(i), narrowed.get());
         }
         return Optional.of(updated);
     }
@@ -175,6 +220,25 @@ public class CumulativeVariableConstraint extends NaryConstraint implements Prop
             return cmp != 0 ? cmp : Double.compare(a[1], b[1]);
         });
         return events;
+    }
+
+    /**
+     * This constraint's current per-task bounds as {@link CumulativePropagation} takes them. The
+     * maximum duration comes from the duration variable's own domain, and each energy floor is the
+     * better of {@link #minEnergies}' caller-supplied bound and the domain minima's product.
+     */
+    @SuppressWarnings("unchecked")
+    private CumulativePropagation.Tasks tasks(double[] est, double[] lst, double[] dmin, double[] rmin,
+                                              Map<Variable<?>, Domain<?>> domains) {
+        int n = est.length;
+        double[] dmax = new double[n];
+        double[] energy = new double[n];
+        for (int i = 0; i < n; i++) {
+            dmax[i] = NumericBounds.max((Domain<Number>) domains.get(durations.get(i)));
+            energy[i] = dmin[i] * rmin[i];
+            if (!minEnergies.isEmpty()) energy[i] = Math.max(energy[i], minEnergies.get(i));
+        }
+        return new CumulativePropagation.Tasks(est, lst, dmin, rmin, dmax, energy, limit, horizon);
     }
 
     /** The tightened start-time window computed for one task, or {@code feasible=false} when none exists. */
@@ -324,14 +388,30 @@ public class CumulativeVariableConstraint extends NaryConstraint implements Prop
             return GroundNogoodConstraint.fromReason(Propagatable.allSingletonReason(culprits, domains));
         }
 
+        double[] newEst = est.clone();
+        double[] newLst = lst.clone();
         for (int i = 0; i < n; i++) {
-            if (!taskWindow(i, est, lst, dmin, rmin, events).feasible()) {
+            TaskWindow window = taskWindow(i, est, lst, dmin, rmin, events);
+            if (!window.feasible()) {
                 Set<Variable<?>> culprits = new LinkedHashSet<>(compulsoryVars);
                 culprits.add(starts.get(i));
                 culprits.add(durations.get(i));
                 culprits.add(resources.get(i));
                 return GroundNogoodConstraint.fromReason(Propagatable.allSingletonReason(culprits, domains));
             }
+            newEst[i] = window.newEst();
+            newLst[i] = window.newLst();
+        }
+
+        var energetic = CumulativePropagation.energetic(tasks(newEst, newLst, dmin, rmin, domains));
+        if (!energetic.feasible()) {
+            Set<Variable<?>> culprits = new LinkedHashSet<>();
+            for (int idx : energetic.overloaded()) {
+                culprits.add(starts.get(idx));
+                culprits.add(durations.get(idx));
+                culprits.add(resources.get(idx));
+            }
+            return GroundNogoodConstraint.fromReason(Propagatable.allSingletonReason(culprits, domains));
         }
         return Optional.empty();
     }

@@ -147,20 +147,31 @@ public class CumulativeConstraint extends NaryConstraint implements Propagatable
         if (energyOverload(est, lct).isPresent()) return Optional.empty();
 
         // Tighten each task's start window
-        Map<Variable<?>, Domain<?>> updated = new HashMap<>();
+        double[] newEst = est.clone();
+        double[] newLst = lst.clone();
         for (int i = 0; i < n; i++) {
             var window = taskWindow(i, est, lst, events);
             if (!window.feasible()) return Optional.empty();
-            double newEst = window.newEst();
-            double newLst = window.newLst();
-            if (newEst != est[i] || newLst != lst[i]) {
-                var dom = domains.get(starts.get(i));
-                if (dom instanceof BoundedDomain<?>) {
-                    updated.put(starts.get(i), IntervalDomain.of(newEst, newLst));
-                } else {
-                    updated.put(starts.get(i), IntRangeDomain.of((int) newEst, (int) newLst));
-                }
-            }
+            newEst[i] = window.newEst();
+            newLst[i] = window.newLst();
+        }
+
+        // Energetic reasoning, over the bounds timetabling just tightened -- the pass that acts
+        // where no task has a compulsory part and timetabling above can say nothing at all.
+        var energetic = CumulativePropagation.energetic(tasks(newEst, newLst));
+        if (!energetic.feasible()) return Optional.empty();
+
+        // narrow (rather than rebuilding a range from the new bounds) so a start domain that had
+        // values removed from its interior keeps them removed, and so an energetic bound landing
+        // between two integers still excludes the value it rules out.
+        Map<Variable<?>, Domain<?>> updated = new HashMap<>();
+        for (int i = 0; i < n; i++) {
+            Optional<Domain<Number>> narrowed = NumericBounds.narrow(
+                    (Domain<Number>) (Domain<?>) domains.get(starts.get(i)),
+                    energetic.est()[i], energetic.lst()[i]);
+            if (narrowed.isEmpty()) continue;
+            if (narrowed.get().isEmpty()) return Optional.empty();
+            updated.put(starts.get(i), narrowed.get());
         }
         return Optional.of(updated);
     }
@@ -252,6 +263,25 @@ public class CumulativeConstraint extends NaryConstraint implements Propagatable
             }
         }
         return Optional.empty();
+    }
+
+    /** This constraint's fixed per-task constants, as the arrays {@link CumulativePropagation} takes. */
+    private static double[] toArray(List<Double> values) {
+        double[] array = new double[values.size()];
+        for (int i = 0; i < array.length; i++) array[i] = values.get(i);
+        return array;
+    }
+
+    /**
+     * Fixed sizes leave nothing for {@link CumulativePropagation.Tasks#minEnergies} to recover --
+     * {@code duration * resource} is already exact, and the maximum duration is the duration.
+     */
+    private CumulativePropagation.Tasks tasks(double[] est, double[] lst) {
+        double[] d = toArray(durations);
+        double[] r = toArray(resources);
+        double[] energy = new double[d.length];
+        for (int i = 0; i < d.length; i++) energy[i] = d[i] * r[i];
+        return new CumulativePropagation.Tasks(est, lst, d, r, d, energy, limit, Double.POSITIVE_INFINITY);
     }
 
     /** The tightened start-time window computed for one task, or {@code feasible=false} when none exists. */
@@ -382,12 +412,24 @@ public class CumulativeConstraint extends NaryConstraint implements Propagatable
             return GroundNogoodConstraint.fromReason(Propagatable.allSingletonReason(culprits, domains));
         }
 
+        double[] newEst = est.clone();
+        double[] newLst = lst.clone();
         for (int i = 0; i < n; i++) {
-            if (!taskWindow(i, est, lst, events).feasible()) {
+            TaskWindow window = taskWindow(i, est, lst, events);
+            if (!window.feasible()) {
                 Set<Variable<?>> culprits = new HashSet<>(compulsoryVars);
                 culprits.add(starts.get(i));
                 return GroundNogoodConstraint.fromReason(Propagatable.allSingletonReason(culprits, domains));
             }
+            newEst[i] = window.newEst();
+            newLst[i] = window.newLst();
+        }
+
+        var energetic = CumulativePropagation.energetic(tasks(newEst, newLst));
+        if (!energetic.feasible()) {
+            Set<Variable<?>> culprits = new LinkedHashSet<>();
+            for (int idx : energetic.overloaded()) culprits.add(starts.get(idx));
+            return GroundNogoodConstraint.fromReason(Propagatable.allSingletonReason(culprits, domains));
         }
         return Optional.empty();
     }

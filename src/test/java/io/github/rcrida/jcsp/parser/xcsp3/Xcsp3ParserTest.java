@@ -2369,10 +2369,49 @@ class Xcsp3ParserTest {
 
     /** Every redundant axis-projection capacity the parser derived, in constraint order. */
     private static List<Double> capacities(Xcsp3Instance instance) {
+        return projections(instance).map(CumulativeVariableConstraint::getLimit).toList();
+    }
+
+    private static java.util.stream.Stream<CumulativeVariableConstraint> projections(Xcsp3Instance instance) {
         return instance.csp().getConstraints().stream()
                 .filter(CumulativeVariableConstraint.class::isInstance)
-                .map(c -> ((CumulativeVariableConstraint) c).getLimit())
-                .toList();
+                .map(CumulativeVariableConstraint.class::cast);
+    }
+
+    @Test void noOverlap2D_rotationTable_givesTheProjectionsTheRealRectangleAreas() throws IOException {
+        // w and h both range over {2,12}, so their minima put this rectangle's energy at 4 -- but
+        // the table only ever pairs 2 with 12, and either way round the area is 24.
+        Xcsp3Instance instance = parseXml(
+                "<var id=\"x0\"> 0..18 </var><var id=\"y0\"> 0..18 </var>"
+                        + "<var id=\"w0\"> 2 12 </var><var id=\"h0\"> 2 12 </var><var id=\"r0\"> 0..1 </var>",
+                "<noOverlap><origins> (x0,y0) </origins><lengths> (w0,h0) </lengths></noOverlap>"
+                        + "<extension><list> r0 w0 h0 </list><supports> (0,2,12)(1,12,2) </supports></extension>");
+        assertThat(projections(instance)).allSatisfy(
+                projection -> assertThat(projection.getMinEnergies()).containsExactly(24.0));
+    }
+
+    @Test void noOverlap2D_tableOverOtherVariables_leavesTheEnergiesToTheDomainMinima() throws IOException {
+        // The table says nothing about w0/h0, so there is no better bound than their domains give
+        // and the projections are left to work those out for themselves.
+        Xcsp3Instance instance = parseXml(
+                "<var id=\"x0\"> 0..18 </var><var id=\"y0\"> 0..18 </var>"
+                        + "<var id=\"w0\"> 2 12 </var><var id=\"h0\"> 2 12 </var>"
+                        + "<var id=\"p\"> 0..1 </var><var id=\"q\"> 0..1 </var>",
+                "<noOverlap><origins> (x0,y0) </origins><lengths> (w0,h0) </lengths></noOverlap>"
+                        + "<extension><list> p q </list><supports> (0,1)(1,0) </supports></extension>");
+        assertThat(projections(instance)).allSatisfy(
+                projection -> assertThat(projection.getMinEnergies()).isEmpty());
+    }
+
+    @Test void noOverlap2D_tableCoveringOnlyTheWidth_leavesTheEnergiesToTheDomainMinima() throws IOException {
+        // Half a link is no link: knowing w0's values without h0's says nothing about the area.
+        Xcsp3Instance instance = parseXml(
+                "<var id=\"x0\"> 0..18 </var><var id=\"y0\"> 0..18 </var>"
+                        + "<var id=\"w0\"> 2 12 </var><var id=\"h0\"> 2 12 </var><var id=\"r0\"> 0..1 </var>",
+                "<noOverlap><origins> (x0,y0) </origins><lengths> (w0,h0) </lengths></noOverlap>"
+                        + "<extension><list> r0 w0 </list><supports> (0,2)(1,12) </supports></extension>");
+        assertThat(projections(instance)).allSatisfy(
+                projection -> assertThat(projection.getMinEnergies()).isEmpty());
     }
 
     @Test void noOverlap2D_higherDimensionality_throwsUnsupported() {
