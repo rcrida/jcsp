@@ -84,14 +84,12 @@ public final class Xcsp3ProblemRunner {
     /**
      * {@code c search-space-before:} is {@link ConstraintSatisfactionProblem#getSearchSpace()} on
      * the original, undecomposed {@code instance.csp()} -- the declared size, unaffected by however
-     * much search progresses. {@code c search-space-after:} is {@code stats}'s own {@link
-     * Statistics#getCurrentSearchSpace()}, printed only when present -- i.e. only when a
-     * {@link Cancellation}/timeout actually stopped search before it completed, in which case it's
-     * the live, propagation-narrowed search space at the exact point that happened. Omitted
-     * entirely for a completed solve (SAT, UNSAT, or OPTIMUM FOUND): {@code
-     * search-space-before}'s already-printed declared value is the whole answer there, with no
-     * narrower "current" state to report separately. {@code stats} is likewise printed as its own
-     * {@code c} line at the end. {@code c}-prefixed lines are the standard SAT/CP competition
+     * much search progresses. {@code c search-space-at-root:} and {@code c search-space-remaining:}
+     * are {@link Statistics#getRootSearchSpace()} and {@link Statistics#getRemainingSearchSpace()},
+     * each printed only when present. {@code c search-space-after:} is the deprecated {@link
+     * Statistics#getCurrentSearchSpace()}, likewise printed only when present -- i.e. only when a
+     * {@link Cancellation}/timeout stopped search before it completed. {@code stats} is printed as
+     * its own {@code c} line. {@code c}-prefixed lines are the standard SAT/CP competition
      * convention for extra, parser-ignorable information alongside the {@code s}/{@code o}/{@code
      * v} status lines, so this doesn't change this class's own output contract. {@code
      * Xcsp3CompetitionRunner} (test sources) parses these lines back out of a captured
