@@ -92,7 +92,7 @@
         <dependency>
             <groupId>org.ojalgo</groupId>
             <artifactId>ojalgo</artifactId>
-            <version>57.3.0</version>
+            <version>57.3.1</version>
             <scope>compile</scope>
         </dependency>
         <!-- Source: https://central.sonatype.com/artifact/org.xcsp/xcsp3-tools -->
