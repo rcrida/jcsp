@@ -1,8 +1,10 @@
 package io.github.rcrida.jcsp.domains;
 
 import org.jspecify.annotations.NonNull;
+import org.jspecify.annotations.Nullable;
 
-import java.util.Comparator;
+import java.util.NoSuchElementException;
+import java.util.Objects;
 import java.util.Set;
 
 /**
@@ -11,17 +13,59 @@ import java.util.Set;
  * (or need to know) which specific numeric domain type produced it — the numeric analogue of {@link
  * DiscreteDomain.DiscreteDomainBuilder}'s own fallback to {@link ObjectSetDomain} for the same
  * reason.
+ * <p>
+ * Caches its bounds as extra record components exactly as {@link IntRangeDomain} does, so {@link
+ * #getMin}/{@link #getMax} are a field read rather than a scan of every value — the O(1) bounds
+ * fast path that {@link io.github.rcrida.jcsp.constraints.NumericBounds#min}/{@link
+ * io.github.rcrida.jcsp.constraints.NumericBounds#max} already dispatch to for every other {@link
+ * NumericDomain}. Both are {@code null} exactly when {@code values} is empty, which only the
+ * canonical constructor can produce: {@link NumericDiscreteDomain.NumericDiscreteDomainBuilder#build}
+ * collapses an empty value set to {@link NumericEmptyDomain} instead. A record's canonical
+ * constructor can't be declared less accessible than the record itself, so {@link
+ * #NumericSetDomain(Set)} is the constructor to call when the bounds aren't already in hand, and
+ * the assertion below guards the canonical one against bounds that don't match {@code values}.
  */
-public record NumericSetDomain<N extends Number>(@NonNull Set<N> values) implements NumericDiscreteDomain<N>, DiscreteSetDomain<N> {
+public record NumericSetDomain<N extends Number>(@NonNull Set<N> values, @Nullable N min, @Nullable N max)
+        implements NumericDiscreteDomain<N>, DiscreteSetDomain<N> {
+
+    public NumericSetDomain {
+        assert Objects.equals(min, extremum(values, -1)) && Objects.equals(max, extremum(values, 1))
+                : String.format("min (%s) and max (%s) must match the actual bounds of values %s", min, max, values);
+    }
+
+    /**
+     * Scans {@code values} once for the bounds the canonical constructor requires.
+     */
+    public NumericSetDomain(@NonNull Set<N> values) {
+        this(values, extremum(values, -1), extremum(values, 1));
+    }
+
+    /**
+     * The value with the smallest ({@code direction} of {@code -1}) or largest ({@code 1}) {@link
+     * Number#doubleValue}, or {@code null} when {@code values} is empty. Ties keep the first such
+     * value iteration reaches.
+     */
+    private static <N extends Number> @Nullable N extremum(@NonNull Set<N> values, int direction) {
+        N extreme = null;
+        for (N value : values) {
+            if (extreme == null
+                    || direction * Double.compare(value.doubleValue(), extreme.doubleValue()) > 0) {
+                extreme = value;
+            }
+        }
+        return extreme;
+    }
 
     @Override
     public N getMin() {
-        return values.stream().min(Comparator.comparingDouble(Number::doubleValue)).orElseThrow();
+        if (min == null) throw new NoSuchElementException("an empty domain has no minimum");
+        return min;
     }
 
     @Override
     public N getMax() {
-        return values.stream().max(Comparator.comparingDouble(Number::doubleValue)).orElseThrow();
+        if (max == null) throw new NoSuchElementException("an empty domain has no maximum");
+        return max;
     }
 
     @Override
