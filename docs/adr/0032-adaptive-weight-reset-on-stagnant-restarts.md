@@ -35,7 +35,10 @@ that fails to raise it counts as stagnant, and after `STAGNANT_RESTART_LIMIT` (3
 stagnant restarts the selector's weights are returned to 1 via
 `DomWdegVariableSelector#resetWeights` (renamed `onStagnation` in 3.1.0, when it became a hook on
 `AdaptiveVariableSelector` — see [ADR-0038](0038-injectable-variable-selector-factory.md)), which
-also clears the last-conflict variable. Any restart
+also clears the last-conflict variable. The same trigger now discards the phase memory too: this
+ADR's claim that weights are the only state correlating one restart with the next was wrong, and
+the remembered path turned out to be the stronger of the two — see
+[ADR-0039](0039-discard-the-phase-memory-on-stagnation.md). Any restart
 that reaches a new deepest assignment clears the counter.
 
 Weight accumulation across restarts is otherwise unchanged, so an instance making progress — or

@@ -46,6 +46,25 @@ public final class PhaseMemory {
     }
 
     /**
+     * Forgets the recorded path entirely, so the restarts that follow are guided by nothing but the
+     * value orderer -- genuine independent draws rather than variations on one remembered descent.
+     * <p>
+     * Needed because the path this class replays is a <em>deepest</em> one, not a known-good one: a
+     * prefix that cannot be completed at all still looks like the best progress ever made, and every
+     * later restart is steered back into it. On {@code StripPacking-C1P1} that is decisive. Holding
+     * everything else equal and varying only whether each attempt gets its own memory, independent
+     * attempts solve it in 37 seconds while a shared one never does -- and a solution is only 80
+     * nodes deep once the rotations it keeps re-committing to are abandoned. Called by
+     * {@link io.github.rcrida.jcsp.solver.DomWdegLubySearch#getSolution} on the same stagnation
+     * trigger that resets the selector's weights, since both are state that correlates one restart
+     * with the next.
+     */
+    public void reset() {
+        bestPath.clear();
+        bestDepth = 0;
+    }
+
+    /**
      * Adopts {@code assignment}'s values as the path to replay, but only when it is strictly deeper
      * than any seen before -- solution-guided search (Demirović et al.), not the every-descent
      * variant of classic phase saving.

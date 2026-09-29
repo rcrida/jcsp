@@ -79,20 +79,32 @@ looks: of 85 instances, exactly one (`StripPacking-C1P1`) reaches this code at a
 `DisjunctiveConstraint`, and no instance uses `<cumulative>`. The corpus establishes no regression
 and nothing more.
 
-The reason the extra pruning does not convert is **search order, not propagation**. Probing the
-deepest assignment reached gives `{h=16, w=16, x=12, y=13}` of 80 variables: all 32 size variables
-are decided before the rectangles are placed. `DomWdegVariableSelector` ranks by
-`domainSize / wdeg`, and at the root `w`/`h` score `2/5 = 0.40` against `x`/`y`'s `20/3 = 6.67`.
-Worse, `x[i]`'s constraints — its `x + w <= 20` bound, the diffn, and one projection — are a strict
-subset of `w[i]`'s, which adds the rotation table and the second projection. Weights are
-incremented per constraint, so every unit `x[i]` can ever gain lands on a constraint `w[i]` shares:
-`wdeg(w) >= wdeg(x)` under any weighting whatsoever, and with `dom(w) = 2 < dom(x) = 20`, `w[i]` is
-preferred at every node forever. Committing to all 16 rotations before placing anything is
-structurally forced by the heuristic, and no propagation strength reaches it.
+> **Correction (2026-09-29).** This section originally concluded that the block was **search
+> order** — that dom/wdeg decides all 32 size variables before placing anything, which it provably
+> does, and that this was therefore why the instance failed. The first half is true and the second
+> was wrong. It was never measured, and when it was, it did not survive: five variable orderings
+> (positions-first, widest-domain-first, smallest-first, rectangle-at-a-time, and the dom/wdeg
+> baseline) all fail, and the two value orderers produce byte-identical node counts. The real cause
+> was solution-guided phase saving replaying an uncompletable prefix across every restart; see
+> [ADR-0039](0039-discard-the-phase-memory-on-stagnation.md), which fixes it and solves the
+> instance. The ordering analysis below is retained because it is correct about dom/wdeg and
+> because the injectable selector it motivated ([ADR-0038](0038-injectable-variable-selector-factory.md))
+> is what made the refutation possible.
 
-So this lands as a real strengthening whose payoff is blocked elsewhere. It is kept because the
-reasoning is exact and general, it costs nothing measurable, and the next step — an ordering that is
-not dominated by domain size — has no value without it either.
+The extra pruning does not convert here, and the ordering is a genuine oddity even though it turned
+out not to be the cause. Probing the deepest assignment reached gives `{h=16, w=16, x=12, y=13}` of
+80 variables: all 32 size variables are decided before the rectangles are placed.
+`DomWdegVariableSelector` ranks by `domainSize / wdeg`, and at the root `w`/`h` score `2/5 = 0.40`
+against `x`/`y`'s `20/3 = 6.67`. Worse, `x[i]`'s constraints — its `x + w <= 20` bound, the diffn,
+and one projection — are a strict subset of `w[i]`'s, which adds the rotation table and the second
+projection. Weights are incremented per constraint, so every unit `x[i]` can ever gain lands on a
+constraint `w[i]` shares: `wdeg(w) >= wdeg(x)` under any weighting whatsoever, and with
+`dom(w) = 2 < dom(x) = 20`, `w[i]` is preferred at every node forever. Committing to all 16
+rotations before placing anything is structurally forced by the heuristic — it simply is not what
+was costing the instance.
+
+So this lands as a real strengthening whose payoff arrived one commit later. It is kept because the
+reasoning is exact and general, and because it costs nothing measurable.
 
 ## Rejected alternatives
 

@@ -236,12 +236,13 @@ class DomWdegLubySearchTest {
     }
 
     @Test
-    void stagnantRestartsEventuallyResetTheAccumulatedWeights() {
+    void stagnantRestartsEventuallyDiscardTheWeightsAndThePhaseMemory() {
         // Six variables pairwise different over five values: unsatisfiable, and big enough
         // (5^6 nodes) that a one-failure Luby budget is exceeded again and again rather than the
         // tree being exhausted. At most five variables can ever be assigned, so bestDepth reaches
         // 5 in the first restart and then plateaus — every later restart is stagnant, and the run
-        // of them trips STAGNANT_RESTART_LIMIT and resets the weights.
+        // of them trips STAGNANT_RESTART_LIMIT, which discards both the accumulated weights and
+        // the remembered path (see PhaseMemory#reset for why the path is the one that matters).
         var builder = ConstraintSatisfactionProblem.builder();
         List<Variable<Integer>> vars = new ArrayList<>();
         for (int i = 0; i < 6; i++) {

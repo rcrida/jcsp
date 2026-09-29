@@ -196,9 +196,15 @@ public class DomWdegLubySearch implements Solver {
                 deepestSeen = phaseMemory.bestDepth();
                 stagnantRestarts = 0;
             } else if (++stagnantRestarts >= STAGNANT_RESTART_LIMIT) {
-                log.debug("dom/wdeg+Luby: {} restarts without progress at restart {}, resetting weights",
+                log.debug("dom/wdeg+Luby: {} restarts without progress at restart {}, discarding weights and phase memory",
                         STAGNANT_RESTART_LIMIT, k);
                 selector.onStagnation();
+                // The remembered path is the stronger of the two correlators: it is the deepest one
+                // seen, which is not the same as a completable one, so a dead prefix keeps being
+                // replayed. Clearing deepestSeen with it lets the next restart set a fresh baseline
+                // rather than counting instantly as stagnant again.
+                phaseMemory.reset();
+                deepestSeen = 0;
                 stagnantRestarts = 0;
             }
             selector.onRestart(restartRandomization.randomFor(k));

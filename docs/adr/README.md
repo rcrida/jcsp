@@ -100,3 +100,4 @@ section instead.
 | [0036](0036-joint-bounds-for-redundant-cumulative-capacity.md) | Derive a 2D noOverlap's redundant cumulative capacity from the instance's joint strip bounds, after parsing | Accepted |
 | [0037](0037-energetic-reasoning-for-cumulative-constraints.md) | Energetic reasoning for cumulative constraints, where timetabling has no compulsory part to work from | Accepted |
 | [0038](0038-injectable-variable-selector-factory.md) | Inject the satisfaction chain's variable ordering as a factory, on its own interface | Accepted |
+| [0039](0039-discard-the-phase-memory-on-stagnation.md) | Discard the remembered path, not just the weights, when restarts stop making progress | Accepted |

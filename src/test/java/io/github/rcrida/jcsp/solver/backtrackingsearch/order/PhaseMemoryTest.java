@@ -100,6 +100,32 @@ class PhaseMemoryTest {
     }
 
     @Test
+    void reset_forgetsThePathAndItsDepth() {
+        // After a reset the memory guides nothing: values come back in the order given, and the
+        // depth signal starts again from zero so the next descent counts as progress.
+        var memory = new PhaseMemory();
+        memory.recordIfDeepest(Map.of(x, 3, y, 4));
+        assertThat(memory.bestDepth()).isEqualTo(2);
+
+        memory.reset();
+
+        assertThat(memory.bestDepth()).isZero();
+        assertThat(memory.prioritise(x, List.of(1, 2, 3))).containsExactly(1, 2, 3);
+        assertThat(memory.prioritise(y, List.of(4, 5))).containsExactly(4, 5);
+    }
+
+    @Test
+    void reset_thenRecord_adoptsTheNewPath() {
+        var memory = new PhaseMemory();
+        memory.recordIfDeepest(Map.of(x, 3, y, 4));
+        memory.reset();
+        memory.recordIfDeepest(Map.of(x, 1));
+
+        assertThat(memory.bestDepth()).isEqualTo(1);
+        assertThat(memory.prioritise(x, List.of(1, 2, 3))).containsExactly(1, 2, 3);
+    }
+
+    @Test
     void recordIfDeepest_atTheSameSize_keepsTheFirst() {
         // The contrast, stated directly: identical calls through the depth-gated entry point keep
         // the original values, which is correct for satisfaction and wrong for optimization.
