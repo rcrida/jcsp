@@ -43,9 +43,11 @@ public record NumericSetDomain<N extends Number>(@NonNull Set<N> values, @Nullab
     /**
      * The value with the smallest ({@code direction} of {@code -1}) or largest ({@code 1}) {@link
      * Number#doubleValue}, or {@code null} when {@code values} is empty. Ties keep the first such
-     * value iteration reaches.
+     * value iteration reaches, which is also what {@link
+     * NumericDiscreteDomain.NumericDiscreteDomainBuilder} does when it tracks these bounds a value
+     * at a time -- the two must agree, or the assertion above would reject the builder's output.
      */
-    private static <N extends Number> @Nullable N extremum(@NonNull Set<N> values, int direction) {
+    static <N extends Number> @Nullable N extremum(@NonNull Set<N> values, int direction) {
         N extreme = null;
         for (N value : values) {
             if (extreme == null

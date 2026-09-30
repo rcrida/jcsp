@@ -1,6 +1,7 @@
 package io.github.rcrida.jcsp.domains;
 
 import org.jspecify.annotations.NonNull;
+import org.jspecify.annotations.Nullable;
 
 import java.util.Collection;
 import java.util.Collections;
@@ -43,27 +44,67 @@ public interface NumericDiscreteDomain<N extends Number> extends NumericDomain<N
      * one) because {@link #build} must collapse to {@link NumericSingletonDomain}/{@link
      * NumericEmptyDomain} rather than the plain {@link ObjectSingletonDomain}/{@link
      * ObjectEmptyDomain}, to keep satisfying {@link NumericDomain}.
+     * <p>
+     * Tracks the bounds {@link NumericSetDomain} caches as it goes, so building a domain stays the
+     * single pass over the values it always was: {@link #value} widens them in constant time, and
+     * only {@link #delete} of a value that is itself a bound forces {@link #build} to rescan.
      */
     final class NumericDiscreteDomainBuilder<N extends Number> implements DiscreteDomain.Builder<N> {
-        private final Set<N> mutableValues = new LinkedHashSet<>();
+        private final Set<N> mutableValues;
+        private @Nullable N min;
+        private @Nullable N max;
+        /** Set by {@link #delete} when the removed value was itself a bound; see {@link #build}. */
+        private boolean boundsStale;
+        /** Set by {@link #build} once {@link #mutableValues} belongs to a domain; see {@link #mutable}. */
+        private boolean built;
 
         NumericDiscreteDomainBuilder(Set<N> initial) {
-            mutableValues.addAll(initial);
+            this(initial.size());
+            values(initial);
         }
 
+        /**
+         * Sized for a caller that will add {@code expectedValues} of them, so growing the backing
+         * set never rehashes -- {@link NumericDomain#withBounds} filters a whole domain into a
+         * builder it starts empty, where the default capacity would rehash all the way up.
+         */
+        NumericDiscreteDomainBuilder(int expectedValues) {
+            mutableValues = LinkedHashSet.newLinkedHashSet(expectedValues);
+        }
+
+        /**
+         * The set to mutate. {@link #build} hands this set to the domain it returns rather than
+         * copying it, so mutating a builder afterwards would mutate that domain -- a builder is
+         * spent once built.
+         */
+        private Set<N> mutable() {
+            assert !built : "a builder cannot be reused after build()";
+            return mutableValues;
+        }
+
+        /**
+         * Widens the tracked bounds unconditionally rather than only when the value is new: a
+         * value already present can't lie outside bounds it was itself folded into, so the strict
+         * comparisons below are a no-op for it. Ties keep the first value added, matching {@link
+         * NumericSetDomain#extremum} over the insertion-ordered set this builds.
+         */
         public NumericDiscreteDomainBuilder<N> value(N value) {
-            mutableValues.add(value);
+            mutable().add(value);
+            if (min == null || value.doubleValue() < min.doubleValue()) min = value;
+            if (max == null || value.doubleValue() > max.doubleValue()) max = value;
             return this;
         }
 
         public NumericDiscreteDomainBuilder<N> values(Collection<? extends N> values) {
-            mutableValues.addAll(values);
+            for (N value : values) value(value);
             return this;
         }
 
         @Override
         public NumericDiscreteDomainBuilder<N> delete(@NonNull Object value) {
-            mutableValues.remove(value);
+            if (mutable().remove(value) && (value.equals(min) || value.equals(max))) {
+                boundsStale = true;
+            }
             return this;
         }
 
@@ -75,7 +116,13 @@ public interface NumericDiscreteDomain<N extends Number> extends NumericDomain<N
             if (mutableValues.size() == 1) {
                 return new NumericSingletonDomain<>(mutableValues.iterator().next());
             }
-            return new NumericSetDomain<>(Collections.unmodifiableSet(new LinkedHashSet<>(mutableValues)));
+            if (boundsStale) {
+                min = NumericSetDomain.extremum(mutableValues, -1);
+                max = NumericSetDomain.extremum(mutableValues, 1);
+                boundsStale = false;
+            }
+            built = true;
+            return new NumericSetDomain<>(Collections.unmodifiableSet(mutableValues), min, max);
         }
     }
 }

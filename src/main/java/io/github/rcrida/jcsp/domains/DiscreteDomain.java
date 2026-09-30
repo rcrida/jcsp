@@ -70,25 +70,38 @@ public interface DiscreteDomain<T> extends Domain<T> {
      * fought Lombok's builder-class-naming/return-type conventions.
      */
     final class DiscreteDomainBuilder<T> implements Builder<T> {
-        private final Set<T> mutableValues = new LinkedHashSet<>();
+        private final Set<T> mutableValues;
+        /** Set by {@link #build} once {@link #mutableValues} belongs to a domain; see {@link #mutable}. */
+        private boolean built;
 
         DiscreteDomainBuilder(Set<T> initial) {
+            mutableValues = LinkedHashSet.newLinkedHashSet(initial.size());
             mutableValues.addAll(initial);
         }
 
+        /**
+         * The set to mutate. {@link #build} hands this set to the domain it returns rather than
+         * copying it, so mutating a builder afterwards would mutate that domain -- a builder is
+         * spent once built.
+         */
+        private Set<T> mutable() {
+            assert !built : "a builder cannot be reused after build()";
+            return mutableValues;
+        }
+
         public DiscreteDomainBuilder<T> value(T value) {
-            mutableValues.add(value);
+            mutable().add(value);
             return this;
         }
 
         public DiscreteDomainBuilder<T> values(Collection<? extends T> values) {
-            mutableValues.addAll(values);
+            mutable().addAll(values);
             return this;
         }
 
         @Override
         public DiscreteDomainBuilder<T> delete(@NonNull Object value) {
-            mutableValues.remove(value);
+            mutable().remove(value);
             return this;
         }
 
@@ -100,7 +113,8 @@ public interface DiscreteDomain<T> extends Domain<T> {
             if (mutableValues.size() == 1) {
                 return new ObjectSingletonDomain<>(mutableValues.iterator().next());
             }
-            return new ObjectSetDomain<>(Collections.unmodifiableSet(new LinkedHashSet<>(mutableValues)));
+            built = true;
+            return new ObjectSetDomain<>(Collections.unmodifiableSet(mutableValues));
         }
     }
 }

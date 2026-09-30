@@ -3,6 +3,7 @@ package io.github.rcrida.jcsp.domains;
 import org.junit.jupiter.api.Test;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class DiscreteDomainTest {
 
@@ -28,5 +29,14 @@ class DiscreteDomainTest {
 
         assertThat(domain).isInstanceOf(ObjectEmptyDomain.class);
         assertThat(domain.isEmpty()).isTrue();
+    }
+
+    @Test
+    void build_thenMutated_throwsAssertionError() {
+        DiscreteDomain.DiscreteDomainBuilder<Object> builder =
+                DiscreteDomain.<Object>builder().value("x").value("y");
+        builder.build();
+
+        assertThatThrownBy(() -> builder.delete("x")).isInstanceOf(AssertionError.class);
     }
 }

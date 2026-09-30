@@ -35,8 +35,9 @@ public interface NumericDomain<N extends Number> extends Domain<N> {
      */
     @SuppressWarnings("unchecked")
     default NumericDomain<N> withBounds(double newMin, double newMax) {
-        var builder = NumericDiscreteDomain.<N>builder();
-        for (N value : ((DiscreteDomain<N>) this).toList()) {
+        DiscreteDomain<N> discrete = (DiscreteDomain<N>) this;
+        var builder = new NumericDiscreteDomain.NumericDiscreteDomainBuilder<N>(discrete.size());
+        for (N value : discrete.asCollection()) {
             if (value.doubleValue() >= newMin && value.doubleValue() <= newMax) {
                 builder.value(value);
             }

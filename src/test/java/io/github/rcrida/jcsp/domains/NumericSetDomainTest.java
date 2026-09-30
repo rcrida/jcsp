@@ -109,4 +109,27 @@ class NumericSetDomainTest {
 
         assertThat(built.toList()).containsExactly(1, 2);
     }
+
+    @Test
+    void builder_buildThenMutated_throwsAssertionError() {
+        var builder = NumericDiscreteDomain.<Integer>builder().value(1).value(2);
+        builder.build();
+
+        assertThatThrownBy(() -> builder.delete(1)).isInstanceOf(AssertionError.class);
+    }
+
+    /**
+     * Deleting a bound is the one case the builder can't keep tracking in constant time, so
+     * {@link NumericDiscreteDomain.NumericDiscreteDomainBuilder#build} rescans -- and the
+     * assertion in {@link NumericSetDomain}'s canonical constructor is what would catch it
+     * failing to.
+     */
+    @Test
+    void builder_deletedTheMinimum_rescansTheBounds() {
+        NumericDiscreteDomain<Integer> built =
+                NumericDiscreteDomain.<Integer>builder().values(List.of(1, 2, 3)).delete(1).build();
+
+        assertThat(built.getMin()).isEqualTo(2);
+        assertThat(built.getMax()).isEqualTo(3);
+    }
 }
