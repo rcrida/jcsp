@@ -9,6 +9,7 @@ import lombok.EqualsAndHashCode;
 import lombok.Singular;
 import lombok.experimental.SuperBuilder;
 import org.jspecify.annotations.NonNull;
+import org.jspecify.annotations.Nullable;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -29,11 +30,17 @@ import java.util.stream.IntStream;
  * fixed to {@code 1} — but implemented with a strictly stronger propagator: {@link
  * CumulativeConstraint#propagate} only performs timetabling (compulsory-part overlap detection),
  * which contributes nothing until tasks' domains have already narrowed enough for compulsory
- * parts to exist. This class additionally implements <b>edge-finding</b> (Carlier &amp; Pinson
- * 1989; Baptiste, Le Pape &amp; Nuijten 2001; Vilim 2007), which reasons about groups of tasks'
- * combined time windows rather than individual compulsory parts, and so can tighten bounds even
- * when no task has a compulsory part at all — see {@link #edgeFind}'s own Javadoc for the worked
- * example.
+ * parts to exist. This class additionally implements two of the standard unary-resource filtering
+ * rules, both reasoning about groups of tasks' combined time windows rather than individual
+ * compulsory parts, and so able to tighten bounds even when no task has a compulsory part at all:
+ * <ul>
+ *   <li><b>overload checking</b> and <b>edge-finding</b> (Carlier &amp; Pinson 1989; Baptiste, Le
+ *       Pape &amp; Nuijten 2001; Vilim 2007) — see {@link #edgeFind};</li>
+ *   <li><b>detectable precedences</b> (Vilim 2004) — see {@link #detectablePrecedences}.</li>
+ * </ul>
+ * Neither rule subsumes the other, so {@link #tighten} runs both against the same bounds and keeps
+ * the tightest window each task gets. The remaining rule of the standard set, <em>not-first/
+ * not-last</em>, is not implemented.
  * <p>
  * Discrete ({@link io.github.rcrida.jcsp.domains.IntRangeDomain}) start-time variables only —
  * unlike {@link CumulativeConstraint}, this has no continuous ({@link
@@ -84,16 +91,42 @@ public class DisjunctiveConstraint extends NaryConstraint implements Propagatabl
     }
 
     /**
-     * Runs {@link #edgeFind} on the current bounds (tightening {@code est}), then again on the
-     * time-reversed instance (tightening {@code lst} — see {@link #edgeFind}'s own Javadoc for the
-     * reversal mapping), combines both results with the original bounds, and narrows via {@link
-     * NumericBounds#narrow}. A task whose combined {@code [est, lst]} window becomes empty (rather
-     * than either pass detecting an overload on its own) signals infeasibility from the
-     * <em>interaction</em> of the two passes.
+     * Runs {@link #tighten} over the current bounds and narrows every task whose window it moved,
+     * via {@link NumericBounds#narrow}. A task whose combined {@code [est, lst]} window becomes
+     * empty (rather than a pass detecting an overload on its own) signals infeasibility from the
+     * <em>interaction</em> of the passes.
      */
     @Override
     @SuppressWarnings("unchecked")
     public Optional<Map<Variable<?>, Domain<?>>> propagate(@NonNull Map<Variable<?>, Domain<?>> domains) {
+        int n = starts.size();
+        TaskBounds bounds = readBounds(domains);
+        Tightened tightened = tighten(bounds);
+        if (tightened.overloaded() != null) return Optional.empty();
+
+        Map<Variable<?>, Domain<?>> updated = new HashMap<>();
+        for (int i = 0; i < n; i++) {
+            int newEst = tightened.est()[i];
+            int newLst = tightened.lst()[i];
+            if (newEst > newLst) return Optional.empty();
+            if (newEst != bounds.est()[i] || newLst != bounds.lst()[i]) {
+                Variable<Integer> variable = starts.get(i);
+                Domain<Integer> dom = (Domain<Integer>) domains.get(variable);
+                NumericBounds.<Integer>narrow(dom, newEst, newLst).ifPresent(d -> updated.put(variable, d));
+            }
+        }
+        return Optional.of(updated);
+    }
+
+    /** One task's-eye view of {@code domains}, as every pass below consumes it. */
+    private record TaskBounds(int[] est, int[] lst, int[] dur, int[] lct) {}
+
+    /**
+     * Reads each task's window out of {@code domains}. {@code lct} is {@code lst + duration}, the
+     * form the rules are stated in.
+     */
+    @SuppressWarnings("unchecked")
+    private TaskBounds readBounds(Map<Variable<?>, Domain<?>> domains) {
         int n = starts.size();
         int[] est = new int[n];
         int[] lst = new int[n];
@@ -106,9 +139,45 @@ public class DisjunctiveConstraint extends NaryConstraint implements Propagatabl
             dur[i] = durations.get(i);
             lct[i] = lst[i] + dur[i];
         }
+        return new TaskBounds(est, lst, dur, lct);
+    }
+
+    /**
+     * Every pass's combined verdict: either an overloaded task-index set, or the tightest
+     * {@code [est, lst]} window each task admits. Exactly one of {@link #overloaded} and the two
+     * bound arrays is populated.
+     */
+    private record Tightened(@Nullable Set<Integer> overloaded, int[] est, int[] lst) {}
+
+    /**
+     * Runs both filtering rules in both time directions over one set of task bounds, and takes the
+     * tightest window each produced for each task.
+     * <p>
+     * {@link #edgeFind} and {@link #detectablePrecedences} are complementary -- neither subsumes
+     * the other (see {@link #detectablePrecedences}'s own worked example for a bound only it
+     * finds) -- so both run against the <em>same</em> input bounds rather than in sequence. Their
+     * joint fixpoint is reached by {@link io.github.rcrida.jcsp.consistency.fixpoint.FixpointConsistency}
+     * re-running this constraint, not by iterating here.
+     * <p>
+     * Each rule runs once forwards and once on the time-reversed instance -- {@code est ← -lct},
+     * {@code lct ← -est} -- so the mirror rules tightening {@code lst} need no separately derived
+     * algorithm; see {@link #edgeFind}'s own Javadoc.
+     * <p>
+     * Shared by {@link #propagate} and {@link #explainInfeasible} so the set of rules, and the
+     * order they combine in, is stated once: an explanation derived from fewer rules than the
+     * propagation that rejected the node would be weaker than it needs to be, and one derived
+     * from more would cite tasks the rejection never consulted.
+     */
+    private static Tightened tighten(TaskBounds bounds) {
+        int[] est = bounds.est();
+        int[] lst = bounds.lst();
+        int[] dur = bounds.dur();
+        int[] lct = bounds.lct();
+        int n = est.length;
 
         EdgeFindResult forward = edgeFind(est, lct, dur);
-        if (forward.infeasible()) return Optional.empty();
+        if (forward.infeasible()) return new Tightened(forward.culprits(), est, lst);
+        int[] forwardPrecedences = detectablePrecedences(est, lct, dur);
 
         int[] revEst = new int[n];
         int[] revLct = new int[n];
@@ -116,29 +185,25 @@ public class DisjunctiveConstraint extends NaryConstraint implements Propagatabl
             revEst[i] = -lct[i];
             revLct[i] = -est[i];
         }
-        int[] backwardNewEst = tightenedEst(revEst, revLct, dur);
+        int[] backwardEdge = tightenedEst(revEst, revLct, dur);
+        int[] backwardPrecedences = detectablePrecedences(revEst, revLct, dur);
 
-        Map<Variable<?>, Domain<?>> updated = new HashMap<>();
+        int[] newEst = new int[n];
+        int[] newLst = new int[n];
         for (int i = 0; i < n; i++) {
-            int newEst = Math.max(est[i], forward.newEst()[i]);
-            int newLst = Math.min(lst[i], -backwardNewEst[i] - dur[i]);
-            if (newEst > newLst) return Optional.empty();
-            if (newEst != est[i] || newLst != lst[i]) {
-                Variable<Integer> variable = starts.get(i);
-                Domain<Integer> dom = (Domain<Integer>) domains.get(variable);
-                NumericBounds.<Integer>narrow(dom, newEst, newLst).ifPresent(d -> updated.put(variable, d));
-            }
+            newEst[i] = Math.max(est[i], Math.max(forward.newEst()[i], forwardPrecedences[i]));
+            newLst[i] = Math.min(lst[i], Math.min(-backwardEdge[i] - dur[i], -backwardPrecedences[i] - dur[i]));
         }
-        return Optional.of(updated);
+        return new Tightened(null, newEst, newLst);
     }
 
     /**
-     * Re-derives the same two {@link #edgeFind} passes {@link #propagate} did (no state threaded
+     * Re-derives the same {@link #tighten} passes {@link #propagate} did (no state threaded
      * between the two calls, matching {@link CumulativeConstraint#explainInfeasible}'s own
-     * from-scratch re-derivation): if either pass itself reported an overloaded task set, that set
+     * from-scratch re-derivation): if a pass itself reported an overloaded task set, that set
      * is the culprit. Otherwise re-checks the same combined {@code [est, lst]} window per task
-     * {@link #propagate} computes — if some task's combined {@code est > lst} (the two passes'
-     * bounds interacting rather than either alone overloading), cites every task in this constraint
+     * {@link #propagate} computes — if some task's combined {@code est > lst} (the passes'
+     * bounds interacting rather than any one alone overloading), cites every task in this constraint
      * rather than tracking which sub-groups each pass's bound came from, a deliberately simpler
      * (still sound, only less tight) fallback. If neither condition holds (this constraint is
      * actually feasible against {@code domains} — a real case, not just a defensive check: this
@@ -149,36 +214,14 @@ public class DisjunctiveConstraint extends NaryConstraint implements Propagatabl
      * Propagatable#allSingletonReason} only when a cited domain can't be soundly cited as a range.
      */
     @Override
-    @SuppressWarnings("unchecked")
     public Optional<NogoodConstraint> explainInfeasible(@NonNull Map<Variable<?>, Domain<?>> domains) {
         int n = starts.size();
-        int[] est = new int[n];
-        int[] lst = new int[n];
-        int[] dur = new int[n];
-        int[] lct = new int[n];
-        for (int i = 0; i < n; i++) {
-            Domain<Integer> dom = (Domain<Integer>) domains.get(starts.get(i));
-            est[i] = (int) NumericBounds.min(dom);
-            lst[i] = (int) NumericBounds.max(dom);
-            dur[i] = durations.get(i);
-            lct[i] = lst[i] + dur[i];
+        Tightened tightened = tighten(readBounds(domains));
+        if (tightened.overloaded() != null) {
+            return citeCulprits(indicesToVariables(tightened.overloaded()), domains);
         }
-
-        EdgeFindResult forward = edgeFind(est, lct, dur);
-        if (forward.infeasible()) return citeCulprits(indicesToVariables(forward.culprits()), domains);
-
-        int[] revEst = new int[n];
-        int[] revLct = new int[n];
         for (int i = 0; i < n; i++) {
-            revEst[i] = -lct[i];
-            revLct[i] = -est[i];
-        }
-        int[] backwardNewEst = tightenedEst(revEst, revLct, dur);
-
-        for (int i = 0; i < n; i++) {
-            int newEst = Math.max(est[i], forward.newEst()[i]);
-            int newLst = Math.min(lst[i], -backwardNewEst[i] - dur[i]);
-            if (newEst > newLst) return citeCulprits(getVariables(), domains);
+            if (tightened.est()[i] > tightened.lst()[i]) return citeCulprits(getVariables(), domains);
         }
         return Optional.empty();
     }
@@ -298,6 +341,59 @@ public class DisjunctiveConstraint extends NaryConstraint implements Propagatabl
             }
         }
         return EdgeFindResult.feasible(newEst);
+    }
+
+    /**
+     * Detectable precedences (Vilim 2004), the rule {@link #edgeFind} structurally cannot express.
+     * On a unary resource exactly one of any two tasks runs first, so whenever task {@code i}
+     * demonstrably cannot run first — {@code est_i + p_i > lst_j}, i.e. {@code i} could not be
+     * finished even by {@code j}'s latest start — the precedence {@code j → i} is forced. Gathering
+     * every such {@code j} gives {@code DPrec(i)}, a set that must complete in full before
+     * {@code i} starts, so {@code est_i ← max(est_i, ect(DPrec(i)))}.
+     * <p>
+     * {@code ect(Θ)}, the earliest every task of {@code Θ} can be finished, is
+     * {@code max over Ω ⊆ Θ of (est(Ω) + p(Ω))}. As with {@link #edgeFind}'s task intervals the
+     * only {@code Ω} that can attain that maximum are the {@code n} suffixes
+     * {@code {j ∈ Θ : est_j ≥ t}}, so a single descending-{@code est} scan accumulating {@code p}
+     * computes it: at each task the running sum is exactly {@code p} over the tasks whose
+     * {@code est} is at least that task's own.
+     * <p>
+     * <b>Worked example</b>, a bound neither the overload rule nor edge-finding reaches: task A
+     * with {@code p=1} in {@code [0,2)}, task B with {@code p=1} in {@code [10,12)}, task C with
+     * {@code p=20} in {@code [0,100)}. {@code est_C + p_C = 20} exceeds both {@code lst_A = 1} and
+     * {@code lst_B = 11}, so C cannot run before either and {@code DPrec(C) = {A, B}}. B alone
+     * cannot finish before 11, so {@code ect({A,B}) = 11} and {@code est_C ← 11}. Edge-finding
+     * reaches only 2 here: the task intervals that could tighten C are those with
+     * {@code est(Θ) ≤ est_C = 0}, which excludes every {@code Θ} containing B.
+     * <p>
+     * Excluding {@code i} from its own {@code DPrec} is load-bearing, not hygiene: a task with a
+     * compulsory part satisfies {@code est_i + p_i > lst_i} against itself.
+     * <p>
+     * Called on the forward and the time-reversed instance by {@link #tighten}, exactly as
+     * {@link #edgeFind} is.
+     *
+     * @param est current earliest-start times
+     * @param lct current latest-completion times ({@code lst + duration})
+     * @param dur fixed task durations
+     */
+    private static int[] detectablePrecedences(int[] est, int[] lct, int[] dur) {
+        int n = est.length;
+        int[] newEst = est.clone();
+        Integer[] byDescendingEst = IntStream.range(0, n).boxed().toArray(Integer[]::new);
+        Arrays.sort(byDescendingEst, Comparator.comparingInt((Integer i) -> est[i]).reversed());
+
+        for (int i = 0; i < n; i++) {
+            int earliestEndOfI = est[i] + dur[i];
+            int sumP = 0;
+            int ect = Integer.MIN_VALUE;
+            for (int j : byDescendingEst) {
+                if (j == i || lct[j] - dur[j] >= earliestEndOfI) continue;
+                sumP += dur[j];
+                ect = Math.max(ect, est[j] + sumP);
+            }
+            if (ect > newEst[i]) newEst[i] = ect;
+        }
+        return newEst;
     }
 
     @Override

@@ -206,6 +206,53 @@ class DisjunctiveConstraintTest {
         assertThat(c.explainInfeasible(domains)).isEmpty();
     }
 
+    // --- propagate(): detectable precedences ---
+
+    @Test
+    void propagate_detectablePrecedences_tightensBeyondWhatEdgeFindingReaches() {
+        // Worked example from detectablePrecedences()' Javadoc: A p=1 in [0,2), B p=1 in [10,12),
+        // C p=20 in [0,100). est_C + p_C = 20 exceeds lst_A = 1 and lst_B = 11, so C can run
+        // before neither and DPrec(C) = {A, B}; B alone cannot finish before 11, so est_C <- 11.
+        //
+        // Edge-finding reaches only est_C <- 2 here, and this test would assert IntRangeDomain
+        // .of(2, 80) before this rule existed: its rule needs est_C >= est(Theta), which excludes
+        // every task interval containing B, leaving only Theta = {A} and {A, B} whose own est is
+        // 0. Neither A nor B moves -- nothing forces either of them later.
+        Variable<Integer> a = F.create("dp_a"), b = F.create("dp_b"), c = F.create("dp_c");
+        var constraint = DisjunctiveConstraint.of(List.of(a, b, c), List.of(1, 1, 20));
+        var domains = Map.<Variable<?>, Domain<?>>of(
+                a, IntRangeDomain.of(0, 1),
+                b, IntRangeDomain.of(10, 11),
+                c, IntRangeDomain.of(0, 80));
+
+        var result = constraint.propagate(domains);
+
+        assertThat(result).isPresent();
+        assertThat(result.get()).containsOnlyKeys(c);
+        assertThat(result.get().get(c)).isEqualTo(IntRangeDomain.of(11, 80));
+    }
+
+    @Test
+    void propagate_detectablePrecedences_mirrorRuleTightensLatestStart() {
+        // The same instance reflected in time: A p=1 in [98,100), B p=1 in [88,90), C p=20 in
+        // [20,100). C cannot run after B -- it would have to start at 89 or later and could not
+        // then finish by its own lct of 100 -- nor after A, so both must follow it. C must
+        // therefore end by the latest either of them can start, which is B's 89, giving
+        // lst_C <- 89 - 20 = 69.
+        Variable<Integer> a = F.create("dpr_a"), b = F.create("dpr_b"), c = F.create("dpr_c");
+        var constraint = DisjunctiveConstraint.of(List.of(a, b, c), List.of(1, 1, 20));
+        var domains = Map.<Variable<?>, Domain<?>>of(
+                a, IntRangeDomain.of(98, 99),
+                b, IntRangeDomain.of(88, 89),
+                c, IntRangeDomain.of(20, 80));
+
+        var result = constraint.propagate(domains);
+
+        assertThat(result).isPresent();
+        assertThat(result.get()).containsOnlyKeys(c);
+        assertThat(result.get().get(c)).isEqualTo(IntRangeDomain.of(20, 69));
+    }
+
     // --- getRelation() / toString() ---
 
     @Test

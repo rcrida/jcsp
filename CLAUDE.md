@@ -182,7 +182,7 @@ csp.globalCardinalityConstraint(Set.of(v1, v2, v3), Map.of(a, 2, b, 1))   // glo
 csp.nValueConstraint(Set.of(v1, v2, v3), count)     // count is a variable, so it can be minimized
 csp.binPackingConstraint(bin, weights, capacities)
 csp.cumulativeConstraint(starts, durations, resources, limit)
-csp.disjunctiveConstraint(starts, durations)        // unary resource; edge-finding
+csp.disjunctiveConstraint(starts, durations)        // unary resource; edge-finding + detectable precedences
 csp.tuplesConstraint(Set.of(Assignment.of(...), ...))          // extensional (table)
 csp.starredTuplesConstraint(Set.of(Map.of(v1, 1, v2, NaryStarredTuplesConstraint.STAR), ...))
 csp.conflictTuplesConstraint(Set.of(Assignment.of(...), ...))  // forbidden combinations

@@ -100,3 +100,33 @@ separate case, citing every task in the constraint rather than a narrower culpri
 to actually occur via brute-force search over small random instances, not merely a defensive
 branch). A future continuous-domain extension needs a distinctly-named factory, not an overload, per
 the scope decision above.
+
+## Extension (2026-09-30): detectable precedences
+
+Edge-finding is one of four standard unary-resource filtering rules — overload checking,
+detectable precedences, not-first/not-last, edge-finding — and **none of them subsumes another**.
+This ADR originally shipped the first and last. Profiling the two Taillard instances after the
+domain-layer throughput work showed the remaining per-node gap against Choco was no longer in
+data-structure overhead, so the question became which pruning was missing.
+
+`detectablePrecedences` (Vilím 2004) now runs alongside `edgeFind`, in both time directions, in a
+shared `tighten` step that keeps the tightest window each task gets from any rule. It reasons about
+*ordering* where edge-finding reasons about *capacity*: when `est_i + p_i > lst_j`, task `i` cannot
+run first, so `j → i` is forced; the set of all such `j` must complete before `i` starts, giving
+`est_i ← ect(DPrec(i))`.
+
+The rules are genuinely incomparable, and the example in `detectablePrecedences`' Javadoc is the
+witness kept as a regression test: A (`p=1`, `[0,2)`), B (`p=1`, `[10,12)`), C (`p=20`, `[0,100)`)
+forces `est_C ← 11`, where edge-finding reaches only 2 — its rule requires `est_C ≥ est(Θ)`, which
+excludes every task interval containing B.
+
+**Result.** `Taillard-os-04-04-0` went from finding *no feasible schedule at all* within 60s to
+solving with makespan 195 (`SolutionChecker` OK), taking the corpus **77 → 78**. Every other
+instance's outcome was unchanged, and `Taillard-js-015-15-0` still finds no solution — the rule
+does not help there, though it costs nothing measurable either.
+
+`tighten` and `readBounds` were extracted while adding this: `propagate` and `explainInfeasible`
+had duplicated both the bounds-reading and the pass-running, and an explanation derived from a
+different rule set than the propagation that rejected the node is a defect waiting to happen.
+
+Not-first/not-last, the fourth rule, remains unimplemented.
