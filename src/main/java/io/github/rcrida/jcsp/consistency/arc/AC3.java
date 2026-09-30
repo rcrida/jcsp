@@ -333,9 +333,12 @@ public class AC3 implements ConstraintConsistency {
         // for a result that's only ever iterated once, never indexed -- asCollection() returns that
         // backing Set directly with no copy at all (see its own Javadoc).
         val jValues = D_j.asCollection();
+        // Resolved once here rather than per value pair: the arc's orientation is the same for
+        // every pair, and deriving it compares two Variables, i.e. two names.
+        val arcFromLeft = constraint.isArcFromLeft(arc);
         List<Object> valuesToDelete = null;
         for (Object x : D_i.asCollection()) {
-            if (!hasSupport(constraint, arc, x, jValues)) {
+            if (!hasSupport(constraint, arcFromLeft, x, jValues)) {
                 if (valuesToDelete == null) valuesToDelete = new ArrayList<>();
                 valuesToDelete.add(x);
             }
@@ -346,9 +349,9 @@ public class AC3 implements ConstraintConsistency {
         return Optional.of(revisedBuilder.build());
     }
 
-    private static boolean hasSupport(BinaryConstraint<?, ?> constraint, Arc arc, Object x, Collection<?> jValues) {
+    private static boolean hasSupport(BinaryConstraint<?, ?> constraint, boolean arcFromLeft, Object x, Collection<?> jValues) {
         for (Object y : jValues) {
-            if (constraint.isSatisfiedByArcValues(arc, x, y)) return true;
+            if (constraint.isSatisfiedByArcValues(arcFromLeft, x, y)) return true;
         }
         return false;
     }

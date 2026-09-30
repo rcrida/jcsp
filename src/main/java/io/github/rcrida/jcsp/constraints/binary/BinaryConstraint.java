@@ -50,9 +50,32 @@ public abstract class BinaryConstraint<L, R> implements Constraint {
      * building a fresh {@link Assignment} (with its own {@code @Singular} map and a new {@link
      * io.github.rcrida.jcsp.assignments.Statistics} instance) per pair to be the dominant cost there.
      */
-    @SuppressWarnings("unchecked")
     public boolean isSatisfiedByArcValues(@NonNull Arc arc, @NonNull Object fromValue, @NonNull Object toValue) {
-        return arc.getFrom().equals(left)
+        return isSatisfiedByArcValues(isArcFromLeft(arc), fromValue, toValue);
+    }
+
+    /**
+     * Whether {@code arc} runs from this constraint's own left variable, so that a {@code
+     * (fromValue, toValue)} pair taken along it is already in left-to-right order.
+     * <p>
+     * Depends only on the arc, never on the values, so {@link
+     * io.github.rcrida.jcsp.consistency.arc.AC3#revise} resolves it once per arc revision and
+     * hands the answer to {@link #isSatisfiedByArcValues(boolean, Object, Object)} for every pair
+     * in the domain product. Re-deriving it per pair, as the {@link Arc}-taking overload above
+     * does, costs a {@link io.github.rcrida.jcsp.variables.Variable} comparison -- which is a
+     * comparison of their names -- inside the innermost loop of arc consistency.
+     */
+    public boolean isArcFromLeft(@NonNull Arc arc) {
+        return arc.getFrom().equals(left);
+    }
+
+    /**
+     * {@link #isSatisfiedByArcValues(Arc, Object, Object)} with the arc's orientation already
+     * resolved by {@link #isArcFromLeft}.
+     */
+    @SuppressWarnings("unchecked")
+    public boolean isSatisfiedByArcValues(boolean arcFromLeft, @NonNull Object fromValue, @NonNull Object toValue) {
+        return arcFromLeft
                 ? isSatisfiedBy((L) fromValue, (R) toValue)
                 : isSatisfiedBy((L) toValue, (R) fromValue);
     }

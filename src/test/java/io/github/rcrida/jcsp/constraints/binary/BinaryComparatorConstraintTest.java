@@ -2,6 +2,7 @@ package io.github.rcrida.jcsp.constraints.binary;
 
 import io.github.rcrida.jcsp.assignments.Assignment;
 import io.github.rcrida.jcsp.constraints.Operator;
+import io.github.rcrida.jcsp.consistency.arc.Arc;
 import io.github.rcrida.jcsp.constraints.nary.GroundNogoodConstraint;
 import io.github.rcrida.jcsp.domains.DiscreteDomain;
 import io.github.rcrida.jcsp.domains.Domain;
@@ -41,6 +42,22 @@ public class BinaryComparatorConstraintTest {
     @Test void leq_violated()  { assertThat(BinaryComparatorConstraint.of(LEFT, Operator.LEQ, RIGHT).isSatisfiedBy(a(4, 3))).isFalse(); }
     @Test void geq_satisfied() { assertThat(BinaryComparatorConstraint.of(LEFT, Operator.GEQ, RIGHT).isSatisfiedBy(a(3, 3))).isTrue(); }
     @Test void geq_violated()  { assertThat(BinaryComparatorConstraint.of(LEFT, Operator.GEQ, RIGHT).isSatisfiedBy(a(2, 3))).isFalse(); }
+
+    /**
+     * The {@link io.github.rcrida.jcsp.consistency.arc.Arc}-taking {@code isSatisfiedByArcValues}
+     * must order the pair by the arc's own direction. Asserted directly because its callers in
+     * {@link io.github.rcrida.jcsp.consistency.arc.AC3} and {@code AC3BitRm} now resolve the
+     * orientation once per arc and use the {@code boolean} overload instead, leaving this one
+     * reachable only from outside the library. {@code LT} is used deliberately: a symmetric
+     * relation would pass either way round and prove nothing.
+     */
+    @Test
+    void isSatisfiedByArcValues_ordersThePairByTheArcsDirection() {
+        var constraint = BinaryComparatorConstraint.of(LEFT, Operator.LT, RIGHT);
+
+        assertThat(constraint.isSatisfiedByArcValues(Arc.of(LEFT, RIGHT), 2, 3)).isTrue();
+        assertThat(constraint.isSatisfiedByArcValues(Arc.of(RIGHT, LEFT), 2, 3)).isFalse();
+    }
 
     @Test
     void partialAssignment_optimisticallyTrue() {

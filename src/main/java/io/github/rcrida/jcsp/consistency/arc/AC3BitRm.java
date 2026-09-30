@@ -235,12 +235,13 @@ public class AC3BitRm implements ConstraintConsistency {
 
     private static BitSet[] buildSupport(Arc arc, BinaryConstraint<?, ?> constraint, ValueIndex fromIndex, ValueIndex toIndex) {
         BitSet[] support = new BitSet[fromIndex.size()];
+        boolean arcFromLeft = constraint.isArcFromLeft(arc);
         for (int i = 0; i < fromIndex.size(); i++) {
             Object x = fromIndex.valuesByIndex().get(i);
             BitSet bits = new BitSet(toIndex.size());
             for (int j = 0; j < toIndex.size(); j++) {
                 Object y = toIndex.valuesByIndex().get(j);
-                if (constraint.isSatisfiedByArcValues(arc, x, y)) bits.set(j);
+                if (constraint.isSatisfiedByArcValues(arcFromLeft, x, y)) bits.set(j);
             }
             support[i] = bits;
         }
