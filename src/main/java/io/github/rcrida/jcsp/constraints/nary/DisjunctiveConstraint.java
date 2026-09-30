@@ -40,7 +40,10 @@ import java.util.stream.IntStream;
  * </ul>
  * Neither rule subsumes the other, so {@link #tighten} runs both against the same bounds and keeps
  * the tightest window each task gets. The remaining rule of the standard set, <em>not-first/
- * not-last</em>, is not implemented.
+ * not-last</em>, is deliberately absent rather than merely missing: it was implemented under two
+ * different {@code Θ} enumerations and reverted both times, changing no outcome anywhere in the
+ * XCSP3 corpus while costing 22-35% of node throughput on {@code Taillard-js-015-15-0}. See
+ * ADR-0018 before implementing it a third time.
  * <p>
  * Discrete ({@link io.github.rcrida.jcsp.domains.IntRangeDomain}) start-time variables only —
  * unlike {@link CumulativeConstraint}, this has no continuous ({@link

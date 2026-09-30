@@ -130,3 +130,40 @@ had duplicated both the bounds-reading and the pass-running, and an explanation 
 different rule set than the propagation that rejected the node is a defect waiting to happen.
 
 Not-first/not-last, the fourth rule, remains unimplemented.
+
+## Rejected (2026-09-30): not-first/not-last
+
+Implemented, measured twice, and reverted. It completes the standard four-rule set and is
+correct — both witness tests fired — but it prunes nothing this corpus can detect while costing
+real throughput, so the fourth rule stays deliberately absent.
+
+Task `j` runs first among `Θ ∪ {j}` only if all of `Θ` fits between `j`'s earliest end and
+`lct(Θ)`, so `est_j + p_j + p(Θ) > lct(Θ)` proves it cannot be first, and since which task of `Θ`
+precedes it is unknown the bound must be the weakest: `est_j ← max(est_j, min{ect_i : i ∈ Θ})`.
+Run on the time-reversed instance this is not-last, exactly as `edgeFind` gets its backward pass.
+It differs from edge-finding by one term — `est_j` where edge-finding uses `est(Θ)`, plus
+edge-finding's extra requirement that `est_j ≥ est(Θ)` — so it triggers on sets edge-finding
+cannot whenever `j` starts strictly later than the set does.
+
+Two `Θ` enumerations were measured against `f08bf61`, 60s budget, fixed seed:
+
+| enumeration | corpus | `Taillard-os-04-04-0` | `Taillard-js-015-15-0` |
+|---|---|---|---|
+| (none — `f08bf61`) | 78 | SAT, obj 195 | UNKNOWN, ~112k nodes |
+| `est`/`lct` task intervals, as `edgeFind` uses | 78, outcomes identical | unchanged | UNKNOWN, ~75k nodes (−35%) |
+| `ect`/`lct`, targeting the rule's own terms | 78, outcomes identical | unchanged | UNKNOWN, ~88k nodes (−22%) |
+
+The second enumeration exists because the first was the wrong family: this rule's bound is a
+minimum over `ect` and its trigger compares `p(Θ)` against `lct(Θ)`, so bounding `Θ` by an `ect`
+floor and an `lct` ceiling controls both, where an `est` floor controls neither. It recovered a
+third of the lost throughput and changed no outcome anywhere.
+
+Remaining search space on both Taillard instances was identical with and without the rule, so the
+nodes it cost bought no progress. Same verdict shape as
+[ADR-0028](0028-restart-on-solution-for-branch-and-bound.md) — cost with no measurable gain,
+rejected wholesale rather than kept behind a flag, since the unmeasured path is the one that rots.
+
+A caveat worth keeping: neither enumeration is a completeness result. For edge-finding, restricting
+to task intervals provably loses nothing; for this rule it is only a choice of which sound sets to
+try. A formulation that finds strictly more could still exist — what was measured is that two
+reasonable ones find nothing this corpus rewards, at a cost this corpus does notice.
