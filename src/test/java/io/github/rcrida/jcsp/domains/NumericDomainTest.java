@@ -52,14 +52,21 @@ class NumericDomainTest {
     }
 
     @Test
-    void withBounds_noOpNarrowing_producesDomainEqualToInput() {
-        // NumericBounds#narrow relies on this equality to detect a no-op narrowing and skip the
-        // domain-map update entirely -- a singleton IntRangeDomain narrowed to bounds it already
-        // satisfies must compare equal to a fresh NumericSingletonDomain holding the same value.
-        IntRangeDomain domain = IntRangeDomain.of(5, 5);
-        NumericDomain<Integer> narrowed = domain.withBounds(0, 10);
+    void withBounds_rangeAlreadyContainsEveryValue_returnsTheSameInstance() {
+        // NumericBounds#narrow detects a no-op narrowing from this identity -- through
+        // DiscreteSetDomain.domainEquals' own self == o fast path -- rather than by rebuilding the
+        // domain and comparing value sets, and the domain keeps its own type rather than being
+        // collapsed into whatever NumericDiscreteDomainBuilder would have produced.
+        IntRangeDomain domain = IntRangeDomain.of(1, 5);
 
-        assertThat(narrowed).isEqualTo(domain);
-        assertThat(domain).isEqualTo(narrowed);
+        assertThat(domain.withBounds(0, 10)).isSameAs(domain);
+    }
+
+    @Test
+    void withBounds_emptyDomain_staysEmpty() {
+        // An empty domain has no bounds to compare against, so it can't take the fast path above.
+        NumericDomain<Integer> narrowed = NumericEmptyDomain.<Integer>instance().withBounds(0, 10);
+
+        assertThat(narrowed.isEmpty()).isTrue();
     }
 }

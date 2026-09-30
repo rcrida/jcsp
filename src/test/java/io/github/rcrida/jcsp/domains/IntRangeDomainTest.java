@@ -55,6 +55,21 @@ public class IntRangeDomainTest {
         assertThat(IntRangeDomain.of(5, 10).toString()).isEqualTo("[5..10]");
     }
 
+    /**
+     * A one-value range and a {@link NumericSingletonDomain} denote the same domain, so narrowing
+     * one into the other must not read as a change. {@link NumericDomain#withBounds} used to be
+     * what exercised this -- it rebuilt even a no-op narrowing, collapsing the range to a
+     * singleton -- and now short-circuits instead, so the property needs asserting directly.
+     */
+    @Test
+    void equals_singletonRange_matchesNumericSingletonDomain_bothDirections() {
+        IntRangeDomain range = IntRangeDomain.of(5, 5);
+        NumericSingletonDomain<Integer> singleton = new NumericSingletonDomain<>(5);
+
+        assertThat(range.equals(singleton)).isTrue();
+        assertThat(singleton.equals(range)).isTrue();
+    }
+
     @Test
     void constructor_mismatchedMin_throwsAssertionError() {
         // of() can never produce this (it always passes its own minInclusive/maxInclusive

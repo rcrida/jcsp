@@ -28,14 +28,25 @@ public interface NumericDomain<N extends Number> extends Domain<N> {
     N getMax();
 
     /**
-     * Returns this domain narrowed to its intersection with {@code [newMin, newMax]}. Filtering
-     * against the requested range already computes that intersection implicitly — every value
-     * present is by definition within the domain's current bounds — so, unlike {@link
-     * BoundedDomain#withBounds}, no separate current-bounds lookup is needed here.
+     * Returns this domain narrowed to its intersection with {@code [newMin, newMax]}, or {@code
+     * this} when the requested range already contains every value — the case a propagator reaching
+     * its fixpoint hits over and over. Filtering would compute that intersection implicitly, since
+     * every value present is by definition within the domain's current bounds, but comparing the
+     * two bounds first is {@code O(1)} where filtering is {@code O(size)}, and it lets {@link
+     * io.github.rcrida.jcsp.constraints.NumericBounds#narrow} recognise the no-op by reference
+     * rather than by an equally sized {@code equals} against a domain it just rebuilt.
+     * <p>
+     * Returning {@code this} also keeps the domain's own type, where filtering hands back whatever
+     * {@link NumericDiscreteDomain.NumericDiscreteDomainBuilder} collapses to: an {@link
+     * IntRangeDomain} that survives a covering narrowing intact stays an {@link IntRangeDomain}
+     * rather than degrading to a {@link NumericSetDomain}.
      */
     @SuppressWarnings("unchecked")
     default NumericDomain<N> withBounds(double newMin, double newMax) {
         DiscreteDomain<N> discrete = (DiscreteDomain<N>) this;
+        if (!discrete.isEmpty() && getMin().doubleValue() >= newMin && getMax().doubleValue() <= newMax) {
+            return this;
+        }
         var builder = new NumericDiscreteDomain.NumericDiscreteDomainBuilder<N>(discrete.size());
         for (N value : discrete.asCollection()) {
             if (value.doubleValue() >= newMin && value.doubleValue() <= newMax) {
