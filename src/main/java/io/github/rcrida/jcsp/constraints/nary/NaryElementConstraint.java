@@ -99,21 +99,15 @@ public class NaryElementConstraint<T> extends NaryConstraint implements Propagat
 
         // Pass 1: prune index — remove i if out-of-bounds or vars[i-1].domain ∩ result.domain = ∅
         {
-            var builder = indexDomain.toBuilder();
-            boolean changed = false;
-            for (Integer i : indexDomain.toList()) {
-                if (i < 1 || i > vars.size()) {
-                    builder.delete(i);
-                    changed = true;
+            DiscreteDomain.Builder<Integer> builder = null;
+            for (Integer i : indexDomain.asCollection()) {
+                if (i >= 1 && i <= vars.size() && intersects(varDomains.get(i - 1), resultDomain)) {
                     continue;
                 }
-                boolean hasSupport = varDomains.get(i - 1).stream().anyMatch(resultDomain::contains);
-                if (!hasSupport) {
-                    builder.delete(i);
-                    changed = true;
-                }
+                if (builder == null) builder = indexDomain.toBuilder();
+                builder.delete(i);
             }
-            if (changed) {
+            if (builder != null) {
                 DiscreteDomain<Integer> newIndex = (DiscreteDomain<Integer>) builder.build();
                 if (newIndex.isEmpty()) return Optional.empty();
                 updated.put(index, newIndex);
@@ -124,18 +118,16 @@ public class NaryElementConstraint<T> extends NaryConstraint implements Propagat
         // Pass 2: prune result — intersect with union of vars[i-1].domain for all live i
         {
             Set<T> reachable = new HashSet<>();
-            for (Integer i : indexDomain.toList()) {
-                varDomains.get(i - 1).stream().forEach(reachable::add);
+            for (Integer i : indexDomain.asCollection()) {
+                reachable.addAll(varDomains.get(i - 1).asCollection());
             }
-            var builder = resultDomain.toBuilder();
-            boolean changed = false;
-            for (T v : resultDomain.toList()) {
-                if (!reachable.contains(v)) {
-                    builder.delete(v);
-                    changed = true;
-                }
+            DiscreteDomain.Builder<T> builder = null;
+            for (T v : resultDomain.asCollection()) {
+                if (reachable.contains(v)) continue;
+                if (builder == null) builder = resultDomain.toBuilder();
+                builder.delete(v);
             }
-            if (changed) {
+            if (builder != null) {
                 DiscreteDomain<T> newResult = (DiscreteDomain<T>) builder.build();
                 updated.put(result, newResult);
                 resultDomain = newResult;
@@ -150,20 +142,31 @@ public class NaryElementConstraint<T> extends NaryConstraint implements Propagat
             DiscreteDomain<T> varDom = updated.containsKey(selectedVar)
                     ? (DiscreteDomain<T>) updated.get(selectedVar)
                     : varDomains.get(i - 1);
-            var builder = varDom.toBuilder();
-            boolean changed = false;
-            for (T v : varDom.toList()) {
-                if (!resultDomain.contains(v)) {
-                    builder.delete(v);
-                    changed = true;
-                }
+            DiscreteDomain.Builder<T> builder = null;
+            for (T v : varDom.asCollection()) {
+                if (resultDomain.contains(v)) continue;
+                if (builder == null) builder = varDom.toBuilder();
+                builder.delete(v);
             }
-            if (changed) {
+            if (builder != null) {
                 updated.put(selectedVar, builder.build());
             }
         }
 
         return Optional.of(updated);
+    }
+
+    /**
+     * Whether {@code candidates} holds any value {@code other} also holds. A plain loop rather
+     * than {@code candidates.stream().anyMatch(other::contains)}: this runs once per live index
+     * value on every propagation, where the pipeline's setup dominates the handful of {@code
+     * contains} calls it usually makes before short-circuiting.
+     */
+    private static boolean intersects(@NonNull DiscreteDomain<?> candidates, @NonNull Domain<?> other) {
+        for (Object candidate : candidates.asCollection()) {
+            if (other.contains(candidate)) return true;
+        }
+        return false;
     }
 
     /**
