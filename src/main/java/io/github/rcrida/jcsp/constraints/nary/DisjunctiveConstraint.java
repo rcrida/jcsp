@@ -308,31 +308,37 @@ public class DisjunctiveConstraint extends NaryConstraint implements Propagatabl
     private static EdgeFindResult edgeFind(int[] est, int[] lct, int[] dur) {
         int n = est.length;
         int[] newEst = est.clone();
-        Integer[] estOrder = IntStream.range(0, n).boxed().toArray(Integer[]::new);
-        Arrays.sort(estOrder, Comparator.comparingInt(i -> est[i]));
+        // Both orders are loop-invariant, so both are built once per call. The lct order used to
+        // be re-derived inside the outer loop -- a fresh boxed list sorted by a comparator on
+        // every one of the n iterations -- which JFR put at 23.9% of a Taillard-js-015-15-0
+        // solve. Filtering the single pre-sorted order by the est threshold yields exactly the
+        // same candidate sequence, ties included.
+        int[] estOrder = orderedBy(est);
+        int[] lctOrder = orderedBy(lct);
+        boolean[] inTheta = new boolean[n];
 
         for (int ii = 0; ii < n; ii++) {
             int threshold = est[estOrder[ii]];
-            List<Integer> candidates = new ArrayList<>();
-            for (int k = 0; k < n; k++) {
-                if (est[k] >= threshold) candidates.add(k);
-            }
-            candidates.sort(Comparator.comparingInt(k -> lct[k]));
-
             int sumP = 0;
             int maxLct = Integer.MIN_VALUE;
             int minEst = Integer.MAX_VALUE;
-            boolean[] inTheta = new boolean[n];
-            List<Integer> thetaSoFar = new ArrayList<>();
-            for (int k : candidates) {
+            Arrays.fill(inTheta, false);
+
+            for (int k : lctOrder) {
+                if (est[k] < threshold) continue;
                 sumP += dur[k];
                 maxLct = Math.max(maxLct, lct[k]);
                 minEst = Math.min(minEst, est[k]);
                 inTheta[k] = true;
-                thetaSoFar.add(k);
 
                 if (minEst + sumP > maxLct) {
-                    return EdgeFindResult.infeasible(new LinkedHashSet<>(thetaSoFar));
+                    // Θ in the order it was grown, rebuilt from inTheta rather than accumulated
+                    // alongside it: this path runs at most once per call, the other n² times do not.
+                    Set<Integer> culprits = new LinkedHashSet<>();
+                    for (int c : lctOrder) {
+                        if (inTheta[c]) culprits.add(c);
+                    }
+                    return EdgeFindResult.infeasible(culprits);
                 }
 
                 for (int j = 0; j < n; j++) {
@@ -344,6 +350,28 @@ public class DisjunctiveConstraint extends NaryConstraint implements Propagatabl
             }
         }
         return EdgeFindResult.feasible(newEst);
+    }
+
+    /**
+     * Indices {@code 0..n-1} ordered by {@code keys} ascending, ties by index — exactly what a
+     * stable sort of a boxed {@code Integer[]} through {@link Comparator#comparingInt} produces,
+     * which is what {@link #edgeFind} used to do twice over. Packs each key into a {@code long}'s
+     * high word and the index into its low word, so one primitive {@link Arrays#sort} orders by
+     * key and then by index with no boxing and no per-comparison call. Keys here are task times,
+     * nowhere near the range where the packing would lose information.
+     */
+    private static int[] orderedBy(int[] keys) {
+        int n = keys.length;
+        long[] packed = new long[n];
+        for (int i = 0; i < n; i++) {
+            packed[i] = ((long) keys[i] << 32) | i;
+        }
+        Arrays.sort(packed);
+        int[] order = new int[n];
+        for (int i = 0; i < n; i++) {
+            order[i] = (int) packed[i];
+        }
+        return order;
     }
 
     /**

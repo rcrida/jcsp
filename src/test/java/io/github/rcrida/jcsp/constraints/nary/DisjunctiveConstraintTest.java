@@ -163,6 +163,23 @@ class DisjunctiveConstraintTest {
     }
 
     @Test
+    void explainInfeasible_overloadBeforeEveryTaskJoinedTheta_citesOnlyTheOverloadedOnes() {
+        // a and b each need 3 units inside [0,4), so Theta overloads as soon as b joins it -- while
+        // c, whose lct of 100 puts it last in the growing order, is still outside. The citation
+        // must be that subset, not every task: the overload was proved without c.
+        Variable<Integer> a = F.create("eip_a"), b = F.create("eip_b"), c = F.create("eip_c");
+        var constraint = DisjunctiveConstraint.of(List.of(a, b, c), List.of(3, 3, 1));
+        var domains = Map.<Variable<?>, Domain<?>>of(
+                a, IntRangeDomain.of(0, 1),
+                b, IntRangeDomain.of(0, 1),
+                c, IntRangeDomain.of(0, 99));
+
+        assertThat(constraint.propagate(domains)).isEmpty();
+        assertThat(constraint.explainInfeasible(domains)).contains(RangeNogoodConstraint.of(
+                Map.of(a, IntervalDomain.of(0, 1), b, IntervalDomain.of(0, 1))));
+    }
+
+    @Test
     void explainInfeasible_gappedDomain_fallsBackPastRangeCitation() {
         // Same overload as explainInfeasible_overload_citesOverloadedTasksAsRange, but a's domain
         // has a gap (still min=0/max=3, so the overload check -- which only reads bounds -- is
