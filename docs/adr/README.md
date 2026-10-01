@@ -101,3 +101,4 @@ section instead.
 | [0037](0037-energetic-reasoning-for-cumulative-constraints.md) | Energetic reasoning for cumulative constraints, where timetabling has no compulsory part to work from | Accepted |
 | [0038](0038-injectable-variable-selector-factory.md) | Inject the satisfaction chain's variable ordering as a factory, on its own interface | Accepted |
 | [0039](0039-discard-the-phase-memory-on-stagnation.md) | Discard the remembered path, not just the weights, when restarts stop making progress | Accepted |
+| [0040](0040-array-backed-domain-value-sets.md) | Hold a domain's values as an array plus the membership set traversal never touches, not an unmodifiable LinkedHashSet | Accepted |

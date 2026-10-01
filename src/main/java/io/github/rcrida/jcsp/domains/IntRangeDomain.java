@@ -16,7 +16,10 @@ import java.util.Set;
 public record IntRangeDomain(Set<Integer> values, int min, int max)
         implements DiscreteSetDomain<Integer>, NumericDiscreteDomain<Integer> {
     public IntRangeDomain {
-        values = Collections.unmodifiableSet(new LinkedHashSet<>(values));
+        // The LinkedHashSet is the defensive copy a caller-supplied set needs; handing that copy
+        // straight to OrderedValueSet, rather than wrapping it, is what makes traversal an array
+        // walk -- and root domains are traversed on every arc revision for the whole solve.
+        values = OrderedValueSet.handingOver(new LinkedHashSet<>(values));
         assert values.isEmpty() || (min == Collections.min(values) && max == Collections.max(values))
                 : String.format("min (%d) and max (%d) must match the actual bounds of values %s", min, max, values);
     }

@@ -114,7 +114,7 @@ public interface DiscreteDomain<T> extends Domain<T> {
                 return new ObjectSingletonDomain<>(mutableValues.iterator().next());
             }
             built = true;
-            return new ObjectSetDomain<>(Collections.unmodifiableSet(mutableValues));
+            return new ObjectSetDomain<>(OrderedValueSet.handingOver(mutableValues));
         }
     }
 }

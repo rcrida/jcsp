@@ -122,7 +122,7 @@ public interface NumericDiscreteDomain<N extends Number> extends NumericDomain<N
                 boundsStale = false;
             }
             built = true;
-            return new NumericSetDomain<>(Collections.unmodifiableSet(mutableValues), min, max);
+            return new NumericSetDomain<>(OrderedValueSet.handingOver(mutableValues), min, max);
         }
     }
 }
