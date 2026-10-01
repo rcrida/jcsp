@@ -1,6 +1,6 @@
 # ADR-0028: Restart-on-solution for branch-and-bound, built and rejected
 
-**Status:** Rejected (2026-09-21) — **but the experiment was incomplete; see the note below**
+**Status:** Rejected (2026-09-21), re-measured and rejected again (2026-10-01) — see the note below and the re-measurement at the end
 
 > **This measured half a mechanism.** Choco pairs `setRestartOnSolution(true)` with
 > `setNogoodOnRestart(true)`, and the second is what makes the first affordable: restart nogoods
@@ -115,3 +115,51 @@ bounding far cheaper than jcsp's per-node LP relaxation (ADR-0009), which is why
 2-10 times" does not transfer into "restarts would help jcsp". It does not, however, explain the
 *ratio* above: the penalty is set by the extra node count, which would be similar whatever a node
 costs.
+
+## Re-measured (2026-10-01): still rejected, and now for a sharper reason
+
+The note at the top of this ADR asked for the decision to be reopened. A second, independent reason
+to reopen appeared: `Taillard-os-04-04-0` looked like exactly the repayment case this ADR had
+recorded as absent from the corpus — *"nothing in the corpus was in a position to repay it"* — and
+it only became solvable at all in `f08bf61`, long after this was written. Bounding its makespan by
+hand made the case look overwhelming:
+
+| posted at the root | result | nodes |
+|---|---|---|
+| `makespan ≤ 193` (the optimum) | OPTIMUM | 6,843 |
+| `makespan ≤ 250` (29% above) | OPTIMUM | 97,772 |
+| `makespan ≤ 292` (the horizon, i.e. no bound) | best 195 only | 452,889 |
+
+So it was rebuilt to the same design, and the gate went green first time again.
+
+**The prediction was wrong, and the reasoning behind it was the error.** Restart-on-solution does
+not *produce* a good bound early; it only changes *where* a bound you already have gets applied.
+The bound table above measures the value of having a good bound from the first descent, which
+nothing in the restart mechanism supplies. On the instance that motivated the reopening it was
+actively worse: best **199** with restarts against **195** without, at the same node count.
+
+Corpus at 60s: **78 solved before, 78 after**, zero failures, zero `SolutionChecker` mismatches.
+The count is unchanged but its content is not, and the two instances that moved explain the whole
+mechanism:
+
+| instance | restarts | before | after |
+|---|---|---|---|
+| `GolombRuler-09-a3` | 2 | SAT, 60s timeout, 250,004 nodes | **OPTIMUM, 20.98s**, 119,287 nodes |
+| `Fastfood-ff10` | 48 | **OPTIMUM, 30.78s**, 404,989 nodes | SAT, 60s timeout, 700,473 nodes |
+
+**The payoff is bimodal in the restart count, because the cost scales with the number of improving
+solutions and the benefit does not.** Two restarts bought a 3x speedup and an optimality proof.
+Forty-eight re-descents lost one. That is a better characterisation than this ADR's original
+"a uniform 7-43% node tax, bought nothing", and it is why an unconditional policy cannot win: the
+instances that need the most restarts are the ones least able to afford them.
+
+Also measured and rejected along the way: clearing the `PhaseMemory` on each restart, on the theory
+that replaying the incumbent's values re-descends the path the new cut has just forbidden. It made
+`Taillard-os-04-04-0` worse again (best **214**), which is evidence *for*
+[ADR-0026](0026-solution-guided-phase-saving.md) rather than against it.
+
+The rejection therefore stands, with the knob question unchanged: the evidence now points at
+restarting only on a *large* improvement, or under a restart cap — and that is a configuration flag
+whose fallback path nothing would measure, which is what the Rejected alternatives section below
+already declines. What would change this verdict is a mechanism that supplies a good bound before
+the first descent, not one that re-applies a bound already in hand.
