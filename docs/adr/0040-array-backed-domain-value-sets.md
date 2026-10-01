@@ -61,11 +61,8 @@ inherited one would route a stream back through the iterator.
 - **Dropping the immutable wrapper without replacing it.** Returning the raw `LinkedHashSet` from
   `values()` removes the delegation but publishes a mutable view of a domain's state through public
   API. It also leaves the linked-list traversal and the node-allocation cost untouched.
-- **Making the builders array-backed too.** This is where the remaining ~21-26% sits, and it is the
-  obvious next increment. It is not in this one because tombstoning or compacting an array under
-  `delete` is a real data structure with its own invariants, and bundling it here would have made a
-  semantically inert change — verifiable by identical node counts — into one that needed its own
-  argument. Deliberately deferred, not overlooked.
+- **Making the builders array-backed too.** Deferred out of this change, then tried separately and
+  rejected; see the follow-up section at the end.
 - **An objective-aware `forEach` override.** Written, then removed: nothing in the codebase calls
   `forEach` on a domain's value set, and an override no caller exercises is an unmeasured path.
 
@@ -86,4 +83,35 @@ that ran to completion. Two apparent differences were both chased down:
   identical 250,004 nodes**. That is the cleanest evidence of inertness available: the same search
   tree, explored fast enough to finish.
 
-The remaining builder-side cost is now the largest single item in both profiles.
+The remaining builder-side cost was the largest single item in both profiles after this change; the follow-up section below records what happened when it was attacked.
+
+## Follow-up (2026-10-01): array-backed *builders*, tried and rejected
+
+The decision above left the builders alone, and re-profiling put them next in line: of the samples
+inside a `java.util` map or set call, the immediate caller was
+`NumericDiscreteDomainBuilder.value` for **22.2%** of a `Taillard-js-015-15-0` solve, and
+`DiscreteDomainBuilder.<init>` plus `.delete` for **11.6%** of `Taillard-os-04-04-0`.
+
+So each builder's single `LinkedHashSet` was split into the two halves `OrderedValueSet` wants
+anyway — an `ArrayList` for insertion order and a plain `HashSet` for membership — with `delete`
+removing only from the set and `build` compacting the list in one pass. `build` then had nothing
+left to derive. It was correct (full gate green, including two newly-needed tests for paths
+`LinkedHashSet` had been handling implicitly: a repeated value via `of(T...)`, and an add after a
+delete).
+
+**It did not pay.** Interleaved A/B against this ADR's own change, 3 reps, nodes in a fixed 60s
+budget: `Taillard-js-015-15-0` **1.01x** (1.01 / 0.96 / 1.01), `Taillard-os-04-04-0` **0.96x**
+(0.98 / 0.96 / 0.96) — a wash and a small regression.
+
+**The premise was the error.** The cost was read as `LinkedHashMap`'s link maintenance
+(`linkNodeAtEnd`, `newNode`, `afterNodeInsertion`), which a list would not pay. But the dominant
+term is `HashMap.putVal` — 17.8% on `Taillard-os-04-04-0` — and **both** designs pay it, because
+both hash every value for membership. Splitting the structure only moved work: profiling the split
+build showed `putVal` down to 10.7% with `ArrayList`/`Arrays.copyOf` up from 0.8% to 2.5%, two
+allocations per builder instead of one, and two traversals of the source in the copy constructor
+where `LinkedHashSet` made one. Net negative.
+
+What would actually reduce it is not hashing at all: an integer domain could answer `contains` from
+a bitset or by binary search over a sorted array. That is a different representation per value
+type, closer in spirit to [ADR-0022](0022-bitset-and-residue-arc-consistency-ac3bitrm.md)'s
+bit-indexed experiment than to this one, and it is not justified by anything measured here.
