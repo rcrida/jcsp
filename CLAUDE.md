@@ -102,7 +102,8 @@ Every domain is a record except `ObjectEmptyDomain`/`NumericEmptyDomain` (final 
 **`BranchAndBoundSolver`**:
 - Incumbent pruning, composed with the same `NogoodStore` wiring ([ADR-0002](docs/adr/0002-nogood-learning-as-first-class-constraints.md)).
 - A `PhaseMemory` recorded on each strictly improving solution ([ADR-0026](docs/adr/0026-solution-guided-phase-saving.md)).
-- No restarts ([ADR-0028](docs/adr/0028-restart-on-solution-rejected-for-branch-and-bound.md)).
+- No restarts ([ADR-0028](docs/adr/0028-restart-on-solution-rejected-for-branch-and-bound.md), built and rejected twice).
+- Variable ordering from `SolverConfig`'s `variableSelectorFactory`, so dom/wdeg by default and injectable — same as the satisfaction chain, and it drives the adaptive hooks ([ADR-0038](docs/adr/0038-injectable-variable-selector-factory.md)).
 - Each new incumbent is also applied as a propagated `LinearBoundConstraint` objective cut ([ADR-0029](docs/adr/0029-objective-cut-as-a-propagated-constraint.md)).
 - When the objective is a `LinearObjective` (`constant + Σ coefficient·variable`, detected via `instanceof`), an LP relaxation from `solver.lp`'s `LpModelBuilder`/`LpBound` (ojAlgo) serves three purposes: a per-node bound, most-fractional branching, and an exact fill of continuous variables once every discrete variable is pinned ([ADR-0009](docs/adr/0009-joint-continuous-discrete-optimization.md)). The LP includes an assignment relaxation for GCC-linked tables ([ADR-0020](docs/adr/0020-assignment-relaxation-for-gcc-linked-tables.md)) and reuses a copied model template across nodes ([ADR-0025](docs/adr/0025-lp-model-reuse-across-search-nodes.md)).
 

@@ -12,6 +12,7 @@ import io.github.rcrida.jcsp.domains.IntRangeDomain;
 import io.github.rcrida.jcsp.domains.IntervalDomain;
 import io.github.rcrida.jcsp.domains.NumericDiscreteDomain;
 import io.github.rcrida.jcsp.solver.backtrackingsearch.order.DefaultValueOrderer;
+import io.github.rcrida.jcsp.solver.backtrackingsearch.selector.AdaptiveVariableSelector;
 import io.github.rcrida.jcsp.solver.backtrackingsearch.selector.MinimumRemainingValuesSelector;
 import io.github.rcrida.jcsp.solver.listener.SolverListener;
 import io.github.rcrida.jcsp.variables.Variable;
@@ -53,7 +54,7 @@ public class BranchAndBoundSolverTest {
     static BranchAndBoundSolver solver(ToDoubleFunction<Assignment> objective, SolverLimits limits) {
         return BranchAndBoundSolver.builder()
                 .objective(objective)
-                .unassignedVariableSelector(MinimumRemainingValuesSelector.INSTANCE)
+                .selectorFactory(constraints -> MinimumRemainingValuesSelector.INSTANCE)
                 .domainValuesOrderer(DefaultValueOrderer.INSTANCE)
                 .inference((problem, variable, assignment) -> Optional.of(problem))
                 .limits(limits)
@@ -119,7 +120,7 @@ public class BranchAndBoundSolverTest {
         };
         BranchAndBoundSolver cancelling = BranchAndBoundSolver.builder()
                 .objective(BranchAndBoundSolverTest::sum)
-                .unassignedVariableSelector(MinimumRemainingValuesSelector.INSTANCE)
+                .selectorFactory(constraints -> MinimumRemainingValuesSelector.INSTANCE)
                 .domainValuesOrderer(DefaultValueOrderer.INSTANCE)
                 .inference(alwaysCancels)
                 .build();
@@ -133,7 +134,7 @@ public class BranchAndBoundSolverTest {
         cancellation.cancel();
         BranchAndBoundSolver cancelled = BranchAndBoundSolver.builder()
                 .objective(BranchAndBoundSolverTest::sum)
-                .unassignedVariableSelector(MinimumRemainingValuesSelector.INSTANCE)
+                .selectorFactory(constraints -> MinimumRemainingValuesSelector.INSTANCE)
                 .domainValuesOrderer(DefaultValueOrderer.INSTANCE)
                 .inference((problem, variable, assignment) -> Optional.of(problem))
                 .cancellation(cancellation)
@@ -148,7 +149,7 @@ public class BranchAndBoundSolverTest {
         io.github.rcrida.jcsp.assignments.Statistics statistics = new io.github.rcrida.jcsp.assignments.Statistics();
         BranchAndBoundSolver limited = BranchAndBoundSolver.builder()
                 .objective(BranchAndBoundSolverTest::sum)
-                .unassignedVariableSelector(MinimumRemainingValuesSelector.INSTANCE)
+                .selectorFactory(constraints -> MinimumRemainingValuesSelector.INSTANCE)
                 .domainValuesOrderer(DefaultValueOrderer.INSTANCE)
                 .inference((problem, variable, assignment) -> Optional.of(problem))
                 .limits(SolverLimits.ofNodes(1))
@@ -182,7 +183,7 @@ public class BranchAndBoundSolverTest {
                 .build();
     }
 
-    private static io.github.rcrida.jcsp.solver.backtrackingsearch.selector.UnassignedVariableSelector fixedOrder(
+    private static AdaptiveVariableSelector fixedOrder(
             Variable<Integer> x, Variable<Integer> y, Variable<Integer> w1, Variable<Integer> w2) {
         return (csp, assignment) -> java.util.stream.Stream.of(x, y, w1, w2)
                 .filter(v -> assignment.getValue(v).isEmpty())
@@ -201,7 +202,7 @@ public class BranchAndBoundSolverTest {
         NogoodStore store = new NogoodStore();
         BranchAndBoundSolver solver = BranchAndBoundSolver.builder()
                 .objective(a -> 0)
-                .unassignedVariableSelector(fixedOrder(x, y, w1, w2))
+                .selectorFactory(constraints -> fixedOrder(x, y, w1, w2))
                 .domainValuesOrderer(DefaultValueOrderer.INSTANCE)
                 .inference(Solver.Factory.FULL_PROPAGATION_INFERENCE)
                 .nogoodStore(store)
@@ -227,7 +228,7 @@ public class BranchAndBoundSolverTest {
         NogoodStore store = new NogoodStore();
         BranchAndBoundSolver solver = BranchAndBoundSolver.builder()
                 .objective(a -> 0)
-                .unassignedVariableSelector(fixedOrder(x, y, w1, w2))
+                .selectorFactory(constraints -> fixedOrder(x, y, w1, w2))
                 .domainValuesOrderer(DefaultValueOrderer.INSTANCE)
                 .inference(Inference.withoutReasonTracking(Solver.Factory.FULL_PROPAGATION_INFERENCE))
                 .nogoodStore(store)
@@ -256,7 +257,7 @@ public class BranchAndBoundSolverTest {
 
         BranchAndBoundSolver solver = BranchAndBoundSolver.builder()
                 .objective(BranchAndBoundSolverTest::sum)
-                .unassignedVariableSelector(MinimumRemainingValuesSelector.INSTANCE)
+                .selectorFactory(constraints -> MinimumRemainingValuesSelector.INSTANCE)
                 .domainValuesOrderer(DefaultValueOrderer.INSTANCE)
                 .inference((problem, variable, assignment) -> Optional.of(problem))
                 .listener(recorder)
@@ -293,7 +294,7 @@ public class BranchAndBoundSolverTest {
             .sumConstraint(Set.of(LP_X, LP_Y, LP_Z), Operator.GEQ, 8)
             .build();
 
-    private static io.github.rcrida.jcsp.solver.backtrackingsearch.selector.UnassignedVariableSelector fixedOrder(
+    private static AdaptiveVariableSelector fixedOrder(
             Variable<Integer> x, Variable<Integer> y, Variable<Integer> z) {
         return (csp, assignment) -> java.util.stream.Stream.of(x, y, z)
                 .filter(v -> assignment.getValue(v).isEmpty())
@@ -318,7 +319,7 @@ public class BranchAndBoundSolverTest {
     private static BranchAndBoundSolver lpSolver(ToDoubleFunction<Assignment> objective) {
         return BranchAndBoundSolver.builder()
                 .objective(objective)
-                .unassignedVariableSelector(fixedOrder(LP_X, LP_Y, LP_Z))
+                .selectorFactory(constraints -> fixedOrder(LP_X, LP_Y, LP_Z))
                 .domainValuesOrderer(DefaultValueOrderer.INSTANCE)
                 .inference(narrowAssignedToSingleton())
                 .statistics(new io.github.rcrida.jcsp.assignments.Statistics())
@@ -391,12 +392,12 @@ public class BranchAndBoundSolverTest {
                     return DefaultValueOrderer.INSTANCE.order(c, variable, assignment);
                 };
 
-        io.github.rcrida.jcsp.solver.backtrackingsearch.selector.UnassignedVariableSelector xThenY =
+        AdaptiveVariableSelector xThenY =
                 (c, assignment) -> assignment.getValue(x).isEmpty() ? x : y;
 
         BranchAndBoundSolver solver = BranchAndBoundSolver.builder()
                 .objective(linearObjective)
-                .unassignedVariableSelector(xThenY) // x tried before y when not overridden
+                .selectorFactory(constraints -> xThenY) // x tried before y when not overridden
                 .domainValuesOrderer(recording)
                 .inference(narrowAssignedToSingleton())
                 .build();
@@ -425,7 +426,7 @@ public class BranchAndBoundSolverTest {
 
         BranchAndBoundSolver solver = BranchAndBoundSolver.builder()
                 .objective(linearObjective)
-                .unassignedVariableSelector(fixedOrder(LP_X, LP_Y, LP_Z))
+                .selectorFactory(constraints -> fixedOrder(LP_X, LP_Y, LP_Z))
                 .domainValuesOrderer(recording)
                 .inference(narrowAssignedToSingleton())
                 .build();
@@ -584,7 +585,7 @@ public class BranchAndBoundSolverTest {
     }
 
     @Test
-    void unassignedVariableSelector_violatingDiscreteFirstContract_failsFast() {
+    void selector_violatingDiscreteFirstContract_failsFast() {
         // A custom selector that always picks the continuous variable, even while the discrete one
         // remains unassigned, violates BranchAndBoundSolver's documented contract. requireDiscrete
         // should catch this with a clear IllegalStateException rather than letting domainValuesOrderer
@@ -595,18 +596,18 @@ public class BranchAndBoundSolverTest {
                 .variableDomain(n, IntRangeDomain.of(1, 3))
                 .variableDomain(x, IntervalDomain.of(0.0, 10.0))
                 .build();
-        io.github.rcrida.jcsp.solver.backtrackingsearch.selector.UnassignedVariableSelector alwaysX =
+        AdaptiveVariableSelector alwaysX =
                 (c, assignment) -> x;
         BranchAndBoundSolver solver = BranchAndBoundSolver.builder()
                 .objective(a -> 0.0)
-                .unassignedVariableSelector(alwaysX)
+                .selectorFactory(constraints -> alwaysX)
                 .domainValuesOrderer(DefaultValueOrderer.INSTANCE)
                 .inference((problem, variable, assignment) -> Optional.of(problem))
                 .build();
 
         assertThatThrownBy(() -> solver.getSolutions(csp).toList())
                 .isInstanceOf(IllegalStateException.class)
-                .hasMessageContaining("unassignedVariableSelector")
+                .hasMessageContaining("variable selector")
                 .hasMessageContaining("contract_x");
     }
 
@@ -631,7 +632,7 @@ public class BranchAndBoundSolverTest {
     private static BranchAndBoundSolver cutSolver(ToDoubleFunction<Assignment> objective) {
         return BranchAndBoundSolver.builder()
                 .objective(objective)
-                .unassignedVariableSelector(fixedOrder(CUT_X, CUT_Y, CUT_A))
+                .selectorFactory(constraints -> fixedOrder(CUT_X, CUT_Y, CUT_A))
                 .domainValuesOrderer(DefaultValueOrderer.INSTANCE)
                 .inference(narrowAssignedToSingleton())
                 .statistics(new io.github.rcrida.jcsp.assignments.Statistics())

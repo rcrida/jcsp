@@ -23,8 +23,14 @@ import java.util.stream.Collectors;
  * 4. Selects the variable with the smallest number of remaining legal values.
  * <p>
  * If no unassigned variables are found, the method will throw an {@link IllegalStateException}.
+ * <p>
+ * Implements {@link AdaptiveVariableSelector} without overriding any of its hooks, so it is
+ * stateless and ignores everything the search tells it -- the point is only that it fits where a
+ * selector factory is wanted, since {@code constraints -> INSTANCE} is then a valid
+ * {@link AdaptiveVariableSelector.Factory}. For a selector that does react, see
+ * {@link DomWdegVariableSelector}.
  */
-public class MinimumRemainingValuesSelector implements UnassignedVariableSelector {
+public class MinimumRemainingValuesSelector implements AdaptiveVariableSelector {
     public static final MinimumRemainingValuesSelector INSTANCE = new MinimumRemainingValuesSelector();
 
     private MinimumRemainingValuesSelector() {}

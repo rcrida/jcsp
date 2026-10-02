@@ -22,7 +22,7 @@ import io.github.rcrida.jcsp.domains.Domain;
 import io.github.rcrida.jcsp.solver.listener.SolverListener;
 import io.github.rcrida.jcsp.solver.backtrackingsearch.order.DomainValuesOrderer;
 import io.github.rcrida.jcsp.solver.backtrackingsearch.order.PhaseMemory;
-import io.github.rcrida.jcsp.solver.backtrackingsearch.selector.UnassignedVariableSelector;
+import io.github.rcrida.jcsp.solver.backtrackingsearch.selector.AdaptiveVariableSelector;
 import io.github.rcrida.jcsp.solver.lp.LpBound;
 import io.github.rcrida.jcsp.solver.lp.LpModelBuilder;
 import io.github.rcrida.jcsp.variables.Variable;
@@ -71,8 +71,7 @@ import java.util.stream.Stream;
  * requires, with an immediate prune on LP infeasibility -- a relaxation's infeasibility already
  * proves the unrelaxed subtree is infeasible too; and (2), when not pruned, choosing which variable
  * to branch on next: the currently-unassigned variable whose LP-relaxed value is farthest from an
- * integer (standard MIP "most fractional" branching), falling back to {@link
- * #unassignedVariableSelector} when every LP-covered unassigned variable already has an integral
+ * integer (standard MIP "most fractional" branching), falling back to {@link #selectorFactory} when every LP-covered unassigned variable already has an integral
  * value, or none are LP-covered at all. This only changes <em>which</em> variable is decided next,
  * not how its domain is split -- unlike textbook MIP branching's binary {@code x<=floor(v)}/
  * {@code x>=ceil(v)} children, this class still enumerates {@link #domainValuesOrderer}'s full
@@ -97,8 +96,7 @@ import java.util.stream.Stream;
  * {@link BoundedDomain} variable also participates in a constraint the LP can't see, like {@code
  * productConstraint}). This is the fix for the MIPLIB {@code flugpl} case that originally motivated
  * ADR-0009: continuous variables whose useful bounds depend on a still-open discrete decision are no
- * longer bisected blind before that decision is even made. Relies on {@link
- * #unassignedVariableSelector} preferring discrete variables while any remain undecided --
+ * longer bisected blind before that decision is even made. Relies on {@link #selectorFactory} preferring discrete variables while any remain undecided --
  * {@link io.github.rcrida.jcsp.solver.backtrackingsearch.selector.MinimumRemainingValuesSelector}
  * (what {@link Solver.Factory} always wires in) satisfies this by construction, since a
  * non-singleton {@link BoundedDomain}'s {@code size()} is {@link Integer#MAX_VALUE} -- larger than
@@ -142,7 +140,16 @@ public class BranchAndBoundSolver implements Solver {
     /** The cut constraint built for one incumbent value; see {@link #objectiveCutCache}. */
     private record ObjectiveCut(double incumbent, @Nullable LinearBoundConstraint<Integer> constraint) {}
 
-    @NonNull UnassignedVariableSelector unassignedVariableSelector;
+    /**
+     * Built once per {@link #getSolutions} call, as {@link DomWdegLubySearch} does and for the same
+     * reason: an {@link AdaptiveVariableSelector} accumulates state about the search it is watching,
+     * so two solves from one solver must not share one. Defaults to dom/wdeg via {@link
+     * AdaptiveVariableSelector.Factory#INSTANCE}, and {@link SolverConfig#getVariableSelectorFactory}
+     * reaches here -- until this field existed it reached only the satisfaction chain, so setting it
+     * and then calling {@code createSolver(csp, objective)} silently had no effect (ADR-0038).
+     */
+    @Builder.Default
+    AdaptiveVariableSelector.@NonNull Factory selectorFactory = AdaptiveVariableSelector.Factory.INSTANCE;
     @NonNull DomainValuesOrderer domainValuesOrderer;
     @NonNull Inference inference;
     @NonNull ToDoubleFunction<Assignment> objective;
@@ -188,7 +195,8 @@ public class BranchAndBoundSolver implements Solver {
         // has already recorded the post-preprocessing figure and first-write-wins keeps it.
         statistics.updateRootSearchSpace(csp.getSearchSpace());
         return search(csp, Assignment.builder().statistics(statistics).listener(listener).cancellation(cancellation).build(),
-                incumbent, deadline, 1.0, new SearchProgress());
+                incumbent, deadline, 1.0, new SearchProgress(),
+                selectorFactory.createSelector(csp.getConstraints()));
     }
 
     private Stream<Assignment> search(ConstraintSatisfactionProblem csp,
@@ -196,7 +204,8 @@ public class BranchAndBoundSolver implements Solver {
                                        double[] incumbent,
                                        long deadline,
                                        double weight,
-                                       SearchProgress progress) {
+                                       SearchProgress progress,
+                                       AdaptiveVariableSelector selector) {
         if (assignment.isComplete(csp) || isDiscreteComplete(csp, assignment)) {
             return resolveComplete(csp, assignment, incumbent);
         }
@@ -204,7 +213,7 @@ public class BranchAndBoundSolver implements Solver {
         if (cutCsp == null) {
             return Stream.empty();
         }
-        return searchCut(cutCsp, assignment, incumbent, deadline, weight, progress);
+        return searchCut(cutCsp, assignment, incumbent, deadline, weight, progress, selector);
     }
 
     /** {@link #search}'s continuation once the objective cut has been folded into {@code csp}. */
@@ -213,7 +222,8 @@ public class BranchAndBoundSolver implements Solver {
                                          double[] incumbent,
                                          long deadline,
                                          double weight,
-                                         SearchProgress progress) {
+                                         SearchProgress progress,
+                                         AdaptiveVariableSelector selector) {
         Variable<?> variable;
         if (objective instanceof LinearObjective linearObjective) {
             Optional<LpBound> bound = LpModelBuilder.solve(csp, linearObjective, lpModelCacheKey);
@@ -221,15 +231,15 @@ public class BranchAndBoundSolver implements Solver {
                 return Stream.empty();
             }
             variable = selectFractionalVariable(csp, assignment, bound.get())
-                    .orElseGet(() -> unassignedVariableSelector.select(csp, assignment));
+                    .orElseGet(() -> selector.select(csp, assignment));
         } else {
             if (objective.applyAsDouble(assignment) >= incumbent[0]) {
                 return Stream.empty();
             }
-            variable = unassignedVariableSelector.select(csp, assignment);
+            variable = selector.select(csp, assignment);
         }
         requireDiscrete(csp, variable);
-        return searchValues(variable, csp, assignment, incumbent, deadline, weight, progress);
+        return searchValues(variable, csp, assignment, incumbent, deadline, weight, progress, selector);
     }
 
     /**
@@ -327,7 +337,7 @@ public class BranchAndBoundSolver implements Solver {
     /**
      * Fails fast, with a clear diagnosis, instead of letting {@link #domainValuesOrderer} crash
      * confusingly deep inside itself (e.g. {@code LeastConstrainingValueOrderer} casting to {@code
-     * DiscreteDomain}) when {@link #unassignedVariableSelector} violates the discrete-first contract
+     * DiscreteDomain}) when {@link #selectorFactory} violates the discrete-first contract
      * documented on this class: reaching this point already means a discrete variable is still open
      * (the {@link #isDiscreteComplete} check in {@link #search} didn't short-circuit), so {@code
      * variable} being a <em>non-singleton</em> {@link BoundedDomain} here can only mean the selector
@@ -343,9 +353,9 @@ public class BranchAndBoundSolver implements Solver {
     private static void requireDiscrete(ConstraintSatisfactionProblem csp, Variable<?> variable) {
         if (csp.getDomain(variable) instanceof BoundedDomain<?> bd && !bd.isSingleton()) {
             throw new IllegalStateException(
-                    "unassignedVariableSelector selected non-singleton continuous variable '" + variable
+                    "the variable selector selected non-singleton continuous variable '" + variable
                             + "' while a discrete variable was still unassigned. BranchAndBoundSolver "
-                            + "requires unassignedVariableSelector to prefer discrete variables while any "
+                            + "requires its variable selector to prefer discrete variables while any "
                             + "remain open (see this class's own Javadoc); MinimumRemainingValuesSelector "
                             + "satisfies this by construction.");
         }
@@ -403,8 +413,7 @@ public class BranchAndBoundSolver implements Solver {
      * inner} without bisecting at all whenever {@code csp} already has no non-singleton {@link
      * BoundedDomain} variable left -- a common case, not just a defensive fallback, since a {@link
      * BoundedDomain} residual variable can collapse to a singleton via propagation triggered by the
-     * very inference step that completes the last discrete decision, before {@link
-     * #unassignedVariableSelector} ever gets a chance to pick it up through the ordinary branching
+     * very inference step that completes the last discrete decision, before {@link #selectorFactory} ever gets a chance to pick it up through the ordinary branching
      * path. {@link SolverDecorator#forcedSolution} is exactly the right tool for that: extract the
      * now-singleton values and validate them, the same way {@link BisectionConditioningSolver}'s own
      * fully-bisected leaves already do internally. {@code incumbent} seeds the fallback's own
@@ -457,7 +466,7 @@ public class BranchAndBoundSolver implements Solver {
      * integer ({@code min(frac, 1-frac)}, maximal at a half-integer) -- standard MIP "most fractional"
      * branching. {@link Optional#empty()} when no unassigned discrete variable is LP-covered, or
      * every covered one is already within {@link #FRACTIONAL_EPSILON} of an integer, letting the
-     * caller fall back to {@link #unassignedVariableSelector}.
+     * caller fall back to {@link #selectorFactory}.
      */
     private Optional<Variable<?>> selectFractionalVariable(ConstraintSatisfactionProblem csp, Assignment assignment, LpBound bound) {
         Variable<?> best = null;
@@ -487,7 +496,8 @@ public class BranchAndBoundSolver implements Solver {
                                                  double[] incumbent,
                                                  long deadline,
                                                  double weight,
-                                                 SearchProgress progress) {
+                                                 SearchProgress progress,
+                                                 AdaptiveVariableSelector selector) {
         ConstraintSatisfactionProblem cspWithNogoods = nogoodStore.apply(csp);
         @SuppressWarnings("unchecked")
         List<T> candidates = (List<T>) phaseMemory.prioritise(variable,
@@ -508,6 +518,7 @@ public class BranchAndBoundSolver implements Solver {
                     }
                     if (!next.isConsistentAmong(cspWithNogoods.getConstraintsTouching(variable))) {
                         next.getStatistics().incrementBacktracks();
+                        selector.onValueRejected(variable);
                         listener.onBacktrack(variable, next);
                         progress.complete(childWeight);
                         return false;
@@ -517,8 +528,8 @@ public class BranchAndBoundSolver implements Solver {
                 .flatMap(next -> {
                     Stream<Assignment> child;
                     try {
-                        child = inferOrExplain(cspWithNogoods, variable, next)
-                                .map(inferred -> search(inferred, next, incumbent, deadline, childWeight, progress))
+                        child = inferOrExplain(cspWithNogoods, variable, next, selector)
+                                .map(inferred -> search(inferred, next, incumbent, deadline, childWeight, progress, selector))
                                 .orElseGet(Stream::empty);
                     } catch (SolverCancelledException e) {
                         child = Stream.empty();
@@ -540,9 +551,12 @@ public class BranchAndBoundSolver implements Solver {
      */
     private Optional<ConstraintSatisfactionProblem> inferOrExplain(ConstraintSatisfactionProblem cspWithNogoods,
                                                                      Variable<?> variable,
-                                                                     Assignment next) {
+                                                                     Assignment next,
+                                                                     AdaptiveVariableSelector selector) {
         ConsistencyResult inferred = inference.applyWithReason(cspWithNogoods, variable, next);
         if (inferred.isInfeasible()) {
+            selector.onConflict(variable, next);
+            selector.onValueRejected(variable);
             if (inferred.reason() != null) {
                 nogoodStore.record(inferred.reason());
                 next.getStatistics().incrementNogoodsLearned();

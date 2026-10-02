@@ -275,7 +275,7 @@ public interface Solver {
                 // first, so it's the chain's terminal solver unconditionally.
                 Solver terminal = BranchAndBoundSolver.builder()
                         .objective(objective)
-                        .unassignedVariableSelector(MinimumRemainingValuesSelector.INSTANCE)
+                        .selectorFactory(config.getVariableSelectorFactory())
                         .domainValuesOrderer(LeastConstrainingValueOrderer.INSTANCE)
                         .inference(nogoodLearningInference(config, fixpointPropagation))
                         .limits(limits)

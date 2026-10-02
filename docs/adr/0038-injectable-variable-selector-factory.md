@@ -90,3 +90,45 @@ rather than for substitutability.
 **Keeping the dom/wdeg method names on the new interface.** A much smaller diff, no doc churn. It
 would have meant an impact-based selector implementing a method called `incrementWeights`, and would
 have left the `recordConflict` mis-description in place unexamined.
+
+## Extension (2026-10-02): wired into the optimization chain
+
+As first built, `SolverConfig#variableSelectorFactory` reached only the satisfaction chain —
+`Solver.java` had exactly one use site. `BranchAndBoundSolver` hardcoded
+`MinimumRemainingValuesSelector` and called **none** of this interface's four hooks, against seven
+call sites in `DomWdegLubySearch`. So setting the factory and then calling
+`createSolver(csp, objective)` silently had no effect, and dom/wdeg would have degenerated to
+dom/deg there even if injected, since nothing fed it conflicts.
+
+`BranchAndBoundSolver` now takes `selectorFactory` in place of `unassignedVariableSelector`,
+builds its selector per `getSolutions` call (adaptive selectors accumulate per-solve state, so two
+solves from one solver must not share one), threads it through `search`/`searchCut`/`searchValues`,
+and raises `onValueRejected` at the direct-consistency rejection and `onConflict` +
+`onValueRejected` on inference failure — the same two points `DomWdegLubySearch` uses.
+`MinimumRemainingValuesSelector` now implements this interface too, inheriting the no-op hooks, so
+`constraints -> INSTANCE` is a valid factory for callers who want the old behaviour.
+
+**The optimization chain's default selector therefore changes from MRV to dom/wdeg.** Corpus at
+60s: **78 solved → 80**, zero failures, every new solution `SolutionChecker` OK.
+
+| instance | before | after |
+|---|---|---|
+| `BinPacking-mdd-n1c1w4a` | UNKNOWN | **SATISFIABLE** |
+| `BinPacking-tab-n1c1w4a` | UNKNOWN | **SATISFIABLE** |
+| `Vrp-A-n32-k5` | UNKNOWN | **SATISFIABLE** |
+| `Opd-07-007-003` | OPTIMUM, 22,172 nodes | OPTIMUM, **939** |
+| `Fastfood-ff10` | OPTIMUM, 404,989 | OPTIMUM, **54,005** |
+| `GolombRuler-09-a3` | OPTIMUM, 250,004 | OPTIMUM, **83,570** |
+| `ChessboardColoration-07-07` | OPTIMUM, 902,098 | OPTIMUM, **346,161** |
+| `Taillard-os-04-04-0` | SAT, best 195 | SAT, best **193** — the proven optimum |
+| `PrizeCollecting-15-3-5-0` | OPTIMUM, 11,134 | OPTIMUM, 14,859 |
+| `Warehouse-opl` | OPTIMUM, 506 | OPTIMUM, 784 |
+| `GraphColoring-3-fullins-4` | SATISFIABLE, 177,295 | **UNKNOWN**, 22,578 |
+
+The one lost instance is understood rather than mysterious, and it bounds where this heuristic pays.
+`GraphColoring-3-fullins-4` is a COP over 405 variables and 3,524 constraints; dom/wdeg's `select`
+computes a ratio per unassigned variable, each summing weights across that variable's constraints,
+where MRV only reads domain sizes. Throughput fell ~7.8x and it no longer reaches a first solution.
+The heuristic's own cost scales with the constraint graph, so a dense instance can pay more for the
+guidance than the guidance saves — which is exactly the case a caller can now override, this ADR's
+original purpose.
