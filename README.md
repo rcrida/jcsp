@@ -285,7 +285,7 @@ BoundSolver solver = Solver.Factory.INSTANCE.createSolver(csp,
 
 Pass `RestartRandomization.NONE` instead to disable this entirely and restore fully deterministic tie-breaking (ties always go to the first-encountered candidate).
 
-**Variable ordering** — `DomWdegLubySearch` orders the variables it branches on with dom/wdeg plus last-conflict reasoning. `variableSelectorFactory` replaces that wholesale, for a problem where domain size is a poor guide to what is worth deciding first:
+**Variable ordering** — both terminal solvers order the variables they branch on with dom/wdeg plus last-conflict reasoning. `variableSelectorFactory` replaces that wholesale, for a problem where domain size is a poor guide to what is worth deciding first:
 
 ```java
 BoundSolver solver = Solver.Factory.INSTANCE.createSolver(csp,
@@ -298,6 +298,16 @@ BoundSolver solver = Solver.Factory.INSTANCE.createSolver(csp,
 ```
 
 It is a *factory* because a selector accumulates state about the search it is watching, so each solve builds its own. Implement `AdaptiveVariableSelector` rather than a lambda to also receive the search's events — `onConflict`, `onValueRejected`, `onRestart` and `onStagnation` — each of which defaults to doing nothing, so a selector that only ranks variables can ignore them. Ordering affects only which assignments are visited when, never which are reachable: a complete search still finds a solution if one exists, and still proves unsatisfiability if none does.
+
+Since 3.2.0 this reaches the optimization chain too. It previously configured only `DomWdegLubySearch`, so setting it and then calling `createSolver(csp, objective)` had no effect; `BranchAndBoundSolver` used minimum-remaining-values and raised none of the four events. Its default is now dom/wdeg as well, which is worth four instances of the bundled XCSP3 corpus. To ask for the old behaviour explicitly:
+
+```java
+SolverConfig.builder()
+    .variableSelectorFactory(constraints -> MinimumRemainingValuesSelector.INSTANCE)
+    .build();
+```
+
+That is worth knowing about for a dense constraint graph. dom/wdeg ranks by `domainSize / weightedDegree`, summing weights across each candidate variable's constraints, where minimum-remaining-values only reads domain sizes — so on a problem with thousands of constraints the ranking can cost more than it saves.
 
 ### Constraint builder methods
 
@@ -365,7 +375,7 @@ builder.notAllEqualConstraint(Set.of(v1, v2, v3))                   // not every
 builder.distinctVectorsConstraint(List.of(List.of(a1, a2), List.of(b1, b2)))  // every pair of equal-length vectors differs in at least one position
 builder.cumulativeConstraint(starts, durations, resources, limit)    // resource-bounded scheduling (MiniZinc cumulative)
 builder.cumulativeVariableConstraint(starts, durations, resources, limit)  // cumulative with variable durations/resource requirements (limit stays a fixed constant)
-builder.disjunctiveConstraint(starts, durations)                     // unary-resource scheduling (no two tasks overlap); real edge-finding propagation, stronger than cumulativeConstraint(limit=1)
+builder.disjunctiveConstraint(starts, durations)                     // unary-resource scheduling (no two tasks overlap); overload checking, edge-finding and detectable precedences, stronger than cumulativeConstraint(limit=1)
 builder.binPackingConstraint(bin, weights, capacities)               // sum(weights[i] : bin[i]==b) <= capacities[b] for every bin b (pair with nValueConstraint over `bin` to minimize bins used; MiniZinc bin_packing_capa)
 builder.atMostOneConstraint(Set.of(b1, b2, b3))                     // at most one boolean is true  (AC3 decomposition)
 builder.atMostNConstraint(Set.of(b1, b2, b3), n)                    // at most n booleans are true
@@ -462,11 +472,20 @@ InitialAssignmentFactory factory = FallbackAssignmentFactory.builder()
 <dependency>
     <groupId>io.github.rcrida</groupId>
     <artifactId>jcsp</artifactId>
-    <version>3.1.0</version>
+    <version>3.2.0</version>
 </dependency>
 ```
 
 jcsp pulls in [ojAlgo](https://www.ojalgo.org/) (MIT-licensed) as a transitive compile-scope dependency, used for the LP relaxation behind `LinearObjective`-driven optimization (see above), and [xcsp3-tools](https://github.com/xcsp3team/XCSP3-Java-Tools) (MIT-licensed) as a transitive compile-scope dependency, used for `Xcsp3Parser` (see above).
+
+### Upgrading from 3.1
+
+Two source-incompatible changes, both on paths only reachable by constructing solver internals or deconstructing a domain record directly — which is why this is a minor release rather than a major one. Everything reached through `Solver.Factory`, `CSP.Builder` or the constraint factories is unaffected.
+
+- **`BranchAndBoundSolver.builder()` takes `selectorFactory` in place of `unassignedVariableSelector`.** The field is now an `AdaptiveVariableSelector.Factory`, matching `DomWdegLubySearch`, because an adaptive selector accumulates per-solve state and so has to be built per solve rather than shared. A ready-made selector becomes `constraints -> selector`; `MinimumRemainingValuesSelector` implements `AdaptiveVariableSelector` so it still fits.
+- **`NumericSetDomain` is a three-component record**, `(values, min, max)`, caching its bounds exactly as `IntRangeDomain` does so `getMin`/`getMax` are a field read rather than a scan. The one-argument `NumericSetDomain(Set)` constructor is unchanged and computes the bounds itself; only a record deconstruction pattern or a direct call to the canonical constructor needs updating.
+
+One behaviour change worth noting even though it compiles: the optimization chain's default variable ordering is now dom/wdeg rather than minimum-remaining-values — see **Variable ordering** above for how to ask for the old one back.
 
 ### Upgrading from 3.0
 
