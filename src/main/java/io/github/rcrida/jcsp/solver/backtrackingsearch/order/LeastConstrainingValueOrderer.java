@@ -3,6 +3,7 @@ package io.github.rcrida.jcsp.solver.backtrackingsearch.order;
 import lombok.val;
 import io.github.rcrida.jcsp.ConstraintSatisfactionProblem;
 import io.github.rcrida.jcsp.assignments.Assignment;
+import io.github.rcrida.jcsp.consistency.arc.Arc;
 import io.github.rcrida.jcsp.constraints.binary.BinaryConstraint;
 import io.github.rcrida.jcsp.domains.DiscreteDomain;
 import io.github.rcrida.jcsp.domains.Domain;
@@ -10,7 +11,6 @@ import io.github.rcrida.jcsp.variables.Variable;
 import org.jspecify.annotations.NonNull;
 
 import java.util.Comparator;
-import java.util.Map;
 import java.util.stream.Stream;
 
 /**
@@ -27,6 +27,16 @@ import java.util.stream.Stream;
  * This implementation specifically accounts for constraints that are instances of {@link BinaryConstraint},
  * which operate on pairs of variables. The elimination of domain values is computed by iterating
  * over the binary constraints involving the variable of interest and evaluating their satisfaction.
+ * <p>
+ * Satisfaction is tested through {@link BinaryConstraint#isSatisfiedByArcValues(boolean, Object,
+ * Object)}, from two raw values, rather than by building an {@link Assignment} per pair. This
+ * method evaluates a whole domain product per candidate value, and an {@link Assignment} carries
+ * its own value map and {@link io.github.rcrida.jcsp.assignments.Statistics} instance: JFR on
+ * {@code GraphColoring-3-fullins-4} put {@code Assignment.of} at 78.6% of the solve and
+ * {@link #countEliminatedValues} at 97.8% of it. That is the same cost
+ * {@link BinaryConstraint#isSatisfiedByArcValues(Arc, Object, Object)}'s own Javadoc records being
+ * introduced for, in {@link io.github.rcrida.jcsp.consistency.arc.AC3}; this class simply had not
+ * been given it.
  */
 public class LeastConstrainingValueOrderer implements DomainValuesOrderer {
     public static final LeastConstrainingValueOrderer INSTANCE = new LeastConstrainingValueOrderer();
@@ -73,10 +83,16 @@ public class LeastConstrainingValueOrderer implements DomainValuesOrderer {
             }
 
             val neighbourDomain = (DiscreteDomain<?>) csp.getVariableDomains().get(neighbourVariable);
+            // Which side of the constraint {@code variable} sits on depends only on the constraint,
+            // so it is resolved once here rather than once per pair below -- the same hoist
+            // AC3.revise makes.
+            val valueIsLeft = constraint.getLeft().equals(variable);
 
-            eliminated += neighbourDomain.stream()
-                    .filter(neighbourValue -> !constraint.isSatisfiedBy(Assignment.of(Map.of(variable, value, neighbourVariable, neighbourValue))))
-                    .count();
+            for (Object neighbourValue : neighbourDomain.asCollection()) {
+                if (!constraint.isSatisfiedByArcValues(valueIsLeft, value, neighbourValue)) {
+                    eliminated++;
+                }
+            }
         }
 
         return eliminated;
