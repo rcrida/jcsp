@@ -139,3 +139,56 @@ license-compatibility concern — pin an MIT-licensed release specifically to av
   fresh, tight LP bound (Phase 2) regardless of whether it arrived via a pinned value or a narrowed
   range. Worth revisiting if wide integer domains (hundreds/thousands of values) become a real jcsp
   workload.
+
+## Follow-up (2026-10-02): what the relaxation actually does on this corpus, and max/min rows
+
+Instrumenting `searchCut`'s three outcomes — bound empty, bound dominated by the incumbent, or
+neither — found the relaxation does far less than its presence suggests:
+
+| instance | empty bound | dominated | proceeded |
+|---|---|---|---|
+| `Knapsack-30-100-00` | 9 | **73** | 204 |
+| `Cutstock-small` | 2 | 0 | 86 |
+| `BusScheduling-cnt-t1` | 0 | 0 | 2,228 |
+| `Taillard-os-04-04-0` | 0 | 0 | 37,655 |
+| `Fastfood-ff10` | 0 | 0 | 355,379 |
+
+On `Knapsack-30-100-00` it earns its keep, pruning 82 of 286 nodes. Everywhere else measured it
+prunes nothing, and a separate count found `selectFractionalVariable` supplying the branching
+variable **zero** times on the Taillards (0 of 74,515 and 0 of 1,033) — so there the LP is solved
+per node and its result used for nothing at all.
+
+Two things came out of chasing that, one a non-issue and one a rejected change.
+
+**The empty-bound prune is sound in practice.** `solve` returns empty on `!result.getState().isFeasible()`,
+which in ojAlgo also covers `FAILED`, `INVALID`, `UNBOUNDED` and `UNEXPLORED` — none of which
+justify cutting a branch, `UNBOUNDED` least of all. Every occurrence in the corpus is `INFEASIBLE`
+(9 on `Knapsack`, 2 on `Cutstock`), so nothing is wrong today, but the predicate is looser than the
+inference it licenses and tightening it to an explicit `INFEASIBLE` test would be cheap hygiene.
+
+**Encoding `MaxVariableConstraint`/`MinVariableConstraint` as relaxation rows: implemented,
+measured, reverted.** There was a real gap here. `Xcsp3CallbackHandler.buildMaxObjective` expresses
+a `maximum` objective as a fresh auxiliary variable linked by a `MaxVariableConstraint` and makes
+that variable the whole objective — and `isLinear` did not recognise max/min, so the LP minimised a
+variable **no row constrained**, returning its domain minimum every time. Adding `target >= x_i`
+(exact for `LEQ`, a relaxation for `EQ`; mirrored for min) closes that, and is safe for the Phase 4
+continuous fill because that path filters on `isComplete && isConsistent` against the real
+constraints.
+
+It changed nothing where it mattered and cost real throughput where it applied:
+
+- `Opd-07-007-003` and `ChessboardColoration-07-07` — node counts *identical*, because neither model
+  contains a max/min constraint at all. The instances predicted to benefit were the wrong ones.
+- The Taillards — unchanged outcomes, slightly fewer nodes, i.e. pure added cost. As the bound table
+  in this corpus shows, their LP bound sits structurally *below* the optimum (~183 against 193 on
+  `os`), so it can never dominate an incumbent no matter how well encoded.
+- `Fastfood-ff10` — **regressed from `OPTIMUM FOUND` at 404,989 nodes to `SATISFIABLE` (704)** at
+  287k/295k/299k nodes across three runs. It holds 43 `<minimum>` constraints, so it gains a row per
+  mined variable in every one of its ~300k LP solves; ~27% of throughput went, and the optimality
+  proof with it.
+
+The lesson is about where LP relaxation pays at all: it is strong for knapsack-shaped problems and
+structurally weak for disjunctive scheduling, where the resource conflicts that constitute the whole
+difficulty are exactly what no linear row expresses. jcsp's own `DisjunctiveConstraint` refutes
+`makespan <= 1200` on `Taillard-js-015-15-0` in 0-1,402 nodes, a far better bound than the LP's best
+possible ~963. The propagator is the right bound source there, and the relaxation has nothing to add.
