@@ -7,7 +7,8 @@ import java.util.concurrent.atomic.AtomicBoolean;
  * Checked frequently — once per local-search step ({@link RaceLocalSolver}'s original use), once
  * per main-chain search node, once per {@link SetBranchingSolver} branch step, once per cutset
  * assignment {@link io.github.rcrida.jcsp.solver.tree.cutsetconditioning.CutsetConditioningSolver}
- * tries, and once per propagator within {@link FixpointPropagation}'s fixpoint loop — the same way
+ * tries, once per combination {@link io.github.rcrida.jcsp.domains.AssignmentDomain#of} enumerates
+ * for a clique, and once per propagator within {@link FixpointPropagation}'s fixpoint loop — the same way
  * {@link io.github.rcrida.jcsp.assignments.SolverLimits} is checked throughout the backtracking
  * solvers; cheap enough to leave in place unconditionally.
  * <p>

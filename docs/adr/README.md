@@ -102,3 +102,4 @@ section instead.
 | [0038](0038-injectable-variable-selector-factory.md) | Inject the satisfaction chain's variable ordering as a factory, on its own interface | Accepted |
 | [0039](0039-discard-the-phase-memory-on-stagnation.md) | Discard the remembered path, not just the weights, when restarts stop making progress | Accepted |
 | [0040](0040-array-backed-domain-value-sets.md) | Hold a domain's values as an array plus the membership set traversal never touches, not an unmodifiable LinkedHashSet | Accepted |
+| [0042](0042-tree-decomposition-cost-control.md) | Make tree decomposition's clique enumeration interruptible, decided before it is paid for, and capped for time rather than memory | Accepted |

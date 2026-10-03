@@ -151,9 +151,11 @@ public class TreeDecompositionSolverTest {
 
     @Test
     void maxDomainSizeScalesWithDomainSize() {
-        // d=2, tw=7: min(2^7, 1_000_000) = 128
-        // d=3, tw=7: min(3^7, 1_000_000) = 2187
-        // d=10, tw=7: min(10^7, 1_000_000) = 1_000_000 (capped)
+        // Literal expectations rather than MAX_DOMAIN_SIZE_CAP itself, so that re-tuning the cap has
+        // to be deliberate: this test is what caught ADR-0042's change from 1,000,000 to 10,000.
+        // d=2, tw=7: min(2^7, 10_000) = 128
+        // d=3, tw=7: min(3^7, 10_000) = 2187
+        // d=10, tw=7: min(10^7, 10_000) = 10_000 (capped)
         val binaryDomainCsp = ConstraintSatisfactionProblem.builder()
                 .variableDomain(V1, IntRangeDomain.of(1, 2))
                 .build();
@@ -165,7 +167,7 @@ public class TreeDecompositionSolverTest {
                 .build();
         when(treeDecomposer.decompose(eq(binaryDomainCsp), eq(128))).thenReturn(Optional.empty());
         when(treeDecomposer.decompose(eq(ternaryDomainCsp), eq(2187))).thenReturn(Optional.empty());
-        when(treeDecomposer.decompose(eq(largeDomainCsp), eq(1_000_000))).thenReturn(Optional.empty());
+        when(treeDecomposer.decompose(eq(largeDomainCsp), eq(10_000))).thenReturn(Optional.empty());
         when(defaultSolver.getSolutions(binaryDomainCsp)).thenReturn(Stream.empty());
         when(defaultSolver.getSolutions(ternaryDomainCsp)).thenReturn(Stream.empty());
         when(defaultSolver.getSolutions(largeDomainCsp)).thenReturn(Stream.empty());

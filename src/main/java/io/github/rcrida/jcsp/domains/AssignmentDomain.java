@@ -1,5 +1,6 @@
 package io.github.rcrida.jcsp.domains;
 
+import io.github.rcrida.jcsp.solver.Cancellation;
 import io.github.rcrida.jcsp.solver.tree.decomposition.decomposer.TreeDecomposer;
 import lombok.val;
 import io.github.rcrida.jcsp.ConstraintSatisfactionProblem;
@@ -9,6 +10,7 @@ import org.jspecify.annotations.NonNull;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
@@ -29,10 +31,35 @@ public record AssignmentDomain(Set<Assignment> values) implements DiscreteSetDom
      * @param csp the original problem, used for determining which of the combinations of domain values are consistent
      */
     public AssignmentDomain(@NonNull Map<Variable<?>, Domain<?>> variableDomains, @NonNull ConstraintSatisfactionProblem csp) {
-        this(populateCombinations(variableDomains, csp));
+        this(populateCombinations(variableDomains, csp, Cancellation.NEVER));
     }
 
-    private static Set<Assignment> populateCombinations(@NonNull Map<Variable<?>, Domain<?>> variableDomains, @NonNull ConstraintSatisfactionProblem csp) {
+    /**
+     * {@link #AssignmentDomain(Map, ConstraintSatisfactionProblem)}, but abandoned as {@link
+     * Optional#empty()} when {@code cancellation} fires part-way through the enumeration.
+     * <p>
+     * This enumeration is the one genuinely long uninterruptible stretch on the satisfaction chain.
+     * {@link io.github.rcrida.jcsp.solver.tree.decomposition.decomposer.TreeDecomposerImpl} bounds
+     * each clique's combination count before calling this, but that bound is
+     * {@code TreeDecompositionSolver.MAX_DOMAIN_SIZE_CAP} = 1,000,000 <em>per clique</em>, each
+     * combination costing a full {@link Assignment#isConsistent} pass over every constraint -- so a
+     * bounded enumeration can still run far longer than any caller's time limit. The cancellation
+     * check goes once per combination produced, which is negligible beside that consistency pass.
+     * <p>
+     * A cancellation that arrives only after the enumeration finished also yields {@link
+     * Optional#empty()}: a complete domain is of no use to a search that is about to stop anyway,
+     * and the caller's fallback path notices the cancellation immediately.
+     */
+    public static Optional<AssignmentDomain> of(@NonNull Map<Variable<?>, Domain<?>> variableDomains,
+                                                 @NonNull ConstraintSatisfactionProblem csp,
+                                                 @NonNull Cancellation cancellation) {
+        val combinations = populateCombinations(variableDomains, csp, cancellation);
+        return cancellation.isCancelled() ? Optional.empty() : Optional.of(new AssignmentDomain(combinations));
+    }
+
+    private static Set<Assignment> populateCombinations(@NonNull Map<Variable<?>, Domain<?>> variableDomains,
+                                                         @NonNull ConstraintSatisfactionProblem csp,
+                                                         @NonNull Cancellation cancellation) {
         // create a list of single variable assignments for each value of the domain of each variable
         val variableAssignments = variableDomains.entrySet().stream()
                 .collect(Collectors.toMap(
@@ -44,6 +71,7 @@ public record AssignmentDomain(Set<Assignment> values) implements DiscreteSetDom
                 .reduce((s1, s2) ->
                         () -> s1.get().flatMap(a1 -> s2.get().map(a1::merge)))
                 .orElse(Stream::empty).get()
+                .takeWhile(a -> !cancellation.isCancelled())
                 .filter(a -> a.isConsistent(csp))
                 .collect(Collectors.toSet());
     }

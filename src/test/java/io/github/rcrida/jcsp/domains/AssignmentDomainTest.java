@@ -2,6 +2,7 @@ package io.github.rcrida.jcsp.domains;
 
 import io.github.rcrida.jcsp.ConstraintSatisfactionProblem;
 import io.github.rcrida.jcsp.assignments.Assignment;
+import io.github.rcrida.jcsp.solver.Cancellation;
 import io.github.rcrida.jcsp.variables.Variable;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -32,6 +33,26 @@ public class AssignmentDomainTest {
     void setUp() {
         assignmentDomain = new AssignmentDomain(
                 Map.<Variable<?>, Domain<?>>of(variable1, domain1, variable2, domain2, variable3, domain3), csp);
+    }
+
+    @Test
+    void of_notCancelled_enumeratesExactlyAsTheConstructorDoes() {
+        var domains = Map.<Variable<?>, Domain<?>>of(variable1, domain1, variable2, domain2, variable3, domain3);
+
+        assertThat(AssignmentDomain.of(domains, csp, Cancellation.NEVER))
+                .contains(assignmentDomain);
+    }
+
+    @Test
+    void of_cancelled_abandonsTheEnumeration() {
+        // The enumeration is bounded but can run far longer than any caller's time limit -- a
+        // clique's combination count is capped at a million, each combination costing a full
+        // consistency pass -- so it has to be interruptible rather than merely finite.
+        var domains = Map.<Variable<?>, Domain<?>>of(variable1, domain1, variable2, domain2, variable3, domain3);
+        var cancellation = new Cancellation();
+        cancellation.cancel();
+
+        assertThat(AssignmentDomain.of(domains, csp, cancellation)).isEmpty();
     }
 
     @Test

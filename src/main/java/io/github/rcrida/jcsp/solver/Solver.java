@@ -222,7 +222,7 @@ public interface Solver {
                             .build();
                     return TreeDecompositionSolver.builder()
                             .inner(cutsetConditioningSolver)
-                            .treeDecomposer(new TreeDecomposerImpl(MinimumDegreeVariableSelector.Factory.INSTANCE))
+                            .treeDecomposer(new TreeDecomposerImpl(MinimumDegreeVariableSelector.Factory.INSTANCE, cancellation))
                             .treeSolver(treeSolver)
                             .targetTreewidth(7)
                             .build();

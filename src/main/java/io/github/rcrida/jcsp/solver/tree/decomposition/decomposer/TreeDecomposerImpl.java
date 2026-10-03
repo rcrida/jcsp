@@ -7,6 +7,7 @@ import io.github.rcrida.jcsp.ConstraintSatisfactionProblem;
 import io.github.rcrida.jcsp.assignments.Assignment;
 import io.github.rcrida.jcsp.domains.AssignmentDomain;
 import io.github.rcrida.jcsp.domains.Domain;
+import io.github.rcrida.jcsp.solver.Cancellation;
 import io.github.rcrida.jcsp.solver.tree.decomposition.decomposer.variableselector.VariableSelectionHeuristic;
 import io.github.rcrida.jcsp.variables.Variable;
 import org.jspecify.annotations.NonNull;
@@ -27,6 +28,14 @@ import java.util.stream.Collectors;
 @Value
 public class TreeDecomposerImpl implements TreeDecomposer {
     VariableSelectionHeuristic.Factory variableHeuristicFactory;
+    /**
+     * Checked while enumerating each clique's joint domain, which is where this class spends
+     * essentially all of its time on a problem large enough to matter -- see {@link
+     * AssignmentDomain#of} for why a bounded enumeration still needs interrupting. Construction-time
+     * rather than a {@link #decompose} parameter, the same way every solver in the chain takes its
+     * {@link Cancellation}.
+     */
+    @NonNull Cancellation cancellation;
 
     // Edge for clique graph with weight = intersection size
     record CliqueEdge(int a, int b, int w) implements Comparable<CliqueEdge> {
@@ -74,8 +83,13 @@ public class TreeDecomposerImpl implements TreeDecomposer {
 
         Map<Integer, Set<Integer>> tree = getMaximumSpanningTree(maximal, edges);
 
-        val treeBuilder = ConstraintSatisfactionProblem.builder();
-        val cliqueVariables = new ArrayList<Variable<Assignment>>();
+        // Every clique's joint domain size first, from a BigInteger product that enumerates nothing,
+        // and only then the enumeration. Interleaving the two -- size-check clique i, enumerate
+        // clique i, size-check clique i+1 -- means a clique that busts the cap discards every
+        // enumeration already done for the cliques before it. The sizes are the cheap part and the
+        // decision is all-or-nothing, so there is no reason to pay for any of it before deciding:
+        // QuadraticAssignment-bur26a spent 74s enumerating and then returned empty on a later clique.
+        val cliqueDomainsByClique = new ArrayList<Map<Variable<?>, Domain<?>>>(maximal.size());
         for (val clique : maximal) {
             val cliqueVariableDomains = new java.util.HashMap<Variable<?>, Domain<?>>();
             clique.forEach(v -> cliqueVariableDomains.put(v, csp.getDomain(v)));
@@ -87,9 +101,19 @@ public class TreeDecomposerImpl implements TreeDecomposer {
                 log.debug("Maximum clique domain size {} exceeded by {}", maxDomainSize, cliqueDomainMaxSize);
                 return Optional.empty();
             }
-            val cliqueDomain = new AssignmentDomain(cliqueVariableDomains, csp);
-            val cliqueVariable = treeBuilder.<Assignment>createVariable(cliqueVariableDomains.keySet().toString(), cliqueDomain);
-            treeBuilder.variableDomain(cliqueVariable, cliqueDomain);
+            cliqueDomainsByClique.add(cliqueVariableDomains);
+        }
+
+        val treeBuilder = ConstraintSatisfactionProblem.builder();
+        val cliqueVariables = new ArrayList<Variable<Assignment>>();
+        for (val cliqueVariableDomains : cliqueDomainsByClique) {
+            val cliqueDomain = AssignmentDomain.of(cliqueVariableDomains, csp, cancellation);
+            if (cliqueDomain.isEmpty()) {
+                log.debug("Abandoning tree decomposition: cancelled while enumerating a clique domain");
+                return Optional.empty();
+            }
+            val cliqueVariable = treeBuilder.<Assignment>createVariable(cliqueVariableDomains.keySet().toString(), cliqueDomain.get());
+            treeBuilder.variableDomain(cliqueVariable, cliqueDomain.get());
             cliqueVariables.add(cliqueVariable);
         }
         val consistencyConstraints = new HashSet<AssignmentVariableConsistencyConstraint>();

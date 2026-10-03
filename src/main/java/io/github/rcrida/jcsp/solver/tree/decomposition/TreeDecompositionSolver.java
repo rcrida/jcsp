@@ -33,7 +33,7 @@ import java.util.stream.Stream;
 @SuperBuilder
 @EqualsAndHashCode(callSuper = true)
 public class TreeDecompositionSolver extends SolverDecorator {
-    static final int MAX_DOMAIN_SIZE_CAP = 1_000_000;
+    static final int MAX_DOMAIN_SIZE_CAP = 10_000;
 
     @NonNull TreeDecomposer treeDecomposer;
     @NonNull Solver treeSolver;

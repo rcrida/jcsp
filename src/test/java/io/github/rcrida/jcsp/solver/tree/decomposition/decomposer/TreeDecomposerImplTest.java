@@ -5,6 +5,7 @@ import io.github.rcrida.jcsp.assignments.Assignment;
 import io.github.rcrida.jcsp.ConstraintSatisfactionProblem;
 import io.github.rcrida.jcsp.domains.Domain;
 import io.github.rcrida.jcsp.domains.IntRangeDomain;
+import io.github.rcrida.jcsp.solver.Cancellation;
 import io.github.rcrida.jcsp.solver.tree.decomposition.decomposer.variableselector.ArbitraryVariableSelector;
 import io.github.rcrida.jcsp.solver.tree.decomposition.decomposer.variableselector.MinimumDegreeVariableSelector;
 import io.github.rcrida.jcsp.variables.Variable;
@@ -26,12 +27,12 @@ public class TreeDecomposerImplTest {
 
     @BeforeEach
     void setUp() {
-        treeDecomposer = new TreeDecomposerImpl(ArbitraryVariableSelector.Factory.INSTANCE);
+        treeDecomposer = new TreeDecomposerImpl(ArbitraryVariableSelector.Factory.INSTANCE, Cancellation.NEVER);
     }
 
     @Test
     void decompose_minimumDegree() {
-        treeDecomposer = new TreeDecomposerImpl(MinimumDegreeVariableSelector.Factory.INSTANCE);
+        treeDecomposer = new TreeDecomposerImpl(MinimumDegreeVariableSelector.Factory.INSTANCE, Cancellation.NEVER);
         val csp = ConstraintSatisfactionProblem.builder()
                 .variableDomain(V0, DOMAIN)
                 .variableDomain(V1, DOMAIN)
@@ -95,6 +96,32 @@ public class TreeDecomposerImplTest {
     @Test
     void decompose_emptyCsp_returnsEmpty() {
         assertThat(treeDecomposer.decompose(ConstraintSatisfactionProblem.builder().build(), 1024)).isEmpty();
+    }
+
+    @Test
+    void decompose_cancelled_abandonsTheDecomposition() {
+        // Enumerating one clique's joint domain is the one long uninterruptible stretch on the
+        // satisfaction chain; before it checked Cancellation, a 60s limit on Tpp-3-3-20-1 ran for
+        // 70s+ and had to be killed. Abandoned as empty rather than thrown, because decompose() is
+        // on the getSolutions() path too, where cancellation truncates silently.
+        val cancellation = new Cancellation();
+        cancellation.cancel();
+        val cancelledDecomposer = new TreeDecomposerImpl(ArbitraryVariableSelector.Factory.INSTANCE, cancellation);
+        val csp = ConstraintSatisfactionProblem.builder()
+                .variableDomain(V0, DOMAIN)
+                .variableDomain(V1, DOMAIN)
+                .variableDomain(V2, DOMAIN)
+                .variableDomain(V3, DOMAIN)
+                .notEqualsConstraint(V0, V1)
+                .notEqualsConstraint(V0, V2)
+                .notEqualsConstraint(V1, V2)
+                .notEqualsConstraint(V1, V3)
+                .notEqualsConstraint(V2, V3)
+                .build();
+
+        // Not vacuous: the same problem decomposes successfully when nothing is cancelled.
+        assertThat(treeDecomposer.decompose(csp, 1024)).isPresent();
+        assertThat(cancelledDecomposer.decompose(csp, 1024)).isEmpty();
     }
 
     @Test
