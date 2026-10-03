@@ -80,12 +80,14 @@ public record AssignmentDomain(Set<Assignment> values) implements DiscreteSetDom
      * Enumerates one clique variable's domain into single-variable assignments: full enumeration
      * for a {@link DiscreteDomain}, or the sole point for an already-singleton {@link BoundedDomain}
      * via {@link Domain#singleValue()} — the only shape a {@link BoundedDomain} can ever be by the
-     * time a clique reaches tree decomposition, since the satisfaction chain's
+     * time a clique reaches tree decomposition. The satisfaction chain's
      * {@code PropagationFixpointSolver(snap=true)} always resolves every bounded domain to a
-     * singleton before {@link io.github.rcrida.jcsp.solver.tree.decomposition.TreeDecompositionSolver} runs (tree decomposition is never reached
-     * from the optimization chain, the only one that leaves bounded domains open). A genuinely
-     * non-singleton {@link BoundedDomain} can't be enumerated at all, so this deliberately doesn't
-     * attempt to handle that case.
+     * singleton before {@link io.github.rcrida.jcsp.solver.tree.decomposition.TreeDecompositionSolver} runs, and the optimization chain -- which
+     * does leave bounded domains open -- reaches tree decomposition only through {@code
+     * BranchAndBoundSolver}'s first-solution search, which {@code Solver.Factory} withholds
+     * entirely from a problem that has any {@link BoundedDomain} variable for exactly this reason
+     * (ADR-0041). A genuinely non-singleton {@link BoundedDomain} can't be enumerated at all, so
+     * this deliberately doesn't attempt to handle that case.
      */
     private static List<Assignment> singleVariableAssignments(Variable<?> variable, Domain<?> domain) {
         if (domain instanceof DiscreteDomain<?> discrete) {

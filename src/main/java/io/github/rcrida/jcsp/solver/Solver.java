@@ -3,6 +3,7 @@ package io.github.rcrida.jcsp.solver;
 import io.github.rcrida.jcsp.ConstraintSatisfactionProblem;
 import io.github.rcrida.jcsp.assignments.Assignment;
 import io.github.rcrida.jcsp.assignments.NogoodStore;
+import io.github.rcrida.jcsp.assignments.SolverLimits;
 import io.github.rcrida.jcsp.consistency.ConsistencyResult;
 import io.github.rcrida.jcsp.consistency.Inference;
 import io.github.rcrida.jcsp.consistency.arc.MAC;
@@ -137,6 +138,65 @@ public interface Solver {
         }
 
         /**
+         * The satisfaction chain's <em>search</em>, everything below its one-time preprocessing:
+         * IndependentSubproblems → TreeDecomposition → CutsetConditioning → TreeSolver /
+         * {@link DomWdegLubySearch}. Shared by both chains rather than duplicated, because the
+         * optimization chain hands one to {@link BranchAndBoundSolver} to reach its first solution
+         * with -- see
+         * <a href="../../../../../../../docs/adr/0041-reuse-the-satisfaction-search-for-the-first-solution.md">ADR-0041</a>.
+         * <p>
+         * Preprocessing is deliberately <em>not</em> included. Each chain has already run its own by
+         * the time its terminal solver holds a problem, and the satisfaction chain's fixpoint snaps
+         * leftover intervals to midpoints ({@code snap=hasContinuous}), which is the opposite of what
+         * the optimization chain wants.
+         * <p>
+         * {@code maxRestarts} is {@link Integer#MAX_VALUE} for the satisfaction chain itself, where
+         * {@link SolverLimits} is meant to be the only bound on a search; a caller embedding this as
+         * one phase of a larger search passes a real cap instead, so that giving up on restarts hands
+         * control back rather than consuming the whole budget.
+         */
+        static Solver satisfactionSearch(@NonNull SolverConfig config,
+                                          @NonNull FixpointPropagation fixpointPropagation,
+                                          int maxRestarts) {
+            val limits = config.getLimits();
+            val cancellation = config.getCancellation();
+            val treeSolver = new TreeSolver(BFSTopologicalSorter.INSTANCE, DefaultValueOrderer.INSTANCE, TreeUnassignedVariableSelector.Factory.INSTANCE);
+            val inference = nogoodLearningInference(config, fixpointPropagation);
+            // Built fresh per sub-problem (not shared) so each independent sub-problem gets its own
+            // NogoodStore, correctly sized and scoped to just its own variables -- see
+            // IndependentSubproblemSolver's javadoc for why sharing one across sub-problems is unsound.
+            // treeSolver is stateless (no accumulated learning) and safe to share across sub-problems.
+            Function<ConstraintSatisfactionProblem, Solver> innerFactory = sub -> {
+                val nogoodStore = NogoodStore.forProblem(sub);
+                val domWdegLubySearch = DomWdegLubySearch.builder()
+                        .domainValuesOrderer(LeastConstrainingValueOrderer.INSTANCE)
+                        .inference(inference)
+                        .limits(limits)
+                        .nogoodStore(nogoodStore)
+                        .statistics(config.getStatistics())
+                        .listener(config.getListener())
+                        .cancellation(cancellation)
+                        .restartRandomization(config.getRestartRandomization())
+                        .selectorFactory(config.getVariableSelectorFactory())
+                        .maxRestarts(maxRestarts)
+                        .build();
+                val cutsetConditioningSolver = CutsetConditioningSolver.builder()
+                        .inner(domWdegLubySearch)
+                        .treeSolver(treeSolver)
+                        .cancellation(cancellation)
+                        .statistics(config.getStatistics())
+                        .build();
+                return TreeDecompositionSolver.builder()
+                        .inner(cutsetConditioningSolver)
+                        .treeDecomposer(new TreeDecomposerImpl(MinimumDegreeVariableSelector.Factory.INSTANCE, cancellation))
+                        .treeSolver(treeSolver)
+                        .targetTreewidth(7)
+                        .build();
+            };
+            return IndependentSubproblemSolver.builder().innerFactory(innerFactory).build();
+        }
+
+        /**
          * Builds a solver chain tailored for satisfaction with the given {@link SolverConfig}.
          */
         BoundSolver createSolver(@NonNull ConstraintSatisfactionProblem csp, @NonNull SolverConfig config);
@@ -190,44 +250,11 @@ public interface Solver {
                 boolean hasSets = csp.getVariableDomains().values().stream()
                         .anyMatch(SetBoundedDomain.class::isInstance);
                 val fixpointPropagation = FixpointPropagation.Factory.INSTANCE.forProblem(csp, config.learningEnabled());
-                val treeSolver = new TreeSolver(BFSTopologicalSorter.INSTANCE, DefaultValueOrderer.INSTANCE, TreeUnassignedVariableSelector.Factory.INSTANCE);
-                val inference = nogoodLearningInference(config, fixpointPropagation);
-                // Built fresh per sub-problem (not shared) so each independent sub-problem gets its own
-                // NogoodStore, correctly sized and scoped to just its own variables -- see
-                // IndependentSubproblemSolver's javadoc for why sharing one across sub-problems is unsound.
-                // treeSolver is stateless (no accumulated learning) and safe to share across sub-problems.
-                Function<ConstraintSatisfactionProblem, Solver> innerFactory = sub -> {
-                    val nogoodStore = NogoodStore.forProblem(sub);
-                    val domWdegLubySearch = DomWdegLubySearch.builder()
-                            .domainValuesOrderer(LeastConstrainingValueOrderer.INSTANCE)
-                            .inference(inference)
-                            .limits(limits)
-                            .nogoodStore(nogoodStore)
-                            .statistics(config.getStatistics())
-                            .listener(config.getListener())
-                            .cancellation(cancellation)
-                            .restartRandomization(config.getRestartRandomization())
-                            .selectorFactory(config.getVariableSelectorFactory())
-                            // Effectively unbounded: getSolution() now reaches Luby-restart search directly
-                            // (see BoundSolver#getSolution below), so DEFAULT_MAX_RESTARTS's cap would silently
-                            // turn SolverLimits.unlimited() into a bounded search. SolverLimits (node/time)
-                            // remains the only intended way to bound a search; restarts should never be it.
-                            .maxRestarts(Integer.MAX_VALUE)
-                            .build();
-                    val cutsetConditioningSolver = CutsetConditioningSolver.builder()
-                            .inner(domWdegLubySearch)
-                            .treeSolver(treeSolver)
-                            .cancellation(cancellation)
-                            .statistics(config.getStatistics())
-                            .build();
-                    return TreeDecompositionSolver.builder()
-                            .inner(cutsetConditioningSolver)
-                            .treeDecomposer(new TreeDecomposerImpl(MinimumDegreeVariableSelector.Factory.INSTANCE, cancellation))
-                            .treeSolver(treeSolver)
-                            .targetTreewidth(7)
-                            .build();
-                };
-                val independentSubproblemSolver = IndependentSubproblemSolver.builder().innerFactory(innerFactory).build();
+                // Integer.MAX_VALUE, not DEFAULT_MAX_RESTARTS: getSolution() reaches Luby-restart
+                // search directly (see BoundSolver#getSolution below), so a restart cap would silently
+                // turn SolverLimits.unlimited() into a bounded search. SolverLimits (node/time) remains
+                // the only intended way to bound a search; restarts should never be it.
+                val independentSubproblemSolver = satisfactionSearch(config, fixpointPropagation, Integer.MAX_VALUE);
                 Solver afterPropagation = hasSets
                         ? SetBranchingSolver.builder().inner(independentSubproblemSolver).listener(config.getListener())
                                 .limits(limits).cancellation(cancellation).statistics(config.getStatistics())
@@ -267,9 +294,18 @@ public interface Solver {
                                             @NonNull SolverConfig config) {
                 val limits = config.getLimits();
                 val cancellation = config.getCancellation();
+                boolean hasContinuous = csp.getVariableDomains().values().stream()
+                        .anyMatch(BoundedDomain.class::isInstance);
                 boolean hasSets = csp.getVariableDomains().values().stream()
                         .anyMatch(SetBoundedDomain.class::isInstance);
                 val fixpointPropagation = FixpointPropagation.Factory.INSTANCE.forProblem(csp, config.learningEnabled());
+                // Withheld for a problem with BoundedDomain variables: this search is the satisfaction
+                // chain's without that chain's interval-snapping fixpoint in front of it (see
+                // satisfactionSearch), so a non-singleton IntervalDomain would reach a DomainValuesOrderer
+                // that cannot enumerate one. Those problems keep branch-and-bound's own first descent.
+                Solver firstSolutionSolver = hasContinuous
+                        ? null
+                        : satisfactionSearch(config, fixpointPropagation, DomWdegLubySearch.DEFAULT_MAX_RESTARTS);
                 // Handles any BoundedDomain variables itself -- see this class's own Javadoc and
                 // ADR-0009 -- rather than being nested inside a BisectionConditioningSolver that runs
                 // first, so it's the chain's terminal solver unconditionally.
@@ -283,6 +319,7 @@ public interface Solver {
                         .statistics(config.getStatistics())
                         .listener(config.getListener())
                         .cancellation(cancellation)
+                        .firstSolutionSolver(firstSolutionSolver)
                         .build();
                 Solver afterPropagation = hasSets
                         ? SetBranchingSolver.builder().inner(terminal).objective(objective).listener(config.getListener())

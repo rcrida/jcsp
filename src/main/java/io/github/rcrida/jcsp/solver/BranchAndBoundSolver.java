@@ -107,6 +107,16 @@ import java.util.stream.Stream;
  * io.github.rcrida.jcsp.solver.backtrackingsearch.order.LeastConstrainingValueOrderer} (and other
  * {@link DomainValuesOrderer}s that assume a {@link io.github.rcrida.jcsp.domains.DiscreteDomain})
  * crash confusingly trying to enumerate a non-singleton {@link BoundedDomain}, which they cannot do.
+ * <p>
+ * Reaching the <em>first</em> solution is a pure feasibility search: there is no incumbent yet, so
+ * neither the bound check in {@link #searchCut} nor {@link #applyObjectiveCut} can prune anything,
+ * and on a heavy-tailed problem one descent can commit to a subtree it never escapes. An optional
+ * {@link #firstSolutionSolver} is given that job instead -- {@link Solver.Factory} supplies the
+ * satisfaction chain's own search, so it brings Luby restarts, phase saving, stagnation resets and
+ * structural decomposition that this class has none of -- and whatever it finds seeds the incumbent
+ * for the ordinary search below. The search that follows is the unchanged, unrestarted one, which is
+ * what keeps draining this stream a proof of optimality. See
+ * <a href="../../../../../../../docs/adr/0041-reuse-the-satisfaction-search-for-the-first-solution.md">ADR-0041</a>.
  */
 @Slf4j
 @Value
@@ -186,6 +196,20 @@ public class BranchAndBoundSolver implements Solver {
     @Builder.Default
     @NonNull PhaseMemory phaseMemory = new PhaseMemory();
 
+    /**
+     * Finds the first feasible solution, ignoring {@link #objective} entirely, before the ordinary
+     * branch-and-bound search runs -- or {@code null} to descend straight into that search, which is
+     * what a directly-constructed solver gets. {@link Solver.Factory#satisfactionSearch} is what
+     * the optimization chain passes; see this class's own Javadoc and ADR-0041 for why that search
+     * and not a restart ladder reimplemented here.
+     * <p>
+     * Only ever consulted for the <em>first</em> solution. Every later one still comes from
+     * {@link #search}, so the bound, the objective cut and the completeness of the final sweep are
+     * untouched by whatever this does.
+     */
+    @Builder.Default
+    @Nullable Solver firstSolutionSolver = null;
+
     @Override
     public Stream<Assignment> getSolutions(@NonNull ConstraintSatisfactionProblem csp) {
         log.info("Search space before branch-and-bound = {}", csp.getSearchSpace());
@@ -194,9 +218,52 @@ public class BranchAndBoundSolver implements Solver {
         // Fallback for a directly-constructed solver; in the full chain PropagationFixpointSolver
         // has already recorded the post-preprocessing figure and first-write-wins keeps it.
         statistics.updateRootSearchSpace(csp.getSearchSpace());
-        return search(csp, Assignment.builder().statistics(statistics).listener(listener).cancellation(cancellation).build(),
-                incumbent, deadline, 1.0, new SearchProgress(),
+        Optional<Assignment> seed = seedIncumbent(csp, incumbent);
+        Stream<Assignment> improvements = search(csp, rootAssignment(), incumbent, deadline, 1.0, new SearchProgress(),
                 selectorFactory.createSelector(csp.getConstraints()));
+        return seed.map(solution -> Stream.concat(Stream.of(solution), improvements)).orElse(improvements);
+    }
+
+    /** The root of one search: a fresh {@link Assignment} carrying this solver's shared per-solve state. */
+    private Assignment rootAssignment() {
+        return Assignment.builder().statistics(statistics).listener(listener).cancellation(cancellation).build();
+    }
+
+    /**
+     * Runs {@link #firstSolutionSolver} and adopts whatever it finds as the starting incumbent, so
+     * the search below begins with a bound instead of having to find one. Empty when there is no
+     * such solver, when it found nothing, or when it gave up -- in every one of those cases the
+     * search below simply starts unbounded, exactly as it did before this field existed.
+     * <p>
+     * {@link Solver#getSolution} is used rather than {@link Solver#getSolutions}, because for the
+     * satisfaction chain only the former reaches {@link DomWdegLubySearch}'s restarts at all, which
+     * is the entire reason for delegating.
+     * <p>
+     * {@link LimitExceededException} and {@link SolverCancelledException} are caught rather than
+     * propagated: the satisfaction chain's single-solution searches throw on truncation (ADR-0011)
+     * while this class has always truncated silently, and this phase is not the place to change
+     * which of those two contracts {@code getSolutions} honours.
+     * <p>
+     * The result is validated before being trusted, the same way {@link
+     * #resolveContinuousResidual} validates its LP fill: a solution to {@code csp} is feasible for
+     * the optimization problem too (an objective is not a constraint), but that is a property of the
+     * injected solver rather than of anything checked here, and an incumbent that is not actually
+     * feasible would prune away real solutions.
+     */
+    private Optional<Assignment> seedIncumbent(ConstraintSatisfactionProblem csp, double[] incumbent) {
+        if (firstSolutionSolver == null) {
+            return Optional.empty();
+        }
+        Optional<Assignment> candidate;
+        try {
+            candidate = firstSolutionSolver.getSolution(csp);
+        } catch (LimitExceededException | SolverCancelledException e) {
+            log.info("First-solution search stopped before finding one: {}", e.getClass().getSimpleName());
+            return Optional.empty();
+        }
+        return candidate
+                .filter(solution -> solution.isComplete(csp) && solution.isConsistent(csp))
+                .flatMap(solution -> accept(solution, incumbent));
     }
 
     private Stream<Assignment> search(ConstraintSatisfactionProblem csp,
@@ -384,19 +451,26 @@ public class BranchAndBoundSolver implements Solver {
         Optional<Assignment> complete = assignment.isComplete(csp)
                 ? Optional.of(assignment)
                 : resolveContinuousResidual(csp, assignment, incumbent[0]);
-        if (complete.isEmpty()) {
-            return Stream.empty();
-        }
-        Assignment solution = complete.get();
+        return complete.flatMap(solution -> accept(solution, incumbent)).stream();
+    }
+
+    /**
+     * Adopts {@code solution} as the new incumbent and returns it, or {@link Optional#empty()} when
+     * it does not strictly improve on the current one and so is not something {@link #getSolutions}
+     * may emit. Shared by the two places a candidate solution arrives from -- {@link
+     * #resolveComplete}'s own leaves and {@link #seedIncumbent}'s injected search -- so that
+     * recording the phase memory and notifying {@link #listener} cannot drift apart between them.
+     */
+    private Optional<Assignment> accept(Assignment solution, double[] incumbent) {
         double cost = objective.applyAsDouble(solution);
         if (cost >= incumbent[0]) {
-            return Stream.empty();
+            return Optional.empty();
         }
         incumbent[0] = cost;
         phaseMemory.recordSolution(solution.getValues());
         log.info("Found improving solution with cost {}: {}", cost, solution);
         listener.onIncumbentImproved(solution, cost);
-        return Stream.of(solution);
+        return Optional.of(solution);
     }
 
     /**

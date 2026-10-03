@@ -23,6 +23,7 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.function.ToDoubleFunction;
+import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -706,5 +707,95 @@ public class BranchAndBoundSolverTest {
 
         assertThat(improving.getLast().getValues())
                 .containsEntry(CUT_X, 0).containsEntry(CUT_Y, 0).containsEntry(CUT_A, 3);
+    }
+
+    // ── First-solution solver (ADR-0041) ──────────────────────────────────────
+
+    /** {@link #solver} plus an injected first-solution search. */
+    static BranchAndBoundSolver seededSolver(Solver firstSolutionSolver) {
+        return BranchAndBoundSolver.builder()
+                .objective(BranchAndBoundSolverTest::sum)
+                .selectorFactory(constraints -> MinimumRemainingValuesSelector.INSTANCE)
+                .domainValuesOrderer(DefaultValueOrderer.INSTANCE)
+                .inference((problem, variable, assignment) -> Optional.of(problem))
+                .firstSolutionSolver(firstSolutionSolver)
+                .build();
+    }
+
+    /** A feasible but non-optimal solution of {@link #CSP}: distinct values summing to 12, not 6. */
+    static Assignment suboptimal() {
+        return Assignment.of(java.util.Map.of(X, 3, Y, 4, Z, 5));
+    }
+
+    @Test
+    void firstSolutionSolver_seedsTheIncumbentAndIsEmittedFirst() {
+        val improving = seededSolver(csp -> Stream.of(suboptimal())).getSolutions(CSP).toList();
+
+        // The injected solution leads, every later element strictly improves on it, and the search
+        // below still reaches the true optimum.
+        assertThat(sum(improving.getFirst())).isEqualTo(12);
+        for (int i = 1; i < improving.size(); i++) {
+            assertThat(sum(improving.get(i))).isLessThan(sum(improving.get(i - 1)));
+        }
+        assertThat(sum(improving.getLast())).isEqualTo(6);
+    }
+
+    @Test
+    void firstSolutionSolver_seedsABoundThatIsInForceFromTheFirstNode() {
+        // Every emitted solution strictly improves on the seed, which is only possible if the
+        // incumbent was already 12 when the search below started -- it never gets the chance to
+        // emit the costlier solutions an unbounded search walks through first.
+        val improving = seededSolver(csp -> Stream.of(suboptimal())).getSolutions(CSP).toList();
+
+        assertThat(improving.stream().skip(1).map(BranchAndBoundSolverTest::sum)).allSatisfy(
+                cost -> assertThat(cost).isLessThan(12));
+        assertThat(sum(improving.getLast())).isEqualTo(6);
+    }
+
+    @Test
+    void firstSolutionSolver_findingNothing_leavesTheSearchUnbounded() {
+        val improving = seededSolver(csp -> Stream.empty()).getSolutions(CSP).toList();
+
+        assertThat(sum(improving.getLast())).isEqualTo(6);
+    }
+
+    @Test
+    void firstSolutionSolver_exceedingItsLimits_isCaughtRatherThanPropagated() {
+        // The satisfaction chain's single-solution searches throw on truncation (ADR-0011); this
+        // class has always truncated silently, and seeding must not change that.
+        val improving = seededSolver(csp -> {
+            throw new LimitExceededException(new io.github.rcrida.jcsp.assignments.Statistics());
+        }).getSolutions(CSP).toList();
+
+        assertThat(sum(improving.getLast())).isEqualTo(6);
+    }
+
+    @Test
+    void firstSolutionSolver_beingCancelled_isCaughtRatherThanPropagated() {
+        val improving = seededSolver(csp -> {
+            throw new SolverCancelledException(new io.github.rcrida.jcsp.assignments.Statistics());
+        }).getSolutions(CSP).toList();
+
+        assertThat(sum(improving.getLast())).isEqualTo(6);
+    }
+
+    @Test
+    void firstSolutionSolver_returningAnIncompleteAssignment_isRejected() {
+        // Trusting this would set an incumbent from a cost computed over unassigned variables,
+        // which sum() reads as 0 -- an incumbent so low it would prune every real solution away.
+        val improving = seededSolver(csp -> Stream.of(Assignment.of(java.util.Map.of(X, 1))))
+                .getSolutions(CSP).toList();
+
+        assertThat(sum(improving.getLast())).isEqualTo(6);
+    }
+
+    @Test
+    void firstSolutionSolver_returningAnInconsistentAssignment_isRejected() {
+        // Complete, and cheaper than any real solution (1+1+1), but it violates allDiff. Adopting
+        // it as the incumbent would prune the whole space and report no solution at all.
+        val improving = seededSolver(csp -> Stream.of(Assignment.of(java.util.Map.of(X, 1, Y, 1, Z, 1))))
+                .getSolutions(CSP).toList();
+
+        assertThat(sum(improving.getLast())).isEqualTo(6);
     }
 }

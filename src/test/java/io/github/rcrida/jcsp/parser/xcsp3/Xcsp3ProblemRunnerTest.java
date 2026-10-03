@@ -278,7 +278,12 @@ class Xcsp3ProblemRunnerTest {
         };
 
         ByteArrayOutputStream buffer = new ByteArrayOutputStream();
-        Xcsp3ProblemRunner.solve(instance, Cancellation.NEVER, listener, printStreamInto(buffer));
+        // Seeded, because the first improving solution now comes from the satisfaction chain's own
+        // search (ADR-0041), whose tie-breaking is reseeded randomly per config by default. Five of
+        // this problem's six solutions cost more than the optimal 4, so an unseeded run would find
+        // the optimum first roughly one time in six and emit a single o line -- a flaky test rather
+        // than a wrong one.
+        Xcsp3ProblemRunner.solve(instance, Cancellation.NEVER, listener, RestartRandomization.seeded(42L), printStreamInto(buffer));
 
         List<String> oLines = buffer.toString(StandardCharsets.UTF_8).lines().filter(line -> line.startsWith("o ")).toList();
         assertThat(incumbentCosts).as("this scenario should force more than one improving solution").hasSizeGreaterThan(1);
