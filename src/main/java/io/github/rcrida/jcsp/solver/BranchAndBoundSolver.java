@@ -244,6 +244,14 @@ public class BranchAndBoundSolver implements Solver {
      * while this class has always truncated silently, and this phase is not the place to change
      * which of those two contracts {@code getSolutions} honours.
      * <p>
+     * Only the incumbent is taken from it. The solution's values are <em>not</em> written to
+     * {@link #phaseMemory} (see {@link #resolveComplete}, which records its own): this search
+     * ignores the objective, so replaying its path steers branching toward a region chosen with no
+     * regard for cost. Measured, not assumed -- recording it cost
+     * {@code TravellingSalesman-20-30-00} an objective of 166-226 against 118 without, across three
+     * seeds, and left {@code GraphColoring-3-fullins-4} proving optimality with one second to spare
+     * instead of thirty (ADR-0041).
+     * <p>
      * The result is validated before being trusted, the same way {@link
      * #resolveContinuousResidual} validates its LP fill: a solution to {@code csp} is feasible for
      * the optimization problem too (an objective is not a constraint), but that is a property of the
@@ -446,20 +454,31 @@ public class BranchAndBoundSolver implements Solver {
      * open {@link BoundedDomain} variables via {@link #resolveContinuousResidual} otherwise -- into a
      * single candidate solution, then applies the same cost/incumbent check every complete assignment
      * gets.
+     * <p>
+     * This is also where {@link #phaseMemory} is written, rather than inside {@link #accept}: these
+     * are the solutions <em>this</em> search found, so their values are evidence about where cheap
+     * solutions live. {@link #seedIncumbent}'s solution is not, and is deliberately not recorded.
      */
     private Stream<Assignment> resolveComplete(ConstraintSatisfactionProblem csp, Assignment assignment, double[] incumbent) {
         Optional<Assignment> complete = assignment.isComplete(csp)
                 ? Optional.of(assignment)
                 : resolveContinuousResidual(csp, assignment, incumbent[0]);
-        return complete.flatMap(solution -> accept(solution, incumbent)).stream();
+        Optional<Assignment> accepted = complete.flatMap(solution -> accept(solution, incumbent));
+        accepted.ifPresent(solution -> phaseMemory.recordSolution(solution.getValues()));
+        return accepted.stream();
     }
 
     /**
      * Adopts {@code solution} as the new incumbent and returns it, or {@link Optional#empty()} when
      * it does not strictly improve on the current one and so is not something {@link #getSolutions}
      * may emit. Shared by the two places a candidate solution arrives from -- {@link
-     * #resolveComplete}'s own leaves and {@link #seedIncumbent}'s injected search -- so that
-     * recording the phase memory and notifying {@link #listener} cannot drift apart between them.
+     * #resolveComplete}'s own leaves and {@link #seedIncumbent}'s injected search -- so that the
+     * cost test and the {@link #listener} notification cannot drift apart between them.
+     * <p>
+     * Writing {@link #phaseMemory} is deliberately <em>not</em> part of this, and is left to
+     * {@link #resolveComplete}: a solution this class found is evidence about where cheap solutions
+     * live, whereas {@link #seedIncumbent}'s came from a search that never looked at the objective.
+     * Recording that one too costs real solution quality -- see ADR-0041 for the measurements.
      */
     private Optional<Assignment> accept(Assignment solution, double[] incumbent) {
         double cost = objective.applyAsDouble(solution);
@@ -467,7 +486,6 @@ public class BranchAndBoundSolver implements Solver {
             return Optional.empty();
         }
         incumbent[0] = cost;
-        phaseMemory.recordSolution(solution.getValues());
         log.info("Found improving solution with cost {}: {}", cost, solution);
         listener.onIncumbentImproved(solution, cost);
         return Optional.of(solution);

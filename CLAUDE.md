@@ -101,7 +101,7 @@ Every domain is a record except `ObjectEmptyDomain`/`NumericEmptyDomain` (final 
 
 **`BranchAndBoundSolver`**:
 - Incumbent pruning, composed with the same `NogoodStore` wiring ([ADR-0002](docs/adr/0002-nogood-learning-as-first-class-constraints.md)).
-- A `PhaseMemory` recorded on each strictly improving solution ([ADR-0026](docs/adr/0026-solution-guided-phase-saving.md)).
+- A `PhaseMemory` recorded on each strictly improving solution ([ADR-0026](docs/adr/0026-solution-guided-phase-saving.md)) — written in `resolveComplete`, not `accept`, so `firstSolutionSolver`'s solution sets the incumbent without steering the branching ([ADR-0041](docs/adr/0041-reuse-the-satisfaction-search-for-the-first-solution.md)).
 - No restarts in its own search ([ADR-0028](docs/adr/0028-restart-on-solution-rejected-for-branch-and-bound.md), built and rejected twice) — which is what keeps a drained stream a proof of optimality.
 - `firstSolutionSolver` finds the first solution instead, ignoring the objective, and seeds the incumbent from it; the chain passes `Solver.Factory.satisfactionSearch`, so the first solution comes with Luby restarts and phase saving and `Statistics#restarts` is no longer always `0` here. Withheld when the problem has any `BoundedDomain` variable. Every later solution still comes from this class's own search ([ADR-0041](docs/adr/0041-reuse-the-satisfaction-search-for-the-first-solution.md)).
 - Variable ordering from `SolverConfig`'s `variableSelectorFactory`, so dom/wdeg by default and injectable — same as the satisfaction chain, and it drives the adaptive hooks ([ADR-0038](docs/adr/0038-injectable-variable-selector-factory.md)).

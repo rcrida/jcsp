@@ -14,11 +14,13 @@ import io.github.rcrida.jcsp.domains.NumericDiscreteDomain;
 import io.github.rcrida.jcsp.solver.backtrackingsearch.order.DefaultValueOrderer;
 import io.github.rcrida.jcsp.solver.backtrackingsearch.selector.AdaptiveVariableSelector;
 import io.github.rcrida.jcsp.solver.backtrackingsearch.selector.MinimumRemainingValuesSelector;
+import io.github.rcrida.jcsp.solver.backtrackingsearch.order.PhaseMemory;
 import io.github.rcrida.jcsp.solver.listener.SolverListener;
 import io.github.rcrida.jcsp.variables.Variable;
 import org.junit.jupiter.api.Test;
 
 import java.time.Duration;
+import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.CopyOnWriteArrayList;
@@ -725,6 +727,46 @@ public class BranchAndBoundSolverTest {
     /** A feasible but non-optimal solution of {@link #CSP}: distinct values summing to 12, not 6. */
     static Assignment suboptimal() {
         return Assignment.of(java.util.Map.of(X, 3, Y, 4, Z, 5));
+    }
+
+    /** {@link #seededSolver} sharing a caller-supplied {@link PhaseMemory}, so it can be inspected. */
+    static BranchAndBoundSolver seededSolver(Solver firstSolutionSolver, PhaseMemory phaseMemory) {
+        return BranchAndBoundSolver.builder()
+                .objective(BranchAndBoundSolverTest::sum)
+                .selectorFactory(constraints -> MinimumRemainingValuesSelector.INSTANCE)
+                .domainValuesOrderer(DefaultValueOrderer.INSTANCE)
+                .inference((problem, variable, assignment) -> Optional.of(problem))
+                .firstSolutionSolver(firstSolutionSolver)
+                .phaseMemory(phaseMemory)
+                .build();
+    }
+
+    @Test
+    void firstSolutionSolver_doesNotRecordItsSolutionInThePhaseMemory() {
+        // The injected search ignores the objective, so replaying its path would steer branching
+        // toward a region chosen with no regard for cost. Only the first element is pulled, so the
+        // seed is the only solution accepted so far and the memory reflects it alone.
+        val memory = new PhaseMemory();
+
+        val seed = seededSolver(csp -> Stream.of(suboptimal()), memory).getSolutions(CSP).findFirst();
+
+        assertThat(seed).isPresent();
+        assertThat(sum(seed.get())).isEqualTo(12);
+        assertThat(memory.prioritise(X, List.<Object>of(1, 2, 3)))
+                .as("the seed's x=3 must not have been promoted to the front")
+                .containsExactly(1, 2, 3);
+    }
+
+    @Test
+    void ownSolutions_areStillRecordedInThePhaseMemory() {
+        // The other half of the same decision: withholding the seed must not disable phase saving
+        // for the solutions this search finds itself.
+        val memory = new PhaseMemory();
+
+        val improving = seededSolver(csp -> Stream.of(suboptimal()), memory).getSolutions(CSP).toList();
+        Object bestX = improving.getLast().getValue(X).orElseThrow();
+
+        assertThat(memory.prioritise(X, List.<Object>of(5, 4, 3, 2, 1))).startsWith(bestX);
     }
 
     @Test

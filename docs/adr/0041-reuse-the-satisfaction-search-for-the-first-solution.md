@@ -152,15 +152,52 @@ turned out to be true:
   `{1..5}` fixture, where the unseeded search finds the optimum on its very first descent and the
   seed only adds work. The corpus says this is worth paying overall (+3 instances, none lost), but
   the cost is real and paid on every optimization solve.
-- **Whether the seed belongs in the phase memory is an open question.** `accept` records it, so the
-  search below replays a path chosen with no regard for cost — a likelier explanation for those five
-  extra nodes than the re-descent itself. Setting the incumbent without recording the phase is a
-  one-line change and has not been measured.
+- **The seed does not belong in the phase memory**, which was an open question when this was first
+  written and has since been measured. See below.
 
 Finally, the first-solution search is reseeded randomly per `SolverConfig` like every other use of
 `RestartRandomization`, so **which** first solution a solve gets is not reproducible unless a seed is
 pinned. That made one existing runner test flaky rather than wrong — it asserts more than one `o`
 line on a problem where one solution in six is optimal — and it now pins a seed.
+
+## Amendment: the seed sets the incumbent but not the phase memory
+
+As first built, `accept` recorded every adopted solution in the `PhaseMemory`, including the seed, so
+the search below replayed a path that had been chosen with no regard for cost. Moving that write out
+of `accept` and into `resolveComplete` — so only solutions *this* search found are recorded — was
+measured as a clear win.
+
+Corpus standing is unchanged either way: **84 solved, 1 unknown, 0 failed**, every solution
+`SolutionChecker` OK. The difference is in solution quality and in headroom.
+
+Objective on the instances that do not prove optimality, three seeds each (lower is better):
+
+| instance | records the seed | skips it |
+|---|---|---|
+| `TravellingSalesman-20-30-00` | 226 / 166 / 202 | **118 / 118 / 118** |
+| `BinPacking-tab-n1c1w4a` | 2 / 5 / 3 | **0 / 2 / 0** |
+| `BinPacking-mdd-n1c1w4a` | 2 / 5 / 3 | **0 / 2 / 0** |
+| `Taillard-js-015-15-0` | 1330 | 1330 |
+
+Strictly better on every seed of every affected instance, and markedly more *stable* — the travelling
+salesman result is seed-independent without the seed's phase memory and varies by 36% with it, which
+is what a heuristic being dragged toward an arbitrary region looks like.
+
+Time, on the instances whose node count moved by more than 15%:
+
+| instance | records the seed | skips it |
+|---|---|---|
+| `GraphColoring-3-fullins-4` | 58.95s (OPTIMUM, 1s to spare) | **29.76s** |
+| `Mario-easy-4` | 2.70s | **1.56s** |
+| `ChessboardColoration-07-07` | **0.51s** | 7.04s |
+
+`GraphColoring-3-fullins-4` is the one that matters: it was proving optimality with a second of
+headroom, which is a counted instance one unlucky run from being lost. `ChessboardColoration-07-07`
+is the only real regression — 4,573 nodes become 223,560 — and it still proves optimality with 53
+seconds to spare, so it buys robustness where it costs none.
+
+Total corpus nodes fall 4.2%, which is *not* the reason for the decision: that figure is dominated by
+one instance's two million nodes and would have been a poor summary of a trade this uneven.
 
 A future caller can inject any `Solver` here, including a local search, without touching this class.
 
