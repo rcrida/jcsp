@@ -1,28 +1,17 @@
 package io.github.rcrida.jcsp.solver;
 
 import io.github.rcrida.jcsp.assignments.Statistics;
-import lombok.Getter;
 
 /**
- * Thrown by {@link BoundSolver#getSolution()} when a
- * {@link io.github.rcrida.jcsp.assignments.SolverLimits} node or time limit is exceeded
- * before a solution (or UNSAT proof) is found.
- *
- * <p>Callers can distinguish a genuine UNSAT result ({@link java.util.Optional#empty()})
- * from a limit-hit (this exception) and inspect how much work was done via
- * {@code getStatistics()} (Lombok-generated; unlike other Lombok-generated methods linked
- * elsewhere in this codebase, this one doesn't resolve as a link from this class-level comment,
- * so it's left as a plain code reference rather than fight the tool).
+ * The {@link InconclusiveSearchException} for a
+ * {@link io.github.rcrida.jcsp.assignments.SolverLimits} node or time limit being exceeded before a
+ * solution (or an UNSAT proof) was found.
  *
  * <p>Only thrown from {@link BoundSolver#getSolution()}, not from
  * {@link BoundSolver#getSolutions()}, which truncates the stream silently instead.
  */
-@Getter
-public class LimitExceededException extends RuntimeException {
-    private final Statistics statistics;
-
+public class LimitExceededException extends InconclusiveSearchException {
     public LimitExceededException(Statistics statistics) {
-        super("Solver limit exceeded after " + statistics.getNodesExplored() + " nodes");
-        this.statistics = statistics;
+        super("Solver limit exceeded after " + statistics.getNodesExplored() + " nodes", statistics);
     }
 }

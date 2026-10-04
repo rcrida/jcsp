@@ -10,6 +10,7 @@ import java.util.Set;
 import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 public class PropagationFixpointSolverTest {
     static final Variable.Factory F = Variable.Factory.INSTANCE;
@@ -97,10 +98,11 @@ public class PropagationFixpointSolverTest {
     }
 
     @Test
-    void cancelledBeforePreprocessing_stopsSilently_notThrown() {
+    void cancelledBeforePreprocessing_truncatesTheStreamButThrowsFromGetSolution() {
         // x1={1}, x2={1..2} — not otherwise infeasible, so a real (non-empty) fixpoint round would
-        // run; a pre-cancelled token must still make preprocessing stop silently (Optional.empty()),
-        // never surfacing SolverCancelledException (this layer has no distinct getSolution() of its own).
+        // run. The two contracts differ and that is the point (ADR-0043): getSolutions() truncates
+        // silently, while getSolution()'s Optional.empty() is reserved for "proven unsatisfiable",
+        // so a cancelled preprocess must throw there rather than claim a refutation it never made.
         Variable<Integer> x1 = F.create("cancelx1"), x2 = F.create("cancelx2");
         var csp = ConstraintSatisfactionProblem.builder()
                 .variableDomain(x1, IntRangeDomain.of(1, 1))
@@ -114,7 +116,9 @@ public class PropagationFixpointSolverTest {
                 .build();
 
         assertThat(solver.getSolutions(csp)).isEmpty();
-        assertThat(solver.getSolution(csp)).isEmpty();
+        assertThatThrownBy(() -> solver.getSolution(csp))
+                .isInstanceOf(SolverCancelledException.class)
+                .isInstanceOf(InconclusiveSearchException.class);
     }
 
     @Test

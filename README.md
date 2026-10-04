@@ -215,14 +215,14 @@ SolverLimits.ofTime(Duration.ofSeconds(5))             // stop after at most 5 s
 SolverLimits.of(10_000, Duration.ofSeconds(5))         // both together
 ```
 
-When a limit is exceeded, `getSolution()` throws `LimitExceededException` containing `Statistics` (nodes explored, backtracks, etc.) so you can distinguish a limit-hit from a genuine UNSAT:
+`getSolution()` draws a hard line between the two things an absent solution can mean: **`Optional.empty()` means the search completed and proved there is no solution**, and every way of stopping early throws an `InconclusiveSearchException` instead. Catch the supertype when all you need is "it didn't finish", or a subtype when you care which budget ran out — `LimitExceededException` (a `SolverLimits` node/time cap), `SolverCancelledException` (an external `Cancellation`) or `RestartsExhaustedException` (a restart cap). All three carry `Statistics`:
 
 ```java
 try {
     Optional<Assignment> solution = solver.getSolution();
-    // Optional.empty() means genuinely UNSAT
-} catch (LimitExceededException e) {
-    // limit was hit before search completed
+    // Optional.empty() here is a proof: there is no solution
+} catch (InconclusiveSearchException e) {
+    // stopped early, so nothing was proved either way
     System.out.println("Explored " + e.getStatistics().getNodesExplored() + " nodes");
 }
 ```
@@ -261,7 +261,7 @@ BoundSolver solver = Solver.Factory.INSTANCE.createSolver(csp, objective,
         .build());
 ```
 
-Behaves exactly like a `SolverLimits` hit: `getSolutions()` truncates the stream silently in both chains, and `getSolution()` throws `SolverCancelledException` only in the satisfaction chain (mirroring `LimitExceededException`'s own scoping exactly) — the optimization chain's `getSolution()` returns the best incumbent found so far instead. A caller that needs to know *whether* a solve stopped because of cancellation, rather than genuine completion, should check `cancellation.isCancelled()` itself, since silent paths don't distinguish the two.
+Behaves exactly like a `SolverLimits` hit: `getSolutions()` truncates the stream silently in both chains, and `getSolution()` throws `SolverCancelledException` in the satisfaction chain — including when the cancellation lands during preprocessing, which used to be swallowed into an `Optional.empty()` indistinguishable from a genuine refutation. The optimization chain's `getSolution()` returns the best incumbent found so far instead. For the silent paths, a caller that needs to know *whether* a solve stopped early rather than finishing should check `cancellation.isCancelled()` itself.
 
 **Nogood learning (CDCL)** — both terminal solvers (`DomWdegLubySearch` for satisfaction, `BranchAndBoundSolver` for optimization) can learn a nogood on every domain wipeout, which pays off when learned nogoods get reused later in the search. **It is off by default**, because measurement says they mostly are not reused: across the bundled 85-instance XCSP3 corpus, enabling learning solved exactly the same instances as disabling it (72 of 85 when that was measured; the corpus baseline has since risen independently of this setting) while costing wall-clock on those that do solve (18 faster without it, 14 unaffected, none reliably slower), and `ChessboardColoration-07-07` only reaches `OPTIMUM FOUND` without it. See [ADR-0030](docs/adr/0030-nogood-learning-is-not-cdcl.md) for why the clauses essentially never fire. Pass `nogoodLearningEnabled(true)` to opt in, or `false` to pin it off explicitly — dom/wdeg variable-ordering weight updates (satisfaction chain) and incumbent-bound pruning (optimization chain) are both unaffected, since they're separate mechanisms:
 

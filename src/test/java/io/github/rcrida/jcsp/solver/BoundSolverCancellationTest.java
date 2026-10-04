@@ -14,23 +14,25 @@ class BoundSolverCancellationTest {
 
     /**
      * A token cancelled before the call ever starts is detected during {@link
-     * PropagationFixpointSolver}'s one-time preprocessing pass -- which runs before {@link
-     * DomWdegLubySearch} ever gets control -- and that layer has no distinct single-solution
-     * algorithm of its own, so it stays silent (matching {@link BranchAndBoundSolver}/{@link
-     * SetBranchingSolver}'s own silent behavior), the same as {@link
-     * #getSolutionReturnsEmptyForGenuineUnsat_notCancelled}. {@link SolverCancelledException} is
-     * only ever thrown when cancellation happens specifically while {@link DomWdegLubySearch}'s own
-     * search is running, after preprocessing has already converged -- see
-     * {@link #listenerCancelsSearchOnceNodeThresholdCrossed}.
+     * PropagationFixpointSolver}'s one-time preprocessing pass, before {@link DomWdegLubySearch}
+     * ever gets control -- and it throws from there too, rather than returning empty.
+     * <p>
+     * This test used to assert the opposite, and that was the bug ADR-0043 fixed: preprocessing
+     * swallowed the cancellation, so a cancelled solve of a <em>satisfiable</em> problem was
+     * indistinguishable from {@link #getSolutionReturnsEmptyForGenuineUnsat_notCancelled}, and
+     * {@code Xcsp3ProblemRunner} reported {@code s UNSATISFIABLE} for it. The contract is now that
+     * {@link Optional#empty()} means proven unsatisfiable and nothing else.
      */
     @Test
-    void getSolutionReturnsEmptySilently_whenCancelledBeforeSearchStarts() {
+    void getSolutionThrows_whenCancelledBeforeSearchStarts() {
         var cancellation = new Cancellation();
         cancellation.cancel();
         BoundSolver solver = Solver.Factory.INSTANCE.createSolver(satisfiable(),
                 SolverConfig.builder().cancellation(cancellation).build());
 
-        assertThat(solver.getSolution()).isEmpty();
+        assertThatThrownBy(solver::getSolution)
+                .isInstanceOf(SolverCancelledException.class)
+                .isInstanceOf(InconclusiveSearchException.class);
     }
 
     @Test

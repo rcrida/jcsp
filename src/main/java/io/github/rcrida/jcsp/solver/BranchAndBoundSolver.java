@@ -239,10 +239,12 @@ public class BranchAndBoundSolver implements Solver {
      * satisfaction chain only the former reaches {@link DomWdegLubySearch}'s restarts at all, which
      * is the entire reason for delegating.
      * <p>
-     * {@link LimitExceededException} and {@link SolverCancelledException} are caught rather than
-     * propagated: the satisfaction chain's single-solution searches throw on truncation (ADR-0011)
-     * while this class has always truncated silently, and this phase is not the place to change
-     * which of those two contracts {@code getSolutions} honours.
+     * {@link InconclusiveSearchException} is caught rather than propagated: the satisfaction chain's
+     * single-solution searches throw when they stop early (ADR-0011, ADR-0043) while this class has
+     * always truncated silently, and this phase is not the place to change which of those two
+     * contracts {@code getSolutions} honours. Note that catching it is also what makes {@link
+     * Optional#empty()} from here mean "no seed", whatever the reason -- this method does not need
+     * the distinction, but it is now available to anyone who does.
      * <p>
      * Only the incumbent is taken from it. The solution's values are <em>not</em> written to
      * {@link #phaseMemory} (see {@link #resolveComplete}, which records its own): this search
@@ -265,7 +267,7 @@ public class BranchAndBoundSolver implements Solver {
         Optional<Assignment> candidate;
         try {
             candidate = firstSolutionSolver.getSolution(csp);
-        } catch (LimitExceededException | SolverCancelledException e) {
+        } catch (InconclusiveSearchException e) {
             log.info("First-solution search stopped before finding one: {}", e.getClass().getSimpleName());
             return Optional.empty();
         }

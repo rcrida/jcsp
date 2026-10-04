@@ -8,7 +8,7 @@ import io.github.rcrida.jcsp.solver.BranchAndBoundSolver;
 import io.github.rcrida.jcsp.solver.Cancellation;
 import io.github.rcrida.jcsp.solver.RestartRandomization;
 import io.github.rcrida.jcsp.solver.Solver;
-import io.github.rcrida.jcsp.solver.SolverCancelledException;
+import io.github.rcrida.jcsp.solver.InconclusiveSearchException;
 import io.github.rcrida.jcsp.solver.SolverConfig;
 import io.github.rcrida.jcsp.solver.listener.SolverListener;
 import io.github.rcrida.jcsp.variables.Variable;
@@ -125,12 +125,15 @@ public final class Xcsp3ProblemRunner {
     }
 
     /**
-     * {@link BoundSolver#getSolution()} throws {@link SolverCancelledException} only when {@code
-     * cancellation} fires during the terminal search itself (see {@link BoundSolver}'s own
-     * Javadoc) -- a {@code cancellation} that's already cancelled before this call, or that fires
-     * during the chain's one-time preprocessing pass, is caught upstream and surfaces as a plain
-     * {@link Optional#empty()}, indistinguishable here from genuine {@code UNSATISFIABLE}. Only the
-     * thrown case is reported as {@code UNKNOWN}.
+     * {@link Optional#empty()} from {@link BoundSolver#getSolution()} means the search completed and
+     * proved there is no solution, so it is reported as {@code UNSATISFIABLE}; every way of stopping
+     * early throws an {@link InconclusiveSearchException} and is reported as {@code UNKNOWN}.
+     * <p>
+     * That was not always true, and the old behaviour was a wrong answer rather than a missing
+     * distinction: a {@code cancellation} firing during the chain's one-time preprocessing pass was
+     * swallowed into an empty result, and this method printed {@code s UNSATISFIABLE} for a problem
+     * it had never refuted. See
+     * <a href="../../../../../../../docs/adr/0043-inconclusive-is-not-unsatisfiable.md">ADR-0043</a>.
      */
     private static void solveSatisfaction(Xcsp3Instance instance, Cancellation cancellation, SolverListener listener,
                                            @Nullable RestartRandomization restartRandomization, Statistics stats, PrintStream out) {
@@ -144,7 +147,7 @@ public final class Xcsp3ProblemRunner {
             }
             out.println("s SATISFIABLE");
             printSolution(instance, solution.get(), out);
-        } catch (SolverCancelledException e) {
+        } catch (InconclusiveSearchException e) {
             out.println("s UNKNOWN");
         }
     }

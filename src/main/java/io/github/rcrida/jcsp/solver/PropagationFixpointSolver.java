@@ -55,25 +55,24 @@ public class PropagationFixpointSolver extends SolverDecorator {
     }
 
     /**
-     * Catches {@link SolverCancelledException} around every {@link FixpointPropagation#applyFixpoint}
-     * call and converts it to {@link Optional#empty()} -- this one-time preprocessing pass has no
-     * distinct single-solution algorithm of its own (see {@link DomWdegLubySearch}'s own Javadoc for
-     * the one call path that's allowed to let it through), so a cancelled preprocess stops silently
-     * the same way a {@link io.github.rcrida.jcsp.assignments.SolverLimits} hit would, indistinguishable
-     * from genuine infeasibility here just like it already is for
-     * {@link io.github.rcrida.jcsp.assignments.SolverLimits}.
+     * Lets {@link SolverCancelledException} out of {@link FixpointPropagation#applyFixpoint} rather
+     * than converting it to {@link Optional#empty()}, which is what it used to do.
+     * <p>
+     * Empty from here means this pass <em>proved</em> the problem infeasible, and a cancelled
+     * preprocess has proved nothing, so the two cannot share a return value: a caller inferring
+     * UNSAT from an empty result would report a refutation that never happened, and {@code
+     * Xcsp3ProblemRunner} did exactly that. The silence {@link BoundSolver#getSolutions()} promises
+     * is applied by {@link SolverDecorator#getSolutions}, the one place that owns that contract, so
+     * it no longer has to be baked in here where the single-solution path shares the code. See
+     * <a href="../../../../../../../docs/adr/0043-inconclusive-is-not-unsatisfiable.md">ADR-0043</a>.
      */
     private @NonNull Optional<ConstraintSatisfactionProblem> runFixpoint(
             @NonNull ConstraintSatisfactionProblem csp) {
         var current = csp;
         boolean changed = true;
         while (changed) {
-            Optional<ConstraintSatisfactionProblem> result;
-            try {
-                result = fixpointPropagation.applyFixpoint(current, null, listener, statistics, cancellation);
-            } catch (SolverCancelledException e) {
-                return Optional.empty();
-            }
+            Optional<ConstraintSatisfactionProblem> result =
+                    fixpointPropagation.applyFixpoint(current, null, listener, statistics, cancellation);
             if (result.isEmpty()) return Optional.empty();
             changed = FixpointPropagation.domainSum(result.get()) < FixpointPropagation.domainSum(current);
             current = result.get();

@@ -264,7 +264,10 @@ class DomWdegLubySearchTest {
                 .inference(Solver.Factory.FULL_PROPAGATION_INFERENCE)
                 .build();
 
-        assertThat(solver.getSolution(csp)).isEmpty();
+        // The problem really is unsatisfiable, but this configuration never proved it -- every
+        // restart was cut off by its one-failure budget -- so the honest answer is "inconclusive",
+        // not Optional.empty() (ADR-0043).
+        assertThatThrownBy(() -> solver.getSolution(csp)).isInstanceOf(RestartsExhaustedException.class);
     }
 
     @Test
@@ -294,14 +297,14 @@ class DomWdegLubySearchTest {
                 .inference(Solver.Factory.FULL_PROPAGATION_INFERENCE)
                 .build();
 
-        assertThat(solver.getSolution(csp)).isEmpty();
+        assertThatThrownBy(() -> solver.getSolution(csp)).isInstanceOf(RestartsExhaustedException.class);
     }
 
     @Test
     void exhaustsAllRestartsWhenBudgetAlwaysExceeded() {
         // x=1 and y=1 forced, x≠y → every MAC attempt fails immediately.
-        // With lubyUnit=1, maxRestarts=1: first restart exceeds budget on the first inference
-        // failure, the loop exits, and getSolution returns empty after exhausting all restarts.
+        // With lubyUnit=1, maxRestarts=1: the first restart exceeds its budget on the first
+        // inference failure, the loop exits, and getSolution throws after exhausting all restarts.
         // Covers: BudgetExceeded thrown, catch block, loop exhaustion, log.warn path.
         Variable<Integer> x = VF.create("x");
         Variable<Integer> y = VF.create("y");
@@ -318,7 +321,10 @@ class DomWdegLubySearchTest {
                 .inference(Solver.Factory.FULL_PROPAGATION_INFERENCE)
                 .build();
 
-        assertThat(extremelyTightSolver.getSolution(csp)).isEmpty();
+        assertThatThrownBy(() -> extremelyTightSolver.getSolution(csp))
+                .isInstanceOf(RestartsExhaustedException.class)
+                .isInstanceOf(InconclusiveSearchException.class)
+                .hasMessageContaining("exhausted 1 restarts");
     }
 
     @Test

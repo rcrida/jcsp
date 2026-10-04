@@ -45,9 +45,21 @@ public abstract class SolverDecorator implements Solver {
         return Optional.of(csp);
     }
 
+    /**
+     * {@link BoundSolver#getSolutions()}'s silent-truncation contract is applied here, the one place
+     * that owns it: an {@link InconclusiveSearchException} out of {@link #preprocess} becomes an
+     * empty stream. {@link #getSolution} deliberately lets it through instead, because there empty
+     * means "proven unsatisfiable" and must not also mean "stopped early" (ADR-0043).
+     */
     @Override
     public Stream<Assignment> getSolutions(@NonNull ConstraintSatisfactionProblem csp) {
-        return preprocess(csp)
+        Optional<ConstraintSatisfactionProblem> preprocessed;
+        try {
+            preprocessed = preprocess(csp);
+        } catch (InconclusiveSearchException e) {
+            return Stream.empty();
+        }
+        return preprocessed
                 .map(p -> p.isFullyDetermined() ? forcedSolution(p).stream() : inner.getSolutions(p))
                 .orElse(Stream.empty());
     }

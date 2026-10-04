@@ -235,8 +235,10 @@ public class DomWdegLubySearch implements Solver {
                 throw e;
             }
         }
+        // Not Optional.empty(): every restart was cut off by its failure budget, so none of them
+        // proved anything, and empty is this method's way of saying "proven unsatisfiable".
         log.warn("dom/wdeg+Luby: exhausted {} restarts without solution", maxRestarts);
-        return Optional.empty();
+        throw new RestartsExhaustedException(maxRestarts, statistics);
     }
 
     @SuppressWarnings("unchecked")
