@@ -101,7 +101,52 @@ it should be on by default.
   case motivating the default-to-random reversal above: an accidental mechanism that silently does
   nothing for some instances is strictly worse than a controlled one that reliably diversifies.
 
-## Rejected (2026-10-05): a per-variable tie-break key instead of a draw per tie
+## Rejected (2026-10-05): two attempts to depend less on the random tie-break
+
+Both of the obvious ways to lean less on `tieBreakRandom` were built and measured, and both lost
+corpus instances against the uniform draw per tie that this ADR introduced. Taken together they say
+something worth knowing: **on this corpus, blind per-node randomness in tie-breaking beats both
+information and reproducibility.** That is the opposite of what one would guess, which is why it is
+recorded at length rather than as a line.
+
+| | corpus solved | lost | gained |
+|---|---|---|---|
+| per-tie uniform draw (kept) | **84** | — | — |
+| per-variable key, below | 82 | `qwh-o30-h374-01`, `MarketSplit-01` | none |
+| conflict-activity key, below | 81 | those two plus `BinPacking-sum-n1c1w4a` | none |
+
+A caveat on that precision: both lost instances sit near the time limit (45s and 13s of 60s), and
+`AC3`'s arc order is salted per JVM independently of this mechanism's seed, so an instance at the
+boundary can flip between runs — `MarketSplit-01` solved at 3 of 3 seeds in isolation and still came
+back UNKNOWN in the sweep. The counts are therefore approximate; the direction, two independent
+attempts losing instances and gaining none, is not.
+
+### The tie structure, measured first
+
+On `Taillard-js-015-15-0`: **73% of selections have no tie at all; 27% do, with a mean tie set of 6.3
+and a maximum of 31; and the very first selection is a 14-way tie out of 241 unassigned variables.**
+So there was a real lever, concentrated exactly where it matters most — early decisions are what
+decide whether a heavy-tailed instance falls into its tail.
+
+One structural fact constrains any secondary key. Within a tie set `dom/wdeg` is equal, so domain
+size and weighted degree are **proportional** there: ordering tied candidates by "smallest domain"
+and by "largest weighted degree" produce the same order, and both merely re-read the quantity that
+already tied. A useful key has to be independent of the ratio.
+
+### Attempt 2: a conflict-activity key, narrowing the tie set
+
+`onValueRejected` already names the variable a candidate was rejected on, and `lastConflictVariable`
+already exploits the most recent one as an override. Generalising that to a per-variable counter gives
+an independent, informative ranking (the activity-based/VSIDS idea), used to **narrow** the tie set
+before the random draw rather than to replace it — deliberately, given attempt 1's result below.
+
+Corpus **84 → 81**, three instances lost and none gained. The likely reason is the same as attempt
+1's, arrived at from the other direction: narrowing the tie set removes the *opportunities* for the
+per-node draw, so an effective informative key suppresses the very diversification that turns out to
+be load-bearing. An informative key and a blind draw are not complements here; they compete for the
+same decisions.
+
+### Attempt 1: a per-variable tie-break key instead of a draw per tie
 
 `DomWdegVariableSelector.select` collects every variable whose `domainSize / wdeg` equals the best
 and picks one with `tieBreakRandom.nextInt(tied.size())` — one draw per tie. Measured on
