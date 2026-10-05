@@ -95,4 +95,35 @@ public class IntRangeDomainTest {
         var domain = new IntRangeDomain(Set.of(), 0, 0);
         assertThat(domain.isEmpty()).isTrue();
     }
+
+    // ── Narrowing stays numeric ───────────────────────────────────────────────
+    // Inheriting DiscreteSetDomain's generic builder demoted a narrowed range to a non-numeric
+    // ObjectSetDomain, so every later `instanceof NumericDomain` test on it silently failed. AC3
+    // narrows by deleting one value at a time, so this happened to essentially every integer
+    // variable the moment arc consistency touched it.
+
+    @Test
+    void toBuilder_narrowedToSeveralValues_staysNumeric() {
+        DiscreteDomain<Integer> narrowed = IntRangeDomain.of(1, 3).toBuilder().delete(3).build();
+
+        assertThat(narrowed).isInstanceOf(NumericDomain.class);
+        assertThat(narrowed).isInstanceOf(NumericSetDomain.class);
+        assertThat(((NumericDomain<Integer>) narrowed).getMax()).isEqualTo(2);
+    }
+
+    @Test
+    void toBuilder_narrowedToOneValue_staysNumeric() {
+        DiscreteDomain<Integer> narrowed = IntRangeDomain.of(1, 2).toBuilder().delete(2).build();
+
+        assertThat(narrowed).isInstanceOf(NumericDomain.class);
+        assertThat(narrowed.singleValue()).contains(1);
+    }
+
+    @Test
+    void toBuilder_narrowedToNothing_staysNumeric() {
+        DiscreteDomain<Integer> narrowed = IntRangeDomain.of(1, 1).toBuilder().delete(1).build();
+
+        assertThat(narrowed).isInstanceOf(NumericDomain.class);
+        assertThat(narrowed.isEmpty()).isTrue();
+    }
 }

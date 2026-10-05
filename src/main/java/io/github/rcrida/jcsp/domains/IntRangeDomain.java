@@ -31,6 +31,25 @@ public record IntRangeDomain(Set<Integer> values, int min, int max)
         return new IntRangeDomain(range, minInclusive, maxInclusive);
     }
 
+    /**
+     * The numeric builder, not the {@link DiscreteSetDomain} default, for exactly the reason {@link
+     * NumericSetDomain#toBuilder} gives: deleting values one at a time (as {@link
+     * io.github.rcrida.jcsp.consistency.arc.AC3} does on every arc revision) must leave behind a
+     * domain that is still a {@link NumericDomain}.
+     * <p>
+     * Inheriting the generic builder demoted a narrowed range to an {@link ObjectSetDomain}, which
+     * is not numeric, so every later {@code instanceof NumericDomain} test on it silently failed:
+     * {@link io.github.rcrida.jcsp.constraints.NumericBounds}' {@code min}/{@code max} fell back to
+     * streaming the whole domain instead of reading a cached bound, {@code narrow} fell back to
+     * per-value deletion instead of {@link NumericDomain#withBounds}, and a propagator gated on
+     * numericity stopped acting at all. Measured on {@code Taillard-js-015-15-0}, whose objective
+     * variable reached search as a non-numeric {@code ObjectSetDomain}.
+     */
+    @Override
+    public NumericDiscreteDomain.NumericDiscreteDomainBuilder<Integer> toBuilder() {
+        return new NumericDiscreteDomain.NumericDiscreteDomainBuilder<>(values);
+    }
+
     @Override
     public Integer getMin() {
         return min;

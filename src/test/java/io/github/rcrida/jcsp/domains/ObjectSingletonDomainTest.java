@@ -2,6 +2,7 @@ package io.github.rcrida.jcsp.domains;
 
 import org.junit.jupiter.api.Test;
 
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
 
@@ -133,13 +134,15 @@ public class ObjectSingletonDomainTest {
         assertThat(result.singleValue()).contains("x");
     }
 
-    // ── DiscreteDomain.DiscreteDomainBuilder.build() collapses to the cheapest representation --
-    // every DiscreteSetDomain implementor (IntRangeDomain, ObjectSetDomain, ...) routes toBuilder() through
-    // the same shared builder, so narrowing any of them exercises this identically. ──
+    // ── DiscreteDomain.DiscreteDomainBuilder.build() collapses to the cheapest representation.
+    // The vehicle has to be a non-numeric DiscreteSetDomain: a numeric one overrides toBuilder() to
+    // keep narrowing numeric (see IntRangeDomainTest/NumericSetDomainTest), so narrowing it lands on
+    // the Numeric* collapse rather than this one. ──
 
     @Test
     void discreteDomainBuilder_narrowedToOneValue_buildsObjectSingletonDomain() {
-        DiscreteDomain<Integer> narrowed = IntRangeDomain.of(1, 2).toBuilder().delete(2).build();
+        DiscreteDomain<Integer> narrowed =
+                new ObjectSetDomain<>(new LinkedHashSet<>(List.of(1, 2))).toBuilder().delete(2).build();
 
         assertThat(narrowed).isInstanceOf(ObjectSingletonDomain.class);
         assertThat(narrowed.singleValue()).contains(1);
@@ -147,7 +150,8 @@ public class ObjectSingletonDomainTest {
 
     @Test
     void discreteDomainBuilder_narrowedToTwoValues_staysObjectSetDomain() {
-        DiscreteDomain<Integer> narrowed = IntRangeDomain.of(1, 3).toBuilder().delete(3).build();
+        DiscreteDomain<Integer> narrowed =
+                new ObjectSetDomain<>(new LinkedHashSet<>(List.of(1, 2, 3))).toBuilder().delete(3).build();
 
         assertThat(narrowed).isInstanceOf(ObjectSetDomain.class);
     }
