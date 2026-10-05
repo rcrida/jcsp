@@ -86,15 +86,28 @@ budget (512 restarts runs the full 60s without answering), not missing propagati
 reaches the decision variables, 11,000 values removed), and not the step size (a probe at 1318, just
 12 below a solution already in hand, is equally unanswerable).
 
-What is left is the COP formulation itself. The parser models `minimize maximum(e[])` as a fresh
-`$max` variable plus `maxConstraint(e[], EQ, $max)`, so the bound lands on `$max`, and tightening it
-*shrinks `$max`'s domain* — which makes dom/wdeg more likely to branch on the objective auxiliary
-early, and because the link is an **equality**, choosing a value for `$max` demands a schedule whose
-makespan is exactly that, not merely at most the bound. A tighter bound therefore makes the question
-harder. The stripped CSP has no `$max` at all, which is why it behaves so differently.
+An earlier version of this ADR blamed variable ordering: the bound lands on the parser's `$max`
+auxiliary, so tightening it shrinks that variable's domain, which would make dom/wdeg branch the
+objective auxiliary early, and `maxConstraint(e[], EQ, $max)` being an equality would then demand a
+schedule with exactly that makespan. **That explanation is wrong.** Wrapping the selector and
+counting its choices over a full solve puts `$max` at **3 picks out of 1,547** — dom/wdeg ranks it
+almost last, as its ratio predicts (368/1 against a start variable's ~552/3). There is no
+early-auxiliary-branching problem to fix.
 
-That points at variable ordering rather than at bounding: an objective auxiliary is a poor thing to
-branch on early, whatever its domain size suggests. Not pursued here.
+Two things are true instead, and they are separable:
+
+**The probe budget is marginally too small.** Running the objective-stripped CSP bounded at 1284
+through the probe's exact configuration — `satisfactionSearch` wrapped in a fixpoint — it answers
+SATISFIABLE at **8,764 nodes**, and a 32-restart budget gives up at **8,522**. Three percent short.
+A larger `probeRestartBudget` would collect answers like that one, at the cost of lingering longer on
+the probes that have no answer; that trade has not been measured across the corpus.
+
+**The COP formulation really is harder, for an unestablished reason.** The same bound, same
+configuration, same budget of 512 restarts: the stripped CSP answers in 7.8s, while the bound applied
+through `ObjectiveCut` on `$max` produces no answer in 60s. After propagation both forms give
+`e[i] <= 1284`, so the difference is something else about carrying `$max` and `maxConstraint` — not
+the branching order, which has been measured and ruled out. Left open rather than guessed at a third
+time.
 
 ## Rejected alternatives
 

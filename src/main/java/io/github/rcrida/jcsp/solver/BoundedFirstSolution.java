@@ -73,10 +73,14 @@ public class BoundedFirstSolution implements IncumbentSeeder {
 
     /**
      * Restart budget for each bounded probe, far smaller than {@link #initialRestartBudget} because a
-     * probe that cannot be answered must hand the budget back rather than consume the solve. The
-     * default is sized from measurement: a probe that succeeds on {@code Taillard-js-015-15-0} takes
-     * around 19 restarts, so a budget below that would cut off the answers worth having, while one
-     * near {@link #initialRestartBudget} lets a single unanswerable probe spend the whole time limit.
+     * probe that cannot be answered must hand the budget back rather than consume the solve. It bounds
+     * a probe's cost in <em>restarts</em>, which is only loosely a bound on its time: the default of
+     * 32 cut an unanswerable probe off after 9.5s on {@code Taillard-js-015-15-0}.
+     * <p>
+     * The default is known to be slightly ungenerous. That same instance's bounded question is
+     * answerable at 8,764 nodes, and 32 restarts reaches 8,522 before giving up -- three percent
+     * short. Raising it would collect answers like that one while lingering longer on the probes that
+     * have none, a trade ADR-0044 records as unmeasured.
      */
     int probeRestartBudget;
 
