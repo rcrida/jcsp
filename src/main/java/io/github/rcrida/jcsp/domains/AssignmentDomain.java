@@ -41,10 +41,11 @@ public record AssignmentDomain(Set<Assignment> values) implements DiscreteSetDom
      * This enumeration is the one genuinely long uninterruptible stretch on the satisfaction chain.
      * {@link io.github.rcrida.jcsp.solver.tree.decomposition.decomposer.TreeDecomposerImpl} bounds
      * each clique's combination count before calling this, but that bound is
-     * {@code TreeDecompositionSolver.MAX_DOMAIN_SIZE_CAP} = 1,000,000 <em>per clique</em>, each
-     * combination costing a full {@link Assignment#isConsistent} pass over every constraint -- so a
-     * bounded enumeration can still run far longer than any caller's time limit. The cancellation
-     * check goes once per combination produced, which is negligible beside that consistency pass.
+     * {@code TreeDecompositionSolver.MAX_DOMAIN_SIZE_CAP} = 10,000 <em>per clique</em>, with no
+     * bound at all on the number of cliques, and each combination costs a full {@link
+     * Assignment#isConsistent} pass over every constraint -- so a bounded enumeration can still run
+     * far longer than any caller's time limit. The cancellation check goes once per combination
+     * produced, which is negligible beside that consistency pass.
      * <p>
      * A cancellation that arrives only after the enumeration finished also yields {@link
      * Optional#empty()}: a complete domain is of no use to a search that is about to stop anyway,
