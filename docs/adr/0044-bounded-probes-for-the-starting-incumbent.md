@@ -102,12 +102,38 @@ SATISFIABLE at **8,764 nodes**, and a 32-restart budget gives up at **8,522**. T
 A larger `probeRestartBudget` would collect answers like that one, at the cost of lingering longer on
 the probes that have no answer; that trade has not been measured across the corpus.
 
-**The COP formulation really is harder, for an unestablished reason.** The same bound, same
-configuration, same budget of 512 restarts: the stripped CSP answers in 7.8s, while the bound applied
-through `ObjectiveCut` on `$max` produces no answer in 60s. After propagation both forms give
-`e[i] <= 1284`, so the difference is something else about carrying `$max` and `maxConstraint` — not
-the branching order, which has been measured and ruled out. Left open rather than guessed at a third
-time.
+**A probe's success is a lottery on restart-randomisation position, and that is what the apparent
+"formulation" difference actually was.** An earlier version of this section claimed the COP form was
+intrinsically harder than the objective-stripped one, because the stripped CSP answered the bounded
+question in 7.8s while the probe could not answer it in 60s. That comparison was confounded.
+
+`RestartRandomization.seeded(baseSeed)` closes over a **stateful** driver `Random`, advanced once per
+`randomFor` call, and ignores its `restartIndex` argument entirely. So a solve that runs several
+searches in sequence hands each later search a different tie-break stream than it would get running
+first — and this instance's difficulty varies enormously with that stream (517 to 21,640 nodes across
+four base seeds, measured on the satisfaction chain). Solving the **identical** problem three times
+from one shared `seeded(20260830)`:
+
+| draw from the shared driver | result | nodes |
+|---|---|---|
+| first | SATISFIABLE, 7.7s | 8,770 |
+| second | SATISFIABLE, 21.6s | 20,873 |
+| third | inconclusive, 60.0s | 56,453 |
+
+The probe runs after the initial unbounded search, so it draws from a later position; instrumented in
+the real path it spends **42,461 nodes in 55.7s** on a question that the same search answers in 8,770
+nodes from the first position. Nothing about the formulation, the constraint set (identical at 271
+constraints, diffed), the domains (same fixpoint, 121,986), the propagator list (identical, printed)
+or the problem assembly (the probe-assembled CSP solves in 7.7s standalone) differs.
+
+Two consequences. The probe's budget cannot be sized meaningfully while its workload is a lottery —
+8,770 nodes suffices from a lucky position and 56,000 does not from an unlucky one, which is why
+`probeRestartBudget` looked marginal rather than wrong. And "same seed" no longer implies "same
+behaviour" for any individual search once a solve runs more than one, which it now always does.
+Making `randomFor` a pure function of `(baseSeed, restartIndex)` through a mixer — keeping the
+anti-correlation property ADR-0015 wanted, without the statefulness — would fix both, and would also
+make `IndependentSubproblemSolver`'s concurrent draws deterministic, a caveat that class's Javadoc
+currently carries. Not done here.
 
 ## Rejected alternatives
 

@@ -51,6 +51,18 @@ public interface RestartRandomization {
      * concurrent subproblems draw from the shared driver isn't deterministic, the same caveat that
      * already applies to those subproblems sharing one {@link Cancellation}/{@link
      * io.github.rcrida.jcsp.assignments.Statistics}.
+     * <p>
+     * <b>{@code restartIndex} is deliberately ignored, and the consequence is sharper than it looks.</b>
+     * Because the driver is stateful, what a caller gets back depends on how many times this has
+     * already been called, not on which restart is asking. A solve that runs several searches in
+     * sequence -- which every optimization solve now does, one for the first solution and one per
+     * bounded probe (ADR-0041, ADR-0044) -- therefore hands each later search a different tie-break
+     * stream than it would have got running first. On a problem whose difficulty is sensitive to that
+     * stream this dominates: solving one fixed instance three times from a single {@code seeded}
+     * driver took 8,770, 20,873 and then more than 56,000 nodes. A whole solve stays reproducible,
+     * since the total sequence of draws is fixed, but two searches within it are not comparable to
+     * each other or to the same search run alone. Making this a pure function of {@code (baseSeed,
+     * restartIndex)} via a mixer would keep the anti-correlation property above without that effect.
      */
     static RestartRandomization seeded(long baseSeed) {
         Random driver = new Random(baseSeed);
