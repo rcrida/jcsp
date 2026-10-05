@@ -100,3 +100,44 @@ it should be on by default.
   while the seeded spread showed real variance (stddev≈14.7, range 400-450). This is the concrete
   case motivating the default-to-random reversal above: an accidental mechanism that silently does
   nothing for some instances is strictly worse than a controlled one that reliably diversifies.
+
+## Rejected (2026-10-05): a per-variable tie-break key instead of a draw per tie
+
+`DomWdegVariableSelector.select` collects every variable whose `domainSize / wdeg` equals the best
+and picks one with `tieBreakRandom.nextInt(tied.size())` — one draw per tie. Measured on
+`Taillard-js-015-15-0`: **73% of selections have no tie at all, 27% do with a mean tie set of 6.3 and
+a maximum of 31, and the very first selection is a 14-way tie out of 241 unassigned variables.**
+
+Drawing per tie makes the choice depend on *how many ties were broken earlier*, so two searches that
+differ by one decision decorrelate completely from that point on. That is not a small effect. Solving
+one fixed problem three times from a single `RestartRandomization.seeded` driver took 8,770, then
+20,873, then more than 56,000 nodes; it is also what made an identical problem look easy in one
+harness and impossible in another, costing a long detour in
+[ADR-0044](0044-bounded-probes-for-the-starting-incumbent.md).
+
+So the tie-break was changed to a **per-variable key**: one `long` drawn per restart, mixed with the
+variable's identity through SplitMix64's finalizer, with the smallest key winning. A pure function of
+(seed, variable), immune to draw position, and it also removed the per-selection `ArrayList`.
+
+It worked as designed and was still rejected. The structural property arrived — three differently
+assembled copies of one problem went from wildly different to 52,394 / 52,275 / 51,564 nodes, i.e.
+consistent with each other — but the corpus fell from **84 solved to 82**, and a three-seed check on
+the two lost instances showed that is not seed luck:
+
+| instance | per-tie draw (kept) | per-variable key (rejected) |
+|---|---|---|
+| `qwh-o30-h374-01` | 2 of 3 seeds solved | 1 of 3 |
+| `MarketSplit-01` | **3 of 3** | 1 of 3 |
+
+The mechanism is worth recording, because it is the opposite of the stated intent of this ADR.
+Drawing per tie supplies **intra-restart** diversification — every node's tie is an independent
+coin flip, so one long search keeps varying its ordering — whereas this ADR only ever set out to
+diversify *between* restarts. A per-variable key keeps the inter-restart diversity and silently
+removes the intra-restart kind, and the instances that lost are exactly the ones that run as a
+single long search rather than many short restarts. The accidental half of the mechanism turns out
+to be load-bearing.
+
+Anyone reaching for this again should know the comparability problem is real and still unsolved; the
+fix has to preserve per-node variation, not just per-restart variation. Making
+`RestartRandomization.seeded`'s `randomFor` a pure function of `(baseSeed, restartIndex)` addresses
+the cross-search half of the problem without touching tie-breaking at all, and remains unmeasured.
