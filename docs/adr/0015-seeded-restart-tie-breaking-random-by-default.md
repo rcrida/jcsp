@@ -101,10 +101,10 @@ it should be on by default.
   case motivating the default-to-random reversal above: an accidental mechanism that silently does
   nothing for some instances is strictly worse than a controlled one that reliably diversifies.
 
-## Rejected (2026-10-05): two attempts to depend less on the random tie-break
+## Rejected (2026-10-05): three attempts to depend less on the random tie-break
 
-Both of the obvious ways to lean less on `tieBreakRandom` were built and measured, and both lost
-corpus instances against the uniform draw per tie that this ADR introduced. Taken together they say
+Every obvious way to lean less on `tieBreakRandom` was built and measured, and all of them lost
+instances against the uniform draw per tie that this ADR introduced. Taken together they say
 something worth knowing: **on this corpus, blind per-node randomness in tie-breaking beats both
 information and reproducibility.** That is the opposite of what one would guess, which is why it is
 recorded at length rather than as a line.
@@ -113,7 +113,26 @@ recorded at length rather than as a line.
 |---|---|---|---|
 | per-tie uniform draw (kept) | **84** | — | — |
 | per-variable key, below | 82 | `qwh-o30-h374-01`, `MarketSplit-01` | none |
-| conflict-activity key, below | 81 | those two plus `BinPacking-sum-n1c1w4a` | none |
+| conflict-activity key, most-active first | 81 | those two plus `BinPacking-sum-n1c1w4a` | none |
+| conflict-activity key, least-active first | not swept | see below | — |
+
+**The third attempt is what makes the conclusion precise: the direction of the informative key does
+not matter, narrowing does.** Preferring the *least*-active candidate is the natural inversion — it
+complements `lastConflictVariable`'s fail-first override instead of doubling down on it, and it is
+self-balancing, since a variable grows less preferred as it accumulates activity, so which tied
+candidate wins keeps rotating. It recovered one of the instances the most-active version lost and
+lost another outright. Across the three canary instances at two seeds each, the kept uniform draw
+solves 6 of 6 and the inversion 3 of 6:
+
+| instance | per-tie draw | most-active | least-active |
+|---|---|---|---|
+| `qwh-o30-h374-01` | 2 of 2 | 1 of 3 | **0 of 2** |
+| `MarketSplit-01` | 2 of 2 | 3 of 3 | 1 of 2 |
+| `BinPacking-sum-n1c1w4a` | 2 of 2 | lost in the sweep | 2 of 2 |
+
+Two opposite orderings of the same signal both losing instances rules out "wrong direction" as the
+explanation and leaves the narrowing itself. Whatever a secondary key prefers, it decides what the
+draw would otherwise have varied, and that variation is the thing earning its keep.
 
 A caveat on that precision: both lost instances sit near the time limit (45s and 13s of 60s), and
 `AC3`'s arc order is salted per JVM independently of this mechanism's seed, so an instance at the
