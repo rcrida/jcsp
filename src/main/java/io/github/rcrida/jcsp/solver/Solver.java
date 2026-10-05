@@ -303,9 +303,25 @@ public interface Solver {
                 // chain's without that chain's interval-snapping fixpoint in front of it (see
                 // satisfactionSearch), so a non-singleton IntervalDomain would reach a DomainValuesOrderer
                 // that cannot enumerate one. Those problems keep branch-and-bound's own first descent.
-                Solver firstSolutionSolver = hasContinuous
+                // Wrapped in a fixpoint, unlike the satisfaction chain's use of satisfactionSearch:
+                // a bounded probe hands the search a problem whose objective bound has only just been
+                // narrowed into one variable's domain, and without propagating that first the search
+                // starts from root domains that do not reflect the bound at all. On a job shop that is
+                // the difference between a question answered in seconds and one that cannot be
+                // answered -- see ADR-0044. snap is irrelevant here, since a problem with any
+                // BoundedDomain gets no seeder at all.
+                IncumbentSeeder incumbentSeeder = hasContinuous
                         ? null
-                        : satisfactionSearch(config, fixpointPropagation, DomWdegLubySearch.DEFAULT_MAX_RESTARTS);
+                        : BoundedFirstSolution.builder()
+                                .search(restartBudget -> PropagationFixpointSolver.builder()
+                                        .inner(satisfactionSearch(config, fixpointPropagation, restartBudget))
+                                        .snap(false)
+                                        .listener(config.getListener())
+                                        .statistics(config.getStatistics())
+                                        .cancellation(cancellation)
+                                        .fixpointPropagation(fixpointPropagation)
+                                        .build())
+                                .build();
                 // Handles any BoundedDomain variables itself -- see this class's own Javadoc and
                 // ADR-0009 -- rather than being nested inside a BisectionConditioningSolver that runs
                 // first, so it's the chain's terminal solver unconditionally.
@@ -319,7 +335,7 @@ public interface Solver {
                         .statistics(config.getStatistics())
                         .listener(config.getListener())
                         .cancellation(cancellation)
-                        .firstSolutionSolver(firstSolutionSolver)
+                        .incumbentSeeder(incumbentSeeder)
                         .build();
                 Solver afterPropagation = hasSets
                         ? SetBranchingSolver.builder().inner(terminal).objective(objective).listener(config.getListener())

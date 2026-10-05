@@ -711,17 +711,28 @@ public class BranchAndBoundSolverTest {
                 .containsEntry(CUT_X, 0).containsEntry(CUT_Y, 0).containsEntry(CUT_A, 3);
     }
 
-    // ── First-solution solver (ADR-0041) ──────────────────────────────────────
+    // ── Seeded incumbent (ADR-0041) ───────────────────────────────────────────
 
-    /** {@link #solver} plus an injected first-solution search. */
-    static BranchAndBoundSolver seededSolver(Solver firstSolutionSolver) {
+    /** {@link #solver} plus an injected {@link IncumbentSeeder}. */
+    static BranchAndBoundSolver seededSolver(IncumbentSeeder seeder) {
+        return seededSolver(seeder, new PhaseMemory());
+    }
+
+    /** {@link #seededSolver} sharing a caller-supplied {@link PhaseMemory}, so it can be inspected. */
+    static BranchAndBoundSolver seededSolver(IncumbentSeeder seeder, PhaseMemory phaseMemory) {
         return BranchAndBoundSolver.builder()
                 .objective(BranchAndBoundSolverTest::sum)
                 .selectorFactory(constraints -> MinimumRemainingValuesSelector.INSTANCE)
                 .domainValuesOrderer(DefaultValueOrderer.INSTANCE)
                 .inference((problem, variable, assignment) -> Optional.of(problem))
-                .firstSolutionSolver(firstSolutionSolver)
+                .incumbentSeeder(seeder)
+                .phaseMemory(phaseMemory)
                 .build();
+    }
+
+    /** A seeder that always offers {@code solution}. */
+    static IncumbentSeeder seeds(Assignment solution) {
+        return (csp, objective) -> Optional.of(solution);
     }
 
     /** A feasible but non-optimal solution of {@link #CSP}: distinct values summing to 12, not 6. */
@@ -729,26 +740,14 @@ public class BranchAndBoundSolverTest {
         return Assignment.of(java.util.Map.of(X, 3, Y, 4, Z, 5));
     }
 
-    /** {@link #seededSolver} sharing a caller-supplied {@link PhaseMemory}, so it can be inspected. */
-    static BranchAndBoundSolver seededSolver(Solver firstSolutionSolver, PhaseMemory phaseMemory) {
-        return BranchAndBoundSolver.builder()
-                .objective(BranchAndBoundSolverTest::sum)
-                .selectorFactory(constraints -> MinimumRemainingValuesSelector.INSTANCE)
-                .domainValuesOrderer(DefaultValueOrderer.INSTANCE)
-                .inference((problem, variable, assignment) -> Optional.of(problem))
-                .firstSolutionSolver(firstSolutionSolver)
-                .phaseMemory(phaseMemory)
-                .build();
-    }
-
     @Test
-    void firstSolutionSolver_doesNotRecordItsSolutionInThePhaseMemory() {
-        // The injected search ignores the objective, so replaying its path would steer branching
-        // toward a region chosen with no regard for cost. Only the first element is pulled, so the
-        // seed is the only solution accepted so far and the memory reflects it alone.
+    void seededIncumbent_isNotRecordedInThePhaseMemory() {
+        // A seeder ranks by feasibility first, so replaying its path would steer branching toward a
+        // region chosen with little regard for cost. Only the first element is pulled, so the seed is
+        // the only solution accepted so far and the memory reflects it alone.
         val memory = new PhaseMemory();
 
-        val seed = seededSolver(csp -> Stream.of(suboptimal()), memory).getSolutions(CSP).findFirst();
+        val seed = seededSolver(seeds(suboptimal()), memory).getSolutions(CSP).findFirst();
 
         assertThat(seed).isPresent();
         assertThat(sum(seed.get())).isEqualTo(12);
@@ -763,18 +762,16 @@ public class BranchAndBoundSolverTest {
         // for the solutions this search finds itself.
         val memory = new PhaseMemory();
 
-        val improving = seededSolver(csp -> Stream.of(suboptimal()), memory).getSolutions(CSP).toList();
+        val improving = seededSolver(seeds(suboptimal()), memory).getSolutions(CSP).toList();
         Object bestX = improving.getLast().getValue(X).orElseThrow();
 
         assertThat(memory.prioritise(X, List.<Object>of(5, 4, 3, 2, 1))).startsWith(bestX);
     }
 
     @Test
-    void firstSolutionSolver_seedsTheIncumbentAndIsEmittedFirst() {
-        val improving = seededSolver(csp -> Stream.of(suboptimal())).getSolutions(CSP).toList();
+    void seededIncumbent_leadsTheStreamAndEveryLaterElementImprovesOnIt() {
+        val improving = seededSolver(seeds(suboptimal())).getSolutions(CSP).toList();
 
-        // The injected solution leads, every later element strictly improves on it, and the search
-        // below still reaches the true optimum.
         assertThat(sum(improving.getFirst())).isEqualTo(12);
         for (int i = 1; i < improving.size(); i++) {
             assertThat(sum(improving.get(i))).isLessThan(sum(improving.get(i - 1)));
@@ -783,11 +780,11 @@ public class BranchAndBoundSolverTest {
     }
 
     @Test
-    void firstSolutionSolver_seedsABoundThatIsInForceFromTheFirstNode() {
+    void seededIncumbent_isInForceFromTheFirstNode() {
         // Every emitted solution strictly improves on the seed, which is only possible if the
         // incumbent was already 12 when the search below started -- it never gets the chance to
         // emit the costlier solutions an unbounded search walks through first.
-        val improving = seededSolver(csp -> Stream.of(suboptimal())).getSolutions(CSP).toList();
+        val improving = seededSolver(seeds(suboptimal())).getSolutions(CSP).toList();
 
         assertThat(improving.stream().skip(1).map(BranchAndBoundSolverTest::sum)).allSatisfy(
                 cost -> assertThat(cost).isLessThan(12));
@@ -795,47 +792,27 @@ public class BranchAndBoundSolverTest {
     }
 
     @Test
-    void firstSolutionSolver_findingNothing_leavesTheSearchUnbounded() {
-        val improving = seededSolver(csp -> Stream.empty()).getSolutions(CSP).toList();
+    void seederFindingNothing_leavesTheSearchUnbounded() {
+        val improving = seededSolver((csp, objective) -> Optional.empty()).getSolutions(CSP).toList();
 
         assertThat(sum(improving.getLast())).isEqualTo(6);
     }
 
     @Test
-    void firstSolutionSolver_exceedingItsLimits_isCaughtRatherThanPropagated() {
-        // The satisfaction chain's single-solution searches throw on truncation (ADR-0011); this
-        // class has always truncated silently, and seeding must not change that.
-        val improving = seededSolver(csp -> {
-            throw new LimitExceededException(new io.github.rcrida.jcsp.assignments.Statistics());
-        }).getSolutions(CSP).toList();
-
-        assertThat(sum(improving.getLast())).isEqualTo(6);
-    }
-
-    @Test
-    void firstSolutionSolver_beingCancelled_isCaughtRatherThanPropagated() {
-        val improving = seededSolver(csp -> {
-            throw new SolverCancelledException(new io.github.rcrida.jcsp.assignments.Statistics());
-        }).getSolutions(CSP).toList();
-
-        assertThat(sum(improving.getLast())).isEqualTo(6);
-    }
-
-    @Test
-    void firstSolutionSolver_returningAnIncompleteAssignment_isRejected() {
+    void seederOfferingAnIncompleteAssignment_isRejected() {
         // Trusting this would set an incumbent from a cost computed over unassigned variables,
         // which sum() reads as 0 -- an incumbent so low it would prune every real solution away.
-        val improving = seededSolver(csp -> Stream.of(Assignment.of(java.util.Map.of(X, 1))))
+        val improving = seededSolver(seeds(Assignment.of(java.util.Map.of(X, 1))))
                 .getSolutions(CSP).toList();
 
         assertThat(sum(improving.getLast())).isEqualTo(6);
     }
 
     @Test
-    void firstSolutionSolver_returningAnInconsistentAssignment_isRejected() {
+    void seederOfferingAnInconsistentAssignment_isRejected() {
         // Complete, and cheaper than any real solution (1+1+1), but it violates allDiff. Adopting
         // it as the incumbent would prune the whole space and report no solution at all.
-        val improving = seededSolver(csp -> Stream.of(Assignment.of(java.util.Map.of(X, 1, Y, 1, Z, 1))))
+        val improving = seededSolver(seeds(Assignment.of(java.util.Map.of(X, 1, Y, 1, Z, 1))))
                 .getSolutions(CSP).toList();
 
         assertThat(sum(improving.getLast())).isEqualTo(6);

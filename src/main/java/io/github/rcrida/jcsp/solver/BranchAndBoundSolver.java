@@ -14,11 +14,8 @@ import io.github.rcrida.jcsp.assignments.NogoodStore;
 import io.github.rcrida.jcsp.assignments.SolverLimits;
 import io.github.rcrida.jcsp.assignments.Statistics;
 import io.github.rcrida.jcsp.consistency.ConsistencyResult;
-import io.github.rcrida.jcsp.constraints.Operator;
-import io.github.rcrida.jcsp.constraints.nary.LinearBoundConstraint;
 import io.github.rcrida.jcsp.consistency.Inference;
 import io.github.rcrida.jcsp.domains.BoundedDomain;
-import io.github.rcrida.jcsp.domains.Domain;
 import io.github.rcrida.jcsp.solver.listener.SolverListener;
 import io.github.rcrida.jcsp.solver.backtrackingsearch.order.DomainValuesOrderer;
 import io.github.rcrida.jcsp.solver.backtrackingsearch.order.PhaseMemory;
@@ -34,7 +31,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.function.ToDoubleFunction;
-import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Stream;
 
 /**
@@ -111,12 +107,12 @@ import java.util.stream.Stream;
  * Reaching the <em>first</em> solution is a pure feasibility search: there is no incumbent yet, so
  * neither the bound check in {@link #searchCut} nor {@link #applyObjectiveCut} can prune anything,
  * and on a heavy-tailed problem one descent can commit to a subtree it never escapes. An optional
- * {@link #firstSolutionSolver} is given that job instead -- {@link Solver.Factory} supplies the
- * satisfaction chain's own search, so it brings Luby restarts, phase saving, stagnation resets and
- * structural decomposition that this class has none of -- and whatever it finds seeds the incumbent
- * for the ordinary search below. The search that follows is the unchanged, unrestarted one, which is
- * what keeps draining this stream a proof of optimality. See
- * <a href="../../../../../../../docs/adr/0041-reuse-the-satisfaction-search-for-the-first-solution.md">ADR-0041</a>.
+ * {@link #incumbentSeeder} is given that job instead, and how it goes about it is entirely its own
+ * business -- {@link Solver.Factory} supplies a {@link BoundedFirstSolution} over the satisfaction
+ * chain's own search. The search that follows is the unchanged, unrestarted one, which is what keeps
+ * draining this stream a proof of optimality. See
+ * <a href="../../../../../../../docs/adr/0041-reuse-the-satisfaction-search-for-the-first-solution.md">ADR-0041</a>
+ * and <a href="../../../../../../../docs/adr/0044-bounded-probes-for-the-starting-incumbent.md">ADR-0044</a>.
  */
 @Slf4j
 @Value
@@ -137,18 +133,15 @@ public class BranchAndBoundSolver implements Solver {
     Object lpModelCacheKey = new Object();
 
     /**
-     * Single-slot cache for {@link #objectiveCut}'s constraint, keyed on the incumbent it was built
-     * for. The incumbent changes only when a strictly better solution is found -- rare relative to
-     * the per-node rate this is consulted at -- so rebuilding the constraint (which copies a
-     * variable set) at every node would be pure waste. Same field conventions and rationale as
-     * {@link #lpModelCacheKey}: direct initializer so Lombok's builder never sees it, and excluded
-     * from this value class's identity.
+     * Applies the incumbent as a propagated constraint; see {@link #applyObjectiveCut}. Carries its
+     * own single-slot cache, since the incumbent changes only when a strictly better solution is
+     * found -- rare relative to the per-node rate it is consulted at -- so rebuilding the constraint
+     * (which copies a variable set) at every node would be pure waste. Same field conventions and
+     * rationale as {@link #lpModelCacheKey}: direct initializer so Lombok's builder never sees it,
+     * and excluded from this value class's identity.
      */
     @EqualsAndHashCode.Exclude @ToString.Exclude @Getter(AccessLevel.NONE)
-    AtomicReference<ObjectiveCut> objectiveCutCache = new AtomicReference<>();
-
-    /** The cut constraint built for one incumbent value; see {@link #objectiveCutCache}. */
-    private record ObjectiveCut(double incumbent, @Nullable LinearBoundConstraint<Integer> constraint) {}
+    ObjectiveCut objectiveCut = new ObjectiveCut();
 
     /**
      * Built once per {@link #getSolutions} call, as {@link DomWdegLubySearch} does and for the same
@@ -197,18 +190,16 @@ public class BranchAndBoundSolver implements Solver {
     @NonNull PhaseMemory phaseMemory = new PhaseMemory();
 
     /**
-     * Finds the first feasible solution, ignoring {@link #objective} entirely, before the ordinary
-     * branch-and-bound search runs -- or {@code null} to descend straight into that search, which is
-     * what a directly-constructed solver gets. {@link Solver.Factory#satisfactionSearch} is what
-     * the optimization chain passes; see this class's own Javadoc and ADR-0041 for why that search
-     * and not a restart ladder reimplemented here.
+     * Supplies a solution to start from, before this class's own search begins -- or {@code null} to
+     * descend straight into that search, which is what a directly-constructed solver gets. The
+     * optimization chain passes a {@link BoundedFirstSolution} over the satisfaction chain's search.
      * <p>
-     * Only ever consulted for the <em>first</em> solution. Every later one still comes from
-     * {@link #search}, so the bound, the objective cut and the completeness of the final sweep are
-     * untouched by whatever this does.
+     * How it finds one is entirely its own business, and nothing about it can affect correctness:
+     * only the incumbent crosses the boundary, this class validates what it is handed, and every
+     * solution after the first still comes from {@link #search}. See {@link IncumbentSeeder}.
      */
     @Builder.Default
-    @Nullable Solver firstSolutionSolver = null;
+    @Nullable IncumbentSeeder incumbentSeeder = null;
 
     @Override
     public Stream<Assignment> getSolutions(@NonNull ConstraintSatisfactionProblem csp) {
@@ -230,48 +221,28 @@ public class BranchAndBoundSolver implements Solver {
     }
 
     /**
-     * Runs {@link #firstSolutionSolver} and adopts whatever it finds as the starting incumbent, so
-     * the search below begins with a bound instead of having to find one. Empty when there is no
-     * such solver, when it found nothing, or when it gave up -- in every one of those cases the
-     * search below simply starts unbounded, exactly as it did before this field existed.
+     * Adopts {@link #incumbentSeeder}'s solution as the starting incumbent, so the search below
+     * begins with a bound instead of having to find one. Empty when there is no seeder or it found
+     * nothing, in which case the search below simply starts unbounded as it always did.
      * <p>
-     * {@link Solver#getSolution} is used rather than {@link Solver#getSolutions}, because for the
-     * satisfaction chain only the former reaches {@link DomWdegLubySearch}'s restarts at all, which
-     * is the entire reason for delegating.
-     * <p>
-     * {@link InconclusiveSearchException} is caught rather than propagated: the satisfaction chain's
-     * single-solution searches throw when they stop early (ADR-0011, ADR-0043) while this class has
-     * always truncated silently, and this phase is not the place to change which of those two
-     * contracts {@code getSolutions} honours. Note that catching it is also what makes {@link
-     * Optional#empty()} from here mean "no seed", whatever the reason -- this method does not need
-     * the distinction, but it is now available to anyone who does.
+     * Validated before being trusted, the same way {@link #resolveContinuousResidual} validates its
+     * LP fill: a solution to {@code csp} is feasible for the optimization problem too (an objective
+     * is not a constraint), but that is a property of the seeder rather than of anything checked
+     * here, and an incumbent that is not actually feasible would prune away real solutions.
      * <p>
      * Only the incumbent is taken from it. The solution's values are <em>not</em> written to
-     * {@link #phaseMemory} (see {@link #resolveComplete}, which records its own): this search
-     * ignores the objective, so replaying its path steers branching toward a region chosen with no
-     * regard for cost. Measured, not assumed -- recording it cost
+     * {@link #phaseMemory} (see {@link #resolveComplete}, which records its own): a seeder ranks by
+     * feasibility first and cost second at best, so replaying its path steers branching toward a
+     * region chosen with little regard for cost. Measured, not assumed -- recording it cost
      * {@code TravellingSalesman-20-30-00} an objective of 166-226 against 118 without, across three
      * seeds, and left {@code GraphColoring-3-fullins-4} proving optimality with one second to spare
      * instead of thirty (ADR-0041).
-     * <p>
-     * The result is validated before being trusted, the same way {@link
-     * #resolveContinuousResidual} validates its LP fill: a solution to {@code csp} is feasible for
-     * the optimization problem too (an objective is not a constraint), but that is a property of the
-     * injected solver rather than of anything checked here, and an incumbent that is not actually
-     * feasible would prune away real solutions.
      */
     private Optional<Assignment> seedIncumbent(ConstraintSatisfactionProblem csp, double[] incumbent) {
-        if (firstSolutionSolver == null) {
+        if (incumbentSeeder == null) {
             return Optional.empty();
         }
-        Optional<Assignment> candidate;
-        try {
-            candidate = firstSolutionSolver.getSolution(csp);
-        } catch (InconclusiveSearchException e) {
-            log.info("First-solution search stopped before finding one: {}", e.getClass().getSimpleName());
-            return Optional.empty();
-        }
-        return candidate
+        return incumbentSeeder.seed(csp, objective)
                 .filter(solution -> solution.isComplete(csp) && solution.isConsistent(csp))
                 .flatMap(solution -> accept(solution, incumbent));
     }
@@ -320,95 +291,19 @@ public class BranchAndBoundSolver implements Solver {
     }
 
     /**
-     * Narrows {@code csp}'s domains by the <em>objective cut</em> {@code sum(c_v * v) <= incumbent -
-     * constant - 1}, or {@code null} when that already wipes a domain out and the whole subtree can
-     * be pruned.
+     * Narrows {@code csp}'s domains so nothing at or above the incumbent's cost remains, or {@code
+     * null} when that already wipes a domain out and the whole subtree can be pruned.
      * <p>
-     * This is the incumbent expressed as a <em>constraint</em> rather than only as the branch-cut
-     * predicate {@link #search} already applies. The distinction is the point: a branch cut rejects
-     * one node, whereas narrowing a domain is information every other propagator then compounds
-     * with, via the ordinary fixpoint the child node's {@link #inference} runs. Without it the
-     * incumbent is invisible to {@link io.github.rcrida.jcsp.constraints.nary.AllDiffConstraint},
-     * {@link io.github.rcrida.jcsp.constraints.nary.GlobalCardinalityConstraint} and every other
-     * propagator, no matter how good it gets.
-     * <p>
-     * Sound because it removes only assignments whose cost is at least the incumbent, and those are
-     * by definition not improving -- the only thing {@link #getSolutions} ever promises to emit.
-     * <p>
-     * Restricted to a wholly integral {@link LinearObjective} (every coefficient and the constant),
-     * which is what makes the strict {@code < incumbent} expressible exactly as {@code <= incumbent
-     * - 1} with no epsilon. A non-integral objective is left alone rather than approximated: the
-     * cut would have to be loosened by an epsilon to stay sound, and a wrong one here silently
-     * discards the true optimum instead of failing.
+     * The bound is expressed as a <em>constraint</em> rather than only as the branch-cut predicate
+     * {@link #search} already applies, which is the point: a branch cut rejects one node, whereas
+     * narrowing a domain is information every other propagator then compounds with, via the ordinary
+     * fixpoint the child node's {@link #inference} runs. {@link ObjectiveCut} owns that, shared with
+     * {@link BoundedFirstSolution}, which bounds its probes the same way.
      */
     private @Nullable ConstraintSatisfactionProblem applyObjectiveCut(ConstraintSatisfactionProblem csp, double incumbent) {
-        if (!(objective instanceof LinearObjective linearObjective) || incumbent == Double.MAX_VALUE) {
-            return csp;
-        }
-        LinearBoundConstraint<Integer> constraint = cutFor(linearObjective, incumbent, csp);
-        if (constraint == null) {
-            return csp;
-        }
-        Optional<Map<Variable<?>, Domain<?>>> narrowed = constraint.propagate(csp.getVariableDomains());
-        if (narrowed.isEmpty()) {
-            return null;
-        }
-        return narrowed.get().isEmpty() ? csp : csp.withDomains(narrowed.get());
-    }
-
-    /**
-     * The cut constraint for {@code incumbent}, from {@link #objectiveCutCache} when it was already
-     * built for that same incumbent. A {@code null} entry is cached too, so a non-integral objective
-     * is diagnosed once rather than re-examined at every node.
-     */
-    private @Nullable LinearBoundConstraint<Integer> cutFor(LinearObjective objective, double incumbent,
-                                                            ConstraintSatisfactionProblem csp) {
-        ObjectiveCut cached = objectiveCutCache.get();
-        if (cached != null && cached.incumbent() == incumbent) {
-            return cached.constraint();
-        }
-        LinearBoundConstraint<Integer> built = buildCut(objective, incumbent, csp);
-        objectiveCutCache.set(new ObjectiveCut(incumbent, built));
-        return built;
-    }
-
-    /**
-     * The cut as a {@link LinearBoundConstraint}, or {@code null} when this objective can't be
-     * expressed as one exactly -- see {@link #applyObjectiveCut} for why an inexact cut is not worth
-     * having. The bound is {@code incumbent - constant - 1}: one strictly better than the incumbent,
-     * which for a wholly integral objective is exactly representable rather than an epsilon away.
-     * <p>
-     * A {@link BoundedDomain} anywhere in the objective disqualifies it outright, for two separate
-     * reasons that happen to coincide: {@code -1} is not the next representable improvement over a
-     * continuous cost, and an {@code Integer}-bounded {@link LinearBoundConstraint} dispatches to
-     * integer propagation, which cannot read a continuous domain at all. The MIPLIB {@code flugpl}
-     * instance (see {@code FlugplTest}) is exactly this mixed integer/continuous shape.
-     */
-    @SuppressWarnings("unchecked")
-    private static @Nullable LinearBoundConstraint<Integer> buildCut(LinearObjective objective, double incumbent,
-                                                                     ConstraintSatisfactionProblem csp) {
-        double bound = incumbent - objective.getConstant() - 1;
-        if (!isExactInt(bound)) {
-            return null;
-        }
-        Map<Variable<Integer>, Integer> coefficients = new HashMap<>();
-        for (var entry : objective.getCoefficients().entrySet()) {
-            if (!isExactInt(entry.getValue()) || csp.getDomain(entry.getKey()) instanceof BoundedDomain<?>) {
-                return null;
-            }
-            coefficients.put((Variable<Integer>) entry.getKey(), entry.getValue().intValue());
-        }
-        return LinearBoundConstraint.of(coefficients, Operator.LEQ, (int) bound);
-    }
-
-    /**
-     * Whether {@code value} is a whole number that survives a cast to {@code int} unchanged. The
-     * magnitude test is not redundant with the first: it rejects an infinity (which {@link
-     * Math#rint} reports as already whole) and a large finite value (which the cast would silently
-     * wrap), either of which would otherwise produce a wrong cut rather than no cut.
-     */
-    private static boolean isExactInt(double value) {
-        return value == Math.rint(value) && Math.abs(value) <= Integer.MAX_VALUE;
+        return objective instanceof LinearObjective linearObjective
+                ? objectiveCut.narrow(csp, linearObjective, incumbent)
+                : csp;
     }
 
     /**

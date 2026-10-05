@@ -105,3 +105,4 @@ section instead.
 | [0041](0041-reuse-the-satisfaction-search-for-the-first-solution.md) | Reuse the satisfaction chain's search to find branch-and-bound's first solution, rather than reimplementing restarts inside it | Accepted |
 | [0042](0042-tree-decomposition-cost-control.md) | Make tree decomposition's clique enumeration interruptible, decided before it is paid for, and capped for time rather than memory | Accepted |
 | [0043](0043-inconclusive-is-not-unsatisfiable.md) | Reserve an empty `getSolution()` for a proven refutation, and throw from every path that stopped early | Accepted |
+| [0044](0044-bounded-probes-for-the-starting-incumbent.md) | Tighten branch-and-bound's starting incumbent by asking a feasibility search bounded questions, behind an `IncumbentSeeder` | Accepted |
