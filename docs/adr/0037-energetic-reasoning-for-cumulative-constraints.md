@@ -125,3 +125,17 @@ untestable branch.
 "dwarfed once cumulative constraints are present". That verdict assumed the cumulative constraints
 were contributing, which before ADR-0036 and this change they were not — so it is worth revisiting,
 though behind an ordering fix.
+
+## How to verify a change here
+
+**The bundled corpus is not evidence for this class.** None of the 85 instances in
+`src/test/resources/xcsp3/competition/` declares a `<cumulative>` constraint (re-checked
+2026-10-06). The only corpus route into this family is ADR-0036's redundant axis projections for a
+2D `<noOverlap>`, which build `CumulativeVariableConstraint` — and only `StripPacking-C1P1` does
+that, since `Taillard-js-015-15-0`'s `<noOverlap>` is the 1D form and routes to
+`DisjunctiveConstraint` instead. So a clean corpus sweep after a change to the fixed-duration path
+says nothing at all, and should not be reported as though it did.
+
+Verify instead with `CumulativeConstraintTest`/`CumulativeVariableConstraintTest` plus the
+cumulative-using example tests, `SprintSchedulingTest` and `Prob061JobShopSchedulingTest`, and use
+`StripPacking-C1P1` for the variable-duration path.

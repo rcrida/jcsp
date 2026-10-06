@@ -36,6 +36,14 @@ import java.util.Optional;
  * disguised scalar all-different). This is a soundness-preserving, non-regression w.r.t. the
  * reified decomposition replaced above -- that decomposition's own per-pair binary constraints hit
  * the same limit via plain arc consistency -- not a weakening introduced by this class.
+ * <p>
+ * Closing that gap in general is not a matter of implementing a known algorithm: {@link
+ * AllDiffConstraint}'s GAC relies on a bipartite variable/value matching, where distinct vectors'
+ * conflict structure is over pairs of rows and generalizes to k-dimensional matching, NP-hard for
+ * {@code k >= 3}. One bounded improvement is available without that: where several pairs' sole
+ * remaining ambiguous position falls on the same column, that column is a plain scalar
+ * all-different and could be routed through {@link AllDiffConstraint}'s own GAC. Deliberately not
+ * built -- it is the tractable fragment, not the general case.
  */
 @SuperBuilder
 @EqualsAndHashCode(callSuper = true)

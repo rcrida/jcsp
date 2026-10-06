@@ -1605,6 +1605,10 @@ final class Xcsp3CallbackHandler implements XCallbacks2 {
      * {@code count}-to-distinct-values link) is always added directly, never reified -- only the
      * condition <em>comparing</em> {@code count} is a meaningful thing to reify ({@code b <-> count
      * <op> k}); the link itself is a definition, not a proposition with a truth value of its own.
+     * <p>
+     * A {@code (ne,1)} condition is logically the same constraint, since {@code count} is bounded
+     * {@code [1, vars.size()]} and so cannot be below 1, but it is deliberately not routed here:
+     * no bundled instance uses that shape, and this is the one place to extend if one appears.
      */
     void applyNValuesCondition(Set<Variable<Integer>> vars, Condition condition, String id) {
         if (condition instanceof ConditionVal val && mapOperator(val.operator) == Operator.GT && val.k == 1) {

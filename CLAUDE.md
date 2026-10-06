@@ -207,7 +207,7 @@ csp.reifyConstraint(b, constraint)    // b <-> constraint
 csp.impliesConstraint(b, constraint)  // b -> constraint
 ```
 
-`AndConstraint` wraps a set of constraints as a single one (chiefly as a reification body). A `Variable`-target sibling (`SumVariableConstraint`, `MaxVariableConstraint`, `CountVariableConstraint`, …) extends `NaryConstraint` directly because `UniformNaryConstraint#isSatisfiedBy` is `final`. Notable propagators with their own ADRs:
+`AndConstraint` wraps a set of constraints as a single one (chiefly as a reification body). A `Variable`-target sibling (`SumVariableConstraint`, `MaxVariableConstraint`, `CountVariableConstraint`, …) extends `NaryConstraint` directly because `UniformNaryConstraint#isSatisfiedBy` is `final` — but that reason only applies from three variables up. Count the total first: a two-variable sibling (`SquareVariableConstraint`, operand plus target) extends `BinaryConstraint`, whose `isSatisfiedBy(L, R)` is abstract, and so gets AC3 arc participation that `NaryConstraint` would forgo. Notable propagators with their own ADRs:
 - GCC: [ADR-0016](docs/adr/0016-flow-based-gac-for-global-cardinality-constraint.md), [ADR-0017](docs/adr/0017-range-based-gac-for-global-cardinality-constraint.md)
 - disjunctive: [ADR-0018](docs/adr/0018-disjunctive-edge-finding-propagator.md)
 - tables: [ADR-0021](docs/adr/0021-bitset-indexed-gac-for-table-constraints.md)

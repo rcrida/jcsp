@@ -22,6 +22,17 @@ import java.util.function.Function;
  * Xcsp3CallbackHandler#recognizeConstraint}. Adding support for a new corpus-confirmed shape is a
  * matter of writing one new implementation and adding it to that registration list -- no change to
  * {@link Xcsp3CallbackHandler} itself beyond that one line.
+ * <p>
+ * <b>A new implementation must match its compound operand at both {@code sons[0]} and {@code
+ * sons[1]}.</b> {@code xcsp3-tools}' own canonizer rewrites {@code ge}/{@code gt} into {@code
+ * le}/{@code lt} by swapping the operand <em>positions</em>, not merely by inverting the operator,
+ * so {@code ge(mul(x,x),4)} arrives as {@code le(4,mul(x,x))} with the compound node on the right.
+ * A recognizer that assumes the compound is always {@code sons[0]} silently declines the whole
+ * {@code ge}/{@code gt} family and falls back to an unpropagated predicate -- a latent gap with no
+ * failing test, since declining is always legal. {@link Xcsp3CallbackHandler#flip} inverts the
+ * operator for the {@code sons[1]} case; {@link ProductRecognizer}, {@link SumOrLinearRecognizer},
+ * {@link RelationSumRecognizer} and {@link GroundRelationRecognizer} each carry the resulting
+ * dual-order match, all four having had exactly this bug.
  */
 @FunctionalInterface
 interface ConstraintRecognizer {
