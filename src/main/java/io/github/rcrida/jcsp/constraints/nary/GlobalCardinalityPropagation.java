@@ -7,7 +7,6 @@ import io.github.rcrida.jcsp.variables.Variable;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Deque;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -78,23 +77,54 @@ final class GlobalCardinalityPropagation {
         private final int[] edgeTo;
         private final int[] capacity;
         private int edgeCount;
-        private final List<List<Integer>> adj;
+        /**
+         * Per-node incident edge indices as plain {@code int[]} rows with their own lengths, rather
+         * than {@code List<List<Integer>>}. Every enqueue and every adjacency step in
+         * {@link #bfsAugmentingPath} boxed an {@code int} otherwise, and node indices here run well
+         * past {@link Integer}'s cache, so each one allocated: JFR on {@code BinPacking-tab-n1c1w4a}
+         * put {@link ArrayDeque#addLast} alone at 71% of the whole solve, and this method's stack at
+         * roughly 85%. Rows are appended to in insertion order and grown by doubling, which keeps
+         * iteration order identical to the {@link List} form -- max-flow's *value* is independent of
+         * augmenting-path order, but which specific maximum flow is found is not, and
+         * {@link #findViolatingSubset} reads a min-cut off it.
+         */
+        private final int[][] adj;
+        private final int[] adjSize;
+        /** Reused across the augmentations of one {@link #maxflow}, which runs one BFS per unit of flow. */
+        private final int[] queue;
+        private final int[] parentEdge;
+        private final boolean[] visited;
 
         MaxFlow(int n, int maxEdges) {
             this.n = n;
             edgeTo = new int[maxEdges];
             capacity = new int[maxEdges];
-            adj = new ArrayList<>(n);
-            for (int i = 0; i < n; i++) adj.add(new ArrayList<>());
+            adj = new int[n][];
+            adjSize = new int[n];
+            queue = new int[n];
+            parentEdge = new int[n];
+            visited = new boolean[n];
+        }
+
+        private void append(int node, int edge) {
+            int[] row = adj[node];
+            if (row == null) {
+                row = new int[4];
+                adj[node] = row;
+            } else if (adjSize[node] == row.length) {
+                row = Arrays.copyOf(row, row.length * 2);
+                adj[node] = row;
+            }
+            row[adjSize[node]++] = edge;
         }
 
         int addEdge(int u, int w, int cap) {
             int fwd = edgeCount;
             edgeTo[edgeCount] = w; capacity[edgeCount] = cap; edgeCount++;
-            adj.get(u).add(fwd);
+            append(u, fwd);
             int rev = edgeCount;
             edgeTo[edgeCount] = u; capacity[edgeCount] = 0; edgeCount++;
-            adj.get(w).add(rev);
+            append(w, rev);
             return fwd;
         }
 
@@ -107,10 +137,27 @@ final class GlobalCardinalityPropagation {
             return capacity[forwardEdge] > 0;
         }
 
+        /**
+         * Pushes this path's bottleneck along {@code forwardEdges}, returning how much moved (zero
+         * when any edge is already saturated). Only sound for a genuine source-to-sink path, which
+         * is why {@link #greedyWarmStart} enumerates the two fixed path shapes rather than taking
+         * arbitrary edge lists.
+         */
+        int pushPath(int... forwardEdges) {
+            int bottleneck = Integer.MAX_VALUE;
+            for (int e : forwardEdges) bottleneck = Math.min(bottleneck, capacity[e]);
+            if (bottleneck == 0) return 0;
+            for (int e : forwardEdges) {
+                capacity[e] -= bottleneck;
+                capacity[e ^ 1] += bottleneck;
+            }
+            return bottleneck;
+        }
+
         int maxflow(int s, int t) {
             int total = 0;
             while (true) {
-                int[] parentEdge = bfsAugmentingPath(s, t);
+                bfsAugmentingPath(s, t);
                 if (parentEdge[t] == -1) return total;
                 int bottleneck = Integer.MAX_VALUE;
                 for (int v = t; v != s; v = edgeTo[parentEdge[v] ^ 1]) {
@@ -124,44 +171,49 @@ final class GlobalCardinalityPropagation {
             }
         }
 
-        private int[] bfsAugmentingPath(int s, int t) {
-            int[] parentEdge = new int[n];
+        /** Leaves the path in {@link #parentEdge}, where {@code parentEdge[t] == -1} means none exists. */
+        private void bfsAugmentingPath(int s, int t) {
             Arrays.fill(parentEdge, -1);
-            boolean[] visited = new boolean[n];
+            Arrays.fill(visited, false);
             visited[s] = true;
-            Deque<Integer> queue = new ArrayDeque<>();
-            queue.add(s);
-            while (!queue.isEmpty()) {
-                int u = queue.poll();
-                for (int e : adj.get(u)) {
+            int head = 0;
+            int tail = 0;
+            queue[tail++] = s;
+            while (head < tail) {
+                int u = queue[head++];
+                int[] row = adj[u];
+                for (int i = 0, size = adjSize[u]; i < size; i++) {
+                    int e = row[i];
                     int w = edgeTo[e];
                     if (capacity[e] > 0 && !visited[w]) {
                         visited[w] = true;
                         parentEdge[w] = e;
-                        queue.add(w);
+                        queue[tail++] = w;
                     }
                 }
             }
-            return parentEdge;
         }
 
         /** Nodes reachable from {@code s} via positive-residual-capacity edges in the current graph. */
         boolean[] reachableFrom(int s) {
-            boolean[] visited = new boolean[n];
-            visited[s] = true;
-            Deque<Integer> queue = new ArrayDeque<>();
-            queue.add(s);
-            while (!queue.isEmpty()) {
-                int u = queue.poll();
-                for (int e : adj.get(u)) {
+            boolean[] reached = new boolean[n];
+            reached[s] = true;
+            int head = 0;
+            int tail = 0;
+            queue[tail++] = s;
+            while (head < tail) {
+                int u = queue[head++];
+                int[] row = adj[u];
+                for (int i = 0, size = adjSize[u]; i < size; i++) {
+                    int e = row[i];
                     int w = edgeTo[e];
-                    if (capacity[e] > 0 && !visited[w]) {
-                        visited[w] = true;
-                        queue.add(w);
+                    if (capacity[e] > 0 && !reached[w]) {
+                        reached[w] = true;
+                        queue[tail++] = w;
                     }
                 }
             }
-            return visited;
+            return reached;
         }
     }
 
@@ -220,8 +272,9 @@ final class GlobalCardinalityPropagation {
         int maxEdges = 2 * (n + 1 + candidateEdgeCount + 1 + t + t + 1 + 1);
 
         MaxFlow flow = new MaxFlow(totalNodes, maxEdges);
-        for (int i = 0; i < n; i++) flow.addEdge(superSource, i, 1);
-        flow.addEdge(superSource, sinkOriginal, sumLo);
+        int[] sourceToVarEdge = new int[n];
+        for (int i = 0; i < n; i++) sourceToVarEdge[i] = flow.addEdge(superSource, i, 1);
+        int sourceToSinkOriginalEdge = flow.addEdge(superSource, sinkOriginal, sumLo);
 
         List<List<CandidateEdge>> varEdgeIndex = new ArrayList<>(n);
         for (int i = 0; i < n; i++) {
@@ -235,21 +288,67 @@ final class GlobalCardinalityPropagation {
 
         int untrackedToSinkEdge = flow.addEdge(untrackedNode, sinkOriginal, n);
         int[] excessEdgeByTrackedIndex = new int[t];
+        int[] trackedToSuperSinkEdge = new int[t];
         for (int k = 0; k < t; k++) {
-            flow.addEdge(network.vars().size() + k, superSink, network.lo()[k]);
+            trackedToSuperSinkEdge[k] = flow.addEdge(network.vars().size() + k, superSink, network.lo()[k]);
             int excess = network.hi()[k] - network.lo()[k];
             excessEdgeByTrackedIndex[k] = excess > 0
                     ? flow.addEdge(network.vars().size() + k, sinkOriginal, excess)
                     : -1;
         }
-        flow.addEdge(sinkOriginal, sourceOriginal, n + sumLo + 1);
-        flow.addEdge(sourceOriginal, superSink, n);
+        int sinkToSourceEdge = flow.addEdge(sinkOriginal, sourceOriginal, n + sumLo + 1);
+        int sourceToSuperSinkEdge = flow.addEdge(sourceOriginal, superSink, n);
 
         int required = n + sumLo;
-        int achieved = flow.maxflow(superSource, superSink);
+        int achieved = greedyWarmStart(flow, varEdgeIndex, sourceToVarEdge, trackedToSuperSinkEdge,
+                sourceToSinkOriginalEdge, sinkToSourceEdge, sourceToSuperSinkEdge, n)
+                + flow.maxflow(superSource, superSink);
 
         return new FlowResult<>(network, flow, achieved == required, varEdgeIndex, superSource,
                 sinkOriginal, untrackedToSinkEdge, excessEdgeByTrackedIndex);
+    }
+
+    /**
+     * Saturates the two augmenting-path shapes that need no search, before
+     * {@link MaxFlow#maxflow} looks for the rest: {@code S' -> var -> trackedValue -> T'} for each
+     * variable that can take some tracked value with quota left, and the bookkeeping path
+     * {@code S' -> sinkOriginal -> sourceOriginal -> T'} carrying the forced lower-bound portion.
+     * <p>
+     * Edmonds-Karp spends one whole breadth-first sweep per unit of flow, and this network needs
+     * {@code n + sumLo} of them -- on {@code BinPacking-tab-n1c1w4a} about 240 sweeps over 5,000
+     * edges for every single call. Nearly all of that flow follows one of the two shapes above and
+     * can be placed directly, leaving the search to handle only the variables that actually
+     * contend. This is a warm start, not a different algorithm: these are ordinary augmenting
+     * paths, so the subsequent {@link MaxFlow#maxflow} still runs to saturation and still returns
+     * the same maximum, which is what keeps feasibility and
+     * {@link #propagateFromFlow}'s filtering unchanged.
+     * <p>
+     * Which <em>particular</em> maximum flow is reached does change, and
+     * {@link #findViolatingSubset} reads a min-cut off it, so an infeasible network can now cite a
+     * different (equally valid) violating subset than it did before.
+     *
+     * @return how much flow was placed, to be added to what {@link MaxFlow#maxflow} finds next
+     */
+    private static int greedyWarmStart(MaxFlow flow, List<List<CandidateEdge>> varEdgeIndex,
+                                            int[] sourceToVarEdge, int[] trackedToSuperSinkEdge,
+                                            int sourceToSinkOriginalEdge, int sinkToSourceEdge,
+                                            int sourceToSuperSinkEdge, int n) {
+        int placed = 0;
+        for (int i = 0; i < n; i++) {
+            for (CandidateEdge edge : varEdgeIndex.get(i)) {
+                // Candidates are numbered from n, tracked values first, so this is the tracked index
+                // and equals t exactly for the merged untracked node -- the one candidate this shape
+                // doesn't cover, since its route to the sink runs through sinkOriginal. Left to the
+                // search below.
+                int trackedIndex = edge.candidate() - n;
+                if (trackedIndex == trackedToSuperSinkEdge.length) continue;
+                int pushed = flow.pushPath(sourceToVarEdge[i], edge.forwardEdge(),
+                        trackedToSuperSinkEdge[trackedIndex]);
+                placed += pushed;
+                if (pushed > 0) break;
+            }
+        }
+        return placed + flow.pushPath(sourceToSinkOriginalEdge, sinkToSourceEdge, sourceToSuperSinkEdge);
     }
 
     /**
