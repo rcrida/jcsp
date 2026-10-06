@@ -108,6 +108,9 @@ public final class Xcsp3CompetitionRunner {
         out.println(header);
         out.println("-".repeat(header.length()));
         int solved = 0, unknown = 0, failed = 0, checkMismatches = 0;
+        int optimumFound = 0, feasibleOnly = 0, optimizationInstances = 0;
+        double solveSeconds = 0;
+        long batchStartNanos = System.nanoTime();
         for (Path instance : instances) {
             Result result = runOne(instance, timeLimitSeconds);
             out.println(ROW_FORMAT.formatted(instanceName(instance), "%.2f".formatted(result.elapsedSeconds()),
@@ -123,9 +126,30 @@ public final class Xcsp3CompetitionRunner {
             if (result.crossCheck().startsWith("MISMATCH") || result.crossCheck().startsWith("CHECK ERROR")) {
                 checkMismatches++;
             }
+            if (result.optimization()) {
+                optimizationInstances++;
+                if (result.summary().startsWith("s SATISFIABLE")) feasibleOnly++;
+            }
+            if (result.summary().startsWith("s OPTIMUM")) optimumFound++;
+            solveSeconds += result.elapsedSeconds();
         }
+        double batchSeconds = (System.nanoTime() - batchStartNanos) / 1_000_000_000.0;
         out.println();
         out.printf("%d solved, %d unknown/timeout, %d failed (of %d)%n", solved, unknown, failed, instances.size());
+        // Separate from the solved count on purpose: an optimization instance that returns a
+        // feasible solution without proving it optimal is "solved" for the line above but is a
+        // weaker result than one that proves it, and the two move independently -- a change can
+        // convert SATISFIABLE into OPTIMUM FOUND without the solved count shifting at all.
+        out.printf("%d optimum found, %d feasible without proof (of %d optimization instances)%n",
+                optimumFound, feasibleOnly, optimizationInstances);
+        // Two totals, because they answer different questions. The solve total is the sum of the
+        // child processes' own elapsed times and is the figure to compare between runs of this
+        // harness -- it is the only one that moves when the solver changes. The batch total adds
+        // this process's per-instance overhead (the {@link #modelInfo} parse and the
+        // SolutionChecker pass, neither of which is charged against the time limit), so it answers
+        // "how long will this take" and nothing about the solver.
+        out.printf("%.1fs total solve time, %.1fs total batch wall-clock (%.1fs harness overhead)%n",
+                solveSeconds, batchSeconds, batchSeconds - solveSeconds);
         if (checkMismatches > 0) {
             out.printf("%d SolutionChecker cross-check MISMATCH(ES) -- see Check column above%n", checkMismatches);
         }
@@ -137,7 +161,19 @@ public final class Xcsp3CompetitionRunner {
     }
 
     private record Result(double elapsedSeconds, String summary, String statsLine, String crossCheck, String model,
+                           boolean optimization,
                            String searchSpaceBefore, String searchSpaceAtRoot, String searchSpaceLeft) {}
+
+    /**
+     * {@link #modelInfo}'s two outputs from its single parse: the display string, and whether the
+     * instance declares an objective at all. The latter is what gives the {@code optimum found}
+     * tally in the summary a denominator -- without it, the count can only be read against the
+     * whole corpus, most of which has nothing to optimize. Taken from the parse rather than from
+     * the child's {@code o} lines because an optimization instance that finds no solution within
+     * the budget emits none, and would otherwise vanish from the denominator precisely when it
+     * matters.
+     */
+    private record Model(String info, boolean optimization) {}
 
     /**
      * Compacts a raw (potentially very long -- {@link io.github.rcrida.jcsp.ConstraintSatisfactionProblem#getSearchSpace()}
@@ -200,7 +236,7 @@ public final class Xcsp3CompetitionRunner {
      * plus a minimal {@link ProcessBuilder} repro comparing default vs. suppressed child logging.
      */
     private static Result runOne(Path instance, long timeLimitSeconds) throws IOException, InterruptedException {
-        String model = modelInfo(instance);
+        Model model = modelInfo(instance);
 
         String javaBin = System.getProperty("java.home") + File.separator + "bin" + File.separator + "java";
         String classpath = System.getProperty("java.class.path");
@@ -216,12 +252,14 @@ public final class Xcsp3CompetitionRunner {
         double elapsedSeconds = (System.nanoTime() - startNanos) / 1_000_000_000.0;
         if (!finished) {
             process.destroyForcibly();
-            return new Result(elapsedSeconds, "HUNG (killed after " + elapsedSeconds + "s)", "(no stats -- process killed)", "-", model,
+            return new Result(elapsedSeconds, "HUNG (killed after " + elapsedSeconds + "s)",
+                    "(no stats -- process killed)", "-", model.info(), model.optimization(),
                     "(no search-space)", "(no search-space)", "(no search-space)");
         }
         String output = new String(process.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
         String summary = firstResultLine(output);
-        return new Result(elapsedSeconds, summary, statsLine(output), crossCheck(instance, summary, output), model,
+        return new Result(elapsedSeconds, summary, statsLine(output), crossCheck(instance, summary, output),
+                model.info(), model.optimization(),
                 cLine(output, "c search-space-before: "), cLine(output, "c search-space-at-root: "),
                 cLine(output, "c search-space-remaining: "));
     }
@@ -242,14 +280,15 @@ public final class Xcsp3CompetitionRunner {
      * same file and reports its own failure via {@link #firstResultLine}, so this method failing
      * shouldn't abort the whole batch.
      */
-    private static String modelInfo(Path instance) {
+    private static Model modelInfo(Path instance) {
         try {
             Xcsp3Instance parsed = Xcsp3Parser.parse(instance);
-            return "%dv/%dc -> %dv/%dc".formatted(
+            return new Model("%dv/%dc -> %dv/%dc".formatted(
                     parsed.declaredVariableNames().size(), parsed.declaredConstraintCount(),
-                    parsed.csp().getVariableDomains().size(), parsed.csp().getConstraints().size());
+                    parsed.csp().getVariableDomains().size(), parsed.csp().getConstraints().size()),
+                    parsed.objective() != null);
         } catch (Exception e) {
-            return "PARSE ERROR";
+            return new Model("PARSE ERROR", false);
         }
     }
 
