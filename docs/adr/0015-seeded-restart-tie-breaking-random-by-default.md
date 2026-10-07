@@ -264,13 +264,54 @@ differing only in the objective cut, and each relearns from nothing. Sharing a s
 not obviously sound — probes descend to *tighter* bounds, and a nogood derived under a tighter cut
 does not hold under a looser one — so the direction needs arguing before it is worth measuring.
 
-A derivation keyed on `(baseSeed, searchIndex, restartIndex)` would give comparability *and*
-cross-search diversity, which is strictly better than either arm here. It needs the solve to thread a
-search identity into `RestartRandomization#randomFor`, widening a published functional interface, so
-it is a deliberate API decision rather than a follow-on — and it replaces this as the remaining
-candidate.
+A derivation keyed on `(baseSeed, searchIndex, restartIndex)` gives comparability *and* cross-search
+diversity, which is strictly better than either arm here. That is the section below, and it shipped.
 
 Kept from the attempt, both independently useful: `Xcsp3CompetitionRunner` takes an optional seed
 argument, without which a multi-seed sweep of this corpus is not possible at all, and
 `Xcsp3ProblemRunnerTest`'s multi-improvement case no longer pins a seed literal whose behaviour
 depends on the exact derivation being tested.
+
+## Accepted (2026-10-07): a stream per search, via `forSearch`
+
+`RestartRandomization` gains `forSearch(int searchIndex)`, defaulting to `this`. `seeded` overrides
+it: search 0 keeps the instance, and each later search gets its *own* driver seeded from
+`(baseSeed, searchIndex)` through SplitMix64. `BoundedFirstSolution` numbers its searches — the first
+solution is 0, each probe the next — and builds each probe inside the descent loop rather than once
+outside it, so probe 3 asks its question the same way wherever the descent reached it.
+
+The distinction from the rejection above is the whole point. That attempt made `randomFor` a pure
+function of `(baseSeed, restartIndex)` and so removed the statefulness *inside* a search, which is
+what varies its restarts and what the probes relied on for independence. This keeps the driver intact
+within a search and only gives each search its own, so both properties hold at once: a search draws
+the same stream wherever it runs in the sequence, and still differs from its siblings.
+
+| | driver | mixer (rejected) | per-search |
+|---|---|---|---|
+| solved, 3 seeds | 84 / 84 / 81 | 83 / 82 / 81 | **84 / 84 / 81** |
+| optimum found | 23 / 23 / 23 | 23 / 23 / 23 | 23 / 23 / 22 |
+| mean total | 830.7s | 866.2s | 849.9s |
+
+Scope is as narrow as the design claims, checked rather than assumed: at one seed, 55 of 79 instances
+are identical node-for-node and 22 of the 24 that differ are optimization instances. The two
+exceptions are satisfaction instances, which take `forSearch(0)` and therefore run byte-identical
+code — `Steiner3-08` is a 60s timeout whose node count measures only how far the clock let it get,
+and `Domino-300-300` gave 303/303/304/304/303 over five runs of *one unchanged build at one seed*.
+That variation is the per-JVM `AC3` arc-order salt this ADR already documents, and it makes
+"byte-identical" unachievable in a harness that spawns a JVM per instance — a flaw in the prediction,
+not in the change.
+
+**The cost, stated plainly.** `Taillard-os-04-04-0` over 30 seeds per arm: the shared driver proves
+optimality 30/30, this change 29/30. The failure is not a rate but one derivation — seed 13, failing
+reproducibly — and it accounts for the entire mean-time difference, since no instance at seed
+20260830 moved by more than 3s. At that sample size 1-against-0 is not statistically distinguishable,
+but it is attributable: the control proved that seed thirty times out of thirty.
+
+Accepted anyway, because the defect it fixes has already produced a wrong answer. Stream position is
+why ADR-0044 twice recorded `Taillard-js-015-15-0`'s COP form as intrinsically harder than its
+objective-stripped form. Any further work on the bounded probes has to compare searches inside one
+solve, and before this that comparison was not a valid thing to do.
+
+Not fixed here: `IndependentSubproblemSolver` solves subproblems concurrently, all at `forSearch(0)`,
+so they still share one driver and still draw in a nondeterministic order. Keying by subproblem needs
+a second identity and is its own decision.

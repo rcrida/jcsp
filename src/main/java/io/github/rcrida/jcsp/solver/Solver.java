@@ -155,7 +155,7 @@ public interface Solver {
          * one phase of a larger search passes a real cap instead, so that giving up on restarts hands
          * control back rather than consuming the whole budget.
          */
-        static Solver satisfactionSearch(@NonNull SolverConfig config,
+        static Solver satisfactionSearch(@NonNull SolverConfig config, int searchIndex,
                                           @NonNull FixpointPropagation fixpointPropagation,
                                           int maxRestarts) {
             val limits = config.getLimits();
@@ -176,7 +176,7 @@ public interface Solver {
                         .statistics(config.getStatistics())
                         .listener(config.getListener())
                         .cancellation(cancellation)
-                        .restartRandomization(config.getRestartRandomization())
+                        .restartRandomization(config.getRestartRandomization().forSearch(searchIndex))
                         .selectorFactory(config.getVariableSelectorFactory())
                         .maxRestarts(maxRestarts)
                         .build();
@@ -254,7 +254,9 @@ public interface Solver {
                 // search directly (see BoundSolver#getSolution below), so a restart cap would silently
                 // turn SolverLimits.unlimited() into a bounded search. SolverLimits (node/time) remains
                 // the only intended way to bound a search; restarts should never be it.
-                val independentSubproblemSolver = satisfactionSearch(config, fixpointPropagation, Integer.MAX_VALUE);
+                // Search 0: the satisfaction chain runs one search, so forSearch leaves its
+                // randomization exactly as configured.
+                val independentSubproblemSolver = satisfactionSearch(config, 0, fixpointPropagation, Integer.MAX_VALUE);
                 Solver afterPropagation = hasSets
                         ? SetBranchingSolver.builder().inner(independentSubproblemSolver).listener(config.getListener())
                                 .limits(limits).cancellation(cancellation).statistics(config.getStatistics())
@@ -313,8 +315,8 @@ public interface Solver {
                 IncumbentSeeder incumbentSeeder = hasContinuous
                         ? null
                         : BoundedFirstSolution.builder()
-                                .search(restartBudget -> PropagationFixpointSolver.builder()
-                                        .inner(satisfactionSearch(config, fixpointPropagation, restartBudget))
+                                .search((restartBudget, searchIndex) -> PropagationFixpointSolver.builder()
+                                        .inner(satisfactionSearch(config, searchIndex, fixpointPropagation, restartBudget))
                                         .snap(false)
                                         .listener(config.getListener())
                                         .statistics(config.getStatistics())

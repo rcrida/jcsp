@@ -55,12 +55,20 @@ import java.util.function.ToDoubleFunction;
 @Builder
 public class BoundedFirstSolution implements IncumbentSeeder {
     /**
-     * Builds a search for one feasible solution, given a restart budget. A function of the budget
-     * because the two uses want very different ones -- see {@link #initialRestartBudget} and
-     * {@link #probeRestartBudget} -- and both searches are built once per {@link #seed} call rather
-     * than once per probe.
+     * Builds a search for one feasible solution, given a restart budget and this search's index
+     * within the solve. The budget because the two uses want very different ones -- see
+     * {@link #initialRestartBudget} and {@link #probeRestartBudget}. The index because each search
+     * must draw its tie-breaking from its own stream rather than from wherever the previous one left
+     * a shared driver, which is what {@link RestartRandomization#forSearch} supplies; the first
+     * solution is search 0 and each probe is the next.
      */
-    @NonNull IntFunction<Solver> search;
+    @NonNull SearchFactory search;
+
+    /** {@link #search}'s shape: a restart budget and a search index in, one search out. */
+    @FunctionalInterface
+    public interface SearchFactory {
+        @NonNull Solver create(int restartBudget, int searchIndex);
+    }
 
     // No @Builder.Default — defaults are set in BoundedFirstSolutionBuilder below, which validates
     // them, following DomWdegLubySearch's own knobs.
@@ -139,7 +147,7 @@ public class BoundedFirstSolution implements IncumbentSeeder {
     @Override
     public @NonNull Optional<Assignment> seed(@NonNull ConstraintSatisfactionProblem csp,
                                               @NonNull ToDoubleFunction<Assignment> objective) {
-        Assignment first = ask(csp, search.apply(initialRestartBudget)).solution();
+        Assignment first = ask(csp, search.create(initialRestartBudget, 0)).solution();
         if (first == null) {
             return Optional.empty();
         }
@@ -165,8 +173,11 @@ public class BoundedFirstSolution implements IncumbentSeeder {
                 .map(LpBound::lowerBound)
                 .orElse(bestCost);
         log.debug("Descending from a first solution costing {}, towards a lower bound of {}", bestCost, lower);
-        Solver probe = search.apply(probeRestartBudget);
+        // Built inside the loop, not once outside it: each probe is its own search and takes its own
+        // index, so that probe 3 asks its question the same way wherever the descent reached it. The
+        // chain rebuild is a handful of object allocations against a search measured in seconds.
         for (int i = 0; i < maxProbes && bestCost > lower; i++) {
+            Solver probe = search.create(probeRestartBudget, i + 1);
             double target = bestCost - Math.max(1.0, Math.ceil((bestCost - lower) / stepDivisor));
             if (target < lower) {
                 break;

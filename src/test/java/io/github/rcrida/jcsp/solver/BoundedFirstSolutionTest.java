@@ -54,20 +54,20 @@ public class BoundedFirstSolutionTest {
      * is what a real feasibility search would find if it happened to be lucky. Records the upper bound
      * it saw on each call, so a test can assert the sequence of targets the descent chose.
      */
-    static IntFunction<Solver> cheapestPermitted(List<Integer> targetsSeen) {
-        return budget -> csp -> {
+    static BoundedFirstSolution.SearchFactory cheapestPermitted(List<Integer> targetsSeen) {
+        return (budget, searchIndex) -> csp -> {
             targetsSeen.add(permittedSpan(csp));
             return Stream.of(at(0, 0));
         };
     }
 
-    static BoundedFirstSolution seeder(IntFunction<Solver> search) {
+    static BoundedFirstSolution seeder(BoundedFirstSolution.SearchFactory search) {
         return BoundedFirstSolution.builder().search(search).build();
     }
 
     @Test
     void noFirstSolution_seedsNothing() {
-        val seeded = seeder(budget -> csp -> Stream.empty()).seed(CSP, SUM);
+        val seeded = seeder((budget, searchIndex) -> csp -> Stream.empty()).seed(CSP, SUM);
 
         assertThat(seeded).isEmpty();
     }
@@ -76,8 +76,8 @@ public class BoundedFirstSolutionTest {
     void aSearchThatStopsEarly_seedsNothingRatherThanThrowing() {
         // IncumbentSeeder's contract forbids throwing: branch-and-bound truncates silently, and
         // seeding is not the place to change that (ADR-0011, ADR-0043).
-        val limited = seeder(budget -> csp -> { throw new LimitExceededException(new Statistics()); });
-        val cancelled = seeder(budget -> csp -> { throw new SolverCancelledException(new Statistics()); });
+        val limited = seeder((budget, searchIndex) -> csp -> { throw new LimitExceededException(new Statistics()); });
+        val cancelled = seeder((budget, searchIndex) -> csp -> { throw new SolverCancelledException(new Statistics()); });
 
         assertThat(limited.seed(CSP, SUM)).isEmpty();
         assertThat(cancelled.seed(CSP, SUM)).isEmpty();
@@ -87,7 +87,7 @@ public class BoundedFirstSolutionTest {
     void anUnusableAnswer_seedsNothing() {
         // Incomplete, so its cost would be computed over unassigned variables. Neither a solution
         // nor a refutation, so the descent must not treat it as either.
-        val seeded = seeder(budget -> csp -> Stream.of(Assignment.of(Map.<Variable<?>, Object>of(X, 1))))
+        val seeded = seeder((budget, searchIndex) -> csp -> Stream.of(Assignment.of(Map.<Variable<?>, Object>of(X, 1))))
                 .seed(CSP, SUM);
 
         assertThat(seeded).isEmpty();
@@ -126,7 +126,7 @@ public class BoundedFirstSolutionTest {
         // both domains at 0..9, since either variable can still take 9 when the other takes 0.
         val targets = new ArrayList<Integer>();
         int[] call = {0};
-        IntFunction<Solver> search = budget -> csp -> {
+        BoundedFirstSolution.SearchFactory search = (budget, searchIndex) -> csp -> {
             targets.add(permittedSpan(csp));
             return call[0]++ == 0 ? Stream.of(at(9, 9)) : Stream.empty();
         };
@@ -140,12 +140,29 @@ public class BoundedFirstSolutionTest {
     }
 
     @Test
+    void everyProbeGetsItsOwnSearchIndex() {
+        // Same shape as the refuted-probe descent above, which runs two probes, so the indices
+        // actually advance rather than being asserted over a single one.
+        val indices = new ArrayList<Integer>();
+        int[] call = {0};
+        BoundedFirstSolution.SearchFactory search = (budget, searchIndex) -> csp -> {
+            indices.add(searchIndex);
+            return call[0]++ == 0 ? Stream.of(at(9, 9)) : Stream.empty();
+        };
+
+        seeder(search).seed(CSP, SUM);
+
+        assertThat(indices).as("the first solution, then one index per probe")
+                .containsExactly(0, 1, 2);
+    }
+
+    @Test
     void anInconclusiveProbe_endsTheDescent() {
         // The band where a bounded question can be neither satisfied nor refuted: one such answer
         // ends the descent, since there is no reason to think a lower target fares better.
         val targets = new ArrayList<Integer>();
         int[] call = {0};
-        IntFunction<Solver> search = budget -> csp -> {
+        BoundedFirstSolution.SearchFactory search = (budget, searchIndex) -> csp -> {
             targets.add(permittedSpan(csp));
             if (call[0]++ == 0) {
                 return Stream.of(at(9, 9));
@@ -165,7 +182,7 @@ public class BoundedFirstSolutionTest {
         // measure the next step from 4 rather than from the target it asked for.
         val targets = new ArrayList<Integer>();
         int[] call = {0};
-        IntFunction<Solver> search = budget -> csp -> {
+        BoundedFirstSolution.SearchFactory search = (budget, searchIndex) -> csp -> {
             targets.add(permittedSpan(csp));
             return switch (call[0]++) {
                 case 0 -> Stream.of(at(9, 9));
@@ -199,7 +216,7 @@ public class BoundedFirstSolutionTest {
         // the search ignored the bound. Nothing has been tightened, so there is nothing to tighten
         // from, and continuing would ask the same question again.
         val targets = new ArrayList<Integer>();
-        IntFunction<Solver> search = budget -> csp -> {
+        BoundedFirstSolution.SearchFactory search = (budget, searchIndex) -> csp -> {
             targets.add(permittedSpan(csp));
             return Stream.of(at(9, 9));
         };
@@ -235,7 +252,7 @@ public class BoundedFirstSolutionTest {
                 .build();
         val justX = LinearObjective.builder().coefficient(X, 1.0).build();
         val asked = new ArrayList<Integer>();
-        IntFunction<Solver> search = budget -> csp -> {
+        BoundedFirstSolution.SearchFactory search = (budget, searchIndex) -> csp -> {
             asked.add(largest(csp, X));
             return Stream.of(Assignment.of(Map.<Variable<?>, Object>of(X, 5)));
         };
@@ -256,7 +273,7 @@ public class BoundedFirstSolutionTest {
                 .build();
         val justX = LinearObjective.builder().coefficient(X, 1.0).build();
 
-        val seeded = seeder(budget -> csp -> Stream.of(Assignment.of(Map.<Variable<?>, Object>of(X, 0))))
+        val seeded = seeder((budget, searchIndex) -> csp -> Stream.of(Assignment.of(Map.<Variable<?>, Object>of(X, 0))))
                 .seed(constrained, justX);
 
         assertThat(seeded).isEmpty();
@@ -264,7 +281,7 @@ public class BoundedFirstSolutionTest {
 
     @Test
     void builderRejectsNonsenseBudgets() {
-        IntFunction<Solver> search = budget -> csp -> Stream.empty();
+        BoundedFirstSolution.SearchFactory search = (budget, searchIndex) -> csp -> Stream.empty();
 
         assertThatThrownBy(() -> BoundedFirstSolution.builder().search(search).initialRestartBudget(0).build())
                 .isInstanceOf(IllegalArgumentException.class).hasMessageContaining("initialRestartBudget");
@@ -278,16 +295,20 @@ public class BoundedFirstSolutionTest {
 
     @Test
     void theTwoSearchesGetTheirOwnBudgets() {
-        val budgets = new ArrayList<Integer>();
-        IntFunction<Solver> search = budget -> {
-            budgets.add(budget);
+        val requests = new ArrayList<String>();
+        BoundedFirstSolution.SearchFactory search = (budget, searchIndex) -> {
+            requests.add(budget + "@" + searchIndex);
             return csp -> Stream.of(at(9, 9));
         };
 
         BoundedFirstSolution.builder().search(search).initialRestartBudget(500).probeRestartBudget(7)
                 .build().seed(CSP, SUM);
 
-        assertThat(budgets).as("one search per role, built once rather than once per probe")
-                .containsExactly(500, 7);
+        // The index matters as much as the budget: each search has to draw its tie-breaking from its
+        // own stream rather than from wherever the previous one left a shared driver, which is what
+        // RestartRandomization#forSearch keys on. One probe only, because this stub answers every
+        // bound with the same cost and the descent stops as soon as a probe fails to improve.
+        assertThat(requests).as("the first solution is search 0 and each probe is the next")
+                .containsExactly("500@0", "7@1");
     }
 }

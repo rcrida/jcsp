@@ -39,6 +39,28 @@ public interface RestartRandomization {
     @Nullable Random randomFor(int restartIndex);
 
     /**
+     * Returns the randomization for the {@code searchIndex}-th search of one solve, so that searches
+     * run in sequence do not draw from each other's streams.
+     * <p>
+     * A solve is not always one search. Every optimization solve runs several — one for the first
+     * solution and one per bounded probe ({@link BoundedFirstSolution}, ADR-0041, ADR-0044) — and
+     * each is a fresh {@link DomWdegLubySearch} whose restart counter starts again at 1. Without a
+     * search identity, {@link #seeded}'s stream position at the moment a search starts is what
+     * decides its tie-breaking, so the same search is a different search depending on what ran
+     * before it. That is measurable: one instance solved three times from a single {@code seeded}
+     * driver took 8,770, then 20,873, then over 56,000 nodes.
+     * <p>
+     * The default returns {@code this}, which is the behaviour every implementation had before this
+     * method existed — a caller's own lambda keeps working and keeps sharing one stream across
+     * searches. {@link #NONE} inherits it and stays inert.
+     *
+     * @param searchIndex 0 for a solve's first (or only) search, then 1 upwards per later search
+     */
+    default RestartRandomization forSearch(int searchIndex) {
+        return this;
+    }
+
+    /**
      * Derives a distinct {@link Random} per restart from one internal driver {@link Random} seeded
      * with {@code baseSeed}, advanced once per call via {@link Random#nextLong()} rather than
      * combining {@code baseSeed} with {@code restartIndex} directly (e.g. {@code baseSeed +
@@ -66,6 +88,38 @@ public interface RestartRandomization {
      */
     static RestartRandomization seeded(long baseSeed) {
         Random driver = new Random(baseSeed);
-        return restartIndex -> new Random(driver.nextLong());
+        return new RestartRandomization() {
+            @Override
+            public Random randomFor(int restartIndex) {
+                return new Random(driver.nextLong());
+            }
+
+            /**
+             * Search 0 keeps this instance, so a solve that runs one search -- the whole satisfaction
+             * chain, and branch-and-bound's own first-solution search -- is unchanged. Each later
+             * search gets its <em>own</em> driver, seeded from {@code (baseSeed, searchIndex)}, so it
+             * draws the same stream wherever it runs in the sequence while still differing from its
+             * siblings. Deriving a whole driver rather than one seed per restart is deliberate: the
+             * statefulness inside a search is what varies its restarts, and replacing it with a pure
+             * per-restart function was measured as a regression (ADR-0015).
+             */
+            @Override
+            public RestartRandomization forSearch(int searchIndex) {
+                return searchIndex == 0 ? this : seeded(mix(baseSeed, searchIndex));
+            }
+        };
+    }
+
+    /**
+     * SplitMix64's gamma step followed by its finalizer (Steele, Lea &amp; Flood 2014), the standard
+     * way to turn a counter into a well-distributed seed. The multiplier is odd, so stepping by it
+     * visits every {@code long} before repeating, and the shift/multiply finalizer avalanches each
+     * step — which is what makes consecutive searches unrelated rather than merely distinct.
+     */
+    private static long mix(long baseSeed, int searchIndex) {
+        long z = baseSeed + searchIndex * 0x9E3779B97F4A7C15L;
+        z = (z ^ (z >>> 30)) * 0xBF58476D1CE4E5B9L;
+        z = (z ^ (z >>> 27)) * 0x94D049BB133111EBL;
+        return z ^ (z >>> 31);
     }
 }
