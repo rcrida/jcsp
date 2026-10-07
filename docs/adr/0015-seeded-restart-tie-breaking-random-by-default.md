@@ -251,9 +251,11 @@ on this ADR now.
 subtrees where earlier nogoods would already apply, so the loss of diversity could in principle be
 paying for itself through the nogood store. It cannot here, for two independent reasons. Learning is
 off by default (ADR-0030) and `Xcsp3ProblemRunner` never enables it — every statistics line in all
-six runs reads `nogoodsLearned=0`. And `Solver.Factory.satisfactionSearch` builds
-`NogoodStore.forProblem(sub)` inside its `innerFactory`, so each `search.apply(...)` gets a *fresh*
-store and no probe ever sees what an earlier one learned. The mixer's correlation lands exactly where
+six runs reads `nogoodsLearned=0`. And no probe ever sees what an earlier one learned:
+`BoundedFirstSolution` builds one probe chain for the whole descent, but
+`IndependentSubproblemSolver.getSolution` calls its `innerFactory` per invocation, and that factory
+is where `Solver.Factory.satisfactionSearch` builds `NogoodStore.forProblem(sub)` — so every probe
+gets a fresh `DomWdegLubySearch` and a fresh store. The mixer's correlation lands exactly where
 nogoods cannot benefit, and leaves untouched the place they could — within one search, where the
 store is shared across restarts and where restart `k` and `k+1` still get unrelated seeds.
 
