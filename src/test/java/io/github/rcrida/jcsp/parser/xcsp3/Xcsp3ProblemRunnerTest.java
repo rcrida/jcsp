@@ -277,16 +277,26 @@ class Xcsp3ProblemRunnerTest {
             }
         };
 
-        ByteArrayOutputStream buffer = new ByteArrayOutputStream();
         // Seeded, because the first improving solution now comes from the satisfaction chain's own
         // search (ADR-0041), whose tie-breaking is reseeded randomly per config by default. Five of
-        // this problem's six solutions cost more than the optimal 4, so an unseeded run would find
-        // the optimum first roughly one time in six and emit a single o line -- a flaky test rather
-        // than a wrong one.
-        Xcsp3ProblemRunner.solve(instance, Cancellation.NEVER, listener, RestartRandomization.seeded(42L), printStreamInto(buffer));
+        // this problem's six solutions cost more than the optimal 4, so a run that happens to find
+        // the optimum first emits a single o line and has nothing to assert ordering over -- a flaky
+        // test rather than a wrong one.
+        //
+        // Searched for rather than pinned to one literal: a fixed seed couples this test to the
+        // exact seed-to-restart derivation inside RestartRandomization#seeded, so any change there
+        // flips it between the common case and the one-in-six one for reasons that have nothing to
+        // do with what it checks. Verified when an experimental derivation did exactly that to the
+        // seed this used to pin. Most seeds give several improvements, so the loop exits at once.
+        ByteArrayOutputStream buffer = new ByteArrayOutputStream();
+        for (long seed = 1; seed <= 20 && incumbentCosts.size() <= 1; seed++) {
+            incumbentCosts.clear();
+            buffer = new ByteArrayOutputStream();
+            Xcsp3ProblemRunner.solve(instance, Cancellation.NEVER, listener, RestartRandomization.seeded(seed), printStreamInto(buffer));
+        }
 
         List<String> oLines = buffer.toString(StandardCharsets.UTF_8).lines().filter(line -> line.startsWith("o ")).toList();
-        assertThat(incumbentCosts).as("this scenario should force more than one improving solution").hasSizeGreaterThan(1);
+        assertThat(incumbentCosts).as("no seed in 1..20 produced more than one improving solution").hasSizeGreaterThan(1);
         assertThat(oLines).hasSize(incumbentCosts.size());
         for (int i = 0; i < oLines.size(); i++) {
             assertThat(oLines.get(i)).isEqualTo("o " + Math.round(incumbentCosts.get(i)));

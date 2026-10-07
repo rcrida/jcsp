@@ -75,15 +75,25 @@ public final class Xcsp3CompetitionRunner {
      * instance) -- {@code AC3}'s own arc-processing order is independently salted once per JVM
      * process regardless -- just removes the larger of the two variance sources.
      */
-    private static final long RESTART_RANDOMIZATION_SEED = 20260830L;
+    private static final long DEFAULT_RESTART_RANDOMIZATION_SEED = 20260830L;
 
     private Xcsp3CompetitionRunner() {
     }
 
+    /**
+     * {@code [instanceDir] [timeLimitSeconds] [restartRandomizationSeed]}. The seed defaults to
+     * {@link #DEFAULT_RESTART_RANDOMIZATION_SEED} and is worth overriding for one reason: several
+     * bundled instances are bimodal, solving immediately under some seeds and not at all under
+     * others, so a single run of this harness is one sample per arm rather than a measurement.
+     * {@code Bibd-sum-06-050-25-03-10} spans 1,539 to over 196,000 nodes across eight seeds. Sweep
+     * a few seeds and compare the distributions whenever a change touches search order, and
+     * especially whenever it touches seed derivation itself.
+     */
     public static void main(String[] args) throws IOException, URISyntaxException, InterruptedException {
         Path directory = args.length >= 1 ? Path.of(args[0]) : bundledInstanceDirectory();
         long timeLimitSeconds = args.length >= 2 ? Long.parseLong(args[1]) : DEFAULT_TIME_LIMIT_SECONDS;
-        run(directory, timeLimitSeconds, System.out);
+        long seed = args.length >= 3 ? Long.parseLong(args[2]) : DEFAULT_RESTART_RANDOMIZATION_SEED;
+        run(directory, timeLimitSeconds, seed, System.out);
     }
 
     private static Path bundledInstanceDirectory() throws URISyntaxException {
@@ -98,7 +108,7 @@ public final class Xcsp3CompetitionRunner {
 
     private static final String ROW_FORMAT = "%-32s %-8s %-20s %-10s %-24s %-14s %-14s %-14s %s";
 
-    static void run(Path directory, long timeLimitSeconds, PrintStream out) throws IOException, InterruptedException {
+    static void run(Path directory, long timeLimitSeconds, long seed, PrintStream out) throws IOException, InterruptedException {
         List<Path> instances;
         try (Stream<Path> files = Files.list(directory)) {
             instances = files.filter(Xcsp3CompetitionRunner::isXcsp3Instance).sorted().toList();
@@ -112,7 +122,7 @@ public final class Xcsp3CompetitionRunner {
         double solveSeconds = 0;
         long batchStartNanos = System.nanoTime();
         for (Path instance : instances) {
-            Result result = runOne(instance, timeLimitSeconds);
+            Result result = runOne(instance, timeLimitSeconds, seed);
             out.println(ROW_FORMAT.formatted(instanceName(instance), "%.2f".formatted(result.elapsedSeconds()),
                     result.summary(), result.crossCheck(), result.model(),
                     formatSearchSpace(result.searchSpaceBefore()), formatSearchSpace(result.searchSpaceAtRoot()),
@@ -235,7 +245,7 @@ public final class Xcsp3CompetitionRunner {
      * "HUNG", confirmed by reproducing it directly via an isolated single-instance corpus run
      * plus a minimal {@link ProcessBuilder} repro comparing default vs. suppressed child logging.
      */
-    private static Result runOne(Path instance, long timeLimitSeconds) throws IOException, InterruptedException {
+    private static Result runOne(Path instance, long timeLimitSeconds, long seed) throws IOException, InterruptedException {
         Model model = modelInfo(instance);
 
         String javaBin = System.getProperty("java.home") + File.separator + "bin" + File.separator + "java";
@@ -243,7 +253,7 @@ public final class Xcsp3CompetitionRunner {
         ProcessBuilder builder = new ProcessBuilder(
                 javaBin, "-cp", classpath, "-Dorg.slf4j.simpleLogger.defaultLogLevel=error",
                 Xcsp3ProblemRunner.class.getName(), instance.toString(), String.valueOf(timeLimitSeconds),
-                String.valueOf(RESTART_RANDOMIZATION_SEED));
+                String.valueOf(seed));
         builder.redirectErrorStream(true);
 
         long startNanos = System.nanoTime();

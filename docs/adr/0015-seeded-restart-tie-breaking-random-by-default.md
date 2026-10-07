@@ -202,6 +202,73 @@ single long search rather than many short restarts. The accidental half of the m
 to be load-bearing.
 
 Anyone reaching for this again should know the comparability problem is real and still unsolved; the
-fix has to preserve per-node variation, not just per-restart variation. Making
-`RestartRandomization.seeded`'s `randomFor` a pure function of `(baseSeed, restartIndex)` addresses
-the cross-search half of the problem without touching tie-breaking at all, and remains unmeasured.
+fix has to preserve per-node variation, not just per-restart variation.
+
+## Rejected (2026-10-07): `randomFor` as a pure function of `(baseSeed, restartIndex)`
+
+The section above closed by naming this as the remaining candidate: it addresses the cross-search
+half of the comparability problem without touching tie-breaking at all. Built, measured, reverted.
+
+`seeded` held one driver `Random` and advanced it per call, ignoring `restartIndex` entirely, so what
+a caller got back depended on how many times it had already been called rather than on which restart
+was asking. The replacement derived each restart's seed as `mix(baseSeed, restartIndex)` using
+SplitMix64's gamma step and finalizer, keeping the anti-correlation the driver existed for while
+making the function pure.
+
+Three seeds per arm, full corpus, 60s per instance, machine held awake:
+
+| seed | driver | mixer |
+|---|---|---|
+| 20260830 | **84** / 804.6s | 83 / 858.7s |
+| 7 | **84** / 761.7s | 82 / 844.6s |
+| 13 | 81 / 925.7s | 81 / 895.2s |
+| mean | **83.0 / 830.7s** | 82.0 / 866.2s |
+
+One instance worse on average and about 4% slower, never better on solved count. `optimum found`
+held at 23 in all six runs and none produced a `SolutionChecker` mismatch, so nothing is answered
+wrongly — it simply solves slightly less within the budget.
+
+Three seeds is few, and the corpus is bimodal enough that the driver arm alone spans 81 to 84. Seed
+13 gives 81 in *both* arms with the same four instances unsolved, which is what a bad seed looks like
+rather than a regression. The claim this rejection rests on is therefore the weak one: the mixer is
+not better, and is probably marginally worse. It is not established that correlated retries are
+harmful in general.
+
+**What the change actually does, read from the code rather than inferred from the numbers.** Every
+optimization solve runs several searches — one for the first solution and one per bounded probe, each
+built by `BoundedFirstSolution`'s own `search.apply(...)` (ADR-0044). Each is a fresh
+`DomWdegLubySearch` whose `getSolution` starts its restart loop at `k = 1`. Under the mixer the
+first-solution search and all up to eight probes therefore receive the *same* seeds —
+`mix(baseSeed, 1)`, `mix(baseSeed, 2)`, … — and repeat each other's tie-break decisions, where the
+driver's statefulness had been handing each search a different stream position. The statefulness was
+supplying **cross-search** diversification; the probes were independent draws because of it.
+
+That is the same shape as the section above, one level out: a mechanism's incidental property was
+load-bearing, and the argument for removing it described the property it broke as the defect. Twice
+on this ADR now.
+
+**Nogood learning is not the explanation, checked rather than assumed.** Correlated retries revisit
+subtrees where earlier nogoods would already apply, so the loss of diversity could in principle be
+paying for itself through the nogood store. It cannot here, for two independent reasons. Learning is
+off by default (ADR-0030) and `Xcsp3ProblemRunner` never enables it — every statistics line in all
+six runs reads `nogoodsLearned=0`. And `Solver.Factory.satisfactionSearch` builds
+`NogoodStore.forProblem(sub)` inside its `innerFactory`, so each `search.apply(...)` gets a *fresh*
+store and no probe ever sees what an earlier one learned. The mixer's correlation lands exactly where
+nogoods cannot benefit, and leaves untouched the place they could — within one search, where the
+store is shared across restarts and where restart `k` and `k+1` still get unrelated seeds.
+
+That observation leaves a separate open item: up to nine searches run over near-identical CSPs,
+differing only in the objective cut, and each relearns from nothing. Sharing a store across probes is
+not obviously sound — probes descend to *tighter* bounds, and a nogood derived under a tighter cut
+does not hold under a looser one — so the direction needs arguing before it is worth measuring.
+
+A derivation keyed on `(baseSeed, searchIndex, restartIndex)` would give comparability *and*
+cross-search diversity, which is strictly better than either arm here. It needs the solve to thread a
+search identity into `RestartRandomization#randomFor`, widening a published functional interface, so
+it is a deliberate API decision rather than a follow-on — and it replaces this as the remaining
+candidate.
+
+Kept from the attempt, both independently useful: `Xcsp3CompetitionRunner` takes an optional seed
+argument, without which a multi-seed sweep of this corpus is not possible at all, and
+`Xcsp3ProblemRunnerTest`'s multi-improvement case no longer pins a seed literal whose behaviour
+depends on the exact derivation being tested.
