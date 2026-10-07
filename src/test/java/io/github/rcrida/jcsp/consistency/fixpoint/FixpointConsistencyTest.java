@@ -2,11 +2,13 @@ package io.github.rcrida.jcsp.consistency.fixpoint;
 
 import io.github.rcrida.jcsp.ConstraintSatisfactionProblem;
 import io.github.rcrida.jcsp.constraints.Operator;
+import io.github.rcrida.jcsp.constraints.binary.BinaryOffsetConstraint;
 import io.github.rcrida.jcsp.constraints.nary.SumBoundConstraint;
 import io.github.rcrida.jcsp.domains.IntRangeDomain;
 import io.github.rcrida.jcsp.variables.Variable;
 import org.junit.jupiter.api.Test;
 
+import java.util.ArrayList;
 import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -16,6 +18,32 @@ public class FixpointConsistencyTest {
     @Test
     void toString_namesTheConstraintType() {
         assertThat(FixpointConsistency.of(SumBoundConstraint.class)).hasToString("FixpointConsistency(SumBoundConstraint)");
+    }
+
+    @Test
+    void apply_cascadingWakesExceedQueueCapacity_doesNotOverflow() {
+        // ConstraintQueue's ring buffer is sized to the filtered constraint count exactly, on the
+        // argument that its BitSet admits each position at most once at a time. A cascade enqueues
+        // far more times than that in total, so the buffer has to wrap repeatedly: a capacity that
+        // was wrong rather than merely tight would throw ArrayIndexOutOfBounds here instead of
+        // narrowing. A chain of x[i] + 1 <= x[i+1] over 0..9 pins every x[i] to exactly {i}, each
+        // narrowing re-waking the neighbouring link. (BinaryComparatorConstraint is no good for
+        // this: it narrows LT as if it were LEQ, so the chain cascades nowhere.)
+        var variables = new ArrayList<Variable<Integer>>();
+        var builder = ConstraintSatisfactionProblem.builder();
+        for (int i = 0; i < 10; i++) {
+            Variable<Integer> variable = Variable.Factory.INSTANCE.create("x" + i);
+            variables.add(variable);
+            builder.variableDomain(variable, IntRangeDomain.of(0, 9));
+        }
+        for (int i = 0; i + 1 < variables.size(); i++) {
+            builder.offsetConstraint(variables.get(i), 1, Operator.LEQ, variables.get(i + 1));
+        }
+        var result = FixpointConsistency.of(BinaryOffsetConstraint.class).apply(builder.build());
+        assertThat(result).isPresent();
+        for (int i = 0; i < variables.size(); i++) {
+            assertThat(result.get().getDomain(variables.get(i)).singleValue()).hasValue(i);
+        }
     }
 
     @Test

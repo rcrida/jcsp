@@ -93,3 +93,38 @@ narrower-seeded call ever happens.
   comment for the corrected scenario.
 - `ConstraintConsistency`'s own Javadoc on `apply(csp, changedSinceLastRun)` was corrected: it no
   longer claims every `FixpointConsistency` instance has "no need for the hint."
+
+### 2026-10-07: the same decision, re-implemented on integer indices
+
+The decision above is unchanged; how it is bookkept is not. Profiling `GolombRuler-09-a4` after
+[ADR-0045](0045-cheap-arc-prechecks-over-excluding-types-from-ac3.md) left this class's own
+bookkeeping as the single largest cost in the solve at **43.7% of self time** — `relevant` 11.3%,
+`ConstraintQueue.<init>` 9.3%, `poll` 6.8%, `wake` 4.7% — against 16% for the constraint
+`propagate` calls it exists to schedule. Almost all of it was `Collections.newSetFromMap(new
+IdentityHashMap<>())`: `SetFromMap.add`/`remove` is an interface call that never devirtualizes, and
+every `apply` call rebuilt the queue's membership set from its whole seed.
+
+`FilterCache` now holds `Map<Variable<?>, int[]> indicesByVariable` — positions into `filtered`
+rather than `Propagatable` references — so `ConstraintQueue` tracks membership in a `BitSet` over
+those positions and holds the queue itself in an `int[]` ring buffer. `relevant` is gone: it built a
+deduped `List` only for the constructor to copy it into the queue and again into the queued set, so
+its work folded into the seeding, taking one traversal where there were three.
+
+The ring buffer's capacity is exactly the filtered constraint count, with no growth path, because
+the `BitSet` admits each position at most once at a time and so the buffer can never hold more
+entries than it has slots. `FixpointConsistencyTest#apply_cascadingWakesExceedQueueCapacity_doesNotOverflow`
+pins that invariant with a cascade that wraps the buffer repeatedly, and was confirmed to throw
+`ArrayIndexOutOfBoundsException` when the capacity is reduced by one.
+
+**Measured 1.34x** on `GolombRuler-09-a4` (35.4s -> 26.1s, 2 seeds) at identical node counts, and
+node counts stayed identical on all eight corpus instances spot-checked — including the one
+behavioural risk, which was that the multi-variable seed order used to be `IdentityHashMap`
+iteration order (arbitrary, salted per JVM) and is now deterministic. `GraphColoring-3-fullins-4`
+29.4s -> 28.5s and `driverlogw-09` ~12% faster; nothing regressed.
+
+**Rejected after building it: sizing the ring buffer to the seed, with doubling growth.** The
+reasoning looked sound — a type with many instances is exactly where one narrowed variable wakes a
+handful of them, so `GraphColoring-3-fullins-4`'s 3,524 disequalities zero 14KB per `apply` call to
+use a few slots of it, which penciled out to ~2% there. Measured: no difference on GraphColoring,
+and slightly *worse* on `GolombRuler-09-a4` and `driverlogw-09`. Reverted to the fixed-capacity
+shape, which is also the one whose bounds argument needs no growth reasoning.
