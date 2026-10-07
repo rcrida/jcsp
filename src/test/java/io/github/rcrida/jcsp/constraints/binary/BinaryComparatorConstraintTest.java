@@ -1,5 +1,7 @@
 package io.github.rcrida.jcsp.constraints.binary;
 
+import lombok.val;
+
 import io.github.rcrida.jcsp.assignments.Assignment;
 import io.github.rcrida.jcsp.constraints.Operator;
 import io.github.rcrida.jcsp.consistency.arc.Arc;
@@ -24,6 +26,16 @@ public class BinaryComparatorConstraintTest {
     static final Variable<Integer> RIGHT = F.create("right");
 
     static Assignment a(int l, int r) { return Assignment.of(Map.of(LEFT, l, RIGHT, r)); }
+
+    @Test
+    void mayPruneAlongArc_defaultsToTrue() {
+        // BinaryConstraint's own default: a type with no cheap support rule never declines an arc,
+        // so AC3 scans the domain product exactly as it did before the precheck existed. Checked on
+        // a comparator because only BinaryNotEqualsConstraint overrides it.
+        val constraint = BinaryComparatorConstraint.of(LEFT, Operator.LEQ, RIGHT);
+        assertThat(constraint.mayPruneAlongArc(true, Set.of(1, 2, 3))).isTrue();
+        assertThat(constraint.mayPruneAlongArc(false, Set.of())).isTrue();
+    }
 
     @Test void eq_satisfied()  { assertThat(BinaryComparatorConstraint.of(LEFT, Operator.EQ,  RIGHT).isSatisfiedBy(a(3, 3))).isTrue(); }
     @Test void eq_violated()   { assertThat(BinaryComparatorConstraint.of(LEFT, Operator.EQ,  RIGHT).isSatisfiedBy(a(3, 4))).isFalse(); }

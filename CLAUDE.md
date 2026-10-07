@@ -116,6 +116,8 @@ Every domain is a record except `ObjectEmptyDomain`/`NumericEmptyDomain` (final 
 
 `AC3` (`consistency.arc`) is the arc-consistency propagator used everywhere. That covers `PROPAGATORS`' entry, `MAC` (run per search node before the fixpoint), `TreeSolver` and local-search preprocessing. `AC3BitRm` is a tested alternative that is deliberately **not wired in** ([ADR-0022](docs/adr/0022-bitset-and-residue-arc-consistency-ac3bitrm.md)).
 
+`revise` asks `BinaryConstraint#mayPruneAlongArc` before scanning the domain product, so a constraint whose support condition is decidable from the to-side domain alone can decline the scan. `BinaryNotEqualsConstraint` is the only override (`size() <= 1`). The contract is one-sided — `false` asserts every from-value has support, so a wrong `false` loses propagation silently; an empty to-side must return `true`. No type is ever excluded from AC3 ([ADR-0045](docs/adr/0045-cheap-arc-prechecks-over-excluding-types-from-ac3.md)).
+
 ### Local Search Chain
 
 `LocalSolver.Factory.INSTANCE.createLocalSolver(maxAttempts, maxSteps, factory, LocalSolverConfig)` builds:

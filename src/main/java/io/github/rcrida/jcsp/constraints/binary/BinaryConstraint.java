@@ -9,6 +9,7 @@ import io.github.rcrida.jcsp.constraints.Constraint;
 import io.github.rcrida.jcsp.variables.Variable;
 import org.jspecify.annotations.NonNull;
 
+import java.util.Collection;
 import java.util.Set;
 
 /**
@@ -78,6 +79,27 @@ public abstract class BinaryConstraint<L, R> implements Constraint {
         return arcFromLeft
                 ? isSatisfiedBy((L) fromValue, (R) toValue)
                 : isSatisfiedBy((L) toValue, (R) fromValue);
+    }
+
+    /**
+     * Whether revising an arc against {@code toValues} -- the to-side domain's values -- could
+     * delete anything from the from-side domain at all. Checked once per arc revision by {@link
+     * io.github.rcrida.jcsp.consistency.arc.AC3#revise}, which skips its whole {@code O(|D_i| *
+     * |D_j|)} scan when this returns {@code false}; this default returns {@code true}, so a
+     * constraint type that can't decide cheaply pays nothing but one virtual call.
+     * <p>
+     * An override must be <em>conservative</em>: {@code false} asserts that every from-value has a
+     * support in {@code toValues}, so returning it wrongly silently loses propagation. In
+     * particular it must return {@code true} whenever {@code toValues} is empty, since then no
+     * from-value has a support and revision wipes the from-side domain out. Overriding is only
+     * worthwhile for a relation whose support condition is decidable from {@code toValues} alone
+     * -- see {@link BinaryNotEqualsConstraint#mayPruneAlongArc}, the one such type here.
+     * <p>
+     * {@code arcFromLeft} is {@link #isArcFromLeft}'s already-resolved answer, so an asymmetric
+     * relation can tell which side {@code toValues} belongs to.
+     */
+    public boolean mayPruneAlongArc(boolean arcFromLeft, @NonNull Collection<?> toValues) {
+        return true;
     }
 
     @Override

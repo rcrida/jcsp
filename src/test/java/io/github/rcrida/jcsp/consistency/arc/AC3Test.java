@@ -8,6 +8,7 @@ import io.github.rcrida.jcsp.constraints.binary.BinaryNotEqualsConstraint;
 import io.github.rcrida.jcsp.constraints.binary.BinaryTuplesConstraint;
 import io.github.rcrida.jcsp.constraints.nary.GroundNogoodConstraint;
 import io.github.rcrida.jcsp.domains.DiscreteDomain;
+import io.github.rcrida.jcsp.domains.Domain;
 import io.github.rcrida.jcsp.domains.EnumDomain;
 import io.github.rcrida.jcsp.domains.IntRangeDomain;
 import io.github.rcrida.jcsp.domains.IntervalDomain;
@@ -138,6 +139,32 @@ public class AC3Test {
                 .notEqualsConstraint(WA, NT)
                 .build();
         assertThat(AC3.INSTANCE.revise(problem, Arc.of(WA, NT))).isEmpty();
+    }
+
+    @Test
+    void reviseArc_emptyToSideDomain_stillWipesFromSide() {
+        // BinaryNotEqualsConstraint#mayPruneAlongArc must answer true for an empty to-side, not just
+        // for a singleton one: nothing in D_i has a support, so the revision has to run and empty
+        // D_i out. A `size() == 1` precheck would decline this arc and silently report "no
+        // revision" for an infeasible one. Goes through the package-private Map-based overload
+        // because ConstraintSatisfactionProblem's own builder rejects an empty declared domain.
+        val domains = Map.<Variable<?>, Domain<?>>of(
+                WA, new EnumDomain<>(EnumSet.of(RED, GREEN)),
+                NT, new EnumDomain<>(EnumSet.noneOf(AustraliaMapColouringTest.Colour.class)));
+        val revised = AC3.revise(domains, Arc.of(WA, NT), BinaryNotEqualsConstraint.of(WA, NT));
+        assertThat(revised).isPresent();
+        assertThat(revised.get().isEmpty()).isTrue();
+    }
+
+    @Test
+    void reviseArc_twoValuedToSideDomain_declinedWithoutScanning() {
+        // The mayPruneAlongArc precheck's false branch: two to-values support every from-value, so a
+        // disequality arc cannot prune and revise returns its "no revision" answer without scanning
+        // the domain product. Observably identical to a scan that deletes nothing -- the point is
+        // that the scan is skipped -- so this pins the answer, and ADR-0045 records the measurement.
+        val twoColours = new EnumDomain<>(EnumSet.of(RED, GREEN));
+        val domains = Map.<Variable<?>, Domain<?>>of(WA, twoColours, NT, twoColours);
+        assertThat(AC3.revise(domains, Arc.of(WA, NT), BinaryNotEqualsConstraint.of(WA, NT))).isEmpty();
     }
 
     @Test

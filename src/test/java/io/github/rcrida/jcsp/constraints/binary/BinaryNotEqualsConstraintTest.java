@@ -8,6 +8,7 @@ import io.github.rcrida.jcsp.variables.Variable;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+import java.util.List;
 import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -43,6 +44,26 @@ public class BinaryNotEqualsConstraintTest {
         assertThat(constraint.isSatisfiedBy(Assignment.of(Map.of()))).isTrue();
         assertThat(constraint.isSatisfiedBy(Assignment.of(Map.of(left, 0)))).isTrue();
         assertThat(constraint.isSatisfiedBy(Assignment.of(Map.of(right, 1)))).isTrue();
+    }
+
+    @Test
+    void mayPruneAlongArc_twoOrMoreToValues_declined() {
+        // Two to-values support every from-value, so an arc revision can delete nothing.
+        assertThat(constraint.mayPruneAlongArc(true, List.of(0, 1))).isFalse();
+        assertThat(constraint.mayPruneAlongArc(false, List.of(0, 1, 2))).isFalse();
+    }
+
+    @Test
+    void mayPruneAlongArc_singletonToValues_allowed() {
+        // The one value could equal a from-value, which is exactly what revision deletes.
+        assertThat(constraint.mayPruneAlongArc(true, List.of(0))).isTrue();
+    }
+
+    @Test
+    void mayPruneAlongArc_emptyToValues_allowed() {
+        // Nothing supports anything, so revision must run and empty the from-side domain out --
+        // the reason the rule is size() <= 1 and not size() == 1.
+        assertThat(constraint.mayPruneAlongArc(true, List.of())).isTrue();
     }
 
     @Test

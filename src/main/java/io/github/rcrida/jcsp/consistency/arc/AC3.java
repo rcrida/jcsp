@@ -336,6 +336,14 @@ public class AC3 implements ConstraintConsistency {
         // Resolved once here rather than per value pair: the arc's orientation is the same for
         // every pair, and deriving it compares two Variables, i.e. two names.
         val arcFromLeft = constraint.isArcFromLeft(arc);
+        // A constraint that can tell from D_j alone that no value of D_i can lose support skips the
+        // scan below entirely. Optional.empty() is this method's own "no revision" answer -- the
+        // same thing the scan returns when it deletes nothing -- so a true precheck and a scan that
+        // finds nothing are indistinguishable to callers. Checked here rather than inside the loop
+        // (as a per-value hasSupport override) because this also skips iterating D_i and rebuilding
+        // the domain: both shapes were measured, and this one subsumed the inner one. See
+        // docs/adr/0045-cheap-arc-prechecks-over-excluding-types-from-ac3.md.
+        if (!constraint.mayPruneAlongArc(arcFromLeft, jValues)) return Optional.empty();
         List<Object> valuesToDelete = null;
         for (Object x : D_i.asCollection()) {
             if (!hasSupport(constraint, arcFromLeft, x, jValues)) {

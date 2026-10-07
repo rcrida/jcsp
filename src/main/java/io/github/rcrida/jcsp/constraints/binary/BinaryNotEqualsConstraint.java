@@ -10,6 +10,7 @@ import lombok.EqualsAndHashCode;
 import lombok.experimental.SuperBuilder;
 import org.jspecify.annotations.NonNull;
 
+import java.util.Collection;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Objects;
@@ -32,6 +33,26 @@ public class BinaryNotEqualsConstraint<T> extends SymmetricBinaryConstraint<T> i
 
     public static <T> BinaryNotEqualsConstraint<T> of(@NonNull Variable<T> left, @NonNull Variable<T> right) {
         return BinaryNotEqualsConstraint.<T>builder().left(left).right(right).build();
+    }
+
+    /**
+     * A from-value loses support along a disequality arc exactly when {@code toValues} is the
+     * singleton holding that same value, so two or more to-values support every from-value and
+     * revision can delete nothing. {@code <= 1} rather than {@code == 1} because an empty {@code
+     * toValues} supports nothing and must still revise, per {@link
+     * BinaryConstraint#mayPruneAlongArc}'s contract.
+     * <p>
+     * This is what keeps {@link io.github.rcrida.jcsp.consistency.arc.AC3} affordable on a CSP
+     * whose binary constraints are mostly disequalities -- an {@link
+     * io.github.rcrida.jcsp.constraints.nary.AllDiffConstraint}'s binary decomposition, or any
+     * parser-produced {@code ne(x,y)} -- where the scan it replaces re-derived "supported" by
+     * walking the whole to-side domain. {@link #propagate} is unaffected and remains this
+     * constraint's own arc-consistent propagator; see
+     * {@code docs/adr/0045-cheap-arc-prechecks-over-excluding-types-from-ac3.md}.
+     */
+    @Override
+    public boolean mayPruneAlongArc(boolean arcFromLeft, @NonNull Collection<?> toValues) {
+        return toValues.size() <= 1;
     }
 
     @Override
