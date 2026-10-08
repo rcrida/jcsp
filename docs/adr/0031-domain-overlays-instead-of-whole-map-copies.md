@@ -116,3 +116,28 @@ This obligates future `Propagatable` implementations to keep reading the domains
 than iterating it — the property that makes an overlay substitutable for a real map. Any propagator
 that genuinely needs to iterate still works (`entrySet` materializes), but silently pays the copy the
 overlay exists to avoid, so it should thread `(base, updates)` explicitly instead.
+
+## 2026-10-08: an overlay inside `DomainAccumulator` was measured and rejected
+
+Not every whole-map copy is worth replacing with an overlay. After the worklist work recorded in
+[ADR-0019](0019-fixpointconsistency-per-object-dirty-tracking.md) and
+[ADR-0024](0024-propagator-worklist.md), `DomainAccumulator.record` was the largest remaining piece
+of fixpoint bookkeeping on `GolombRuler-09-a4` at 7.1% of self time — it copies `initial` into a
+`LinkedHashMap` on the first narrowing of each fixpoint call, then writes every later narrowing into
+both that copy and the `allUpdates` diff.
+
+Replacing the copy with `DomainOverlay.of(initial, allUpdates)` fits this class exactly: the overlay
+reads `updates` live, so one instance stays correct as narrowing continues, and `allUpdates` is
+already the diff `finish` needs. It removes the O(variable count) copy and the double write.
+
+**Measured a wash and reverted.** Interleaved, 3 reps, identical node counts:
+`GraphColoring-3-fullins-4` ~2% faster, `GolombRuler-09-a4` ~1.5% slower, `driverlogw-09` ~1%
+slower. The reason is the direction of the trade, which is the opposite of the one this ADR's
+original case makes: here the copy happens once per narrowing fixpoint call, while the overlay adds
+a hash lookup in `updates` to *every* domain read that misses it — and reads vastly outnumber calls,
+since `AC3.revise` alone does two per arc. The 7.1% was a profile share, not a recoverable cost.
+
+**How to apply:** an overlay pays where it replaces a copy on a path that is traversed once per
+read-heavy phase, not where the copy is already amortised across the reads that follow it. Check the
+read-to-copy ratio before assuming the overlay wins, and keep `DomainAccumulator`'s `working` field
+name honest — it is a mutable working copy, not a view.
