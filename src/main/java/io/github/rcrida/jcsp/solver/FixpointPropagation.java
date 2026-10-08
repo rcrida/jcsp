@@ -90,6 +90,7 @@ import org.jspecify.annotations.Nullable;
 
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -431,6 +432,12 @@ public class FixpointPropagation {
         private final boolean[] convergesInternally;
         /** Per-propagator dirty variables; {@code null} for a queued propagator means "full scan". */
         private final Set<Variable<?>>[] dirty;
+        /**
+         * Whether {@link #dirty}{@code [i]} is this worklist's own mutable set rather than a shared
+         * reference to a caller's. {@link #wakeOne} hands out the incoming set itself and only
+         * copies when a second wake actually needs to union into it -- see its own Javadoc.
+         */
+        private final boolean[] ownsDirty;
 
         @SuppressWarnings("unchecked")
         Worklist(List<ConstraintConsistency> propagators, Coverage coverage,
@@ -443,9 +450,13 @@ public class FixpointPropagation {
                 convergesInternally[i] = propagators.get(i).convergesInternally();
             }
             this.dirty = new Set[propagators.size()];
+            this.ownsDirty = new boolean[propagators.size()];
             Arrays.fill(queued, true);
             if (initialSeed != null) {
-                for (int i = 0; i < propagators.size(); i++) dirty[i] = new HashSet<>(initialSeed);
+                // One frozen copy shared by every slot, rather than a copy per propagator. Copied
+                // rather than wrapped because this one set is the caller's: an unmodifiable view
+                // would still show a later mutation of it through every slot sharing the view.
+                Arrays.fill(dirty, Set.copyOf(initialSeed));
             }
         }
 
@@ -460,11 +471,24 @@ public class FixpointPropagation {
             return -1;
         }
 
-        /** Hands propagator {@code i} its accumulated dirty set and clears it. */
+        /**
+         * Hands propagator {@code i} its accumulated dirty set and clears the slot.
+         * <p>
+         * The set handed out is always unmodifiable, which is what makes {@link #wakeOne}'s sharing
+         * safe by construction rather than by convention: a propagator cannot mutate a set that is
+         * still another propagator's pending dirty set, and cannot mutate the caller's {@code
+         * initialSeed} either. A slot still holding a shared reference is already unmodifiable, so
+         * only an {@link #ownsDirty} slot -- this worklist's own union buffer, mutable precisely so
+         * that repeated wakes can add to it in place -- needs wrapping here. Clearing the slot is
+         * what makes that final: nothing can union into the taken set afterwards, since the next
+         * {@link #wakeOne} for {@code i} starts a fresh slot.
+         */
         @Nullable Set<Variable<?>> takeDirty(int i) {
             Set<Variable<?>> taken = dirty[i];
+            boolean owned = ownsDirty[i];
             dirty[i] = null;
-            return taken;
+            ownsDirty[i] = false;
+            return owned ? Collections.unmodifiableSet(taken) : taken;
         }
 
         /**
@@ -487,14 +511,36 @@ public class FixpointPropagation {
             for (int watcher : alwaysWoken) wakeOne(watcher, changed);
         }
 
+        /**
+         * Shares {@code changed} rather than copying it, and copies only if a second wake has to
+         * union into the same slot. {@link #wake} fans one {@code changed} set out to every watcher
+         * of every variable in it, so copying per watcher charged a fresh {@link HashSet} -- and a
+         * rehash of every element -- once per watcher, which was 7.4% of a {@code
+         * GolombRuler-09-a4} solve. Most slots are then taken by {@link #takeDirty} and read without
+         * any union ever happening.
+         * <p>
+         * Sound because {@code changed} is freshly built per {@link #wake} call by {@link
+         * #changedVariables} (or is the caller's {@code initialSeed}) and is only ever read
+         * afterwards: every {@link ConstraintConsistency} that takes a dirty set iterates it and
+         * none mutates it. {@link #ownsDirty} is what keeps that true here -- a slot still pointing
+         * at someone else's set is copied before the first {@code addAll}, so a union into one
+         * watcher's slot can never be seen by another sharing the same set.
+         */
         private void wakeOne(int i, Set<Variable<?>> changed) {
-            if (queued[i]) {
-                // Already pending: null means a full scan is pending, which subsumes anything added.
-                if (dirty[i] != null) dirty[i].addAll(changed);
-            } else {
+            if (!queued[i]) {
                 queued[i] = true;
-                dirty[i] = new HashSet<>(changed);
+                dirty[i] = changed;
+                ownsDirty[i] = false;
+                return;
             }
+            // Already pending: null means a full scan is pending, which subsumes anything added, and
+            // the identity check catches the same set arriving twice via two of its own variables.
+            if (dirty[i] == null || dirty[i] == changed) return;
+            if (!ownsDirty[i]) {
+                dirty[i] = new HashSet<>(dirty[i]);
+                ownsDirty[i] = true;
+            }
+            dirty[i].addAll(changed);
         }
     }
 
@@ -556,6 +602,11 @@ public class FixpointPropagation {
      * domain, never changes the variable set). Public so {@link
      * io.github.rcrida.jcsp.solver.Solver.Factory#propagationInference} can reuse it to
      * compute {@code applyFixpoint}'s round-1 seed from the pre-/post-MAC domains.
+     * <p>
+     * Unmodifiable, and effectively immutable rather than merely a read-only view: the backing
+     * {@link HashSet} is built here and no other reference to it escapes. {@code Worklist.wakeOne}
+     * shares one of these sets across every propagator woken by it instead of copying it per
+     * propagator, which is only sound while nothing downstream can mutate it.
      */
     public static Set<Variable<?>> changedVariables(Map<Variable<?>, Domain<?>> before,
                                                       Map<Variable<?>, Domain<?>> after) {
@@ -565,7 +616,7 @@ public class FixpointPropagation {
                 result.add(entry.getKey());
             }
         }
-        return result;
+        return Collections.unmodifiableSet(result);
     }
 
     /**

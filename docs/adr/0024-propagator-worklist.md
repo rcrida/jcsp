@@ -112,3 +112,39 @@ plausible sources, but that split was not measured and should not be asserted.
   domain map. Cheaper, but a stale or wrong value would silently weaken the fixpoint, and the diff
   only runs when a propagator genuinely changed something — by which point it is doing real work
   anyway. Reconsider only with evidence the diff is hot.
+
+## 2026-10-08: the dirty set is shared, and frozen so that sharing is safe by construction
+
+The decision above is unchanged; the dirty-set bookkeeping under it is not. `Worklist.wake` fans one
+`changed` set out to every watcher of every variable in it, and `wakeOne` built a fresh
+`HashSet<>(changed)` per watcher — rehashing every element once per watcher, which profiling put at
+**7.4% of a `GolombRuler-09-a4` solve** once the costs that had been hiding it were removed. Most of
+those copies were then read once and discarded without any union ever happening.
+
+`wakeOne` now shares the incoming set and copies only when a second wake has to union into the same
+slot, tracked by an `ownsDirty` flag. The seeding path shares too: one `Set.copyOf(initialSeed)` for
+every slot, where it was a copy per propagator.
+
+That is only sound while nothing downstream mutates a shared set, so the sets are **unmodifiable
+once populated** rather than relying on that as a convention:
+
+- `changedVariables` returns `Collections.unmodifiableSet` over a `HashSet` it alone references, so
+  the result is effectively immutable and not merely a read-only view.
+- `initialSeed` is `Set.copyOf`'d rather than wrapped, because that one set belongs to the caller: a
+  view would still show a later mutation of it through every slot sharing the view.
+- `takeDirty` wraps an `ownsDirty` slot on the way out — that buffer is this worklist's own and
+  mutable precisely so repeated wakes can add to it in place, and clearing the slot is what makes
+  the wrap final, since nothing can union into a taken set afterwards.
+
+`FixpointPropagationTest#applyFixpoint_everyDirtySetHandedToAPropagatorIsUnmodifiable` pins this with
+a propagator that tries to mutate every set it receives. It sits on *both* sides of a narrowing
+propagator in the list, because the two paths need different positions: ahead of it the spy takes a
+shared set, behind it the spy is still queued when the wake arrives, so the wake must union into its
+pending slot. Confirmed by deleting `takeDirty`'s wrap — the trailing position then reports a mutable
+set, and the leading position alone does not catch it.
+
+Measured against the previous commit, interleaved, 3 reps, identical node counts throughout:
+`GolombRuler-09-a4` 25.8s -> 24.7s and `driverlogw-09` 12.8s -> 12.3s, both ~4%;
+`GraphColoring-3-fullins-4` flat to ~2% slower, inside its own 1.3s run-to-run spread. Freezing
+costs roughly 2% back against the same change left unguarded (24.2s on `GolombRuler-09-a4`), which
+is the price of the guarantee and was taken deliberately.

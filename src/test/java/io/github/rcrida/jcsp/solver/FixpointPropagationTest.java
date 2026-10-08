@@ -21,6 +21,75 @@ public class FixpointPropagationTest {
     static final Variable.Factory F = Variable.Factory.INSTANCE;
 
     @Test
+    void changedVariables_isUnmodifiable() {
+        Variable<Integer> x = F.create("cvx");
+        var before = Map.<Variable<?>, Domain<?>>of(x, IntRangeDomain.of(1, 3));
+        var after = Map.<Variable<?>, Domain<?>>of(x, IntRangeDomain.of(1, 1));
+        var changed = FixpointPropagation.changedVariables(before, after);
+        assertThat(changed).containsExactly(x);
+        assertThatThrownBy(() -> changed.add(F.create("other"))).isInstanceOf(UnsupportedOperationException.class);
+    }
+
+    @Test
+    void applyFixpoint_everyDirtySetHandedToAPropagatorIsUnmodifiable() {
+        // Worklist.wakeOne hands one `changed` set to every propagator woken by it rather than
+        // copying it per propagator, and unions in place on a second wake. Both only stay sound
+        // while no propagator can mutate what it was given, so takeDirty must hand out an
+        // unmodifiable set on both paths: the shared reference and the worklist's own union buffer.
+        // This spy tries to mutate every non-null set it receives and records what happened, run
+        // against a cascade so it is woken repeatedly and sees the union path too.
+        var seen = new java.util.ArrayList<String>();
+        ConstraintConsistency spy = new ConstraintConsistency() {
+            @Override
+            public java.util.Optional<ConstraintSatisfactionProblem> apply(ConstraintSatisfactionProblem csp) {
+                return java.util.Optional.of(csp);
+            }
+
+            @Override
+            public java.util.Optional<ConstraintSatisfactionProblem> apply(
+                    ConstraintSatisfactionProblem csp, Set<Variable<?>> changedSinceLastRun) {
+                if (changedSinceLastRun == null) {
+                    seen.add("fullScan");
+                } else {
+                    try {
+                        changedSinceLastRun.add(F.create("intruder"));
+                        seen.add("MUTABLE");
+                    } catch (UnsupportedOperationException expected) {
+                        seen.add("unmodifiable");
+                    }
+                }
+                return java.util.Optional.of(csp);
+            }
+        };
+        Variable<Integer> a = F.create("ua"), b = F.create("ub"), c = F.create("uc");
+        var csp = ConstraintSatisfactionProblem.builder()
+                .variableDomain(a, IntRangeDomain.of(0, 5))
+                .variableDomain(b, IntRangeDomain.of(0, 5))
+                .variableDomain(c, IntRangeDomain.of(0, 5))
+                .offsetConstraint(a, 1, io.github.rcrida.jcsp.constraints.Operator.LEQ, b)
+                .offsetConstraint(b, 1, io.github.rcrida.jcsp.constraints.Operator.LEQ, c)
+                .build();
+        // The spy sits on both sides of the narrowing propagator because the two paths need
+        // different positions, and one list covers both. Ahead of it, the spy runs before anything
+        // has woken it and so takes a shared set (the frozen initialSeed, then the shared `changed`
+        // from a wake). Behind it, the spy is still queued when the wake arrives, so the wake has to
+        // union into its pending set -- the one slot that is this worklist's own mutable buffer.
+        // Verified by deleting takeDirty's wrap: the trailing position then reports MUTABLE, and
+        // the leading position alone does not catch it.
+        var propagation = FixpointPropagation.builder()
+                .propagators(java.util.List.of(
+                        spy,
+                        io.github.rcrida.jcsp.consistency.fixpoint.FixpointConsistency.of(
+                                io.github.rcrida.jcsp.constraints.binary.BinaryOffsetConstraint.class),
+                        spy))
+                .build();
+        // A seed, so the spy's first call gets a set rather than null (a full scan).
+        assertThat(propagation.applyFixpoint(csp, Set.of(a), SolverListener.NONE, new Statistics(), Cancellation.NEVER))
+                .isPresent();
+        assertThat(seen).hasSizeGreaterThan(2).doesNotContain("MUTABLE", "fullScan").contains("unmodifiable");
+    }
+
+    @Test
     void applyFixpointWithSeed_skipsNogoodOutsideSeed_fullScanCatchesIt() {
         // A nogood (x=1, y=2) already falsified by the given domains. Seeding round 1 with a set
         // that excludes both x and y means applyFixpoint(csp, seed, listener) must skip checking it
