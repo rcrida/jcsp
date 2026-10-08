@@ -74,3 +74,34 @@ a profile share overstating what is recoverable.
   returned the same 728. Three tuning constants with no principled basis, justified by no improvement
   in any answer. Revisit only with a real outcome measure: run the non-closing instances to a much
   longer budget and compare final objective values.
+
+## 2026-10-08: consult the cache before computing anything from the CSP
+
+The decision above is unchanged; one piece of the implementation was leaving most of its own win on
+the table. `solve` opened with `relevantVariables(csp, objective)` — a full scan of
+`getConstraints()` — on *every* node, before the cache lookup, and then the cached path deliberately
+ignored that result in favour of `reusable.variables()`, with a comment explaining the two agree by
+invariant. So the scan was pure waste on exactly the path this ADR exists to make cheap: JFR put it
+at **7.7% of a `Vrp-P-n16-k8` solve**, where the LP accounts for 74% of the time overall.
+
+`solve` now looks the entry up first and takes the variable list from it, computing
+`relevantVariables` only when there is no reusable entry (no `cacheKey`, an assignment-relaxation
+problem, or a changed objective). Three smaller things followed:
+
+- `ReusableModel` loses its `ojVariables` component, which nothing ever read — the cached path has
+  always rebuilt that map while re-bounding the copy.
+- The degenerate "no relevant variables" case is cached too, as an entry with an empty list and a
+  null model, so it also costs one scan per solve rather than one per node. Previously the early
+  return sat above the cache, so such a problem rescanned on every node.
+- The alignment invariant the old comment had to argue is now structural rather than argued: there
+  is one list, computed once where the model is built, and it is the only one any caller sees.
+
+Measured at a fixed 100s budget, 2 reps, so node counts read as throughput:
+`Vrp-P-n16-k8` 957k -> 1,058k nodes (**+10.5%**, and its reported objective improved from 667/659 to
+630 in both reps), `Vrp-A-n32-k5` 211k -> 246k (**+16.8%**). `Fastfood-ff10` completes inside the
+budget and is byte-identical at 54,273 nodes and `o 704`, which is the no-behaviour-change check.
+
+One incidental note for whoever next touches this file: an `assert template != null` added while
+restructuring cost 4 instructions and 1 uncovered branch and failed the coverage gate. JaCoCo does
+not filter null-check asserts (this was already recorded for a boxed `Integer`; it is not specific to
+unboxing). The invariant lives in `ReusableModel`'s Javadoc instead.

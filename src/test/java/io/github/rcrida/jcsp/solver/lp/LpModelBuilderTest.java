@@ -220,6 +220,24 @@ public class LpModelBuilderTest {
         assertThat(bound).contains(new LpBound(42.0, Map.of()));
     }
 
+    @Test
+    void noRelevantVariables_withCacheKey_cachesTheEmptinessItself() {
+        // The reusable entry holds the variable list, so the second call must answer from the cache
+        // rather than rescanning getConstraints() -- including when the list is empty, which is the
+        // one cached shape carrying a null model. Both calls return the same constant bound; the
+        // point of the second is that it exercises the cached-empty path at all, since a per-node
+        // LP solve is exactly this call repeated.
+        Variable<Integer> x = F.create("cachedEmptyX");
+        var csp = ConstraintSatisfactionProblem.builder()
+                .variableDomain(x, IntRangeDomain.of(0, 10))
+                .build();
+        LinearObjective objective = LinearObjective.builder().constant(42.0).build();
+        Object key = new Object();
+
+        assertThat(LpModelBuilder.solve(csp, objective, key)).contains(new LpBound(42.0, Map.of()));
+        assertThat(LpModelBuilder.solve(csp, objective, key)).contains(new LpBound(42.0, Map.of()));
+    }
+
     // ---- assignment relaxation (GlobalCardinalityConstraint + function-table linkage) --------------
 
     private static GlobalCardinalityConstraint.OccurrenceRange atMostOne() {

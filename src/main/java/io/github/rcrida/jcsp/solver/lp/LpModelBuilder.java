@@ -124,28 +124,36 @@ public final class LpModelBuilder {
     public static Optional<LpBound> solve(@NonNull ConstraintSatisfactionProblem csp,
                                            @NonNull LinearObjective objective,
                                            @Nullable Object cacheKey) {
-        List<Variable<?>> variables = List.copyOf(relevantVariables(csp, objective));
-        if (variables.isEmpty()) {
-            return Optional.of(new LpBound(objective.getConstant(), Map.of()));
-        }
-
-        ReusableModel reusable = cacheKey == null ? null : reusableModel(csp, objective, variables, cacheKey);
-        Map<Variable<?>, org.ojalgo.optimisation.Variable> ojVariables;
+        // The cache is consulted before anything is computed from csp, because the reusable entry
+        // already carries the variable list: recomputing it here cost a full scan of
+        // getConstraints() per search node for a result the cached path then discarded in favour of
+        // reusable.variables() anyway (7.7% of a Vrp-P-n16-k8 solve).
+        ReusableModel reusable = cacheKey == null ? null : reusableModel(csp, objective, cacheKey);
+        List<Variable<?>> variables;
+        Map<Variable<?>, org.ojalgo.optimisation.Variable> ojVariables = new LinkedHashMap<>();
         ExpressionsBasedModel model;
         if (reusable == null) {
-            ojVariables = new LinkedHashMap<>();
+            variables = List.copyOf(relevantVariables(csp, objective));
+            if (variables.isEmpty()) {
+                return Optional.of(new LpBound(objective.getConstant(), Map.of()));
+            }
             model = build(csp, objective, variables, ojVariables);
         } else {
+            variables = reusable.variables();
+            if (variables.isEmpty()) {
+                // Cached emptiness: no linear constraints and no objective coefficients, so there is
+                // no LP to build. Held in the cache rather than recomputed so this stays one scan
+                // per solve instead of one per node, the same reason the lookup comes first.
+                return Optional.of(new LpBound(objective.getConstant(), Map.of()));
+            }
             // A copy per node, not the template itself: ojAlgo retains presolve state on a model it
             // has solved, so mutating bounds and re-solving the same instance returns a valid but
             // far weaker bound (measured: Knapsack-30-100-00 went from 605 nodes to 288,022).
+            // Non-null because variables is non-empty here -- the two go together by construction,
+            // see ReusableModel's own Javadoc.
             model = reusable.model().copy();
-            ojVariables = new LinkedHashMap<>();
-            // The cached list, not the freshly computed one: it is what the retained model's variable
-            // order was built from, and the two agree by the invariant documented on reusableModel.
-            List<Variable<?>> cachedVariables = reusable.variables();
-            for (int i = 0; i < cachedVariables.size(); i++) {
-                Variable<?> variable = cachedVariables.get(i);
+            for (int i = 0; i < variables.size(); i++) {
+                Variable<?> variable = variables.get(i);
                 double[] bounds = boundsOf(csp, variable);
                 var ojVariable = model.getVariable(i).lower(bounds[0]).upper(bounds[1]);
                 ojVariables.put(variable, ojVariable);
@@ -165,24 +173,31 @@ public final class LpModelBuilder {
         return Optional.of(new LpBound(result.getValue() + objective.getConstant(), solution));
     }
 
-    /** A structural model retained across nodes; see {@link #solve(ConstraintSatisfactionProblem, LinearObjective, Object)}. */
+    /**
+     * A structural model retained across nodes; see {@link
+     * #solve(ConstraintSatisfactionProblem, LinearObjective, Object)}.
+     * <p>
+     * {@code model} is {@code null} exactly when {@code variables} is empty -- the degenerate
+     * problem with no linear constraints and no objective coefficients, which needs no LP at all.
+     * Caching that outcome is what keeps {@link #relevantVariables} off the per-node path for it too.
+     */
     private record ReusableModel(LinearObjective objective, List<Variable<?>> variables,
-                                  Map<Variable<?>, org.ojalgo.optimisation.Variable> ojVariables,
-                                  ExpressionsBasedModel model) {
+                                  @Nullable ExpressionsBasedModel model) {
     }
 
     /**
      * The retained model for {@code cacheKey}, or {@code null} when this problem cannot reuse one.
      * A cached entry is reused only when it was built for the same {@code objective}, so a caller
      * that changes objective mid-solve is rebuilt for rather than silently served a stale model.
-     * Matching on the objective alone is sufficient to keep {@link ReusableModel#variables} aligned
-     * with the retained model's own variable order, which the index-based lookup below depends on:
-     * {@link #relevantVariables} is a function of the objective's coefficient keys and the linear
-     * constraints, and the latter are fixed for the constraint graph this entry is already keyed on.
+     * Matching on the objective alone is sufficient, because {@link #relevantVariables} is a
+     * function of the objective's coefficient keys and the linear constraints, and the latter are
+     * fixed for the constraint graph this entry is already keyed on. {@link
+     * ReusableModel#variables} is therefore computed here, once, and is the only list any caller
+     * uses -- so the retained model's own variable order and the list indexing into it cannot
+     * diverge, rather than agreeing by an invariant that had to be argued.
      */
     private static @Nullable ReusableModel reusableModel(ConstraintSatisfactionProblem csp,
                                                           LinearObjective objective,
-                                                          List<Variable<?>> variables,
                                                           Object cacheKey) {
         AtomicReference<ReusableModel> holder =
                 csp.computeAuxiliaryCacheIfAbsent(cacheKey, ignored -> new AtomicReference<>());
@@ -193,9 +208,11 @@ public final class LpModelBuilder {
         if (!findAssignmentLinkages(csp, objective).isEmpty()) {
             return null;
         }
-        Map<Variable<?>, org.ojalgo.optimisation.Variable> ojVariables = new LinkedHashMap<>();
-        ExpressionsBasedModel model = build(csp, objective, variables, ojVariables);
-        ReusableModel fresh = new ReusableModel(objective, variables, ojVariables, model);
+        List<Variable<?>> variables = List.copyOf(relevantVariables(csp, objective));
+        ReusableModel fresh = variables.isEmpty()
+                ? new ReusableModel(objective, variables, null)
+                : new ReusableModel(objective, variables,
+                        build(csp, objective, variables, new LinkedHashMap<>()));
         holder.set(fresh);
         return fresh;
     }
