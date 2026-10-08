@@ -107,3 +107,4 @@ section instead.
 | [0043](0043-inconclusive-is-not-unsatisfiable.md) | Reserve an empty `getSolution()` for a proven refutation, and throw from every path that stopped early | Accepted |
 | [0044](0044-bounded-probes-for-the-starting-incumbent.md) | Tighten branch-and-bound's starting incumbent by asking a feasibility search bounded questions, behind an `IncumbentSeeder` | Accepted |
 | [0045](0045-cheap-arc-prechecks-over-excluding-types-from-ac3.md) | Let a binary constraint decline an arc revision it knows cannot prune, rather than excluding its type from AC3 | Accepted |
+| [0046](0046-adaptive-lp-gate-keyed-on-cut-rate.md) | Back the per-node LP bound off after a streak of solves that failed to cut, keyed on cut rate rather than frequency | Accepted |

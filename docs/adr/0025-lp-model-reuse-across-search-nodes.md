@@ -73,7 +73,10 @@ a profile share overstating what is recoverable.
   instance — and on `Fastfood-ff10`, the one non-closing instance that does report an objective, it
   returned the same 728. Three tuning constants with no principled basis, justified by no improvement
   in any answer. Revisit only with a real outcome measure: run the non-closing instances to a much
-  longer budget and compare final objective values.
+  longer budget and compare final objective values. **Done, and the gate was accepted on that
+  measure — see [ADR-0046](0046-adaptive-lp-gate-keyed-on-cut-rate.md):** `Vrp-P-n16-k8`'s
+  reported objective improves 620 to 558 at a 180s budget, and keying the backoff on cut rate
+  rather than frequency removed the tuning constants this entry objected to.
 
 ## 2026-10-08: consult the cache before computing anything from the CSP
 

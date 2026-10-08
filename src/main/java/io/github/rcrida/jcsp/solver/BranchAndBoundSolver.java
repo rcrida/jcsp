@@ -211,7 +211,7 @@ public class BranchAndBoundSolver implements Solver {
         statistics.updateRootSearchSpace(csp.getSearchSpace());
         Optional<Assignment> seed = seedIncumbent(csp, incumbent);
         Stream<Assignment> improvements = search(csp, rootAssignment(), incumbent, deadline, 1.0, new SearchProgress(),
-                selectorFactory.createSelector(csp.getConstraints()));
+                selectorFactory.createSelector(csp.getConstraints()), new LpGate());
         return seed.map(solution -> Stream.concat(Stream.of(solution), improvements)).orElse(improvements);
     }
 
@@ -253,7 +253,8 @@ public class BranchAndBoundSolver implements Solver {
                                        long deadline,
                                        double weight,
                                        SearchProgress progress,
-                                       AdaptiveVariableSelector selector) {
+                                       AdaptiveVariableSelector selector,
+                                       LpGate lpGate) {
         if (assignment.isComplete(csp) || isDiscreteComplete(csp, assignment)) {
             return resolveComplete(csp, assignment, incumbent);
         }
@@ -261,7 +262,7 @@ public class BranchAndBoundSolver implements Solver {
         if (cutCsp == null) {
             return Stream.empty();
         }
-        return searchCut(cutCsp, assignment, incumbent, deadline, weight, progress, selector);
+        return searchCut(cutCsp, assignment, incumbent, deadline, weight, progress, selector, lpGate);
     }
 
     /** {@link #search}'s continuation once the objective cut has been folded into {@code csp}. */
@@ -271,15 +272,24 @@ public class BranchAndBoundSolver implements Solver {
                                          long deadline,
                                          double weight,
                                          SearchProgress progress,
-                                         AdaptiveVariableSelector selector) {
+                                         AdaptiveVariableSelector selector,
+                                         LpGate lpGate) {
         Variable<?> variable;
-        if (objective instanceof LinearObjective linearObjective) {
+        if (objective instanceof LinearObjective linearObjective && lpGate.solveThisNode()) {
             Optional<LpBound> bound = LpModelBuilder.solve(csp, linearObjective, lpModelCacheKey);
-            if (bound.isEmpty() || bound.get().lowerBound() >= incumbent[0]) {
+            boolean cut = bound.isEmpty() || bound.get().lowerBound() >= incumbent[0];
+            lpGate.record(cut);
+            if (cut) {
                 return Stream.empty();
             }
             variable = selectFractionalVariable(csp, assignment, bound.get())
                     .orElseGet(() -> selector.select(csp, assignment));
+        } else if (objective instanceof LinearObjective) {
+            // Gated off: no LP bound and no most-fractional hint this node. Not also falling back to
+            // the else branch's objective.applyAsDouble check below, because that evaluates a
+            // LinearObjective over a *partial* assignment, which is not a lower bound once any
+            // coefficient is negative. The incumbent is already enforced by applyObjectiveCut above.
+            variable = selector.select(csp, assignment);
         } else {
             if (objective.applyAsDouble(assignment) >= incumbent[0]) {
                 return Stream.empty();
@@ -287,7 +297,7 @@ public class BranchAndBoundSolver implements Solver {
             variable = selector.select(csp, assignment);
         }
         requireDiscrete(csp, variable);
-        return searchValues(variable, csp, assignment, incumbent, deadline, weight, progress, selector);
+        return searchValues(variable, csp, assignment, incumbent, deadline, weight, progress, selector, lpGate);
     }
 
     /**
@@ -486,7 +496,8 @@ public class BranchAndBoundSolver implements Solver {
                                                  long deadline,
                                                  double weight,
                                                  SearchProgress progress,
-                                                 AdaptiveVariableSelector selector) {
+                                                 AdaptiveVariableSelector selector,
+                                                 LpGate lpGate) {
         ConstraintSatisfactionProblem cspWithNogoods = nogoodStore.apply(csp);
         @SuppressWarnings("unchecked")
         List<T> candidates = (List<T>) phaseMemory.prioritise(variable,
@@ -518,7 +529,7 @@ public class BranchAndBoundSolver implements Solver {
                     Stream<Assignment> child;
                     try {
                         child = inferOrExplain(cspWithNogoods, variable, next, selector)
-                                .map(inferred -> search(inferred, next, incumbent, deadline, childWeight, progress, selector))
+                                .map(inferred -> search(inferred, next, incumbent, deadline, childWeight, progress, selector, lpGate))
                                 .orElseGet(Stream::empty);
                     } catch (SolverCancelledException e) {
                         child = Stream.empty();

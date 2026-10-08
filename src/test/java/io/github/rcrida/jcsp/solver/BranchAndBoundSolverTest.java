@@ -330,6 +330,44 @@ public class BranchAndBoundSolverTest {
     }
 
     @Test
+    void linearObjective_lpThatNeverCuts_gatesOffAndStillFindsTheOptimum() {
+        // Drives LpGate past its patience inside a real solve, which is the only way to reach
+        // searchCut's gated branch. Ten booleans with a LinearObjective, and the single real
+        // constraint a PredicateConstraint -- not linear, so LpModelBuilder gives the model no rows
+        // at all and the relaxation is just "minimise the sum over [0,1] boxes", i.e. 0 at every
+        // node. 0 never reaches the incumbent, so the LP cuts nothing however long it runs, the miss
+        // streak reaches LpGate.PATIENCE, and the rest of the search proceeds on the selector alone.
+        // Unpropagated predicates also mean the search is near-exhaustive, so it comfortably exceeds
+        // the patience run-up. The optimum must still come out at exactly seven ones.
+        List<Variable<Integer>> bits = new java.util.ArrayList<>();
+        var builder = ConstraintSatisfactionProblem.builder();
+        for (int i = 0; i < 10; i++) {
+            Variable<Integer> bit = Variable.Factory.INSTANCE.create("gateBit" + i);
+            bits.add(bit);
+            builder.variableDomain(bit, IntRangeDomain.of(0, 1));
+        }
+        builder.predicateConstraint(Set.copyOf(bits),
+                a -> a.getValues().values().stream().mapToInt(v -> (Integer) v).sum() == 7);
+        var csp = builder.build();
+
+        var objectiveBuilder = LinearObjective.builder();
+        bits.forEach(bit -> objectiveBuilder.coefficient(bit, 1.0));
+        LinearObjective objective = objectiveBuilder.build();
+
+        BranchAndBoundSolver solver = BranchAndBoundSolver.builder()
+                .objective(objective)
+                .domainValuesOrderer(DefaultValueOrderer.INSTANCE)
+                .inference(narrowAssignedToSingleton())
+                .statistics(new io.github.rcrida.jcsp.assignments.Statistics())
+                .build();
+        var improving = solver.getSolutions(csp).toList();
+
+        assertThat(improving).isNotEmpty();
+        Assignment best = improving.get(improving.size() - 1);
+        assertThat(objective.applyAsDouble(best)).isCloseTo(7.0, org.assertj.core.api.Assertions.within(1e-9));
+    }
+
+    @Test
     void linearObjective_prunesInfeasibleAndDominatedBranches_findsCorrectOptimum() {
         LinearObjective linearObjective = LinearObjective.builder()
                 .coefficient(LP_X, 1.0).coefficient(LP_Y, 1.0).coefficient(LP_Z, 1.0)
