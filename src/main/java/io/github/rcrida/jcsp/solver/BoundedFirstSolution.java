@@ -22,16 +22,16 @@ import java.util.function.ToDoubleFunction;
  * same search a <em>bounded</em> question: "is there a solution costing at most {@code target}?".
  *
  * <p>The bound is an {@link ObjectiveCut}, so it is propagated rather than merely checked, which is
- * what makes a tighter question often an easier one: on {@code Taillard-js-015-15-0}, bounding the
- * makespan at 1281 finds a solution in 3.1s where the unbounded search takes 4.4s to find its 1330,
- * and bounds at or below 1146 are refuted by propagation alone without visiting a single node.
+ * what makes a tighter question often an easier one: on a job shop, bounding the makespan below what
+ * the unbounded search finds can be answered faster than the unbounded question, and a bound far
+ * enough below the optimum is refuted by propagation alone without visiting a single node.
  *
  * <p>The schedule is a descent, deliberately not a bisection. Between the costs a bounded search can
- * satisfy and those it can refute lies a band where it can do neither within any sane budget --
- * measured at roughly 1220 to 1274 on that instance, straddling the optimum -- and a bisection aims
- * its first probe squarely into the middle of it, learning nothing and spending everything. Stepping
- * down by {@link #stepDivisor}ths of the remaining gap keeps the early probes in the region that
- * answers cheaply, and every answer shrinks the gap for the next one.
+ * satisfy and those it can refute lies a band where it can do neither within any sane budget,
+ * straddling the optimum, and a bisection aims its first probe squarely into the middle of it,
+ * learning nothing and spending everything. Stepping down by {@link #stepDivisor}ths of the remaining
+ * gap keeps the early probes in the region that answers cheaply, and every answer shrinks the gap for
+ * the next one.
  *
  * <p>Which answer came back is what drives the descent, and being able to tell two of them apart is
  * what <a href="../../../../../../../docs/adr/0043-inconclusive-is-not-unsatisfiable.md">ADR-0043</a>
@@ -90,14 +90,13 @@ public class BoundedFirstSolution implements IncumbentSeeder {
     /**
      * Restart budget for each bounded probe, far smaller than {@link #initialRestartBudget} because a
      * probe that cannot be answered must hand the budget back rather than consume the solve. It bounds
-     * a probe's cost in <em>restarts</em>, which is only loosely a bound on its time: the default of
-     * 32 cut an unanswerable probe off after 9.5s on {@code Taillard-js-015-15-0}.
+     * a probe's cost in <em>restarts</em>, which is only loosely a bound on its time.
      * <p>
-     * The default is known to be slightly ungenerous. That same instance's bounded question is
-     * answerable at 8,764 nodes, and 32 restarts reaches 8,522 before giving up -- three percent
-     * short. Raising it collects answers like that one while lingering longer on the probes that have
-     * none, and that trade has now been measured over the corpus: 128 and 512 are both worse than 32
-     * overall. Do not raise it without re-measuring; ADR-0044 records the figures.
+     * The default is known to be slightly ungenerous: it gives up a little short of answers that a
+     * larger budget would collect, in exchange for lingering less on the probes that have none. That
+     * trade is measured over the corpus, and larger values came out worse, so do not raise it without
+     * re-measuring -- see
+     * <a href="../../../../../../../docs/adr/0044-bounded-probes-for-the-starting-incumbent.md">ADR-0044</a>.
      */
     int probeRestartBudget;
 

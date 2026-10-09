@@ -5,10 +5,11 @@ package io.github.rcrida.jcsp.solver;
  * stopped earning it.
  * <p>
  * {@link BranchAndBoundSolver} solves one LP per node when its objective is a {@link
- * LinearObjective} (ADR-0009), and on some problems that bound never prunes anything at all: an
- * instrumented census of {@code Vrp-P-n16-k8} recorded 322,995 LP solves and <em>zero</em> cuts,
- * with the LP accounting for 74% of the solve. Others depend on it — {@code Knapsack-30-100-00}
- * cuts on 73 of 277 solves, and removing the LP there costs 396 nodes to 192,852.
+ * LinearObjective} (<a href="../../../../../../../docs/adr/0009-joint-continuous-discrete-optimization.md">ADR-0009</a>),
+ * and on some problems that bound never prunes anything at all, while accounting for most of the
+ * solve. Others depend on it, and lose orders of magnitude in nodes without it -- see
+ * <a href="../../../../../../../docs/adr/0046-adaptive-lp-gate-keyed-on-cut-rate.md">ADR-0046</a>
+ * for both censuses.
  * <p>
  * So the gate is keyed on the one signal that distinguishes them, rather than on a frequency: a
  * streak of solves that failed to cut. Until {@link #PATIENCE} consecutive solves have all failed,
@@ -33,16 +34,15 @@ final class LpGate {
     /**
      * Consecutive non-cutting solves tolerated before backing off, and afterwards the reciprocal of
      * the rate the LP is retried at. One constant rather than separate patience/backoff/cap knobs,
-     * which is what an earlier adaptive-gate attempt was rejected for (ADR-0025).
+     * which is what an earlier adaptive-gate attempt was rejected for
+     * (<a href="../../../../../../../docs/adr/0025-lp-model-reuse-across-search-nodes.md">ADR-0025</a>).
      * <p>
-     * 128 because the win does not depend on it while the protection does. Swept against both
-     * signals at once -- {@code Vrp-P-n16-k8} reported {@code o 558} at 16, 32, 64 and 128 alike,
-     * while {@code Knapsack-30-100-00} took 486, 431, 431 and 396 nodes -- so the largest value is
-     * free on the instance the gate is for and exactly recovers the ungated node count on the
-     * instance it must not disturb. At 128 that is not luck: {@code Knapsack-30-100-00} runs 277 LP
-     * solves of which 73 cut, so it cannot accumulate 128 consecutive misses and the gate provably
-     * never engages there. A dead LP pays 128 solves before backing off, negligible against the
-     * 322,995 {@code Vrp-P-n16-k8} would otherwise run.
+     * 128 because the win does not depend on it while the protection does: an instance whose LP
+     * prunes regularly cannot accumulate 128 consecutive misses, so the gate provably never engages
+     * there, while a dead LP pays 128 solves against the hundreds of thousands it would otherwise
+     * run. Swept against both signals -- see
+     * <a href="../../../../../../../docs/adr/0046-adaptive-lp-gate-keyed-on-cut-rate.md">ADR-0046</a>
+     * for the figures; do not change it without re-measuring both.
      */
     static final int PATIENCE = 128;
 

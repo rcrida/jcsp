@@ -79,18 +79,19 @@ import java.util.stream.Stream;
  * ToDoubleFunction}{@code <Assignment>}) is what triggers this. Complete assignments are unaffected
  * -- their real cost is exact, so relaxing it would only add solve cost for no benefit.
  * <p>
- * This class now runs <em>before</em> {@link BisectionConditioningSolver} rather than after it (see
- * ADR-0009): {@link Solver.Factory} wires this class directly as the optimization chain's terminal
- * solver even when the problem has {@link BoundedDomain} variables, instead of nesting it inside
- * {@link BisectionConditioningSolver}. Variable selection above only ever considers non-{@link
+ * {@link Solver.Factory} wires this class as the optimization chain's terminal solver even when the
+ * problem has {@link BoundedDomain} variables, with {@link BisectionConditioningSolver} reached from
+ * inside it rather than wrapped around it (see
+ * <a href="../../../../../../../docs/adr/0009-joint-continuous-discrete-optimization.md">ADR-0009</a>).
+ * Variable selection above only ever considers non-{@link
  * BoundedDomain} ("discrete") variables -- {@link #isDiscreteComplete} recognises the point where
  * every discrete variable is decided but {@link BoundedDomain} variables remain open, and {@link
  * #resolveContinuousResidual} takes over from there: it fills them directly from the same node's LP
  * solution when {@link #objective} is a {@link LinearObjective} and that fill is actually consistent
  * against every constraint (exact, since with every discrete variable already pinned the LP is no
  * longer an approximation for the remaining purely-continuous sub-problem), falling back to
- * {@link BisectionConditioningSolver} -- now invoked internally, once per discrete-complete leaf
- * rather than once for the whole search -- when the fast path doesn't apply or isn't sound (e.g. a
+ * {@link BisectionConditioningSolver} -- invoked once per discrete-complete leaf rather than once
+ * for the whole search -- when the fast path doesn't apply or isn't sound (e.g. a
  * {@link BoundedDomain} variable also participates in a constraint the LP can't see, like {@link
  * ConstraintSatisfactionProblem.ConstraintSatisfactionProblemBuilder#productConstraint(java.util.Set,
  * io.github.rcrida.jcsp.constraints.Operator, Number)}). Continuous variables whose useful bounds
@@ -264,10 +265,8 @@ public class BranchAndBoundSolver implements Solver {
      * Only the incumbent is taken from it. The solution's values are <em>not</em> written to
      * {@link #phaseMemory} (see {@link #resolveComplete}, which records its own): a seeder ranks by
      * feasibility first and cost second at best, so replaying its path steers branching toward a
-     * region chosen with little regard for cost. Measured, not assumed -- recording it cost
-     * {@code TravellingSalesman-20-30-00} an objective of 166-226 against 118 without, across three
-     * seeds, and left {@code GraphColoring-3-fullins-4} proving optimality with one second to spare
-     * instead of thirty (ADR-0041).
+     * region chosen with little regard for cost -- measurably worse solutions, per
+     * <a href="../../../../../../../docs/adr/0041-reuse-the-satisfaction-search-for-the-first-solution.md">ADR-0041</a>.
      */
     private Optional<Assignment> seedIncumbent(ConstraintSatisfactionProblem csp, double[] incumbent) {
         if (incumbentSeeder == null) {
@@ -440,7 +439,6 @@ public class BranchAndBoundSolver implements Solver {
      * Writing {@link #phaseMemory} is deliberately <em>not</em> part of this, and is left to
      * {@link #resolveComplete}: a solution this class found is evidence about where cheap solutions
      * live, whereas {@link #seedIncumbent}'s came from a search that never looked at the objective.
-     * Recording that one too costs real solution quality -- see ADR-0041 for the measurements.
      */
     private Optional<Assignment> accept(Assignment solution, double[] incumbent) {
         double cost = objective.applyAsDouble(solution);
