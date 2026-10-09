@@ -95,8 +95,9 @@ public class BoundedFirstSolution implements IncumbentSeeder {
      * <p>
      * The default is known to be slightly ungenerous. That same instance's bounded question is
      * answerable at 8,764 nodes, and 32 restarts reaches 8,522 before giving up -- three percent
-     * short. Raising it would collect answers like that one while lingering longer on the probes that
-     * have none, a trade ADR-0044 records as unmeasured.
+     * short. Raising it collects answers like that one while lingering longer on the probes that have
+     * none, and that trade has now been measured over the corpus: 128 and 512 are both worse than 32
+     * overall. Do not raise it without re-measuring; ADR-0044 records the figures.
      */
     int probeRestartBudget;
 

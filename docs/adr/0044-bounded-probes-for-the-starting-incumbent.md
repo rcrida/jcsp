@@ -221,6 +221,48 @@ the latter in 21.3s. So the trade this ADR recorded as unmeasured — a larger p
 answers like those at the cost of lingering on probes that have none — is now the whole gap on this
 instance, and is still unmeasured.
 
+### The probe budget, now measured and left alone
+
+The trade this ADR recorded as unmeasured — a larger `probeRestartBudget` collecting answers that 32
+restarts just misses, at the cost of lingering on probes that have none — was swept at 32, 128 and
+512 over the 30 COP instances. **Both increases are worse overall, and the default stays at 32.**
+
+| budget | optimum found | notes |
+|---|---|---|
+| 32 | 22 | |
+| 128 | 22 | `GraphColoring-3-fullins-4` consistently +50% (25s → 38s), `GolombRuler-09-a4` +12% |
+| 512 | **21** | loses `GraphColoring-3-fullins-4`'s proof; `BinPacking-sum` *worse* (3 → 4); `GolombRuler-09-a3` 3s → 24s |
+
+512 is the failure mode the field's own Javadoc predicts: one unanswerable probe consumes the budget
+branch-and-bound would have spent, so an instance that proved optimality stops proving it and another
+returns a worse objective than it did with a smaller budget. The descent breaks on the first
+unanswerable probe, so the waste is bounded at one probe — but on a large instance one probe is
+enough.
+
+128 is the interesting case, and it is why this needed five seeds rather than one. On
+`TravellingSalesman-20-30-00` a single seed showed 118 → 107, which looked like the whole gap closing:
+
+| seed | 32 | 128 |
+|---|---|---|
+| 20260830 | 118 | 107 |
+| 20260831 | 118 | 122 |
+| 20260832 | 118 | 120 |
+| 20260833 | 118 | 109 |
+| 20260834 | 122 | 118 |
+| mean / median | 118.8 / 118 | 115.2 / 118 |
+
+A better mean, an identical median, and the spread widened from 118-122 to 107-122. Budget 128 wins
+three of five seeds by larger margins than it loses, so the mean favours it by ~3% — but buying a 3%
+mean with that much variance plus a 50% slowdown on an unrelated instance is not a default change.
+Four of the five runs at 128 emit a single `o` line, so the descent really is doing the work; it is
+just not reliably doing it better.
+
+Two measurement notes worth keeping. Wall-clock on a long batch picks up machine suspension —
+`caffeinate -i` blocks idle sleep but not system sleep, and two runs recorded 962s and 360s against a
+60s limit while both returned the answer 60s of search gives, so the solver's own reported figures are
+the ones to read. And `BinPacking-mdd-n1c1w4a` returns 5, 5 and 2 across seeds at an unchanged
+budget, so it cannot carry a per-seed comparison in either direction.
+
 ## Rejected alternatives
 
 **Bisection on the objective.** The textbook schedule, and the measurement above is what rules it
