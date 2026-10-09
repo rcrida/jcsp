@@ -96,4 +96,38 @@ class BoundSolverLimitsTest {
         assertThatThrownBy(solver::getSolution).isInstanceOf(LimitExceededException.class);
         assertThatThrownBy(solver::getSolution).isInstanceOf(LimitExceededException.class);
     }
+
+    /** {@code x} in 1..3 with nothing to satisfy, so a solve of it is well inside any budget. */
+    private static ConstraintSatisfactionProblem trivialOptimization(Variable<Integer> x) {
+        return ConstraintSatisfactionProblem.builder().variableDomain(x, IntRangeDomain.of(1, 3)).build();
+    }
+
+    @Test
+    void optimizationGetSolutionDoesNotInheritAnEarlierSolvesLimitVerdict() {
+        // The flag answers "did this solve run out of budget", so a solve that completes well inside
+        // its budget must report false even on a SolverLimits an earlier solve exhausted. The
+        // satisfaction chain always reset it; the optimization chain used to reset neither entry point.
+        Variable<Integer> x = VF.create("resetX");
+        SolverLimits limits = SolverLimits.ofNodes(1000);
+        limits.markLimitReached();
+        BoundSolver solver = Solver.Factory.INSTANCE.createSolver(trivialOptimization(x),
+                a -> a.getValue(x).map(v -> (double) (int) v).orElse(0.0),
+                SolverConfig.builder().limits(limits).build());
+
+        assertThat(solver.getSolution()).isPresent();
+        assertThat(limits.isLimitReached()).isFalse();
+    }
+
+    @Test
+    void optimizationGetSolutionsDoesNotInheritAnEarlierSolvesLimitVerdict() {
+        Variable<Integer> x = VF.create("resetStreamX");
+        SolverLimits limits = SolverLimits.ofNodes(1000);
+        limits.markLimitReached();
+        BoundSolver solver = Solver.Factory.INSTANCE.createSolver(trivialOptimization(x),
+                a -> a.getValue(x).map(v -> (double) (int) v).orElse(0.0),
+                SolverConfig.builder().limits(limits).build());
+
+        assertThat(solver.getSolutions().toList()).isNotEmpty();
+        assertThat(limits.isLimitReached()).isFalse();
+    }
 }

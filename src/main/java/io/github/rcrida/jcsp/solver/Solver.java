@@ -368,11 +368,18 @@ public interface Solver {
                 return new BoundSolver() {
                     @Override
                     public Stream<Assignment> getSolutions() {
+                        // Same reset as the satisfaction chain's two entry points above: the flag
+                        // answers "did this solve run out of budget", so a solve must not inherit the
+                        // verdict of the previous one on a shared SolverLimits. An incumbent seeder
+                        // makes that easy to hit -- a probe that exceeds the limit sets the flag for
+                        // reasons that have nothing to do with branch-and-bound's own search.
+                        limits.resetLimitReached();
                         return chain.getSolutions(csp);
                     }
 
                     @Override
                     public Optional<Assignment> getSolution() {
+                        limits.resetLimitReached();
                         return chain.getSolutions(csp).reduce((a, b) -> b);
                     }
                 };
