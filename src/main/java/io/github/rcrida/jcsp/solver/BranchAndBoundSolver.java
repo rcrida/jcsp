@@ -223,8 +223,25 @@ public class BranchAndBoundSolver implements Solver {
         statistics.updateRootSearchSpace(csp.getSearchSpace());
         Optional<Assignment> seed = seedIncumbent(csp, incumbent);
         Stream<Assignment> improvements = search(csp, rootAssignment(), incumbent, deadline, 1.0, new SearchProgress(),
-                selectorFactory.createSelector(csp.getConstraints()), new LpGate());
+                selectorFactory.createSelector(csp.getConstraints()), lpGateFor(csp));
         return seed.map(solution -> Stream.concat(Stream.of(solution), improvements)).orElse(improvements);
+    }
+
+    /**
+     * The LP-bound policy for one solve: the ordinary backing-off {@link LpGate} when {@link
+     * #applyObjectiveCut} will carry the incumbent, and {@link LpGate#alwaysSolving} when it cannot.
+     * <p>
+     * Backing off is sound either way -- a skipped bound forgoes pruning rather than admitting
+     * anything -- but it is only affordable while something else enforces the incumbent. An objective
+     * with no expressible cut (a fractional coefficient, say) has nothing else: {@link #searchCut}
+     * deliberately does not fall back to {@code objective.applyAsDouble} for a {@link LinearObjective},
+     * so a gated-off node would carry no bound at all and the search would enumerate.
+     */
+    private LpGate lpGateFor(ConstraintSatisfactionProblem csp) {
+        return objective instanceof LinearObjective linearObjective
+                && ObjectiveCut.isExpressible(linearObjective, csp)
+                ? new LpGate()
+                : LpGate.alwaysSolving();
     }
 
     /** The root of one search: a fresh {@link Assignment} carrying this solver's shared per-solve state. */
@@ -291,28 +308,27 @@ public class BranchAndBoundSolver implements Solver {
                                          SearchProgress progress,
                                          AdaptiveVariableSelector selector,
                                          LpGate lpGate) {
-        Variable<?> variable;
-        if (objective instanceof LinearObjective linearObjective && lpGate.solveThisNode()) {
-            Optional<LpBound> bound = LpModelBuilder.solve(csp, linearObjective, lpModelCacheKey);
-            boolean cut = bound.isEmpty() || bound.get().lowerBound() >= incumbent[0];
-            lpGate.record(cut);
-            if (cut) {
-                return Stream.empty();
+        Optional<Variable<?>> hint = Optional.empty();
+        if (objective instanceof LinearObjective linearObjective) {
+            if (lpGate.solveThisNode()) {
+                Optional<LpBound> bound = LpModelBuilder.solve(csp, linearObjective, lpModelCacheKey);
+                boolean cut = bound.isEmpty() || bound.get().lowerBound() >= incumbent[0];
+                lpGate.record(cut);
+                if (cut) {
+                    return Stream.empty();
+                }
+                hint = selectFractionalVariable(csp, assignment, bound.get());
             }
-            variable = selectFractionalVariable(csp, assignment, bound.get())
-                    .orElseGet(() -> selector.select(csp, assignment));
-        } else if (objective instanceof LinearObjective) {
-            // Gated off: no LP bound and no most-fractional hint this node. Not also falling back to
-            // the else branch's objective.applyAsDouble check below, because that evaluates a
-            // LinearObjective over a *partial* assignment, which is not a lower bound once any
-            // coefficient is negative. The incumbent is already enforced by applyObjectiveCut above.
-            variable = selector.select(csp, assignment);
-        } else {
-            if (objective.applyAsDouble(assignment) >= incumbent[0]) {
-                return Stream.empty();
-            }
-            variable = selector.select(csp, assignment);
+            // Gated off: no LP bound and no most-fractional hint this node, and no fallback to the
+            // objective.applyAsDouble check below either -- that evaluates a LinearObjective over a
+            // *partial* assignment, which is not a lower bound once any coefficient is negative.
+            // Nothing is lost by it: the incumbent is enforced by applyObjectiveCut above, and a
+            // search whose objective has no expressible cut is given a gate that never backs off
+            // (see getSolutions), so this node is reached only when the cut is carrying the bound.
+        } else if (objective.applyAsDouble(assignment) >= incumbent[0]) {
+            return Stream.empty();
         }
+        Variable<?> variable = hint.orElseGet(() -> selector.select(csp, assignment));
         requireDiscrete(csp, variable);
         return searchValues(variable, csp, cutNarrowed, assignment, incumbent, deadline, weight, progress, selector, lpGate);
     }

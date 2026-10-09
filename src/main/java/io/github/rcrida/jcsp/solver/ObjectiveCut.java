@@ -177,17 +177,36 @@ public final class ObjectiveCut {
     private static @Nullable LinearBoundConstraint<Integer> build(LinearObjective objective, double strictlyBetterThan,
                                                                   ConstraintSatisfactionProblem csp) {
         double bound = strictlyBetterThan - objective.getConstant() - 1;
-        if (!isExactInt(bound)) {
+        if (!isExactInt(bound) || !isExpressible(objective, csp)) {
             return null;
         }
         Map<Variable<Integer>, Integer> coefficients = new HashMap<>();
         for (var entry : objective.getCoefficients().entrySet()) {
-            if (!isExactInt(entry.getValue()) || !isIntegerValued(csp.getDomain(entry.getKey()))) {
-                return null;
-            }
             coefficients.put((Variable<Integer>) entry.getKey(), entry.getValue().intValue());
         }
         return LinearBoundConstraint.of(coefficients, Operator.LEQ, (int) bound);
+    }
+
+    /**
+     * Whether {@code objective} on {@code csp} can be cut at all -- the half of {@link #build}'s
+     * verdict that depends only on the coefficients and the domains they are keyed on, and so is the
+     * same for every bound. {@code false} means no bound will ever be expressible here, however the
+     * incumbent moves.
+     *
+     * <p>For a caller that relies on the cut to carry its bound and needs to know, once per solve,
+     * whether it may stop computing a bound of its own: {@link BranchAndBoundSolver} asks before
+     * allowing {@link LpGate} to back off, since with no cut to fall back on an LP bound is the only
+     * pruning the node has. Narrowing can only make this more true (see {@link #constraintFor}), so
+     * a {@code false} at the root stays a safe answer deeper down.
+     */
+    public static boolean isExpressible(@NonNull LinearObjective objective,
+                                        @NonNull ConstraintSatisfactionProblem csp) {
+        for (var entry : objective.getCoefficients().entrySet()) {
+            if (!isExactInt(entry.getValue()) || !isIntegerValued(csp.getDomain(entry.getKey()))) {
+                return false;
+            }
+        }
+        return true;
     }
 
     /**

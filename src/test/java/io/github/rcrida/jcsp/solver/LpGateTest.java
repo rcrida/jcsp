@@ -71,6 +71,15 @@ public class LpGateTest {
     }
 
     @Test
+    void alwaysSolvingNeverBacksOff() {
+        // For a search where the LP bound is the only thing bounding a node, because the objective
+        // has no expressible cut to keep the incumbent enforced.
+        LpGate gate = LpGate.alwaysSolving();
+
+        assertThat(solvesOver(gate, 10_000)).isEqualTo(10_000);
+    }
+
+    @Test
     void patienceOfOneBacksOffImmediately() {
         LpGate gate = new LpGate(1);
         // Solves, misses, and from then on every node is a retry probe, so nothing is ever skipped.

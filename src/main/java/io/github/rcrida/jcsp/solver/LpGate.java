@@ -17,10 +17,12 @@ package io.github.rcrida.jcsp.solver;
  * whose LP prunes regularly therefore never reaches the streak and is untouched, while one whose
  * LP is dead weight pays about a {@code PATIENCE}th of the cost.
  * <p>
- * Skipping a bound is always sound: it forgoes pruning, never admits anything. The incumbent stays
- * enforced regardless, because {@link BranchAndBoundSolver#applyObjectiveCut} applies it as a
- * propagated constraint before the node is branched (ADR-0029). What a skipped node also forgoes is
- * the LP's most-fractional branching hint, falling back to the configured variable selector.
+ * Skipping a bound is always sound: it forgoes pruning, never admits anything. It is only
+ * <em>affordable</em> because the incumbent stays enforced regardless, by {@link
+ * BranchAndBoundSolver#applyObjectiveCut} applying it as a propagated constraint before the node is
+ * branched (ADR-0029). Where there is no such cut to fall back on, a skipped node has no bound at
+ * all, so those searches get {@link #alwaysSolving} instead. What a skipped node also forgoes is the
+ * LP's most-fractional branching hint, falling back to the configured variable selector.
  * <p>
  * Per-search state, so one is created per {@link BranchAndBoundSolver#getSolutions} call and
  * threaded through the search exactly as the {@code AdaptiveVariableSelector} is, for the same
@@ -55,6 +57,17 @@ final class LpGate {
     /** Explicit patience, so this policy can be exercised without a 128-node run-up. */
     LpGate(int patience) {
         this.patience = patience;
+    }
+
+    /**
+     * A gate that never backs off, for a search where the LP bound is the <em>only</em> thing
+     * bounding a node: backing off is sound only because the incumbent stays enforced by the
+     * objective cut, and an objective with no expressible cut (see {@link
+     * ObjectiveCut#isExpressible}) has nothing to stay enforced by. Expressed as unreachable
+     * patience rather than a flag, so there is one policy here rather than two.
+     */
+    static LpGate alwaysSolving() {
+        return new LpGate(Integer.MAX_VALUE);
     }
 
     /**

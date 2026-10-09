@@ -81,6 +81,23 @@ public class ObjectiveCutTest {
     }
 
     @Test
+    void isExpressible_answersPerObjectiveAndDomainsRatherThanPerBound() {
+        // What a caller relying on the cut to carry its bound needs to know once per solve, rather
+        // than per bound: BranchAndBoundSolver lets LpGate back off only when this is true.
+        val halfSum = LinearObjective.builder().coefficient(X, 0.5).coefficient(Y, 0.5).build();
+        val fx = F.<Double>create("expressibleFracX");
+        val fractional = ConstraintSatisfactionProblem.builder()
+                .variableDomain(fx, NumericDiscreteDomain.of(0.0, 1.9))
+                .build();
+
+        assertThat(ObjectiveCut.isExpressible(SUM, CSP)).isTrue();
+        assertThat(ObjectiveCut.isExpressible(halfSum, CSP)).as("a fractional coefficient").isFalse();
+        assertThat(ObjectiveCut.isExpressible(
+                LinearObjective.builder().coefficient(fx, 1.0).build(), fractional))
+                .as("a fractional domain").isFalse();
+    }
+
+    @Test
     void constraintFor_declinesAFractionalDiscreteDomain() {
         // Not a continuous domain, so the BoundedDomain check never saw it, and its coefficients and
         // derived bound are both exact ints. But LinearBoundPropagation reads a domain through
