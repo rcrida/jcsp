@@ -220,8 +220,12 @@ public class BranchAndBoundSolver implements Solver {
         // recorded (a probe that was cancelled mid-descent, say) would otherwise stand in for this
         // search's figures -- which is what getRemainingSearchSpace documents them to be.
         statistics.clearSearchSpaceSnapshots();
+        // Whether any domain is continuous is invariant for a solve -- narrowing an IntervalDomain
+        // yields an IntervalDomain -- so it is decided once here rather than rediscovered by
+        // isDiscreteComplete scanning every domain at every node of a problem that has none.
+        boolean hasContinuous = csp.getVariableDomains().values().stream().anyMatch(BoundedDomain.class::isInstance);
         Stream<Assignment> improvements = search(csp, rootAssignment(), incumbent, deadline, 1.0, new SearchProgress(),
-                selectorFactory.createSelector(csp.getConstraints()), lpGateFor(csp));
+                selectorFactory.createSelector(csp.getConstraints()), lpGateFor(csp), hasContinuous);
         return seed.map(solution -> Stream.concat(Stream.of(solution), improvements)).orElse(improvements);
     }
 
@@ -281,15 +285,17 @@ public class BranchAndBoundSolver implements Solver {
                                        double weight,
                                        SearchProgress progress,
                                        AdaptiveVariableSelector selector,
-                                       LpGate lpGate) {
-        if (assignment.isComplete(csp) || isDiscreteComplete(csp, assignment)) {
+                                       LpGate lpGate,
+                                       boolean hasContinuous) {
+        if (assignment.isComplete(csp) || (hasContinuous && isDiscreteComplete(csp, assignment))) {
             return resolveComplete(csp, assignment, incumbent);
         }
         ObjectiveCut.Narrowed cut = applyObjectiveCut(csp, incumbent[0]);
         if (cut == null) {
             return Stream.empty();
         }
-        return searchCut(cut.csp(), cut.variables(), assignment, incumbent, deadline, weight, progress, selector, lpGate);
+        return searchCut(cut.csp(), cut.variables(), assignment, incumbent, deadline, weight, progress, selector,
+                lpGate, hasContinuous);
     }
 
     /**
@@ -305,7 +311,8 @@ public class BranchAndBoundSolver implements Solver {
                                          double weight,
                                          SearchProgress progress,
                                          AdaptiveVariableSelector selector,
-                                         LpGate lpGate) {
+                                         LpGate lpGate,
+                                         boolean hasContinuous) {
         Optional<Variable<?>> hint = Optional.empty();
         if (objective instanceof LinearObjective linearObjective) {
             if (lpGate.solveThisNode()) {
@@ -327,7 +334,8 @@ public class BranchAndBoundSolver implements Solver {
             return Stream.empty();
         }
         Variable<?> variable = branchVariable(csp, assignment, hint.orElseGet(() -> selector.select(csp, assignment)));
-        return searchValues(variable, csp, cutNarrowed, assignment, incumbent, deadline, weight, progress, selector, lpGate);
+        return searchValues(variable, csp, cutNarrowed, assignment, incumbent, deadline, weight, progress, selector,
+                lpGate, hasContinuous);
     }
 
     /**
@@ -391,6 +399,11 @@ public class BranchAndBoundSolver implements Solver {
      * true for a purely continuous problem (no discrete variables to wait for), which is what makes
      * {@link #resolveComplete} degenerate correctly to "resolve the whole thing via {@link
      * #resolveContinuousResidual}" for a CSP like {@code ContinuousOptimizationTest}'s.
+     * <p>
+     * Called only when the problem has a {@link BoundedDomain} variable at all. Otherwise it is the
+     * same predicate as {@link Assignment#isComplete}, which {@link #search} has just evaluated, so
+     * on the problems that make up most of a corpus this would be a second whole-variable-map scan
+     * per internal node that can only ever return false.
      */
     private static boolean isDiscreteComplete(ConstraintSatisfactionProblem csp, Assignment assignment) {
         return csp.getVariableDomains().entrySet().stream()
@@ -540,7 +553,8 @@ public class BranchAndBoundSolver implements Solver {
                                                  double weight,
                                                  SearchProgress progress,
                                                  AdaptiveVariableSelector selector,
-                                                 LpGate lpGate) {
+                                                 LpGate lpGate,
+                                                 boolean hasContinuous) {
         // Merged once for the direct check below, which reads the store's live by-variable index and
         // so sees everything recorded since. The merged constraint *set* a fixpoint propagates is a
         // snapshot, though, so the one handed to the inference is re-taken per candidate inside the
@@ -578,7 +592,8 @@ public class BranchAndBoundSolver implements Solver {
                     Stream<Assignment> child;
                     try {
                         child = inferOrExplain(nogoodStore.apply(csp), variable, next, cutNarrowed, selector)
-                                .map(inferred -> search(inferred, next, incumbent, deadline, childWeight, progress, selector, lpGate))
+                                .map(inferred -> search(inferred, next, incumbent, deadline, childWeight, progress,
+                                        selector, lpGate, hasContinuous))
                                 .orElseGet(Stream::empty);
                     } catch (SolverCancelledException e) {
                         child = Stream.empty();
