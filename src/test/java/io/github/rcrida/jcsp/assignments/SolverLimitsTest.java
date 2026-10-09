@@ -118,4 +118,28 @@ class SolverLimitsTest {
         limits.resetLimitReached();
         assertThat(limits.isLimitReached()).isFalse();
     }
+
+    @Test
+    void deadlineIsCapturedOnceForTheWholeSolve() throws InterruptedException {
+        // The time limit bounds a solve, not each search within it: an optimization solve runs a
+        // feasibility search and a series of bounded probes, each asking for its own deadline, and
+        // recomputing now + timeLimit per ask re-granted the whole budget to each of them.
+        SolverLimits limits = SolverLimits.ofTime(Duration.ofSeconds(60));
+
+        long first = limits.deadlineNanos();
+        Thread.sleep(2);
+
+        assertThat(limits.deadlineNanos()).isEqualTo(first);
+    }
+
+    @Test
+    void resetLimitReachedStartsANewTimeBudget() throws InterruptedException {
+        SolverLimits limits = SolverLimits.ofTime(Duration.ofSeconds(60));
+        long first = limits.deadlineNanos();
+        Thread.sleep(2);
+
+        limits.resetLimitReached();
+
+        assertThat(limits.deadlineNanos()).isGreaterThan(first);
+    }
 }

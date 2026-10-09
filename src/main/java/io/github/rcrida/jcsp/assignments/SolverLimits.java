@@ -11,6 +11,7 @@ import org.jspecify.annotations.Nullable;
 
 import java.time.Duration;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicReference;
 
 /**
  * Caps the amount of search work performed by a solver.
@@ -42,6 +43,16 @@ public class SolverLimits {
     @Getter(AccessLevel.NONE)
     AtomicBoolean limitReached = new AtomicBoolean(false);
 
+    /**
+     * The absolute deadline {@link #deadlineNanos} captured for the solve in progress, or {@code
+     * null} before the first call of a solve. Same ephemeral-state treatment as {@link
+     * #limitReached}, and cleared by the same {@link #resetLimitReached}.
+     */
+    @EqualsAndHashCode.Exclude
+    @ToString.Exclude
+    @Getter(AccessLevel.NONE)
+    AtomicReference<Long> deadline = new AtomicReference<>();
+
     private SolverLimits(long nodeLimit, @Nullable Duration timeLimit) {
         if (nodeLimit < 0) throw new IllegalArgumentException("nodeLimit must be non-negative, got: " + nodeLimit);
         this.nodeLimit = nodeLimit;
@@ -64,9 +75,31 @@ public class SolverLimits {
         return new SolverLimits(nodeLimit, timeLimit);
     }
 
-    /** Returns the absolute deadline as a {@link System#nanoTime()} value, or {@link Long#MAX_VALUE} if unlimited. */
+    /**
+     * The absolute deadline as a {@link System#nanoTime()} value, or {@link Long#MAX_VALUE} if
+     * unlimited. Captured on the first call and the same for every later one, until {@link
+     * #resetLimitReached} clears it.
+     * <p>
+     * {@link #timeLimit} bounds a <em>solve</em>, not each search within it, and one solve runs
+     * several: an optimization solve seeds an incumbent through its own feasibility search and a
+     * series of bounded probes, each of which reaches {@code DomWdegLubySearch} and asks for a
+     * deadline of its own. Recomputing {@code now + timeLimit} per search re-granted the whole
+     * budget to each of them, so a solve given a minute could spend nine before returning -- with
+     * the caller's own deadline long expired by then, which left branch-and-bound's search filtered
+     * out entirely in favour of the seed.
+     */
     public long deadlineNanos() {
-        return timeLimit == null ? Long.MAX_VALUE : System.nanoTime() + timeLimit.toNanos();
+        if (timeLimit == null) {
+            return Long.MAX_VALUE;
+        }
+        Long captured = deadline.get();
+        if (captured != null) {
+            return captured;
+        }
+        // Not set(): a concurrent capture (IndependentSubproblemSolver solves subproblems in
+        // parallel against one instance) must leave both callers reading the same deadline.
+        deadline.compareAndSet(null, System.nanoTime() + timeLimit.toNanos());
+        return deadline.get();
     }
 
     /** True when {@code nodesExplored} has reached or exceeded the node limit (and a limit is set). */
@@ -90,9 +123,14 @@ public class SolverLimits {
         return limitReached.get();
     }
 
-    /** Clears the limit-hit flag so this instance can be reused for a new search. */
+    /**
+     * Clears the limit-hit flag and the captured {@link #deadlineNanos} so this instance can be
+     * reused for a new solve. Called by {@link io.github.rcrida.jcsp.solver.BoundSolver}'s entry
+     * points, which is where one solve ends and the next begins.
+     */
     public void resetLimitReached() {
         limitReached.set(false);
+        deadline.set(null);
     }
 
     /** Why {@link #checkStop} says a search should stop, or {@link #NONE} if it shouldn't. */
