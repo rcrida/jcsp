@@ -739,6 +739,61 @@ public class BranchAndBoundSolverTest {
         assertThat(improving.getLast().getValues()).containsEntry(CUT_A, 3);
     }
 
+    /** Three variables with a floor of 1, so a bound that bites narrows every one of them. */
+    private static final Variable<Integer> SEED_P = F.create("seeded_cut_p");
+    private static final Variable<Integer> SEED_Q = F.create("seeded_cut_q");
+    private static final Variable<Integer> SEED_R = F.create("seeded_cut_r");
+
+    @Test
+    void objectiveCut_declaresWhatItNarrowedToTheInference() {
+        // The cut narrows domains outside any propagation pass, so they appear in no diff the next
+        // inference call can take against the problem it is handed: MAC seeds its arcs from the
+        // branched variable and the fixpoint's dirty seed is a diff of the already-cut problem.
+        // Unless the cut says what it narrowed, that narrowing wakes no propagator -- which is the
+        // whole reason the bound is a constraint rather than a branch-cut predicate.
+        //
+        // A seeded incumbent of 6 over domains of 1..5 makes the root's own cut bite: p + q + r <= 5
+        // with two terms worth at least 1 each leaves every domain at 1..3.
+        var csp = ConstraintSatisfactionProblem.builder()
+                .variableDomain(SEED_P, IntRangeDomain.of(1, 5))
+                .variableDomain(SEED_Q, IntRangeDomain.of(1, 5))
+                .variableDomain(SEED_R, IntRangeDomain.of(1, 5))
+                .build();
+        LinearObjective objective = LinearObjective.builder()
+                .coefficient(SEED_P, 1.0).coefficient(SEED_Q, 1.0).coefficient(SEED_R, 1.0).build();
+        var declared = new CopyOnWriteArrayList<Set<Variable<?>>>();
+        Inference capturing = new Inference() {
+            @Override
+            public Optional<ConstraintSatisfactionProblem> apply(ConstraintSatisfactionProblem problem,
+                                                                  Variable<?> variable, Assignment assignment) {
+                return narrowAssignedToSingleton().apply(problem, variable, assignment);
+            }
+
+            @Override
+            public ConsistencyResult applyWithReason(ConstraintSatisfactionProblem problem, Variable<?> variable,
+                                                      Assignment assignment, Set<Variable<?>> alsoChanged) {
+                declared.add(alsoChanged);
+                return ConsistencyResult.feasible(apply(problem, variable, assignment).orElseThrow());
+            }
+        };
+        BranchAndBoundSolver solver = BranchAndBoundSolver.builder()
+                .objective(objective)
+                .selectorFactory(constraints -> fixedOrder(SEED_P, SEED_Q, SEED_R))
+                .domainValuesOrderer(DefaultValueOrderer.INSTANCE)
+                .inference(capturing)
+                .incumbentSeeder((problem, obj) ->
+                        Optional.of(Assignment.of(java.util.Map.of(SEED_P, 2, SEED_Q, 2, SEED_R, 2))))
+                .build();
+
+        var improving = solver.getSolutions(csp).toList();
+
+        assertThat(declared).isNotEmpty();
+        assertThat(declared.getFirst())
+                .as("the root's cut narrowed all three domains from 1..5 to 1..3")
+                .containsExactlyInAnyOrder(SEED_P, SEED_Q, SEED_R);
+        assertThat(objective.applyAsDouble(improving.getLast())).isEqualTo(3.0);
+    }
+
     @Test
     void nonLinearObjective_isLeftEntirelyAlone() {
         // No LinearObjective means no coefficients to read, so there is nothing to cut with.

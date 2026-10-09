@@ -10,9 +10,11 @@ import io.github.rcrida.jcsp.variables.Variable;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.concurrent.atomic.AtomicReference;
 
 /**
@@ -78,6 +80,19 @@ public final class ObjectiveCut {
     }
 
     /**
+     * {@link #narrow}'s result: the bounded problem, plus the variables whose domains the bound
+     * actually narrowed -- empty when it narrowed nothing, or when there was no cut to apply.
+     *
+     * <p>The caller needs the second half because the narrowing happens outside any propagation
+     * pass, so it appears in no diff the next one can take for itself: these are the variables it
+     * must declare to {@link io.github.rcrida.jcsp.consistency.Inference#apply(ConstraintSatisfactionProblem,
+     * Variable, io.github.rcrida.jcsp.assignments.Assignment, Set)} as already changed, so the
+     * propagators touching them are woken. That is where the compounding this whole class exists for
+     * actually happens.
+     */
+    public record Narrowed(@NonNull ConstraintSatisfactionProblem csp, @NonNull Set<Variable<?>> variables) {}
+
+    /**
      * {@code csp} with its domains narrowed so that no remaining assignment costs
      * {@code strictlyBetterThan} or more: {@code null} when that already empties a domain (nothing
      * better exists, so a caller may prune outright), and {@code csp} itself when there is no
@@ -87,21 +102,25 @@ public final class ObjectiveCut {
      * <p>Sound because it removes only assignments at or above the given cost. An infinite bound is
      * treated as no bound at all, which is what an as-yet-unknown incumbent looks like.
      */
-    public @Nullable ConstraintSatisfactionProblem narrow(@NonNull ConstraintSatisfactionProblem csp,
-                                                          @NonNull LinearObjective objective,
-                                                          double strictlyBetterThan) {
+    public @Nullable Narrowed narrow(@NonNull ConstraintSatisfactionProblem csp,
+                                     @NonNull LinearObjective objective,
+                                     double strictlyBetterThan) {
         if (strictlyBetterThan == Double.MAX_VALUE) {
-            return csp;
+            return new Narrowed(csp, Set.of());
         }
         LinearBoundConstraint<Integer> constraint = constraintFor(objective, strictlyBetterThan, csp);
         if (constraint == null) {
-            return csp;
+            return new Narrowed(csp, Set.of());
         }
         Optional<Map<Variable<?>, Domain<?>>> narrowed = constraint.propagate(csp.getVariableDomains());
         if (narrowed.isEmpty()) {
             return null;
         }
-        return narrowed.get().isEmpty() ? csp : csp.withDomains(narrowed.get());
+        // propagate returns only the domains it changed, so its key set is the narrowed set --
+        // wrapped rather than copied, since this is on the per-node path.
+        return narrowed.get().isEmpty()
+                ? new Narrowed(csp, Set.of())
+                : new Narrowed(csp.withDomains(narrowed.get()), Collections.unmodifiableSet(narrowed.get().keySet()));
     }
 
     /**

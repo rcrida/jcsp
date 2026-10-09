@@ -24,7 +24,9 @@ import io.github.rcrida.jcsp.solver.tree.sorter.BFSTopologicalSorter;
 import lombok.val;
 import org.jspecify.annotations.NonNull;
 
+import java.util.HashSet;
 import java.util.Optional;
+import java.util.Set;
 import java.util.function.Function;
 import java.util.function.ToDoubleFunction;
 import java.util.stream.Stream;
@@ -50,11 +52,12 @@ public interface Solver {
          * <p>
          * Seeds {@code applyFixpoint}'s round-1 dirty-variable hint from this call's own inputs,
          * rather than passing {@code null} (full first-round scan) as before: {@code problem} is
-         * exactly the parent search node's already-converged CSP, since nothing else touches it
-         * between when the parent's own inference call finished and this one starts. So the diff
-         * between {@code problem} and the post-MAC result (via {@link
-         * FixpointPropagation#changedVariables}) is exactly what changed by branching on
-         * {@code variable} plus whatever MAC narrowed as a result -- nothing else could have.
+         * ordinarily the parent search node's already-converged CSP, so the diff between it and the
+         * post-MAC result (via {@link FixpointPropagation#changedVariables}) is exactly what changed
+         * by branching on {@code variable} plus whatever MAC narrowed as a result. A caller that
+         * narrowed {@code problem} itself after its parent's inference converged declares what it
+         * narrowed through {@link Inference#apply(ConstraintSatisfactionProblem, Variable, Assignment,
+         * Set)}, since no diff this method can take would show it -- see {@link #seed}.
          * <p>
          * Doesn't need to separately account for newly-learned nogoods (e.g. one recorded while
          * backtracking an earlier sibling value at this same node): {@code problem} here is always
@@ -84,15 +87,29 @@ public interface Solver {
                 @Override
                 public Optional<ConstraintSatisfactionProblem> apply(ConstraintSatisfactionProblem problem,
                                                                       Variable<?> variable, Assignment assignment) {
+                    return apply(problem, variable, assignment, Set.of());
+                }
+
+                @Override
+                public Optional<ConstraintSatisfactionProblem> apply(ConstraintSatisfactionProblem problem,
+                                                                      Variable<?> variable, Assignment assignment,
+                                                                      Set<Variable<?>> alsoChanged) {
                     return MAC.INSTANCE.apply(problem, variable, assignment)
                             .flatMap(afterMac -> fixpointPropagation.applyFixpoint(afterMac,
-                                    FixpointPropagation.changedVariables(problem.getVariableDomains(), afterMac.getVariableDomains()),
+                                    seed(problem, afterMac, alsoChanged),
                                     assignment.listener(), assignment.getStatistics(), assignment.cancellation()));
                 }
 
                 @Override
                 public ConsistencyResult applyWithReason(ConstraintSatisfactionProblem problem,
                                                           Variable<?> variable, Assignment assignment) {
+                    return applyWithReason(problem, variable, assignment, Set.of());
+                }
+
+                @Override
+                public ConsistencyResult applyWithReason(ConstraintSatisfactionProblem problem,
+                                                          Variable<?> variable, Assignment assignment,
+                                                          Set<Variable<?>> alsoChanged) {
                     ConsistencyResult macResult = MAC.INSTANCE.applyWithReason(problem, variable, assignment);
                     if (macResult.isInfeasible()) {
                         return macResult.reason() != null ? macResult
@@ -100,7 +117,7 @@ public interface Solver {
                     }
                     ConstraintSatisfactionProblem afterMac = macResult.problem();
                     ConsistencyResult fixpointResult = fixpointPropagation.applyFixpointWithReason(afterMac,
-                            FixpointPropagation.changedVariables(problem.getVariableDomains(), afterMac.getVariableDomains()),
+                            seed(problem, afterMac, alsoChanged),
                             assignment.listener(), assignment.getStatistics(), assignment.cancellation());
                     if (fixpointResult.isInfeasible() && fixpointResult.reason() == null) {
                         return ConsistencyResult.infeasible(GroundNogoodConstraint.of(assignment.getValues()));
@@ -108,6 +125,31 @@ public interface Solver {
                     return fixpointResult;
                 }
             };
+        }
+
+        /**
+         * {@link FixpointPropagation#applyFixpoint}'s round-1 dirty hint for one search node: what
+         * MAC narrowed, plus whatever the caller narrowed itself before handing the problem over.
+         * <p>
+         * The diff alone covers the ordinary case, where {@code problem} is the parent node's
+         * already-converged CSP (see {@link #propagationInference}). A caller that narrowed it after
+         * that -- {@link BranchAndBoundSolver}'s objective cut is the one that does -- changed domains
+         * that appear in no diff taken against the problem it passes, so without {@code alsoChanged}
+         * its narrowing would wake nothing and the propagators that should compound it (a bounded
+         * makespan tightening every latest start through a precedence chain, say) would never run at
+         * the node that produced it.
+         */
+        private static Set<Variable<?>> seed(ConstraintSatisfactionProblem problem,
+                                              ConstraintSatisfactionProblem afterMac,
+                                              Set<Variable<?>> alsoChanged) {
+            Set<Variable<?>> changed = FixpointPropagation.changedVariables(
+                    problem.getVariableDomains(), afterMac.getVariableDomains());
+            if (alsoChanged.isEmpty()) {
+                return changed;
+            }
+            Set<Variable<?>> union = new HashSet<>(changed);
+            union.addAll(alsoChanged);
+            return union;
         }
 
         /**

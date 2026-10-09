@@ -6,6 +6,7 @@ import io.github.rcrida.jcsp.constraints.nary.GroundNogoodConstraint;
 import io.github.rcrida.jcsp.variables.Variable;
 
 import java.util.Optional;
+import java.util.Set;
 
 /**
  * Interface for inference algorithms in constraint satisfaction problems. The inference algorithm adds a global constraint for
@@ -34,6 +35,30 @@ public interface Inference {
     }
 
     /**
+     * Variant of {@link #apply} for a caller that narrowed {@code problem}'s domains itself since the
+     * parent node's propagation converged: {@code alsoChanged} names the variables it narrowed.
+     * {@code io.github.rcrida.jcsp.solver.BranchAndBoundSolver} is one, narrowing its incumbent bound
+     * into the domains before branching.
+     * <p>
+     * An implementation that seeds its propagation from a dirty set has to include {@code
+     * alsoChanged} in it, since the caller's narrowing happened outside any propagation pass and so
+     * appears in no diff the implementation can take for itself -- without it that narrowing wakes no
+     * propagator and the problem handed back is not a fixpoint of its own propagators. The default
+     * ignores it, which is correct for an implementation that re-derives everything regardless.
+     */
+    default Optional<ConstraintSatisfactionProblem> apply(ConstraintSatisfactionProblem problem, Variable<?> variable,
+                                                          Assignment assignment, Set<Variable<?>> alsoChanged) {
+        return apply(problem, variable, assignment);
+    }
+
+    /** {@link #applyWithReason} with {@link #apply(ConstraintSatisfactionProblem, Variable, Assignment, Set)}'s
+     *  caller-narrowed variables; same contract for {@code alsoChanged}. */
+    default ConsistencyResult applyWithReason(ConstraintSatisfactionProblem problem, Variable<?> variable,
+                                              Assignment assignment, Set<Variable<?>> alsoChanged) {
+        return applyWithReason(problem, variable, assignment);
+    }
+
+    /**
      * Wraps {@code delegate} so {@link #applyWithReason} never derives a reason on failure (a
      * {@code null} one, not this interface's default assignment-wide fallback), letting a caller
      * that always calls {@code applyWithReason} still get a true zero-explanation-cost path -- the
@@ -53,6 +78,26 @@ public interface Inference {
             public ConsistencyResult applyWithReason(ConstraintSatisfactionProblem problem,
                                                       Variable<?> variable, Assignment assignment) {
                 return apply(problem, variable, assignment)
+                        .map(ConsistencyResult::feasible)
+                        .orElseGet(() -> ConsistencyResult.infeasible(null));
+            }
+
+            // Both seeded variants are forwarded rather than left to their defaults, which would
+            // drop alsoChanged on the floor: this wrapper is what the default (learning-off)
+            // configuration wires in, so the defaults would mean no caller-narrowed variable ever
+            // reaches the fixpoint's dirty seed outside a learning solve.
+            @Override
+            public Optional<ConstraintSatisfactionProblem> apply(ConstraintSatisfactionProblem problem,
+                                                                  Variable<?> variable, Assignment assignment,
+                                                                  Set<Variable<?>> alsoChanged) {
+                return delegate.apply(problem, variable, assignment, alsoChanged);
+            }
+
+            @Override
+            public ConsistencyResult applyWithReason(ConstraintSatisfactionProblem problem,
+                                                      Variable<?> variable, Assignment assignment,
+                                                      Set<Variable<?>> alsoChanged) {
+                return apply(problem, variable, assignment, alsoChanged)
                         .map(ConsistencyResult::feasible)
                         .orElseGet(() -> ConsistencyResult.infeasible(null));
             }

@@ -9,6 +9,7 @@ import org.junit.jupiter.api.Test;
 
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -30,6 +31,37 @@ class InferenceTest {
         ConsistencyResult result = NO_OP.applyWithReason(csp, x, assignment);
         assertThat(result.isInfeasible()).isFalse();
         assertThat(result.problem()).isEqualTo(csp);
+    }
+
+    @Test
+    void seededApply_defaultIgnoresTheCallerNarrowedVariables() {
+        // Correct for an implementation that seeds nothing: it re-derives everything regardless, so
+        // there is nothing for alsoChanged to wake. One that does seed must override this.
+        Variable<Integer> x = VF.create("seededApplyX");
+        Variable<Integer> y = VF.create("seededApplyY");
+        var csp = ConstraintSatisfactionProblem.builder()
+                .variableDomain(x, IntRangeDomain.of(1, 2))
+                .variableDomain(y, IntRangeDomain.of(1, 2))
+                .build();
+        var assignment = Assignment.of(Map.of(x, 1));
+
+        assertThat(NO_OP.apply(csp, x, assignment, Set.of(y))).contains(csp);
+    }
+
+    @Test
+    void seededApplyWithReason_defaultDelegatesToTheUnseededVariant() {
+        Variable<Integer> x = VF.create("seededReasonX");
+        Variable<Integer> y = VF.create("seededReasonY");
+        var csp = ConstraintSatisfactionProblem.builder()
+                .variableDomain(x, IntRangeDomain.of(1, 2))
+                .variableDomain(y, IntRangeDomain.of(1, 2))
+                .build();
+        var assignment = Assignment.of(Map.of(x, 1));
+
+        ConsistencyResult result = ALWAYS_FAILS.applyWithReason(csp, x, assignment, Set.of(y));
+
+        assertThat(result.isInfeasible()).isTrue();
+        assertThat(result.reason()).isEqualTo(GroundNogoodConstraint.of(assignment.getValues()));
     }
 
     @Test

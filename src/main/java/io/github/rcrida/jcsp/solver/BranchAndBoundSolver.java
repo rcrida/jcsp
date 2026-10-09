@@ -30,6 +30,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.function.ToDoubleFunction;
 import java.util.stream.Stream;
 
@@ -258,15 +259,20 @@ public class BranchAndBoundSolver implements Solver {
         if (assignment.isComplete(csp) || isDiscreteComplete(csp, assignment)) {
             return resolveComplete(csp, assignment, incumbent);
         }
-        ConstraintSatisfactionProblem cutCsp = applyObjectiveCut(csp, incumbent[0]);
-        if (cutCsp == null) {
+        ObjectiveCut.Narrowed cut = applyObjectiveCut(csp, incumbent[0]);
+        if (cut == null) {
             return Stream.empty();
         }
-        return searchCut(cutCsp, assignment, incumbent, deadline, weight, progress, selector, lpGate);
+        return searchCut(cut.csp(), cut.variables(), assignment, incumbent, deadline, weight, progress, selector, lpGate);
     }
 
-    /** {@link #search}'s continuation once the objective cut has been folded into {@code csp}. */
+    /**
+     * {@link #search}'s continuation once the objective cut has been folded into {@code csp}.
+     * {@code cutNarrowed} is what the cut narrowed, carried down to {@link #inferOrExplain} so the
+     * child node's propagation is seeded with it -- see {@link ObjectiveCut.Narrowed}.
+     */
     private Stream<Assignment> searchCut(ConstraintSatisfactionProblem csp,
+                                         Set<Variable<?>> cutNarrowed,
                                          Assignment assignment,
                                          double[] incumbent,
                                          long deadline,
@@ -297,7 +303,7 @@ public class BranchAndBoundSolver implements Solver {
             variable = selector.select(csp, assignment);
         }
         requireDiscrete(csp, variable);
-        return searchValues(variable, csp, assignment, incumbent, deadline, weight, progress, selector, lpGate);
+        return searchValues(variable, csp, cutNarrowed, assignment, incumbent, deadline, weight, progress, selector, lpGate);
     }
 
     /**
@@ -310,10 +316,10 @@ public class BranchAndBoundSolver implements Solver {
      * fixpoint the child node's {@link #inference} runs. {@link ObjectiveCut} owns that, shared with
      * {@link BoundedFirstSolution}, which bounds its probes the same way.
      */
-    private @Nullable ConstraintSatisfactionProblem applyObjectiveCut(ConstraintSatisfactionProblem csp, double incumbent) {
+    private ObjectiveCut.@Nullable Narrowed applyObjectiveCut(ConstraintSatisfactionProblem csp, double incumbent) {
         return objective instanceof LinearObjective linearObjective
                 ? objectiveCut.narrow(csp, linearObjective, incumbent)
-                : csp;
+                : new ObjectiveCut.Narrowed(csp, Set.of());
     }
 
     /**
@@ -491,6 +497,7 @@ public class BranchAndBoundSolver implements Solver {
      */
     private <T> Stream<Assignment> searchValues(Variable<T> variable,
                                                  ConstraintSatisfactionProblem csp,
+                                                 Set<Variable<?>> cutNarrowed,
                                                  Assignment assignment,
                                                  double[] incumbent,
                                                  long deadline,
@@ -528,7 +535,7 @@ public class BranchAndBoundSolver implements Solver {
                 .flatMap(next -> {
                     Stream<Assignment> child;
                     try {
-                        child = inferOrExplain(cspWithNogoods, variable, next, selector)
+                        child = inferOrExplain(cspWithNogoods, variable, next, cutNarrowed, selector)
                                 .map(inferred -> search(inferred, next, incumbent, deadline, childWeight, progress, selector, lpGate))
                                 .orElseGet(Stream::empty);
                     } catch (SolverCancelledException e) {
@@ -548,12 +555,19 @@ public class BranchAndBoundSolver implements Solver {
      * Inference} doesn't want a nogood recorded for this failure (see
      * {@link Inference#withoutReasonTracking}) -- this method has no fallback of its own for that
      * case, since choosing whether/how to explain is entirely {@link #inference}'s job.
+     * <p>
+     * {@code cutNarrowed} is declared to the {@link Inference} as already changed: {@link
+     * #applyObjectiveCut} narrowed those domains outside any propagation pass, so they appear in no
+     * diff the inference can take against the problem it is handed, and leaving them undeclared
+     * means the bound narrows a domain that then wakes no propagator -- which is the whole mechanism
+     * the cut exists for rather than a branch-cut predicate (ADR-0029).
      */
     private Optional<ConstraintSatisfactionProblem> inferOrExplain(ConstraintSatisfactionProblem cspWithNogoods,
                                                                      Variable<?> variable,
                                                                      Assignment next,
+                                                                     Set<Variable<?>> cutNarrowed,
                                                                      AdaptiveVariableSelector selector) {
-        ConsistencyResult inferred = inference.applyWithReason(cspWithNogoods, variable, next);
+        ConsistencyResult inferred = inference.applyWithReason(cspWithNogoods, variable, next, cutNarrowed);
         if (inferred.isInfeasible()) {
             selector.onConflict(variable, next);
             selector.onValueRejected(variable);
