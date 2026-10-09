@@ -127,3 +127,15 @@ cheap to reproduce — count solves and bound-prunes at `searchCut`'s LP site. A
 reads only cut rate, any future third use of the LP bound inside `searchCut` would silently become
 gated too; a use that must always run belongs outside that branch, as `resolveComplete`'s fill and
 `BoundedFirstSolution`'s probe bound already are.
+
+**Correction (2026-10-09), same decision.** "Skipping a bound is always sound" is true, but this ADR
+read it as also always *affordable*, because "the incumbent stays enforced by `applyObjectiveCut`".
+That holds only where there is a cut to be enforced by, and `ObjectiveCut.build` declines outright
+for a non-integral coefficient, a non-integral domain value, or a `BoundedDomain` in the objective.
+For such an objective the LP bound was the node's only bound, and once the streak engaged, all but
+one node in `PATIENCE` carried no bound at all — strictly worse than passing the same function as an
+opaque `ToDoubleFunction`, which keeps the `applyAsDouble` check. A solve whose objective has no
+expressible cut now gets `LpGate.alwaysSolving()`; the gate's own policy is unchanged, and so is
+every instance in the census above, each of which has a wholly integral objective and so an
+expressible cut. `ObjectiveCut.isExpressible` is the bound-independent half of `build`'s verdict,
+asked once per solve.

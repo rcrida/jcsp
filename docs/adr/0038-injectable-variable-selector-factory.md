@@ -76,6 +76,18 @@ Four public methods on `DomWdegVariableSelector` are renamed. 3.1.0 is unrelease
 3.0.0), so no published API breaks; ADR-0015 and ADR-0032 reference the old names and carry a
 pointer here rather than being rewritten.
 
+**Follow-on (2026-10-09).** Making dom/wdeg the default everywhere, branch-and-bound included, broke
+an unstated precondition of `BranchAndBoundSolver`: that the selector prefers discrete variables while
+any remain open. `MinimumRemainingValuesSelector` satisfied it by construction, since a non-singleton
+`IntervalDomain` reports `size() == Integer.MAX_VALUE` and so is never the smallest remaining domain.
+dom/wdeg does not: `domainSize / weight` scores a zero-weight discrete variable at
+`Double.MAX_VALUE`, behind any non-singleton interval, whose ratio caps at `Integer.MAX_VALUE`. Late
+in a descent, where the open discrete variables often share no constraint with another unassigned
+variable, that is ordinary — and it threw `IllegalStateException` out of the caller's lazy stream.
+Branch-and-bound no longer relies on the selector for it: `branchVariable` substitutes the open
+discrete variable with the smallest remaining domain. Ordering still cannot affect soundness, which
+is why substituting is a free fix rather than a compromise.
+
 ## Rejected alternatives
 
 **Hooks on `UnassignedVariableSelector` itself, as no-op defaults.** One interface instead of two,
