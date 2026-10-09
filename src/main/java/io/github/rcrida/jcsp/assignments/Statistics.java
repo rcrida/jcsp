@@ -249,6 +249,22 @@ public class Statistics {
         remainingSearchSpace.compareAndSet(null, searchSpace);
     }
 
+    /**
+     * Clears {@link #getCurrentSearchSpace} and {@link #getRemainingSearchSpace}, so that the next
+     * write wins rather than being discarded.
+     * <p>
+     * For a solve with an earlier phase that records snapshots of a search these figures are not
+     * documented to describe: {@link io.github.rcrida.jcsp.solver.BranchAndBoundSolver}'s incumbent
+     * seeder runs its own feasibility searches against this same instance, and under first-write-wins
+     * a cancelled probe's subtree would stand in for the branch-and-bound search's own. Deliberately
+     * does not touch {@link #getRootSearchSpace}, which is the whole problem's post-preprocessing
+     * size and the same figure whatever phase recorded it.
+     */
+    public void clearSearchSpaceSnapshots() {
+        currentSearchSpace.set(null);
+        remainingSearchSpace.set(null);
+    }
+
     void add(Statistics other) {
         nodesExplored.addAndGet(other.nodesExplored.get());
         constraintChecks.addAndGet(other.constraintChecks.get());

@@ -216,6 +216,10 @@ public class BranchAndBoundSolver implements Solver {
         // has already recorded the post-preprocessing figure and first-write-wins keeps it.
         statistics.updateRootSearchSpace(csp.getSearchSpace());
         Optional<Assignment> seed = seedIncumbent(csp, incumbent);
+        // The search-space snapshots are first-write-wins, so whatever the seeder's own searches
+        // recorded (a probe that was cancelled mid-descent, say) would otherwise stand in for this
+        // search's figures -- which is what getRemainingSearchSpace documents them to be.
+        statistics.clearSearchSpaceSnapshots();
         Stream<Assignment> improvements = search(csp, rootAssignment(), incumbent, deadline, 1.0, new SearchProgress(),
                 selectorFactory.createSelector(csp.getConstraints()), lpGateFor(csp));
         return seed.map(solution -> Stream.concat(Stream.of(solution), improvements)).orElse(improvements);

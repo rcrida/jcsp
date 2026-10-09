@@ -942,6 +942,43 @@ public class BranchAndBoundSolverTest {
     }
 
     @Test
+    void searchSpaceSnapshotsDescribeThisSearch_notTheSeedersOwn() {
+        // The snapshots are first-write-wins, which keeps the deepest re-detection as a lazy stream
+        // unwinds. The seeder runs first and against the same Statistics, so a probe of its own that
+        // stopped early would otherwise claim both slots and branch-and-bound's figures -- what
+        // getRemainingSearchSpace documents them to be, and what the XCSP3 runner prints -- would be
+        // silently discarded.
+        var statistics = new io.github.rcrida.jcsp.assignments.Statistics();
+        var cancellation = new Cancellation();
+        IncumbentSeeder probing = (csp, objective) -> {
+            statistics.updateCurrentSearchSpace(java.math.BigInteger.valueOf(999));
+            statistics.updateRemainingSearchSpace(java.math.BigInteger.valueOf(999));
+            cancellation.cancel();
+            return Optional.of(suboptimal());
+        };
+        BranchAndBoundSolver solver = BranchAndBoundSolver.builder()
+                .objective(BranchAndBoundSolverTest::sum)
+                .selectorFactory(constraints -> MinimumRemainingValuesSelector.INSTANCE)
+                .domainValuesOrderer(DefaultValueOrderer.INSTANCE)
+                .inference((problem, variable, assignment) -> Optional.of(problem))
+                .incumbentSeeder(probing)
+                .statistics(statistics)
+                .cancellation(cancellation)
+                .build();
+
+        assertThat(solver.getSolutions(CSP).toList()).containsExactly(suboptimal());
+
+        assertThat(statistics.getCurrentSearchSpace())
+                .as("the cancelled search's own root, not the seeder's 999")
+                .contains(CSP.getSearchSpace());
+        assertThat(statistics.getRemainingSearchSpace())
+                .as("this search's remaining estimate, not the seeder's 999")
+                .isPresent()
+                .get()
+                .isNotEqualTo(java.math.BigInteger.valueOf(999));
+    }
+
+    @Test
     void seededIncumbent_isNotRecordedInThePhaseMemory() {
         // A seeder ranks by feasibility first, so replaying its path would steer branching toward a
         // region chosen with little regard for cost. Only the first element is pulled, so the seed is

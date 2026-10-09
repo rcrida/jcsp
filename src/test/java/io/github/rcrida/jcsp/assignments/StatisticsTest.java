@@ -62,6 +62,24 @@ public class StatisticsTest {
     }
 
     @Test
+    void clearSearchSpaceSnapshots_letsTheNextWriteWin_butKeepsTheRootFigure() {
+        // For a solve whose earlier phase (an incumbent seeder's feasibility probes) recorded
+        // snapshots of a search these figures are not documented to describe.
+        val statistics = new Statistics();
+        statistics.updateRootSearchSpace(BigInteger.valueOf(500));
+        statistics.updateCurrentSearchSpace(BigInteger.valueOf(7));
+        statistics.updateRemainingSearchSpace(BigInteger.valueOf(30));
+
+        statistics.clearSearchSpaceSnapshots();
+        statistics.updateCurrentSearchSpace(BigInteger.valueOf(100));
+        statistics.updateRemainingSearchSpace(BigInteger.valueOf(1));
+
+        assertThat(statistics.getCurrentSearchSpace()).contains(BigInteger.valueOf(100));
+        assertThat(statistics.getRemainingSearchSpace()).contains(BigInteger.valueOf(1));
+        assertThat(statistics.getRootSearchSpace()).contains(BigInteger.valueOf(500));
+    }
+
+    @Test
     void incrementNodesExplored() {
         val statistics = new Statistics();
         statistics.incrementNodesExplored();
