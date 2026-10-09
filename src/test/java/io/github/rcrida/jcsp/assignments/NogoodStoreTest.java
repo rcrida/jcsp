@@ -147,6 +147,20 @@ class NogoodStoreTest {
     }
 
     @Test
+    void clearForgetsEverythingRecordedSoFar() {
+        // For an owner whose nogoods were only valid under a bound it is about to drop -- see
+        // BranchAndBoundSolver#nogoodStore.
+        NogoodStore store = new NogoodStore();
+        store.record(nogood(Map.of(X, 1, Y, 2)));
+        var csp = csp();
+
+        store.clear();
+
+        assertThat(store.size()).isZero();
+        assertThat(store.apply(csp)).as("an emptied store applies as an empty one does").isSameAs(csp);
+    }
+
+    @Test
     void applyAttachesByVariableIndexToCsp() {
         NogoodStore store = new NogoodStore();
         var xOnly = nogood(Map.of(X, 1));

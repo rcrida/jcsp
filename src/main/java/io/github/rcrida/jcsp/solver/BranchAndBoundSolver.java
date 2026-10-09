@@ -159,6 +159,14 @@ public class BranchAndBoundSolver implements Solver {
     @NonNull ToDoubleFunction<Assignment> objective;
     @Builder.Default
     @NonNull SolverLimits limits = SolverLimits.unlimited();
+    /**
+     * Accumulates the nogoods this search learns, and is emptied at the start of each {@link
+     * #getSolutions} call: unlike {@link DomWdegLubySearch}'s, these are not unconditional facts.
+     * A reason derived here comes from domains {@link #applyObjectiveCut} has narrowed, so it means
+     * "fails while costing less than the incumbent" -- sound for the rest of one search, where the
+     * incumbent only tightens, and unsound for the next one, which starts unbounded again and would
+     * otherwise inherit nogoods that refuse the prefix of its own optimum.
+     */
     @Builder.Default
     @NonNull NogoodStore nogoodStore = new NogoodStore();
     /**
@@ -207,6 +215,9 @@ public class BranchAndBoundSolver implements Solver {
         log.info("Search space before branch-and-bound = {}", csp.getSearchSpace());
         double[] incumbent = {Double.MAX_VALUE};
         long deadline = limits.deadlineNanos();
+        // Per-solve state, like the selector and the LP gate built below: a nogood here is relative
+        // to the incumbent it was derived under, and this search starts unbounded -- see nogoodStore.
+        nogoodStore.clear();
         // Fallback for a directly-constructed solver; in the full chain PropagationFixpointSolver
         // has already recorded the post-preprocessing figure and first-write-wins keeps it.
         statistics.updateRootSearchSpace(csp.getSearchSpace());

@@ -197,6 +197,24 @@ public class NogoodStore {
         return csp.withNogoods(current, byVariable);
     }
 
+    /**
+     * Forgets every nogood recorded so far, for an owner starting a fresh search that the recorded
+     * ones are not valid facts about.
+     * <p>
+     * A nogood is ordinarily unconditional -- a combination of values that violates the problem's own
+     * constraints, true for as long as the problem is. A search that prunes by a bound of its own
+     * breaks that: {@link io.github.rcrida.jcsp.solver.BranchAndBoundSolver} derives its reasons from
+     * domains its incumbent has narrowed, so "this prefix fails" means "fails while costing less than
+     * the incumbent". That holds for the rest of one search, where the incumbent only tightens, and
+     * not at all for the next one, which starts unbounded -- there, an inherited nogood can refuse the
+     * prefix of the very optimum it was recorded above.
+     */
+    public void clear() {
+        nogoods.clear();
+        byVariable.clear();
+        snapshot.set(null);
+    }
+
     public int size() {
         return nogoods.size();
     }

@@ -221,6 +221,55 @@ public class BranchAndBoundSolverTest {
     }
 
     @Test
+    void nogoodsDoNotSurviveFromOneSolveIntoTheNext() {
+        // A reason derived here comes from domains the incumbent narrowed, so it means "fails while
+        // costing less than the incumbent" -- sound for the rest of one search, where the incumbent
+        // only tightens, and not for the next, which starts unbounded. Carried over, such a nogood
+        // can refuse the prefix of the very optimum it was recorded above, so the next solve either
+        // reports a worse optimum or none at all.
+        Variable<Integer> x = F.create("resolve_x");
+        Variable<Integer> y = F.create("resolve_y");
+        Variable<Integer> w1 = F.create("resolve_w1");
+        Variable<Integer> w2 = F.create("resolve_w2");
+        ConstraintSatisfactionProblem csp = deterministicFailThenSucceedCsp(x, y, w1, w2);
+        var inherited = new CopyOnWriteArrayList<Integer>();
+        Inference counting = new Inference() {
+            @Override
+            public Optional<ConstraintSatisfactionProblem> apply(ConstraintSatisfactionProblem problem,
+                                                                  Variable<?> variable, Assignment assignment) {
+                return Solver.Factory.FULL_PROPAGATION_INFERENCE.apply(problem, variable, assignment);
+            }
+
+            @Override
+            public ConsistencyResult applyWithReason(ConstraintSatisfactionProblem problem, Variable<?> variable,
+                                                      Assignment assignment, Set<Variable<?>> alsoChanged) {
+                inherited.add(problem.getNogoods().size());
+                return Solver.Factory.FULL_PROPAGATION_INFERENCE
+                        .applyWithReason(problem, variable, assignment, alsoChanged);
+            }
+        };
+        NogoodStore store = new NogoodStore();
+        BranchAndBoundSolver solver = BranchAndBoundSolver.builder()
+                .objective(a -> 0.0)
+                .selectorFactory(constraints -> fixedOrder(x, y, w1, w2))
+                .domainValuesOrderer(DefaultValueOrderer.INSTANCE)
+                .inference(counting)
+                .nogoodStore(store)
+                .build();
+
+        solver.getSolutions(csp).toList();
+        assertThat(store.size()).as("the first solve learns something to inherit").isGreaterThan(0);
+        int callsInFirstSolve = inherited.size();
+
+        solver.getSolutions(csp).toList();
+
+        assertThat(inherited).hasSizeGreaterThan(callsInFirstSolve);
+        assertThat(inherited.get(callsInFirstSolve))
+                .as("the second solve's first propagation sees no inherited nogood")
+                .isZero();
+    }
+
+    @Test
     void nogoodSetIsReMergedForEveryCandidateValueOfANode() {
         // A nogood learned while backtracking one sibling value has to be in the constraint set the
         // next sibling propagates against -- that being the branch most likely to re-derive the same
