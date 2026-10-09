@@ -306,23 +306,35 @@ public interface Solver {
                 // satisfactionSearch), so a non-singleton IntervalDomain would reach a DomainValuesOrderer
                 // that cannot enumerate one. Those problems keep branch-and-bound's own first descent.
                 // Wrapped in a fixpoint, unlike the satisfaction chain's use of satisfactionSearch:
-                // a bounded probe hands the search a problem whose objective bound has only just been
-                // narrowed into one variable's domain, and without propagating that first the search
-                // starts from root domains that do not reflect the bound at all. On a job shop that is
-                // the difference between a question answered in seconds and one that cannot be
-                // answered -- see ADR-0044. snap is irrelevant here, since a problem with any
-                // BoundedDomain gets no seeder at all.
+                // a bounded probe hands the search a problem carrying an objective cut, and without
+                // propagating that first the search starts from root domains that do not reflect the
+                // bound at all. On a job shop that is the difference between a question answered in
+                // seconds and one that cannot be answered -- see ADR-0044. snap is irrelevant here,
+                // since a problem with any BoundedDomain gets no seeder at all.
+                //
+                // Each search's propagator list is filtered for the problem that search is actually
+                // given, never for csp: a probe's problem carries a LinearBoundConstraint cut that csp
+                // itself need not have, and forProblem filters on the types present, so reusing csp's
+                // list would hand the probe a search that cannot propagate its own bound. Recomputed
+                // per search rather than reused for the unbounded first solution, because that search
+                // is not handed csp either -- seedIncumbent is reached below this chain's own
+                // preprocessing, so it passes whatever that narrowed csp to. At most one call per
+                // probe, against a search measured in seconds.
                 IncumbentSeeder incumbentSeeder = hasContinuous
                         ? null
                         : BoundedFirstSolution.builder()
-                                .search((restartBudget, searchIndex) -> PropagationFixpointSolver.builder()
-                                        .inner(satisfactionSearch(config, searchIndex, fixpointPropagation, restartBudget))
-                                        .snap(false)
-                                        .listener(config.getListener())
-                                        .statistics(config.getStatistics())
-                                        .cancellation(cancellation)
-                                        .fixpointPropagation(fixpointPropagation)
-                                        .build())
+                                .search((searchCsp, restartBudget, searchIndex) -> {
+                                    val searchPropagation = FixpointPropagation.Factory.INSTANCE
+                                            .forProblem(searchCsp, config.learningEnabled());
+                                    return PropagationFixpointSolver.builder()
+                                            .inner(satisfactionSearch(config, searchIndex, searchPropagation, restartBudget))
+                                            .snap(false)
+                                            .listener(config.getListener())
+                                            .statistics(config.getStatistics())
+                                            .cancellation(cancellation)
+                                            .fixpointPropagation(searchPropagation)
+                                            .build();
+                                })
                                 .build();
                 // Handles any BoundedDomain variables itself -- see this class's own Javadoc and
                 // ADR-0009 -- rather than being nested inside a BisectionConditioningSolver that runs

@@ -267,7 +267,15 @@ class Xcsp3ProblemRunnerTest {
                 .variableDomain(c, IntRangeDomain.of(0, 2))
                 .allDiffConstraint(Set.of(a, b, c))
                 .build();
-        LinearObjective objective = LinearObjective.builder().coefficient(a, 1.0).coefficient(b, 2.0).coefficient(c, 3.0).build();
+        // Halved coefficients, so the objective is linear but not exactly cuttable: ObjectiveCut
+        // declines a fractional bound rather than loosening it by an epsilon, so BoundedFirstSolution
+        // declines to probe and branch-and-bound's own search produces the whole progression. That is
+        // this test's subject -- that each o line is printed as its incumbent is found, which needs
+        // more than one of them to mean anything. With an integral objective the descent now lands on
+        // the optimum directly and a single o line is all there is to see (the ADR-0044
+        // Taillard-os-04-04-0 shape), which is the seeder working, not this contract holding.
+        // Ordering within the six solutions is unchanged, since halving is monotone.
+        LinearObjective objective = LinearObjective.builder().coefficient(a, 0.5).coefficient(b, 1.0).coefficient(c, 1.5).build();
         Xcsp3Instance instance = new Xcsp3Instance(csp, objective, false, Set.of("a", "b", "c"), 0);
         List<Double> incumbentCosts = new ArrayList<>();
         SolverListener listener = new SolverListener() {

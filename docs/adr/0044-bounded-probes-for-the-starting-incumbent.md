@@ -135,6 +135,92 @@ anti-correlation property ADR-0015 wanted, without the statefulness — would fi
 make `IndependentSubproblemSolver`'s concurrent draws deterministic, a caveat that class's Javadoc
 currently carries. Not done here.
 
+## Correction: a bound narrowed into the domains is not a bounded probe
+
+*2026-10-09.* Everything above applies each probe's bound by **narrowing it into the domains once**,
+before the probe's search starts. That is enough only when the bound lands somewhere narrowing can
+see it, and `Taillard-js-015-15-0` — the instance the section above diagnoses at length — is the
+favourable case: its objective is the parser's single `$max` auxiliary, so one pass removes 11,000
+values. The claim "not missing propagation" was true of that instance and does not generalise.
+
+`TravellingSalesman-20-30-00` minimises `Σ d[i]` over twenty variables with domains `{1..30, 33, 36}`.
+The first solution costs **324**, and the LP lower bound is **20** — `Σ min d[i]`, because nothing
+linear links the tour to the distances: the lookup tables are not linear constraints, `allDifferent`
+is not, and [ADR-0020](0020-assignment-relaxation-for-gcc-linked-tables.md)'s assignment relaxation
+declines three times over (it keys on `GlobalCardinalityConstraint`, the tables hold 380 tuples
+against a cap of 64, and each shares *two* variables with the all-different group where the linkage
+admits one). So probe 0 targets 286. One propagation pass of `Σ d ≤ 286` bounds each `d[i]` at
+`286 − 19 = 267`, far above its own maximum of 36, and narrows **nothing**: the probe's preprocessed
+domain-size sum is 1040, identical to the unbounded search's 1040.
+
+The probe therefore re-asked the unbounded question, answered it no better than the incumbent, and the
+`cost >= bestCost` guard ended the descent after a single probe. Every optimization solve whose
+objective is spread across many variables had been paying for a descent that could not descend.
+
+### The fix
+
+`ObjectiveCut` grows `enforce`, which adds the cut to the **constraint set** instead of propagating it
+into the domains once. Two halves, both required:
+
+- the cut as a real constraint, so every node's fixpoint re-derives it against the domains *that node*
+  has narrowed — which is where a thin bound eventually bites;
+- the probe's `FixpointPropagation` filtered for the **cut** problem rather than the original.
+  `Factory#forProblem` filters on the constraint types present
+  ([ADR-0012](0012-per-csp-propagator-filtering.md)), and its own Javadoc states the assumption this
+  breaks: "constraints are never added or removed during search". A `LinearBoundConstraint` added to a
+  problem that had none would otherwise sit in the constraint set unpropagated — and
+  `LinearBoundConstraint#isSatisfiedBy` returns `true` until every variable is assigned, so it would
+  not even prune as a check.
+
+`BranchAndBoundSolver` keeps `narrow`. It applies its bound at **every node**, where a constraint-graph
+rebuild and a fresh propagator filter per node would cost far more than the thin-bound passes it gives
+up; and by the time its search is deep enough for a sum bound to matter, most objective variables are
+singletons and narrowing works. So the two callers now apply the same cut two different ways, which is
+the thing to keep straight about `ObjectiveCut`.
+
+Two guards went away as structural consequences. The `cost >= bestCost` check is unreachable once the
+cut is a constraint of the problem `ask` validates against: a returned solution costs at most the
+target, and one that ignores its bound is rejected by that validation instead. And a `searchCsp == csp`
+fast path to reuse the original propagator list, written on the assumption that the unbounded search
+gets `csp` itself, was never taken — `seedIncumbent` is reached *below* this chain's own preprocessing,
+so even that search is handed whatever the preprocessing narrowed `csp` to. The coverage gate found it.
+
+### Measurement
+
+The 30 bundled COP instances (the only ones affected — the seeder is never constructed outside the
+optimization chain), 60s each, the runner's own fixed seed. **Result class identical on all 30**: 22
+optimum found, 8 feasible without proof, both arms, every solution `SolutionChecker` OK. Total solve
+time 573.0s → 577.2s, **+0.7%**, spread thin rather than concentrated — 24 instances within ±0.5s and
+`GolombRuler-09-a4`'s +1.58s the largest single change. That is the descent doing real work where it
+previously aborted after one probe, and it is the whole price.
+
+The gain is in answer quality on the eight that do not prove optimality, across three restart seeds:
+
+| instance | before | after | |
+|---|---|---|---|
+| `Vrp-A-n32-k5` | 3569, 3569, 3569 | **1640, 1871, 1622** | −48% to −55% |
+| `Vrp-P-n16-k8` | 606, 606, 606 | **455, 496, 499** | −18% to −25% |
+| `QuadraticAssignment-bur26a` | 2696169, 2862696, 2904938 | **2358989, 2481424, 2745097** | −5% to −13% |
+| `BinPacking-mdd`/`-sum`/`-tab` | 5 / 3 / 5 | unchanged | |
+| `Taillard-js-015-15-0` | 1284 | unchanged | |
+| `TravellingSalesman-20-30-00` | 118 | unchanged | |
+
+Every seed improves on every instance that moves at all, and the before column is stable enough
+(`Vrp-A` is 3569 on all three seeds, via nine branch-and-bound improvements each time) that the
+change is not seed luck. Both `Vrp` instances now emit **one** `o` line where they emitted nine or
+ten: the descent arrives with the answer, which is the `Taillard-os-04-04-0` shape this ADR was
+written for, reached on two more instances.
+
+`TravellingSalesman-20-30-00` — the instance that exposed all of this — is **not** among the winners.
+Its descent now runs `324 → 242 → 206 → 174 → 152` where it managed one aborted probe before, so
+branch-and-bound starts from 152 instead of 324, and still finishes the 60s at 118 against a true
+optimum of 104 (confirmed by a Held-Karp dynamic program over the instance's own distance matrix).
+The remaining limit here is `probeRestartBudget`: probe 4 is cut off at 32 restarts, while the same
+bounded questions asked with an unlimited budget answer at **280 restarts for 110 and 765 for 104**,
+the latter in 21.3s. So the trade this ADR recorded as unmeasured — a larger probe budget collecting
+answers like those at the cost of lingering on probes that have none — is now the whole gap on this
+instance, and is still unmeasured.
+
 ## Rejected alternatives
 
 **Bisection on the objective.** The textbook schedule, and the measurement above is what rules it

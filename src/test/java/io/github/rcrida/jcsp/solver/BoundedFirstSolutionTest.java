@@ -4,6 +4,7 @@ import lombok.val;
 import io.github.rcrida.jcsp.ConstraintSatisfactionProblem;
 import io.github.rcrida.jcsp.assignments.Assignment;
 import io.github.rcrida.jcsp.assignments.Statistics;
+import io.github.rcrida.jcsp.constraints.nary.LinearBoundConstraint;
 import io.github.rcrida.jcsp.domains.IntRangeDomain;
 import io.github.rcrida.jcsp.variables.Variable;
 import org.junit.jupiter.api.Test;
@@ -12,7 +13,6 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.function.IntFunction;
 import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -37,8 +37,35 @@ public class BoundedFirstSolutionTest {
     }
 
     /**
-     * The loosest cost the bound on {@code csp} still permits, read generically: narrowing an
-     * {@link IntRangeDomain} by a cut does not necessarily leave an {@link IntRangeDomain} behind.
+     * The cost bound the question put to a search carries, read from the {@link ObjectiveCut} added to
+     * {@code asked} rather than from its domains. The cut is a constraint and narrows no domain of its
+     * own accord -- a bound on {@code x + y} leaves both 0..9, since either can still take 9 when the
+     * other takes 0 -- so reading domains cannot see a target at all; see {@link ObjectiveCut#enforce}.
+     * Identified as the constraint {@code asked} has and {@code base} does not, which is exact even
+     * when {@code base} carries {@link LinearBoundConstraint}s of its own. The unbounded question
+     * carries no cut and reports the loosest cost the declared domains permit, so a recorded sequence
+     * reads as one descent.
+     */
+    static int boundAsked(ConstraintSatisfactionProblem base, ConstraintSatisfactionProblem asked) {
+        return cutBound(base, asked).orElseGet(() -> permittedSpan(asked));
+    }
+
+    /** As {@link #boundAsked}, for an objective over {@link #X} alone. */
+    static int boundAskedOverX(ConstraintSatisfactionProblem base, ConstraintSatisfactionProblem asked) {
+        return cutBound(base, asked).orElseGet(() -> largest(asked, X));
+    }
+
+    static Optional<Integer> cutBound(ConstraintSatisfactionProblem base, ConstraintSatisfactionProblem asked) {
+        return asked.getConstraints().stream()
+                .filter(constraint -> !base.getConstraints().contains(constraint))
+                .filter(LinearBoundConstraint.class::isInstance)
+                .map(constraint -> ((LinearBoundConstraint<?>) constraint).getBound().intValue())
+                .findFirst();
+    }
+
+    /**
+     * The loosest cost {@code csp}'s domains still permit, read generically: narrowing an
+     * {@link IntRangeDomain} does not necessarily leave an {@link IntRangeDomain} behind.
      */
     static int permittedSpan(ConstraintSatisfactionProblem csp) {
         return largest(csp, X) + largest(csp, Y);
@@ -50,13 +77,13 @@ public class BoundedFirstSolutionTest {
     }
 
     /**
-     * A search that answers each question with the cheapest assignment its bound still permits, which
-     * is what a real feasibility search would find if it happened to be lucky. Records the upper bound
-     * it saw on each call, so a test can assert the sequence of targets the descent chose.
+     * A search that answers each question with the cheapest assignment there is, which is what a real
+     * feasibility search would find if it happened to be lucky. Records the bound it was asked about
+     * on each call, so a test can assert the sequence of targets the descent chose.
      */
     static BoundedFirstSolution.SearchFactory cheapestPermitted(List<Integer> targetsSeen) {
-        return (budget, searchIndex) -> csp -> {
-            targetsSeen.add(permittedSpan(csp));
+        return (searchCsp, budget, searchIndex) -> csp -> {
+            targetsSeen.add(boundAsked(CSP, searchCsp));
             return Stream.of(at(0, 0));
         };
     }
@@ -67,7 +94,7 @@ public class BoundedFirstSolutionTest {
 
     @Test
     void noFirstSolution_seedsNothing() {
-        val seeded = seeder((budget, searchIndex) -> csp -> Stream.empty()).seed(CSP, SUM);
+        val seeded = seeder((searchCsp, budget, searchIndex) -> csp -> Stream.empty()).seed(CSP, SUM);
 
         assertThat(seeded).isEmpty();
     }
@@ -76,8 +103,8 @@ public class BoundedFirstSolutionTest {
     void aSearchThatStopsEarly_seedsNothingRatherThanThrowing() {
         // IncumbentSeeder's contract forbids throwing: branch-and-bound truncates silently, and
         // seeding is not the place to change that (ADR-0011, ADR-0043).
-        val limited = seeder((budget, searchIndex) -> csp -> { throw new LimitExceededException(new Statistics()); });
-        val cancelled = seeder((budget, searchIndex) -> csp -> { throw new SolverCancelledException(new Statistics()); });
+        val limited = seeder((searchCsp, budget, searchIndex) -> csp -> { throw new LimitExceededException(new Statistics()); });
+        val cancelled = seeder((searchCsp, budget, searchIndex) -> csp -> { throw new SolverCancelledException(new Statistics()); });
 
         assertThat(limited.seed(CSP, SUM)).isEmpty();
         assertThat(cancelled.seed(CSP, SUM)).isEmpty();
@@ -87,7 +114,7 @@ public class BoundedFirstSolutionTest {
     void anUnusableAnswer_seedsNothing() {
         // Incomplete, so its cost would be computed over unassigned variables. Neither a solution
         // nor a refutation, so the descent must not treat it as either.
-        val seeded = seeder((budget, searchIndex) -> csp -> Stream.of(Assignment.of(Map.<Variable<?>, Object>of(X, 1))))
+        val seeded = seeder((searchCsp, budget, searchIndex) -> csp -> Stream.of(Assignment.of(Map.<Variable<?>, Object>of(X, 1))))
                 .seed(CSP, SUM);
 
         assertThat(seeded).isEmpty();
@@ -126,8 +153,8 @@ public class BoundedFirstSolutionTest {
         // both domains at 0..9, since either variable can still take 9 when the other takes 0.
         val targets = new ArrayList<Integer>();
         int[] call = {0};
-        BoundedFirstSolution.SearchFactory search = (budget, searchIndex) -> csp -> {
-            targets.add(permittedSpan(csp));
+        BoundedFirstSolution.SearchFactory search = (searchCsp, budget, searchIndex) -> csp -> {
+            targets.add(boundAsked(CSP, searchCsp));
             return call[0]++ == 0 ? Stream.of(at(9, 9)) : Stream.empty();
         };
 
@@ -140,12 +167,34 @@ public class BoundedFirstSolutionTest {
     }
 
     @Test
+    void everyProbeIsHandedItsBoundAsAConstraint_notAsNarrowedDomains() {
+        // The regression this guards. A bound spread across several objective variables narrows no
+        // domain at all -- x + y <= 15 leaves both 0..9 -- so a probe given only what one propagation
+        // pass narrowed is given back the unbounded problem, answers it with something no better than
+        // the incumbent, and ends the descent after a single probe having learned nothing. Both halves
+        // are asserted: that the bound is there as a constraint, and that the domains cannot show it.
+        val cuts = new ArrayList<Integer>();
+        int[] call = {0};
+        BoundedFirstSolution.SearchFactory search = (searchCsp, budget, searchIndex) -> csp -> {
+            cutBound(CSP, searchCsp).ifPresent(cuts::add);
+            assertThat(permittedSpan(searchCsp)).as("this bound narrows no domain").isEqualTo(18);
+            return call[0]++ == 0 ? Stream.of(at(9, 9)) : Stream.empty();
+        };
+
+        seeder(search).seed(CSP, SUM);
+
+        // 18 against a lower bound of 0 aims the first probe at 15; refuting it lifts the bound to 16,
+        // so the next aims at 17.
+        assertThat(cuts).as("one cut per probe, the unbounded question carrying none").containsExactly(15, 17);
+    }
+
+    @Test
     void everyProbeGetsItsOwnSearchIndex() {
         // Same shape as the refuted-probe descent above, which runs two probes, so the indices
         // actually advance rather than being asserted over a single one.
         val indices = new ArrayList<Integer>();
         int[] call = {0};
-        BoundedFirstSolution.SearchFactory search = (budget, searchIndex) -> csp -> {
+        BoundedFirstSolution.SearchFactory search = (searchCsp, budget, searchIndex) -> csp -> {
             indices.add(searchIndex);
             return call[0]++ == 0 ? Stream.of(at(9, 9)) : Stream.empty();
         };
@@ -162,8 +211,8 @@ public class BoundedFirstSolutionTest {
         // ends the descent, since there is no reason to think a lower target fares better.
         val targets = new ArrayList<Integer>();
         int[] call = {0};
-        BoundedFirstSolution.SearchFactory search = (budget, searchIndex) -> csp -> {
-            targets.add(permittedSpan(csp));
+        BoundedFirstSolution.SearchFactory search = (searchCsp, budget, searchIndex) -> csp -> {
+            targets.add(boundAsked(CSP, searchCsp));
             if (call[0]++ == 0) {
                 return Stream.of(at(9, 9));
             }
@@ -182,8 +231,8 @@ public class BoundedFirstSolutionTest {
         // measure the next step from 4 rather than from the target it asked for.
         val targets = new ArrayList<Integer>();
         int[] call = {0};
-        BoundedFirstSolution.SearchFactory search = (budget, searchIndex) -> csp -> {
-            targets.add(permittedSpan(csp));
+        BoundedFirstSolution.SearchFactory search = (searchCsp, budget, searchIndex) -> csp -> {
+            targets.add(boundAsked(CSP, searchCsp));
             return switch (call[0]++) {
                 case 0 -> Stream.of(at(9, 9));
                 case 1 -> Stream.of(at(2, 2));
@@ -211,19 +260,20 @@ public class BoundedFirstSolutionTest {
     }
 
     @Test
-    void aProbeAnsweringNoBetterThanTheIncumbent_endsTheDescent() {
-        // The bound asked for at most target, so an answer that costs as much as the incumbent means
-        // the search ignored the bound. Nothing has been tightened, so there is nothing to tighten
-        // from, and continuing would ask the same question again.
+    void aProbeAnsweringOutsideItsOwnBound_isNotTrusted() {
+        // A search that ignores the bound it was given. Its answer costs 18 against a probe asking for
+        // at most 15, and the cut is a constraint of the problem it was asked about, so validation
+        // rejects it: neither a solution nor a refutation, which ends the descent with the incumbent
+        // intact rather than adopting an answer that is no improvement at all.
         val targets = new ArrayList<Integer>();
-        BoundedFirstSolution.SearchFactory search = (budget, searchIndex) -> csp -> {
-            targets.add(permittedSpan(csp));
+        BoundedFirstSolution.SearchFactory search = (searchCsp, budget, searchIndex) -> csp -> {
+            targets.add(boundAsked(CSP, searchCsp));
             return Stream.of(at(9, 9));
         };
 
         val seeded = seeder(search).seed(CSP, SUM);
 
-        assertThat(seeded).contains(at(9, 9));
+        assertThat(seeded).as("the unbounded first solution, unimproved").contains(at(9, 9));
         assertThat(targets).as("the unbounded question and one probe").hasSize(2);
     }
 
@@ -252,8 +302,8 @@ public class BoundedFirstSolutionTest {
                 .build();
         val justX = LinearObjective.builder().coefficient(X, 1.0).build();
         val asked = new ArrayList<Integer>();
-        BoundedFirstSolution.SearchFactory search = (budget, searchIndex) -> csp -> {
-            asked.add(largest(csp, X));
+        BoundedFirstSolution.SearchFactory search = (searchCsp, budget, searchIndex) -> csp -> {
+            asked.add(boundAskedOverX(bounded, searchCsp));
             return Stream.of(Assignment.of(Map.<Variable<?>, Object>of(X, 5)));
         };
 
@@ -273,7 +323,7 @@ public class BoundedFirstSolutionTest {
                 .build();
         val justX = LinearObjective.builder().coefficient(X, 1.0).build();
 
-        val seeded = seeder((budget, searchIndex) -> csp -> Stream.of(Assignment.of(Map.<Variable<?>, Object>of(X, 0))))
+        val seeded = seeder((searchCsp, budget, searchIndex) -> csp -> Stream.of(Assignment.of(Map.<Variable<?>, Object>of(X, 0))))
                 .seed(constrained, justX);
 
         assertThat(seeded).isEmpty();
@@ -281,7 +331,7 @@ public class BoundedFirstSolutionTest {
 
     @Test
     void builderRejectsNonsenseBudgets() {
-        BoundedFirstSolution.SearchFactory search = (budget, searchIndex) -> csp -> Stream.empty();
+        BoundedFirstSolution.SearchFactory search = (searchCsp, budget, searchIndex) -> csp -> Stream.empty();
 
         assertThatThrownBy(() -> BoundedFirstSolution.builder().search(search).initialRestartBudget(0).build())
                 .isInstanceOf(IllegalArgumentException.class).hasMessageContaining("initialRestartBudget");
@@ -296,7 +346,7 @@ public class BoundedFirstSolutionTest {
     @Test
     void theTwoSearchesGetTheirOwnBudgets() {
         val requests = new ArrayList<String>();
-        BoundedFirstSolution.SearchFactory search = (budget, searchIndex) -> {
+        BoundedFirstSolution.SearchFactory search = (searchCsp, budget, searchIndex) -> {
             requests.add(budget + "@" + searchIndex);
             return csp -> Stream.of(at(9, 9));
         };

@@ -14,9 +14,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 
-import java.util.Objects;
 import java.util.Optional;
-import java.util.function.IntFunction;
 import java.util.function.ToDoubleFunction;
 
 /**
@@ -55,19 +53,29 @@ import java.util.function.ToDoubleFunction;
 @Builder
 public class BoundedFirstSolution implements IncumbentSeeder {
     /**
-     * Builds a search for one feasible solution, given a restart budget and this search's index
-     * within the solve. The budget because the two uses want very different ones -- see
-     * {@link #initialRestartBudget} and {@link #probeRestartBudget}. The index because each search
-     * must draw its tie-breaking from its own stream rather than from wherever the previous one left
-     * a shared driver, which is what {@link RestartRandomization#forSearch} supplies; the first
-     * solution is search 0 and each probe is the next.
+     * Builds a search for one feasible solution, given the problem it will be asked about, a restart
+     * budget, and this search's index within the solve. The budget because the two uses want very
+     * different ones -- see {@link #initialRestartBudget} and {@link #probeRestartBudget}. The index
+     * because each search must draw its tie-breaking from its own stream rather than from wherever the
+     * previous one left a shared driver, which is what {@link RestartRandomization#forSearch}
+     * supplies; the first solution is search 0 and each probe is the next.
      */
     @NonNull SearchFactory search;
 
-    /** {@link #search}'s shape: a restart budget and a search index in, one search out. */
+    /**
+     * {@link #search}'s shape: the problem to be asked about, a restart budget and a search index in,
+     * one search out.
+     *
+     * <p>{@code csp} is the same problem the returned {@link Solver} is then asked about, and is
+     * passed here as well because a search's <em>configuration</em> can depend on which constraint
+     * types the problem has -- {@link FixpointPropagation.Factory#forProblem} filters the propagator
+     * list on exactly that. A probe's problem carries an {@link ObjectiveCut} the original does not,
+     * so a factory that configured itself from the original problem would build a search that cannot
+     * propagate the very bound the probe exists to ask about.
+     */
     @FunctionalInterface
     public interface SearchFactory {
-        @NonNull Solver create(int restartBudget, int searchIndex);
+        @NonNull Solver create(@NonNull ConstraintSatisfactionProblem csp, int restartBudget, int searchIndex);
     }
 
     // No @Builder.Default — defaults are set in BoundedFirstSolutionBuilder below, which validates
@@ -147,7 +155,7 @@ public class BoundedFirstSolution implements IncumbentSeeder {
     @Override
     public @NonNull Optional<Assignment> seed(@NonNull ConstraintSatisfactionProblem csp,
                                               @NonNull ToDoubleFunction<Assignment> objective) {
-        Assignment first = ask(csp, search.create(initialRestartBudget, 0)).solution();
+        Assignment first = ask(csp, search.create(csp, initialRestartBudget, 0)).solution();
         if (first == null) {
             return Optional.empty();
         }
@@ -173,29 +181,32 @@ public class BoundedFirstSolution implements IncumbentSeeder {
                 .map(LpBound::lowerBound)
                 .orElse(bestCost);
         log.debug("Descending from a first solution costing {}, towards a lower bound of {}", bestCost, lower);
-        // Built inside the loop, not once outside it: each probe is its own search and takes its own
-        // index, so that probe 3 asks its question the same way wherever the descent reached it. The
-        // chain rebuild is a handful of object allocations against a search measured in seconds.
         for (int i = 0; i < maxProbes && bestCost > lower; i++) {
-            Solver probe = search.create(probeRestartBudget, i + 1);
             double target = bestCost - Math.max(1.0, Math.ceil((bestCost - lower) / stepDivisor));
             if (target < lower) {
                 break;
             }
             log.debug("Probe {}: is there a solution costing at most {}?", i, target);
-            // Cost at most target is cost strictly better than target + 1. The narrowing cannot come
-            // back null here: it empties a domain only when the target falls below the objective's
-            // domain-only minimum, and every target is at or above the LP bound, which already
-            // accounts for that minimum and every linear constraint besides.
-            ConstraintSatisfactionProblem bounded = Objects.requireNonNull(
-                    cut.narrow(csp, objective, target + 1),
-                    "a target at or above the LP lower bound cannot empty a domain");
-            Answer answer = ask(bounded, probe);
+            // Cost at most target is cost strictly better than target + 1. Added as a constraint
+            // rather than narrowed into the domains: see ObjectiveCut#enforce for why a bound spread
+            // across many objective variables is invisible to a search that only sees what one
+            // root-level pass of it narrowed.
+            ConstraintSatisfactionProblem bounded = cut.enforce(csp, objective, target + 1);
+            // Built inside the loop, not once outside it: each probe is its own search over its own
+            // bounded problem and takes its own index, so that probe 3 asks its question the same way
+            // wherever the descent reached it. Rebuilding the chain costs a constraint-graph build
+            // (enforce changed the constraint set) and one propagator-list filter, both once per
+            // probe against a search measured in seconds.
+            Answer answer = ask(bounded, search.create(bounded, probeRestartBudget, i + 1));
             if (answer.solution() != null) {
                 double cost = objective.applyAsDouble(answer.solution());
-                if (cost >= bestCost) {
-                    break; // no better than what we hold already, so there is nothing left to tighten
-                }
+                // Necessarily an improvement, so there is no "no better than what we hold" case to
+                // check for: the cut is a constraint of `bounded` and `ask` returns only a solution
+                // consistent with it, which puts the cost at or below target and so strictly below
+                // bestCost. An answer that ignores its bound is rejected by that validation and
+                // arrives here as neither a solution nor a refutation. This was a real case while the
+                // bound was only narrowed into the domains, where a thin one narrowed nothing and the
+                // probe answered the unbounded question instead -- see ObjectiveCut#enforce.
                 log.debug("Bounded probe at {} improved the incumbent from {} to {}", target, bestCost, cost);
                 best = answer.solution();
                 bestCost = cost;
