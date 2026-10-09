@@ -720,30 +720,44 @@ public class BranchAndBoundSolverTest {
     }
 
     @Test
-    void selector_violatingDiscreteFirstContract_failsFast() {
-        // A custom selector that always picks the continuous variable, even while the discrete one
-        // remains unassigned, violates BranchAndBoundSolver's documented contract. requireDiscrete
-        // should catch this with a clear IllegalStateException rather than letting domainValuesOrderer
-        // crash confusingly trying to enumerate a non-singleton BoundedDomain.
-        Variable<Integer> n = F.create("contract_n");
+    void selectorChoosingAContinuousVariable_branchesOnADiscreteOneInstead() {
+        // A selector that picks the continuous variable while a discrete one is still open is not a
+        // misconfiguration: dom/wdeg -- the default since ADR-0038 -- ranks a zero-weight discrete
+        // variable at Double.MAX_VALUE, behind any non-singleton IntervalDomain, whose size() caps
+        // its ratio at Integer.MAX_VALUE. No DomainValuesOrderer can enumerate an interval, so the
+        // branching variable is substituted rather than the whole stream throwing.
+        Variable<Integer> wide = F.create("contract_wide");
+        Variable<Integer> narrow = F.create("contract_narrow");
         Variable<Double> x = F.create("contract_x");
         var csp = ConstraintSatisfactionProblem.builder()
-                .variableDomain(n, IntRangeDomain.of(1, 3))
+                .variableDomain(wide, IntRangeDomain.of(1, 3))
+                .variableDomain(narrow, IntRangeDomain.of(1, 2))
                 .variableDomain(x, IntervalDomain.of(0.0, 10.0))
                 .build();
-        AdaptiveVariableSelector alwaysX =
-                (c, assignment) -> x;
+        AdaptiveVariableSelector alwaysX = (c, assignment) -> x;
+        var branched = new CopyOnWriteArrayList<Variable<?>>();
+        Inference pinning = narrowAssignedToSingleton();
         BranchAndBoundSolver solver = BranchAndBoundSolver.builder()
                 .objective(a -> 0.0)
                 .selectorFactory(constraints -> alwaysX)
                 .domainValuesOrderer(DefaultValueOrderer.INSTANCE)
-                .inference((problem, variable, assignment) -> Optional.of(problem))
+                // Pins each branched variable, as the chain's own MAC-plus-fixpoint inference does;
+                // the continuous residual is then resolved from singleton domains.
+                .inference((problem, variable, assignment) -> {
+                    branched.add(variable);
+                    return pinning.apply(problem, variable, assignment);
+                })
                 .build();
 
-        assertThatThrownBy(() -> solver.getSolutions(csp).toList())
-                .isInstanceOf(IllegalStateException.class)
-                .hasMessageContaining("variable selector")
-                .hasMessageContaining("contract_x");
+        var improving = solver.getSolutions(csp).toList();
+
+        assertThat(improving).isNotEmpty();
+        assertThat(improving.getFirst().getValue(wide)).isPresent();
+        assertThat(improving.getFirst().getValue(narrow)).isPresent();
+        assertThat(improving.getFirst().getValue(x)).isPresent();
+        assertThat(branched.getFirst())
+                .as("the substitute is the discrete variable with the smallest remaining domain")
+                .isEqualTo(narrow);
     }
 
     // --- objective cut: the incumbent applied as a constraint, not only as a branch-cut predicate ---

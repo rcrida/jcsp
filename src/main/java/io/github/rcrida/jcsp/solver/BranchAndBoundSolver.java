@@ -26,6 +26,7 @@ import io.github.rcrida.jcsp.variables.Variable;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -90,20 +91,13 @@ import java.util.stream.Stream;
  * longer an approximation for the remaining purely-continuous sub-problem), falling back to
  * {@link BisectionConditioningSolver} -- now invoked internally, once per discrete-complete leaf
  * rather than once for the whole search -- when the fast path doesn't apply or isn't sound (e.g. a
- * {@link BoundedDomain} variable also participates in a constraint the LP can't see, like {@code
- * productConstraint}). This is the fix for the MIPLIB {@code flugpl} case that originally motivated
- * ADR-0009: continuous variables whose useful bounds depend on a still-open discrete decision are no
- * longer bisected blind before that decision is even made. Relies on {@link #selectorFactory} preferring discrete variables while any remain undecided --
- * {@link io.github.rcrida.jcsp.solver.backtrackingsearch.selector.MinimumRemainingValuesSelector}
- * (what {@link Solver.Factory} always wires in) satisfies this by construction, since a
- * non-singleton {@link BoundedDomain}'s {@code size()} is {@link Integer#MAX_VALUE} -- larger than
- * any realistic discrete domain -- so it's never the smallest-remaining-domain choice while a
- * discrete variable is still open. A caller supplying a custom selector directly to this class's
- * builder must preserve that preference itself; {@link #requireDiscrete} fails fast with a clear
- * {@link IllegalStateException} if it doesn't, rather than letting {@link
- * io.github.rcrida.jcsp.solver.backtrackingsearch.order.LeastConstrainingValueOrderer} (and other
- * {@link DomainValuesOrderer}s that assume a {@link io.github.rcrida.jcsp.domains.DiscreteDomain})
- * crash confusingly trying to enumerate a non-singleton {@link BoundedDomain}, which they cannot do.
+ * {@link BoundedDomain} variable also participates in a constraint the LP can't see, like {@link
+ * ConstraintSatisfactionProblem.ConstraintSatisfactionProblemBuilder#productConstraint(java.util.Set,
+ * io.github.rcrida.jcsp.constraints.Operator, Number)}). Continuous variables whose useful bounds
+ * depend on a still-open discrete decision are therefore not bisected before that decision is made.
+ * Which variable is branched on does not depend on {@link #selectorFactory} honouring that split:
+ * {@link #branchVariable} substitutes a discrete variable whenever the selector picks a non-singleton
+ * {@link BoundedDomain} one, since no {@link DomainValuesOrderer} can enumerate one.
  * <p>
  * Reaching the <em>first</em> solution is a pure feasibility search: there is no incumbent yet, so
  * neither the bound check in {@link #searchCut} nor {@link #applyObjectiveCut} can prune anything,
@@ -328,8 +322,7 @@ public class BranchAndBoundSolver implements Solver {
         } else if (objective.applyAsDouble(assignment) >= incumbent[0]) {
             return Stream.empty();
         }
-        Variable<?> variable = hint.orElseGet(() -> selector.select(csp, assignment));
-        requireDiscrete(csp, variable);
+        Variable<?> variable = branchVariable(csp, assignment, hint.orElseGet(() -> selector.select(csp, assignment)));
         return searchValues(variable, csp, cutNarrowed, assignment, incumbent, deadline, weight, progress, selector, lpGate);
     }
 
@@ -350,30 +343,42 @@ public class BranchAndBoundSolver implements Solver {
     }
 
     /**
-     * Fails fast, with a clear diagnosis, instead of letting {@link #domainValuesOrderer} crash
-     * confusingly deep inside itself (e.g. {@code LeastConstrainingValueOrderer} casting to {@code
-     * DiscreteDomain}) when {@link #selectorFactory} violates the discrete-first contract
-     * documented on this class: reaching this point already means a discrete variable is still open
-     * (the {@link #isDiscreteComplete} check in {@link #search} didn't short-circuit), so {@code
-     * variable} being a <em>non-singleton</em> {@link BoundedDomain} here can only mean the selector
-     * picked an unresolved continuous variable while a discrete one remained open. A <em>singleton</em>
-     * {@link BoundedDomain} is fine -- e.g. {@code flugpl}'s {@code STM1}, pinned by its own equality
-     * constraint before search even starts -- since {@link #domainValuesOrderer} implementations
-     * already special-case a singleton {@link BoundedDomain} the same way {@link
-     * io.github.rcrida.jcsp.solver.backtrackingsearch.selector.MinimumRemainingValuesSelector} (what
-     * {@link Solver.Factory} always wires in) naturally prefers it anyway, being the smallest
-     * possible domain size. A caller-supplied custom selector passed directly to this class's
-     * builder could still violate the non-singleton case.
+     * The variable to branch on: {@code selected} as the selector chose it, or a discrete substitute
+     * when it chose a <em>non-singleton</em> {@link BoundedDomain} one. Reaching this point already
+     * means some discrete variable is still open (the {@link #isDiscreteComplete} check in {@link
+     * #search} didn't short-circuit), so there is always a substitute to find, chosen by smallest
+     * remaining domain.
+     * <p>
+     * A continuous variable is never branched on here: {@link #resolveContinuousResidual} resolves
+     * them all at once, and {@link #domainValuesOrderer} cannot enumerate a non-singleton {@link
+     * BoundedDomain} at all (e.g. {@link
+     * io.github.rcrida.jcsp.solver.backtrackingsearch.order.LeastConstrainingValueOrderer} casting to
+     * {@link io.github.rcrida.jcsp.domains.DiscreteDomain}). A <em>singleton</em> {@link
+     * BoundedDomain} is fine -- e.g. {@code flugpl}'s {@code STM1}, pinned by its own equality
+     * constraint before search even starts -- since the orderers special-case it.
+     * <p>
+     * Substituting rather than requiring the selector to prefer discrete variables, because the
+     * default selector does not: dom/wdeg ({@link AdaptiveVariableSelector.Factory#INSTANCE}, what
+     * {@link Solver.Factory} wires in per ADR-0038) ranks on {@code domainSize / weight}, and a
+     * discrete variable whose weight is still zero scores {@link Double#MAX_VALUE} -- worse than any
+     * non-singleton {@link BoundedDomain}, whose {@code size()} caps the ratio at {@link
+     * Integer#MAX_VALUE}. Late in a descent, where the remaining discrete variables often share no
+     * constraint with another unassigned variable, that is an ordinary outcome rather than a
+     * misconfiguration, and it used to throw out of the caller's stream.
      */
-    private static void requireDiscrete(ConstraintSatisfactionProblem csp, Variable<?> variable) {
-        if (csp.getDomain(variable) instanceof BoundedDomain<?> bd && !bd.isSingleton()) {
-            throw new IllegalStateException(
-                    "the variable selector selected non-singleton continuous variable '" + variable
-                            + "' while a discrete variable was still unassigned. BranchAndBoundSolver "
-                            + "requires its variable selector to prefer discrete variables while any "
-                            + "remain open (see this class's own Javadoc); MinimumRemainingValuesSelector "
-                            + "satisfies this by construction.");
+    private static Variable<?> branchVariable(ConstraintSatisfactionProblem csp, Assignment assignment,
+                                               Variable<?> selected) {
+        if (!(csp.getDomain(selected) instanceof BoundedDomain<?> bd) || bd.isSingleton()) {
+            return selected;
         }
+        log.debug("Selector chose continuous {} while a discrete variable was open; substituting", selected);
+        // orElseThrow() without a message: unreachable, since isDiscreteComplete short-circuited.
+        return csp.getVariableDomains().entrySet().stream()
+                .filter(entry -> !(entry.getValue() instanceof BoundedDomain<?>)
+                        && assignment.getValue(entry.getKey()).isEmpty())
+                .min(Comparator.comparingInt(entry -> entry.getValue().size()))
+                .orElseThrow()
+                .getKey();
     }
 
     /**
