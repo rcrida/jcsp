@@ -221,6 +221,51 @@ public class BranchAndBoundSolverTest {
     }
 
     @Test
+    void nogoodSetIsReMergedForEveryCandidateValueOfANode() {
+        // A nogood learned while backtracking one sibling value has to be in the constraint set the
+        // next sibling propagates against -- that being the branch most likely to re-derive the same
+        // failure. The merged set is a snapshot, so taking it once per node left every nogood learned
+        // at a node invisible to the rest of that node's own candidates.
+        Variable<Integer> x = F.create("remerge_x");
+        var csp = ConstraintSatisfactionProblem.builder().variableDomain(x, IntRangeDomain.of(1, 3)).build();
+        var seen = new CopyOnWriteArrayList<Integer>();
+        Inference recording = new Inference() {
+            @Override
+            public Optional<ConstraintSatisfactionProblem> apply(ConstraintSatisfactionProblem problem,
+                                                                  Variable<?> variable, Assignment assignment) {
+                return Optional.of(problem);
+            }
+
+            @Override
+            public ConsistencyResult applyWithReason(ConstraintSatisfactionProblem problem, Variable<?> variable,
+                                                      Assignment assignment, Set<Variable<?>> alsoChanged) {
+                seen.add(problem.getNogoods().size());
+                // Only the first candidate fails, and it fails with a reason, so exactly one nogood
+                // is recorded before the remaining candidates are propagated.
+                return seen.size() == 1
+                        ? ConsistencyResult.infeasible(
+                                io.github.rcrida.jcsp.constraints.nary.GroundNogoodConstraint.of(assignment.getValues()))
+                        : ConsistencyResult.feasible(problem);
+            }
+        };
+        BranchAndBoundSolver solver = BranchAndBoundSolver.builder()
+                .objective(a -> 0.0)
+                .selectorFactory(constraints -> (c, assignment) -> x)
+                .domainValuesOrderer(DefaultValueOrderer.INSTANCE)
+                .inference(recording)
+                .nogoodStore(new NogoodStore())
+                .build();
+
+        solver.getSolutions(csp).toList();
+
+        assertThat(seen).hasSizeGreaterThan(1);
+        assertThat(seen.getFirst()).as("nothing learned yet when the first candidate is propagated").isZero();
+        assertThat(seen.subList(1, seen.size()))
+                .as("every later candidate propagates against the nogood the first one produced")
+                .allMatch(count -> count == 1);
+    }
+
+    @Test
     void nogoodLearningDisabled_solvesWithoutRecordingNogoods() {
         Variable<Integer> x = F.create("bbnlx");
         Variable<Integer> y = F.create("bbnly");

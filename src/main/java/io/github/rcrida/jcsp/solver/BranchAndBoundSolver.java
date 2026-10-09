@@ -505,6 +505,12 @@ public class BranchAndBoundSolver implements Solver {
                                                  SearchProgress progress,
                                                  AdaptiveVariableSelector selector,
                                                  LpGate lpGate) {
+        // Merged once for the direct check below, which reads the store's live by-variable index and
+        // so sees everything recorded since. The merged constraint *set* a fixpoint propagates is a
+        // snapshot, though, so the one handed to the inference is re-taken per candidate inside the
+        // flatMap -- as DomWdegLubySearch does, and for the same reason: a nogood learned while
+        // backtracking one sibling value must be visible to every later sibling's propagation, that
+        // being the branch most likely to re-derive the same failure.
         ConstraintSatisfactionProblem cspWithNogoods = nogoodStore.apply(csp);
         @SuppressWarnings("unchecked")
         List<T> candidates = (List<T>) phaseMemory.prioritise(variable,
@@ -535,7 +541,7 @@ public class BranchAndBoundSolver implements Solver {
                 .flatMap(next -> {
                     Stream<Assignment> child;
                     try {
-                        child = inferOrExplain(cspWithNogoods, variable, next, cutNarrowed, selector)
+                        child = inferOrExplain(nogoodStore.apply(csp), variable, next, cutNarrowed, selector)
                                 .map(inferred -> search(inferred, next, incumbent, deadline, childWeight, progress, selector, lpGate))
                                 .orElseGet(Stream::empty);
                     } catch (SolverCancelledException e) {
