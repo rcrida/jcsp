@@ -145,7 +145,8 @@ public class BranchAndBoundSolver implements Solver {
      * so two solves from one solver must not share one. Defaults to dom/wdeg via {@link
      * AdaptiveVariableSelector.Factory#INSTANCE}, and {@link SolverConfig#getVariableSelectorFactory}
      * reaches here -- until this field existed it reached only the satisfaction chain, so setting it
-     * and then calling {@code createSolver(csp, objective)} silently had no effect (ADR-0038).
+     * and then calling {@link Solver.Factory#createSolver(ConstraintSatisfactionProblem, ToDoubleFunction)}
+     * silently had no effect (ADR-0038).
      */
     @Builder.Default
     AdaptiveVariableSelector.@NonNull Factory selectorFactory = AdaptiveVariableSelector.Factory.INSTANCE;
@@ -166,7 +167,7 @@ public class BranchAndBoundSolver implements Solver {
     @NonNull NogoodStore nogoodStore = new NogoodStore();
     /**
      * Shared token the root {@link Assignment} is seeded with (instead of a fresh {@code
-     * Assignment.empty()}), so it's readable via {@code SolverConfig.getStatistics()} after the
+     * Assignment.empty()}), so it's readable via {@link SolverConfig#getStatistics()} after the
      * call regardless of whether an improving solution was ever found.
      */
     @Builder.Default
@@ -458,7 +459,9 @@ public class BranchAndBoundSolver implements Solver {
      * with every discrete variable already pinned, that's no longer an approximation for the
      * remaining purely-continuous sub-problem, just its exact solution -- accepted only if it fills
      * every open variable and satisfies every constraint (a {@link BoundedDomain} variable can
-     * participate in a constraint the LP can't see, e.g. {@code productConstraint}, which this
+     * participate in a constraint the LP can't see, e.g. {@link
+     * ConstraintSatisfactionProblem.ConstraintSatisfactionProblemBuilder#productConstraint(java.util.Set,
+     * io.github.rcrida.jcsp.constraints.Operator, Number)}, which this
      * consistency check catches). Falls back to a fresh, single-use {@link BisectionConditioningSolver}
      * over just this residual otherwise, with {@link SolverDecorator#forcedSolution} as its own
      * {@code inner}: {@link BisectionConditioningSolver#getSolutions} delegates straight to {@code

@@ -13,10 +13,10 @@ package io.github.rcrida.jcsp.solver;
  * <p>
  * So the gate is keyed on the one signal that distinguishes them, rather than on a frequency: a
  * streak of solves that failed to cut. Until {@link #PATIENCE} consecutive solves have all failed,
- * every node solves. After that the LP runs on one node in {@code PATIENCE}, which is enough to
+ * every node solves. After that the LP runs on one node in {@link #PATIENCE}, which is enough to
  * notice if it starts cutting again — any cut resets the gate to full rate immediately. A problem
  * whose LP prunes regularly therefore never reaches the streak and is untouched, while one whose
- * LP is dead weight pays about a {@code PATIENCE}th of the cost.
+ * LP is dead weight pays about a {@link #PATIENCE}th of the cost.
  * <p>
  * Skipping a bound is always sound: it forgoes pruning, never admits anything. It is only
  * <em>affordable</em> because the incumbent stays enforced regardless, by {@link
@@ -26,7 +26,8 @@ package io.github.rcrida.jcsp.solver;
  * LP's most-fractional branching hint, falling back to the configured variable selector.
  * <p>
  * Per-search state, so one is created per {@link BranchAndBoundSolver#getSolutions} call and
- * threaded through the search exactly as the {@code AdaptiveVariableSelector} is, for the same
+ * threaded through the search exactly as the {@link
+ * io.github.rcrida.jcsp.solver.backtrackingsearch.selector.AdaptiveVariableSelector} is, for the same
  * reason: two solves from one solver must not share one.
  */
 final class LpGate {

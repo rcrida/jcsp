@@ -32,8 +32,10 @@ import java.util.concurrent.atomic.AtomicReference;
  *
  * <p>Shared by the two callers that need it, which apply the same cut two different ways: {@link
  * BranchAndBoundSolver} re-{@link #narrow}s its incumbent into the domains at every node
- * ([ADR-0029]), while {@link BoundedFirstSolution} {@link #enforce}s a probe's bound as a constraint
- * once per probe ([ADR-0044]). See {@link #enforce} for why one-per-node and one-per-search want
+ * (<a href="../../../../../../../docs/adr/0029-objective-cut-as-a-propagated-constraint.md">ADR-0029</a>),
+ * while {@link BoundedFirstSolution} {@link #enforce}s a probe's bound as a constraint once per probe
+ * (<a href="../../../../../../../docs/adr/0044-bounded-probes-for-the-starting-incumbent.md">ADR-0044</a>).
+ * See {@link #enforce} for why one-per-node and one-per-search want
  * different mechanisms. An instance carries a single-slot cache, since the bound changes rarely
  * relative to the rate it is consulted at, and rebuilding the constraint copies a variable set.
  */
