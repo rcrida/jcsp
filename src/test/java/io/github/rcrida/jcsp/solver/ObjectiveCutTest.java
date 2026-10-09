@@ -79,6 +79,44 @@ public class ObjectiveCutTest {
     }
 
     @Test
+    void constraintFor_reusesTheCachedCutForTheSameObjectiveAndBound() {
+        // What the cache is for: the incumbent moves rarely relative to the per-node rate the cut is
+        // asked for, and building one copies a variable set.
+        val cut = new ObjectiveCut();
+
+        assertThat(cut.constraintFor(SUM, 16.0, CSP)).isSameAs(cut.constraintFor(SUM, 16.0, CSP));
+    }
+
+    @Test
+    void constraintFor_rebuildsWhenTheBoundChanges() {
+        val cut = new ObjectiveCut();
+
+        assertThat(cut.constraintFor(SUM, 16.0, CSP).getBound()).isEqualTo(15);
+        assertThat(cut.constraintFor(SUM, 10.0, CSP).getBound()).isEqualTo(9);
+    }
+
+    @Test
+    void constraintFor_rebuildsWhenTheObjectiveChanges() {
+        // Keyed on the bound alone, a second objective at the same bound was answered with the first
+        // objective's cut -- a wrong cut, which discards real solutions rather than failing.
+        val xOnly = LinearObjective.builder().coefficient(X, 1.0).build();
+        val cut = new ObjectiveCut();
+
+        assertThat(cut.constraintFor(SUM, 16.0, CSP).getVariables()).containsExactlyInAnyOrder(X, Y);
+        assertThat(cut.constraintFor(xOnly, 16.0, CSP).getVariables()).containsExactly(X);
+    }
+
+    @Test
+    void constraintFor_cachesADeclinedNaNBound() {
+        // A NaN bound has no cut, and under a raw == comparison never matched its own cache entry
+        // either, so it was rebuilt (and re-declined) at every node.
+        val cut = new ObjectiveCut();
+
+        assertThat(cut.constraintFor(SUM, Double.NaN, CSP)).isNull();
+        assertThat(cut.constraintFor(SUM, Double.NaN, CSP)).isNull();
+    }
+
+    @Test
     void enforce_declinesAnObjectiveWithNoExactCut() {
         // A fractional coefficient cannot be cut exactly, and an inexact cut would have to be loosened
         // by an epsilon to stay sound -- see ObjectiveCut#build.

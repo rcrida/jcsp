@@ -35,26 +35,44 @@ import java.util.concurrent.atomic.AtomicReference;
  * relative to the rate it is consulted at, and rebuilding the constraint copies a variable set.
  */
 public final class ObjectiveCut {
-    /** The constraint built for one bound, {@code null} when that bound has no exact cut. */
-    private record Cached(double strictlyBetterThan, @Nullable LinearBoundConstraint<Integer> constraint) {}
+    /**
+     * The constraint built for one objective and bound, {@code null} when that pair has no exact
+     * cut. Both halves of the key are kept: a caller is free to hold one instance and ask it about
+     * more than one objective, and answering from a cache keyed on the bound alone would hand it the
+     * first objective's cut -- a wrong cut discards real solutions rather than failing, which is the
+     * outcome {@link #build} declines a non-integral objective to avoid.
+     */
+    private record Cached(@NonNull LinearObjective objective, double strictlyBetterThan,
+                          @Nullable LinearBoundConstraint<Integer> constraint) {}
 
     private final AtomicReference<Cached> cache = new AtomicReference<>();
 
     /**
      * The cut requiring a cost strictly better than {@code strictlyBetterThan}, or {@code null} when
-     * this objective cannot be cut exactly. Cached against the bound it was built for; a {@code null}
-     * result is cached too, so an objective that can never be cut is diagnosed once rather than
-     * re-examined on every call.
+     * this objective cannot be cut exactly. Cached against the objective and bound it was built for;
+     * a {@code null} result is cached too, so an objective that can never be cut is diagnosed once
+     * rather than re-examined on every call.
+     *
+     * <p>{@code csp} is deliberately not part of the cache key, although {@link #build} reads it: a
+     * caller asks once per search <em>node</em>, each with its own narrowed domains, so keying on it
+     * would mean never hitting the cache at all. Safe because the only thing read of it is whether
+     * each objective variable's domain is discrete with integral values, and narrowing can only
+     * remove values from a domain -- it can neither introduce a {@link BoundedDomain} nor make an
+     * integral domain fractional. So an answer computed against a parent node's wider domains still
+     * holds for every descendant.
      */
     public @Nullable LinearBoundConstraint<Integer> constraintFor(@NonNull LinearObjective objective,
                                                                   double strictlyBetterThan,
                                                                   @NonNull ConstraintSatisfactionProblem csp) {
         Cached cached = cache.get();
-        if (cached != null && cached.strictlyBetterThan() == strictlyBetterThan) {
+        // Double.compare, not ==, so a NaN bound (an objective that returned one) hits the cache
+        // instead of rebuilding a declined cut at every node.
+        if (cached != null && cached.objective().equals(objective)
+                && Double.compare(cached.strictlyBetterThan(), strictlyBetterThan) == 0) {
             return cached.constraint();
         }
         LinearBoundConstraint<Integer> built = build(objective, strictlyBetterThan, csp);
-        cache.set(new Cached(strictlyBetterThan, built));
+        cache.set(new Cached(objective, strictlyBetterThan, built));
         return built;
     }
 
