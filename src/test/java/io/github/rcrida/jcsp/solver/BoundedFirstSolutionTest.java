@@ -344,6 +344,14 @@ public class BoundedFirstSolutionTest {
     }
 
     @Test
+    void builderRejectsAMissingSearch() {
+        // The one mandatory field: every tuning knob has a default that passes its own check, so
+        // without this the diagnosis was Lombok's NullPointerException from the generated constructor.
+        assertThatThrownBy(() -> BoundedFirstSolution.builder().build())
+                .isInstanceOf(IllegalArgumentException.class).hasMessageContaining("search");
+    }
+
+    @Test
     void theTwoSearchesGetTheirOwnBudgets() {
         val requests = new ArrayList<String>();
         BoundedFirstSolution.SearchFactory search = (searchCsp, budget, searchIndex) -> {

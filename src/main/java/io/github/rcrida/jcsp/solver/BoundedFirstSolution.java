@@ -137,6 +137,12 @@ public class BoundedFirstSolution implements IncumbentSeeder {
         private int stepDivisor = 8;
 
         public BoundedFirstSolution build() {
+            // The one mandatory field, checked beside the four optional ones rather than left to
+            // Lombok's @NonNull check in the generated constructor, whose NullPointerException is
+            // the diagnosis this builder exists to improve on.
+            if (search == null) {
+                throw new IllegalArgumentException("search must be set");
+            }
             if (initialRestartBudget <= 0) {
                 throw new IllegalArgumentException("initialRestartBudget must be positive, got: " + initialRestartBudget);
             }
