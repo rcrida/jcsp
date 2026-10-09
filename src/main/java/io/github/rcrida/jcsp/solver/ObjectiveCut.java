@@ -4,6 +4,7 @@ import io.github.rcrida.jcsp.ConstraintSatisfactionProblem;
 import io.github.rcrida.jcsp.constraints.Operator;
 import io.github.rcrida.jcsp.constraints.nary.LinearBoundConstraint;
 import io.github.rcrida.jcsp.domains.BoundedDomain;
+import io.github.rcrida.jcsp.domains.DiscreteDomain;
 import io.github.rcrida.jcsp.domains.Domain;
 import io.github.rcrida.jcsp.variables.Variable;
 import org.jspecify.annotations.NonNull;
@@ -141,11 +142,17 @@ public final class ObjectiveCut {
      * cut would have to be loosened by an epsilon to stay sound and a wrong one here silently
      * discards the true optimum instead of failing.
      *
-     * <p>A {@link BoundedDomain} anywhere in the objective disqualifies it outright, for two separate
-     * reasons that happen to coincide: {@code -1} is not the next representable improvement over a
-     * continuous cost, and an {@code Integer}-bounded {@link LinearBoundConstraint} dispatches to
-     * integer propagation, which cannot read a continuous domain at all. The MIPLIB {@code flugpl}
-     * instance (see {@code FlugplTest}) is exactly this mixed integer/continuous shape.
+     * <p>Every objective variable's <em>domain</em> has to be integral too, which {@link
+     * #isIntegerValued} decides. That subsumes the {@link BoundedDomain} case -- {@code -1} is not
+     * the next representable improvement over a continuous cost, and an {@code Integer}-bounded
+     * {@link LinearBoundConstraint} dispatches to integer propagation, which cannot read a continuous
+     * domain at all; the MIPLIB {@code flugpl} instance (see {@code FlugplTest}) is exactly this mixed
+     * integer/continuous shape -- but it also covers a <em>discrete</em> domain of fractional values,
+     * which is just as wrong and is not continuous: {@link
+     * io.github.rcrida.jcsp.constraints.nary.LinearBoundPropagation} reads such a domain through
+     * {@link Number#intValue}, so a value of {@code 1.9} contributes {@code 1} both to the bound it is
+     * filtered against and to {@link LinearBoundConstraint#isSatisfiedBy}'s own sum. An assignment
+     * costing more than the bound then passes for one costing less.
      */
     @SuppressWarnings("unchecked")
     private static @Nullable LinearBoundConstraint<Integer> build(LinearObjective objective, double strictlyBetterThan,
@@ -156,12 +163,30 @@ public final class ObjectiveCut {
         }
         Map<Variable<Integer>, Integer> coefficients = new HashMap<>();
         for (var entry : objective.getCoefficients().entrySet()) {
-            if (!isExactInt(entry.getValue()) || csp.getDomain(entry.getKey()) instanceof BoundedDomain<?>) {
+            if (!isExactInt(entry.getValue()) || !isIntegerValued(csp.getDomain(entry.getKey()))) {
                 return null;
             }
             coefficients.put((Variable<Integer>) entry.getKey(), entry.getValue().intValue());
         }
         return LinearBoundConstraint.of(coefficients, Operator.LEQ, (int) bound);
+    }
+
+    /**
+     * Whether every value {@code domain} holds survives {@link Number#intValue} unchanged, so that
+     * the integer propagation an {@code Integer}-bounded {@link LinearBoundConstraint} dispatches to
+     * reads the domain exactly rather than a truncation of it. False for a {@link BoundedDomain},
+     * which is not enumerable at all.
+     *
+     * <p>Enumerates the domain rather than probing its element type, since an integral-valued {@code
+     * Double} domain is perfectly cuttable and a type probe would decline it. The cost is one pass
+     * per objective variable per <em>distinct bound</em> -- the result is cached with the cut it
+     * decided (see {@link #constraintFor}), so it is paid when the incumbent moves, not per node.
+     */
+    private static boolean isIntegerValued(Domain<?> domain) {
+        // Every value is a Number by construction: LinearObjective's coefficients are keyed on
+        // Variable<? extends Number>, and a variable's domain holds its own type's values.
+        return domain instanceof DiscreteDomain<?> discrete
+                && discrete.stream().allMatch(value -> isExactInt(((Number) value).doubleValue()));
     }
 
     /**

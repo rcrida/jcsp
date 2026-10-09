@@ -4,6 +4,8 @@ import io.github.rcrida.jcsp.ConstraintSatisfactionProblem;
 import io.github.rcrida.jcsp.constraints.Operator;
 import io.github.rcrida.jcsp.constraints.nary.LinearBoundConstraint;
 import io.github.rcrida.jcsp.domains.IntRangeDomain;
+import io.github.rcrida.jcsp.domains.IntervalDomain;
+import io.github.rcrida.jcsp.domains.NumericDiscreteDomain;
 import io.github.rcrida.jcsp.variables.Variable;
 import lombok.val;
 import org.junit.jupiter.api.Test;
@@ -76,6 +78,38 @@ public class ObjectiveCutTest {
     void enforce_declinesAnInfiniteBound() {
         // What an as-yet-unknown incumbent looks like: no bound at all, so nothing to add.
         assertThat(new ObjectiveCut().enforce(CSP, SUM, Double.MAX_VALUE)).isSameAs(CSP);
+    }
+
+    @Test
+    void constraintFor_declinesAFractionalDiscreteDomain() {
+        // Not a continuous domain, so the BoundedDomain check never saw it, and its coefficients and
+        // derived bound are both exact ints. But LinearBoundPropagation reads a domain through
+        // intValue(), so 1.9 counts as 1 both when filtering the domain against the bound and in
+        // isSatisfiedBy's own sum: (1.9, 1.9) sums to 2 under a bound of 2 while really costing 3.8,
+        // and a probe would adopt it as an "improvement" over a first solution costing 3.
+        val fx = F.<Double>create("fracX");
+        val fy = F.<Double>create("fracY");
+        val fractional = ConstraintSatisfactionProblem.builder()
+                .variableDomain(fx, NumericDiscreteDomain.of(0.0, 1.0, 1.9))
+                .variableDomain(fy, NumericDiscreteDomain.of(0.0, 1.0, 1.9))
+                .build();
+        val sum = LinearObjective.builder().coefficient(fx, 1.0).coefficient(fy, 1.0).build();
+
+        assertThat(new ObjectiveCut().constraintFor(sum, 3.0, fractional)).isNull();
+        assertThat(new ObjectiveCut().enforce(fractional, sum, 3.0)).isSameAs(fractional);
+    }
+
+    @Test
+    void constraintFor_declinesAContinuousDomain() {
+        // The other half of the same check: a non-singleton interval cannot be read by integer
+        // propagation at all, and -1 is not the next improvement over a continuous cost.
+        val cx = F.<Double>create("contX");
+        val continuous = ConstraintSatisfactionProblem.builder()
+                .variableDomain(cx, IntervalDomain.of(0.0, 9.0))
+                .build();
+        val sum = LinearObjective.builder().coefficient(cx, 1.0).build();
+
+        assertThat(new ObjectiveCut().constraintFor(sum, 5.0, continuous)).isNull();
     }
 
     @Test
