@@ -853,6 +853,141 @@ public class BranchAndBoundSolverTest {
     private static final Variable<Integer> SEED_R = F.create("seeded_cut_r");
 
     @Test
+    void objectiveBound_isCarriedByTheProblemAndDeclaredToTheInference() {
+        // ADR-0049: the bound is a constraint the problem carries, not a hand-run pass, so it is
+        // re-propagated by the ordinary fixpoint at every node. Both levels of that fixpoint are
+        // woken by changed variables, so its scope is declared to each inference call -- without
+        // that the layered constraint would be visited less often than the pass it replaced.
+        var csp = ConstraintSatisfactionProblem.builder()
+                .variableDomain(SEED_P, IntRangeDomain.of(1, 5))
+                .variableDomain(SEED_Q, IntRangeDomain.of(1, 5))
+                .variableDomain(SEED_R, IntRangeDomain.of(1, 5))
+                .build();
+        LinearObjective objective = LinearObjective.builder()
+                .coefficient(SEED_P, 1.0).coefficient(SEED_Q, 1.0).coefficient(SEED_R, 1.0).build();
+        var carried = new CopyOnWriteArrayList<Integer>();
+        var declared = new CopyOnWriteArrayList<Set<Variable<?>>>();
+        Inference capturing = new Inference() {
+            @Override
+            public Optional<ConstraintSatisfactionProblem> apply(ConstraintSatisfactionProblem problem,
+                                                                  Variable<?> variable, Assignment assignment) {
+                return narrowAssignedToSingleton().apply(problem, variable, assignment);
+            }
+
+            @Override
+            public ConsistencyResult applyWithReason(ConstraintSatisfactionProblem problem, Variable<?> variable,
+                                                      Assignment assignment, Set<Variable<?>> alsoChanged) {
+                if (problem.getObjectiveBound() != null) {
+                    carried.add(problem.getObjectiveBound().getBound());
+                    declared.add(alsoChanged);
+                }
+                return ConsistencyResult.feasible(apply(problem, variable, assignment).orElseThrow());
+            }
+        };
+        BranchAndBoundSolver solver = BranchAndBoundSolver.builder()
+                .objective(objective)
+                .selectorFactory(constraints -> fixedOrder(SEED_P, SEED_Q, SEED_R))
+                .domainValuesOrderer(DefaultValueOrderer.INSTANCE)
+                .inference(capturing)
+                .incumbentSeeder((problem, obj) ->
+                        Optional.of(Assignment.of(java.util.Map.of(SEED_P, 2, SEED_Q, 2, SEED_R, 2))))
+                .build();
+
+        var improving = solver.getSolutions(csp).toList();
+
+        assertThat(carried).as("the seeded incumbent of 6 becomes a bound of 5").isNotEmpty();
+        assertThat(carried).allMatch(bound -> bound <= 5);
+        assertThat(objective.applyAsDouble(improving.getLast())).isEqualTo(3.0);
+        // Declared on the node that takes a new bound on, and not again while that bound stands:
+        // the bound reads only its own variables, so re-propagating it where none of them moved
+        // cannot narrow anything, and the dirty-driven mechanism catches the cases where they do.
+        assertThat(declared.getFirst())
+                .as("the node that newly takes a bound on declares its scope")
+                .containsExactlyInAnyOrder(SEED_P, SEED_Q, SEED_R);
+        assertThat(declared).anySatisfy(scope ->
+                assertThat(scope).as("a node inheriting the bound declares nothing").isEmpty());
+    }
+
+    @Test
+    void inheritedObjectiveBound_isDiscardedAtTheRoot() {
+        // withObjectiveBound is public API, so a caller can hand in a problem still carrying a bound
+        // from somewhere else. A bound is only valid relative to the incumbent that justified it, and
+        // this search starts unbounded -- keeping it would prune away solutions this solve is
+        // entitled to find, including its own optimum. Same hazard as ADR-0048's inherited nogoods.
+        var csp = ConstraintSatisfactionProblem.builder()
+                .variableDomain(SEED_P, IntRangeDomain.of(1, 5))
+                .variableDomain(SEED_Q, IntRangeDomain.of(1, 5))
+                .build();
+        LinearObjective objective = LinearObjective.builder()
+                .coefficient(SEED_P, 1.0).coefficient(SEED_Q, 1.0).build();
+        // "cost <= 1" is unsatisfiable here (each variable is at least 1), so a solve that kept it
+        // would prove the problem has no solution at all rather than finding the optimum of 2.
+        var preBounded = csp.withObjectiveBound(
+                io.github.rcrida.jcsp.constraints.nary.LinearBoundConstraint.of(
+                        java.util.Map.of(SEED_P, 1, SEED_Q, 1), Operator.LEQ, 1));
+        BranchAndBoundSolver solver = BranchAndBoundSolver.builder()
+                .objective(objective)
+                .selectorFactory(constraints -> MinimumRemainingValuesSelector.INSTANCE)
+                .domainValuesOrderer(DefaultValueOrderer.INSTANCE)
+                .inference(Solver.Factory.FULL_PROPAGATION_INFERENCE)
+                .build();
+
+        var improving = solver.getSolutions(preBounded).toList();
+
+        assertThat(improving).isNotEmpty();
+        assertThat(objective.applyAsDouble(improving.getLast())).isEqualTo(2.0);
+    }
+
+    @Test
+    void objectiveBound_tightensAsTheIncumbentImproves() {
+        // One constraint object per improving solution, replacing the last: the staleness check is
+        // reference equality against ObjectiveCut's cache, so an unchanged incumbent rebuilds nothing.
+        // p + 2q, with p + q >= 6 as a predicate the LP relaxation cannot see -- so the LP bound
+        // stays loose and the search walks a staircase of improving solutions (11, 10, 9, 8, 7)
+        // rather than finding the optimum at the first leaf and pruning everything after it.
+        var csp = ConstraintSatisfactionProblem.builder()
+                .variableDomain(SEED_P, IntRangeDomain.of(1, 5))
+                .variableDomain(SEED_Q, IntRangeDomain.of(1, 5))
+                .predicateConstraint(Set.of(SEED_P, SEED_Q), a -> {
+                    var p = a.getValue(SEED_P);
+                    var q = a.getValue(SEED_Q);
+                    return p.isEmpty() || q.isEmpty() || p.get() + q.get() >= 6;
+                })
+                .build();
+        LinearObjective objective = LinearObjective.builder()
+                .coefficient(SEED_P, 1.0).coefficient(SEED_Q, 2.0).build();
+        var bounds = new java.util.LinkedHashSet<Integer>();
+        Inference recording = new Inference() {
+            @Override
+            public Optional<ConstraintSatisfactionProblem> apply(ConstraintSatisfactionProblem problem,
+                                                                  Variable<?> variable, Assignment assignment) {
+                if (problem.getObjectiveBound() != null) {
+                    bounds.add(problem.getObjectiveBound().getBound());
+                }
+                return narrowAssignedToSingleton().apply(problem, variable, assignment);
+            }
+        };
+        AdaptiveVariableSelector pThenQ = (c, assignment) -> Stream.of(SEED_P, SEED_Q)
+                .filter(v -> assignment.getValue(v).isEmpty())
+                .findFirst()
+                .orElseThrow();
+        BranchAndBoundSolver solver = BranchAndBoundSolver.builder()
+                .objective(objective)
+                .selectorFactory(constraints -> pThenQ)
+                .domainValuesOrderer(DefaultValueOrderer.INSTANCE)
+                .inference(recording)
+                .build();
+
+        var improving = solver.getSolutions(csp).toList();
+
+        assertThat(objective.applyAsDouble(improving.getLast())).isEqualTo(7.0);
+        assertThat(new java.util.ArrayList<>(bounds))
+                .as("each improving cost becomes a strictly tighter bound")
+                .isNotEmpty()
+                .isSortedAccordingTo(java.util.Comparator.reverseOrder());
+    }
+
+    @Test
     void objectiveCut_declaresWhatItNarrowedToTheInference() {
         // The cut narrows domains outside any propagation pass, so they appear in no diff the next
         // inference call can take against the problem it is handed: MAC seeds its arcs from the

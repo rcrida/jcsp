@@ -13,7 +13,7 @@ import java.util.Set;
  * Two allocation-cheap {@link Set} constructions that deliberately avoid {@code hashCode}/{@code
  * equals} calls on their elements, unlike {@link Set#copyOf}/{@code new HashSet<>(...)} which both
  * rehash every element to build/verify a hash table. Extracted for {@link
- * ConstraintSatisfactionProblem#mergedWithNogoods} and {@link NogoodStore#apply} specifically: both
+ * ConstraintSatisfactionProblem#getConstraints} and {@link NogoodStore#apply} specifically: both
  * were found via JFR profiling of a hard XCSP3 BinPacking instance to spend the large majority of
  * search time re-hashing {@link io.github.rcrida.jcsp.constraints.nary.NogoodConstraint}s (whose
  * {@code hashCode}/{@code equals} recursively walk a {@code Set<Variable<?>>}) on every node that

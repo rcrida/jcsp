@@ -30,14 +30,17 @@ import java.util.concurrent.atomic.AtomicReference;
  * latest start through the precedence chain, which is why asking a <em>tighter</em> question can be
  * easier than asking a loose one.
  *
- * <p>Shared by the two callers that need it, which apply the same cut two different ways: {@link
- * BranchAndBoundSolver} re-{@link #narrow}s its incumbent into the domains at every node
- * (<a href="../../../../../../../docs/adr/0029-objective-cut-as-a-propagated-constraint.md">ADR-0029</a>),
- * while {@link BoundedFirstSolution} {@link #enforce}s a probe's bound as a constraint once per probe
+ * <p>Shared by the two callers that need it, which put the same cut into a problem two different
+ * ways: {@link BranchAndBoundSolver} layers its incumbent's cut on via {@link
+ * ConstraintSatisfactionProblem#withObjectiveBound}, replacing it as the incumbent improves
+ * (<a href="../../../../../../../docs/adr/0029-objective-cut-as-a-propagated-constraint.md">ADR-0029</a>,
+ * <a href="../../../../../../../docs/adr/0049-layer-the-objective-bound-into-the-fixpoint.md">ADR-0049</a>),
+ * while {@link BoundedFirstSolution} {@link #enforce}s a probe's bound into the constraint set once
+ * per probe
  * (<a href="../../../../../../../docs/adr/0044-bounded-probes-for-the-starting-incumbent.md">ADR-0044</a>).
- * See {@link #enforce} for why one-per-node and one-per-search want
- * different mechanisms. An instance carries a single-slot cache, since the bound changes rarely
- * relative to the rate it is consulted at, and rebuilding the constraint copies a variable set.
+ * See {@link #enforce} for why a bound fixed for a whole search and one that moves want different
+ * mechanisms. An instance carries a single-slot cache, since the bound changes rarely relative to the
+ * rate it is consulted at, and rebuilding the constraint copies a variable set.
  */
 public final class ObjectiveCut {
     /**
@@ -82,58 +85,14 @@ public final class ObjectiveCut {
     }
 
     /**
-     * {@link #narrow}'s result: the bounded problem, plus the variables whose domains the bound
-     * actually narrowed -- empty when it narrowed nothing, or when there was no cut to apply.
-     *
-     * <p>The caller needs the second half because the narrowing happens outside any propagation
-     * pass, so it appears in no diff the next one can take for itself: these are the variables it
-     * must declare to {@link io.github.rcrida.jcsp.consistency.Inference#apply(ConstraintSatisfactionProblem,
-     * Variable, io.github.rcrida.jcsp.assignments.Assignment, Set)} as already changed, so the
-     * propagators touching them are woken. That is where the compounding this whole class exists for
-     * actually happens.
-     */
-    public record Narrowed(@NonNull ConstraintSatisfactionProblem csp, @NonNull Set<Variable<?>> variables) {}
-
-    /**
-     * {@code csp} with its domains narrowed so that no remaining assignment costs
-     * {@code strictlyBetterThan} or more: {@code null} when that already empties a domain (nothing
-     * better exists, so a caller may prune outright), and {@code csp} itself when there is no
-     * expressible cut or the cut changed nothing. A caller that must distinguish "no cut possible"
-     * from "cut changed nothing" asks {@link #constraintFor} first.
-     *
-     * <p>Sound because it removes only assignments at or above the given cost. An infinite bound is
-     * treated as no bound at all, which is what an as-yet-unknown incumbent looks like.
-     */
-    public @Nullable Narrowed narrow(@NonNull ConstraintSatisfactionProblem csp,
-                                     @NonNull LinearObjective objective,
-                                     double strictlyBetterThan) {
-        if (strictlyBetterThan == Double.MAX_VALUE) {
-            return new Narrowed(csp, Set.of());
-        }
-        LinearBoundConstraint<Integer> constraint = constraintFor(objective, strictlyBetterThan, csp);
-        if (constraint == null) {
-            return new Narrowed(csp, Set.of());
-        }
-        Optional<Map<Variable<?>, Domain<?>>> narrowed = constraint.propagate(csp.getVariableDomains());
-        if (narrowed.isEmpty()) {
-            return null;
-        }
-        // propagate returns only the domains it changed, so its key set is the narrowed set --
-        // wrapped rather than copied, since this is on the per-node path.
-        return narrowed.get().isEmpty()
-                ? new Narrowed(csp, Set.of())
-                : new Narrowed(csp.withDomains(narrowed.get()), Collections.unmodifiableSet(narrowed.get().keySet()));
-    }
-
-    /**
      * {@code csp} with this bound added as a propagated <em>constraint</em>, so every later fixpoint
      * re-derives it; {@code csp} itself when the bound is infinite or has no expressible cut.
      *
-     * <p>For the caller that applies a bound once per search rather than once per node, where {@link
-     * #narrow} is not enough. {@link #narrow} is a single propagation pass, so it leaves behind only
+     * <p>For the caller that applies a bound once per search rather than once per node, and that
+     * needs it in the problem's own constraint set. A single propagation pass would leave behind only
      * what the bound narrowed <em>at that moment</em>; a bound spread thinly across many variables
      * narrows nothing at all, since twenty domains of width thirty under a sum bound of 286 each
-     * still reach 267. The bound is then invisible from the first node onwards, and the "bounded"
+     * still reach 267. The bound would then be invisible from the first node onwards, and the "bounded"
      * search re-asks the unbounded question. As a constraint it is re-propagated at every node
      * against the domains that node has narrowed, which is where a thin bound eventually bites.
      *
@@ -141,9 +100,12 @@ public final class ObjectiveCut {
      * and a caller must hand the result to a {@link FixpointPropagation} built for <em>it</em> rather
      * than for {@code csp} -- {@link FixpointPropagation.Factory#forProblem} filters on the constraint
      * types present, so a {@link LinearBoundConstraint} the original problem didn't have would
-     * otherwise never be propagated at all. {@link BranchAndBoundSolver} uses {@link #narrow} for
-     * exactly these two reasons: it applies its bound at every node, where rebuilding the graph and
-     * the propagator list per node would cost far more than the thin-bound passes it gives up.
+     * otherwise never be propagated at all. {@link BranchAndBoundSolver} gets the same effect without
+     * either rebuild, via {@link ConstraintSatisfactionProblem#withObjectiveBound}: its bound changes
+     * per improving solution rather than per search, so it layers the constraint on an untouched
+     * graph instead of adding it (see
+     * <a href="../../../../../../../docs/adr/0049-layer-the-objective-bound-into-the-fixpoint.md">ADR-0049</a>).
+     * A probe's bound is fixed for its whole search, so there is nothing for it to gain from that.
      */
     public @NonNull ConstraintSatisfactionProblem enforce(@NonNull ConstraintSatisfactionProblem csp,
                                                           @NonNull LinearObjective objective,

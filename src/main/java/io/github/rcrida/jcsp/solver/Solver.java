@@ -128,6 +128,27 @@ public interface Solver {
         }
 
         /**
+         * {@code csp} carrying a representative objective bound when branch-and-bound will layer one
+         * on it, or {@code csp} unchanged otherwise -- for the single purpose of filtering the
+         * propagator list, which reads only the constraint <em>types</em> a problem carries.
+         * <p>
+         * The bound value is deliberately meaningless: {@code constant + 1} is chosen because it
+         * makes the derived bound exactly {@code 0}, so {@link ObjectiveCut#constraintFor} always
+         * finds it expressible when the objective itself is, and the real first incumbent will
+         * replace it. Returns {@code csp} when the objective is not linear or has no expressible cut
+         * ({@link ObjectiveCut#isExpressible}), which are exactly the cases where no bound is ever
+         * layered.
+         */
+        private static ConstraintSatisfactionProblem objectiveBoundShape(
+                ConstraintSatisfactionProblem csp, ToDoubleFunction<Assignment> objective) {
+            if (!(objective instanceof LinearObjective linear) || !ObjectiveCut.isExpressible(linear, csp)) {
+                return csp;
+            }
+            return csp.withObjectiveBound(new ObjectiveCut()
+                    .constraintFor(linear, linear.getConstant() + 1, csp));
+        }
+
+        /**
          * {@link FixpointPropagation#applyFixpoint}'s round-1 dirty hint for one search node: what
          * MAC narrowed, plus whatever the caller narrowed itself before handing the problem over.
          * <p>
@@ -342,7 +363,16 @@ public interface Solver {
                         .anyMatch(BoundedDomain.class::isInstance);
                 boolean hasSets = csp.getVariableDomains().values().stream()
                         .anyMatch(SetBoundedDomain.class::isInstance);
-                val fixpointPropagation = FixpointPropagation.Factory.INSTANCE.forProblem(csp, config.learningEnabled());
+                // Filtered for a problem shaped like the ones this search will actually see, not for
+                // csp as given: branch-and-bound layers its incumbent on as a LinearBoundConstraint
+                // (ADR-0049), and forProblem filters on the constraint types present, so a csp with
+                // no linear constraint of its own would yield a propagator list that cannot propagate
+                // the very bound the search depends on. Layering a representative cut onto the probe
+                // problem states that shape rather than asserting it: its bound value is irrelevant,
+                // only its type is read here.
+                val boundShapedCsp = objectiveBoundShape(csp, objective);
+                val fixpointPropagation =
+                        FixpointPropagation.Factory.INSTANCE.forProblem(boundShapedCsp, config.learningEnabled());
                 // Withheld for a problem with BoundedDomain variables: this search is the satisfaction
                 // chain's without that chain's interval-snapping fixpoint in front of it (see
                 // satisfactionSearch), so a non-singleton IntervalDomain would reach a DomainValuesOrderer
