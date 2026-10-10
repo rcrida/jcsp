@@ -110,3 +110,4 @@ section instead.
 | [0046](0046-adaptive-lp-gate-keyed-on-cut-rate.md) | Back the per-node LP bound off after a streak of solves that failed to cut, keyed on cut rate rather than frequency | Accepted |
 | [0047](0047-declare-caller-narrowed-domains-to-the-inference.md) | Declare caller-narrowed domains to the inference, rather than leaving them to wake nothing | Accepted |
 | [0048](0048-a-bound-conditional-nogood-lives-for-one-search.md) | A bound-conditional nogood lives for one search | Accepted |
+| [0049](0049-layer-the-objective-bound-into-the-fixpoint.md) | Layer the objective bound into the fixpoint, instead of narrowing with it outside | Proposed |
