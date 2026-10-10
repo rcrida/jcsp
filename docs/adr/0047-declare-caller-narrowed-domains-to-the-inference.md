@@ -72,6 +72,92 @@ it changed, so it is the result map's key set, wrapped rather than copied.
   `alsoChanged`. One that does not seed can ignore it, and the interface's defaults do.
 - Any future caller that narrows domains between two propagation passes has a way to say so, and a
   reason to: the alternative is a narrowing that silently propagates no further.
-- Not measured over the corpus. This is a correctness fix to a mechanism whose whole purpose is
-  propagation strength, so the direction is not in doubt, but the per-node cost of waking the
-  objective's propagators is real and the net effect on the corpus is unmeasured.
+- **It costs an optimality proof on this corpus.** Accepted with that known, not in ignorance of it.
+  See the measurement below, which is the whole point of this section: anyone revisiting the
+  cost/benefit should start from these numbers rather than re-deriving them.
+
+## Measurement
+
+`Xcsp3CompetitionRunner`, all 85 bundled instances, 60s each, fixed seed 20260830. The two dom/wdeg
+arms were additionally run at seeds 7 and 99 over the 13 instances that differed between them; the two
+MRV arms are one seed each. Four arms, varying only branch-and-bound's ordering and this decision; the
+satisfaction chain and the incumbent seeder stay on dom/wdeg throughout.
+
+| arm | optimum found | total solve |
+|---|---|---|
+| no seeding, dom/wdeg (before this ADR) | **23** of 31 | **773.9s** |
+| seeding, dom/wdeg (this ADR) | 22 of 31 | 831.8s |
+| seeding, MRV for branch-and-bound | 21 of 31 | 872.1s |
+| no seeding, MRV for branch-and-bound | 20 of 31 | 913.9s |
+
+84 of 85 solved in every arm, and no `SolutionChecker` cross-check failure anywhere. Four instances
+account for every difference:
+
+| instance | no seed / wdeg | **seed / wdeg** | seed / MRV | no seed / MRV |
+|---|---|---|---|---|
+| `Taillard-os-04-04-0` | OPT 17.9s, 112k nodes | **OPT 3.9s, 21k** | OPT 3.3s, 22k | SAT (timeout) |
+| `PrizeCollecting-15-3-5-0` | OPT 4.7s, 11k | **SAT (timeout), 168k** | OPT 2.3s, 5k | OPT 2.3s, 6k |
+| `GolombRuler-09-a4` | OPT 25.2s, 648k | **OPT 43.4s, 1,501k** | SAT (timeout) | SAT (timeout) |
+| `GraphColoring-3-fullins-4` | OPT 25.3s, 121k | **OPT 24.7s, 121k** | SAT (timeout) | SAT (timeout) |
+
+Everything else — the other 81 instances, every objective value, every satisfaction instance — is
+unchanged, node-for-node. `PrizeCollecting` still *finds* its optimum of 20; what it loses is the
+proof.
+
+This is not seed luck. The no-seeding arm is bit-identical across all three seeds on these instances
+(`PrizeCollecting` 11k/15k/12k, `GolombRuler-09-a4` 648k/643k/644k), the seeded arm varies only
+slightly (168k/172k/178k, 1501k/1450k/1534k), and the sign is the same on every seed. Attribution is
+equally direct: an arm built from this ADR's own commit with nothing changed but the seeding disabled
+reproduces the no-seeding column exactly, which places all of it here rather than on any of the
+fourteen other fixes in the same batch.
+
+### What the regression is not
+
+Two plausible mechanisms were built and refuted, both worth not re-deriving:
+
+- **The LP's most-fractional branching hint.** Disabling it changes nothing: identical node counts
+  with and without, on all three affected instances.
+- **Bound-caused conflicts inflating dom/wdeg's weights.** Suppressing `onConflict` at every node
+  whose domains the cut had narrowed recovers nothing (`PrizeCollecting` 173k → 160k, still no proof;
+  `GolombRuler-09-a4` unchanged). Instrumentation shows why: only 14-23% of nodes have a non-empty
+  cut narrowing, and the failing nodes are mostly not those.
+- **Branching pulled onto objective variables** (the cut's narrowing only ever touches them). Measured
+  at 0% objective-variable branches in both arms on `PrizeCollecting`.
+
+### What it is
+
+A feedback loop, with no seam to fix. Stronger propagation changes the tree; the tree changes which
+conflicts occur (`PrizeCollecting`: 4k backtracks against 150k); the conflicts change dom/wdeg's
+weights; the weights change the tree. The propagation itself is good in isolation — with MRV ordering,
+seeding is 5k nodes against 6k on `PrizeCollecting`, and on `Taillard-os-04-04-0` it is the difference
+between closing in 3.3s and not closing at all. Instrumentation shows the shape of the perturbation:
+the mean domain size of the branched variable on `PrizeCollecting` goes from 1.63 (a chain of forced,
+nearly-pinned decisions) to 8.31 (a genuinely bushier tree). And on `Taillard-os-04-04-0` the cut
+narrows at exactly **one** node in either arm, yet the seeded search is 5x smaller — one node's extra
+propagation cascading through everything below it.
+
+### Rejected alternative, measured: MRV for branch-and-bound's ordering
+
+Since the harm is specific to dom/wdeg's `domainSize / weightedDegree` and the propagation pays under
+MRV on the two instances that motivated the question, MRV was tried as branch-and-bound's own selector
+(the satisfaction chain left on dom/wdeg). It is worse: it recovers `PrizeCollecting` and loses both
+`GolombRuler-09-a4` and `GraphColoring-3-fullins-4`, for 21 optima against 22, or 20 against 23
+without seeding. [ADR-0038](0038-injectable-variable-selector-factory.md)'s choice of dom/wdeg
+therefore survives contact with this change. A selector whose feedback loop does not punish stronger
+propagation might get both, but plain MRV is not it.
+
+### What would remove the need for this ADR
+
+This decision patches a narrowing that happens *outside* the propagation loop, which is itself only
+there because ADR-0029 judged a per-node constraint addition too expensive. Putting the bound in the
+loop as an ordinary constraint would make the declaration unnecessary for this caller and close the
+whole class of invisible mutation —
+[ADR-0049](0049-layer-the-objective-bound-into-the-fixpoint.md) proposes how, and is explicit that it
+is an architectural fix and not a fix for the search-order trade recorded above.
+
+### A correction to ADR-0029
+
+[ADR-0029](0029-objective-cut-as-a-propagated-constraint.md) measured its win and credited it to the
+bound compounding through other propagators. That compounding never happened until this ADR, so
+ADR-0029's measured benefit came from the narrowing's *direct* effects — the node's own candidate
+enumeration and its consistency checks — and not from the mechanism its rationale describes.
