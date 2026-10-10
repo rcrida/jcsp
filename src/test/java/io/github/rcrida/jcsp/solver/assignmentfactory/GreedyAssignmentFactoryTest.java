@@ -66,6 +66,18 @@ public class GreedyAssignmentFactoryTest {
         assertThat(assignment.getValue(b)).hasValueSatisfying(v -> assertThat(domain.contains(v)).isTrue());
     }
 
+    /**
+     * Draws per arm, which this comparison needs far more of than the {@link
+     * Prob054NQueensTest#nQueens} one above. There, greedy averages 1.05 violations against random's
+     * 5.37 and 20 draws never invert (measured over 500 comparisons). Here the single
+     * {@code disjointConstraint} is violated on 50% of greedy draws against 84% of random ones, so
+     * each average is a mean of Bernoulli trials only 0.33 apart: at 20 draws the comparison inverts
+     * on about 0.85% of runs (measured over 2,000 comparisons, and observed failing once in CI),
+     * which at 200 falls to roughly 1e-14. Neither factory can be seeded -- both break ties through
+     * {@link java.util.concurrent.ThreadLocalRandom} -- so sample size is the only control available.
+     */
+    private static final int COMPARISON_DRAWS = 200;
+
     @Test
     void greedyAssignment_setBoundedDomain_hasFewerConflictsOnAverageThanRandom() {
         val a = F.<Set<String>>create("a2");
@@ -75,11 +87,11 @@ public class GreedyAssignmentFactoryTest {
                 .variableDomain(a, domain).variableDomain(b, domain)
                 .disjointConstraint(a, b)
                 .build();
-        double avgGreedyViolations = IntStream.range(0, 20)
+        double avgGreedyViolations = IntStream.range(0, COMPARISON_DRAWS)
                 .mapToLong(i -> csp.getConstraints().stream()
                         .filter(c -> !c.isSatisfiedBy(GreedyAssignmentFactory.INSTANCE.getAssignment(csp))).count())
                 .average().orElseThrow();
-        double avgRandomViolations = IntStream.range(0, 20)
+        double avgRandomViolations = IntStream.range(0, COMPARISON_DRAWS)
                 .mapToLong(i -> csp.getConstraints().stream()
                         .filter(c -> !c.isSatisfiedBy(RandomAssignmentFactory.INSTANCE.getAssignment(csp))).count())
                 .average().orElseThrow();
