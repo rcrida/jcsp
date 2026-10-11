@@ -72,9 +72,16 @@ it changed, so it is the result map's key set, wrapped rather than copied.
   `alsoChanged`. One that does not seed can ignore it, and the interface's defaults do.
 - Any future caller that narrows domains between two propagation passes has a way to say so, and a
   reason to: the alternative is a narrowing that silently propagates no further.
-- **It costs an optimality proof on this corpus.** Accepted with that known, not in ignorance of it.
-  See the measurement below, which is the whole point of this section: anyone revisiting the
-  cost/benefit should start from these numbers rather than re-deriving them.
+- **It cost an optimality proof on this corpus** — accepted with that known, not in ignorance of it.
+  See the measurement below.
+- **That cost has since been recovered**, by
+  [ADR-0049](0049-layer-the-objective-bound-into-the-fixpoint.md): putting the bound in the problem as
+  a layered constraint, and declaring its scope only at the nodes that take a new bound on, reaches 23
+  optima in 797.5s — the baseline's proof count, `PrizeCollecting-15-3-5-0` closing faster than it
+  ever did, and this ADR's `Taillard-os-04-04-0` win kept. This ADR's `alsoChanged` mechanism survives
+  and is what ADR-0049 declares through; what ADR-0049 replaced is the hand-run narrow, and the
+  per-node declaration of what it narrowed. The measurement below is the state as this ADR left it,
+  and remains the reference for anything that revisits the declaration policy.
 
 ## Measurement
 
@@ -146,14 +153,16 @@ without seeding. [ADR-0038](0038-injectable-variable-selector-factory.md)'s choi
 therefore survives contact with this change. A selector whose feedback loop does not punish stronger
 propagation might get both, but plain MRV is not it.
 
-### What would remove the need for this ADR
+### What replaced the narrowing
 
-This decision patches a narrowing that happens *outside* the propagation loop, which is itself only
-there because ADR-0029 judged a per-node constraint addition too expensive. Putting the bound in the
-loop as an ordinary constraint would make the declaration unnecessary for this caller and close the
-whole class of invisible mutation —
-[ADR-0049](0049-layer-the-objective-bound-into-the-fixpoint.md) proposes how, and is explicit that it
-is an architectural fix and not a fix for the search-order trade recorded above.
+This decision patched a narrowing that happens *outside* the propagation loop, which was itself only
+there because ADR-0029 judged a per-node constraint addition too expensive.
+[ADR-0049](0049-layer-the-objective-bound-into-the-fixpoint.md) removes the outside narrowing instead,
+layering the bound onto the problem the way nogoods are layered. It did not make the declaration
+unnecessary — adding a constraint is itself a change the variable-seeded worklist cannot see — so this
+ADR's `alsoChanged` is still the mechanism; what changed is that a fixed scope is declared at the nodes
+that take a new bound on, rather than a hand pass's output being declared at every node. It also, to
+my surprise and against this ADR's own prediction, recovered the lost proof.
 
 ### A correction to ADR-0029
 
