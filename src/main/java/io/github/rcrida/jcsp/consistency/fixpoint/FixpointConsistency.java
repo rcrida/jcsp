@@ -65,26 +65,40 @@ public class FixpointConsistency implements ConstraintConsistency {
      * last time (a cheap identity check — always correct on a miss, since it just falls back to a
      * fresh filter). Note {@code csp.getConstraints()}, unlike {@code getAllBinaryConstraints()},
      * changes reference whenever a nogood is learned, not just when the structural constraint set
-     * changes — this instance's own cache holder is keyed per {@link ConstraintSatisfactionProblem}
-     * structure (via {@link ConstraintSatisfactionProblem#computeAuxiliaryCacheIfAbsent}, on {@link
-     * #constraintType} — every {@link FixpointConsistency} in the solver chains targets an ordinary
-     * structural constraint type, never a {@link NogoodConstraint} subtype, since those are handled
-     * separately by {@link NogoodFixpointConsistency}, so this filtered result never actually
-     * changes as nogoods accumulate in practice — but the reference-equality check below is what
-     * makes that a correctness guarantee rather than an assumption), not on this instance itself:
-     * a single cache slot shared across every {@link ConstraintSatisfactionProblem} solved by the
-     * same shared {@code PROPAGATORS}-list instance would let two different problems solved
-     * concurrently (e.g. independent subproblems) keep evicting each other's entry.
+     * changes — and, since
+     * <a href="../../../../../../../docs/adr/0049-layer-the-objective-bound-into-the-fixpoint.md">ADR-0049</a>,
+     * whenever branch-and-bound's layered {@link ConstraintSatisfactionProblem#getObjectiveBound}
+     * is replaced as its incumbent improves. Learned nogoods never change any filtered result here
+     * (they are a {@link NogoodConstraint} subtype, handled separately by {@link
+     * NogoodFixpointConsistency}, and no {@link FixpointConsistency} in the solver chains targets
+     * one), but the objective bound is a {@link
+     * io.github.rcrida.jcsp.constraints.nary.LinearBoundConstraint} — an ordinary structural type —
+     * so for that one entry the filtered contents genuinely do change mid-solve. The
+     * reference-equality check below is what makes this correct in both cases rather than reliant on
+     * either of those observations.
+     * <p>
+     * This instance's cache holder is keyed per {@link ConstraintSatisfactionProblem} structure (via
+     * {@link ConstraintSatisfactionProblem#computeAuxiliaryCacheIfAbsent}, on {@link
+     * #constraintType}), not on this instance itself: a single cache slot shared across every {@link
+     * ConstraintSatisfactionProblem} solved by the same shared {@code PROPAGATORS}-list instance
+     * would let two different problems solved concurrently (e.g. independent subproblems) keep
+     * evicting each other's entry.
      * <p>
      * Also builds {@link FilterCache#indicesByVariable}, a {@code Variable -> constraint positions}
      * index used by {@link ConstraintQueue} to skip constraint objects none of whose variables
      * changed since they were last checked -- built unconditionally, not lazily/optionally the way
-     * {@link NogoodFixpointConsistency}'s own {@code NogoodStore#byVariable} index is: unlike the nogood
-     * set, {@code source} here is fixed at CSP-build time and never mutates mid-solve, so there is
-     * no "expensive to keep rebuilding" tradeoff to weigh (the two reverted eager-nogood-index
-     * attempts {@link NogoodFixpointConsistency} documents don't apply -- this index is built once
-     * per distinct {@code source} reference and reused for that {@link ConstraintSatisfactionProblem}'s
-     * entire solve, exactly like {@link FilterCache#filtered} itself already is).
+     * {@link NogoodFixpointConsistency}'s own {@code NogoodStore#byVariable} index is.
+     * <p>
+     * That is still worth it, but not because {@code source} is immutable for a solve: it is not. Each
+     * nogood learned and each objective-bound replacement produces a fresh {@code source} reference,
+     * and every entry consulted after one of those re-filters and rebuilds its index. What keeps the
+     * tradeoff one-sided is the <em>rate</em>. Those events are bounded by learned nogoods and
+     * improving solutions, never by nodes, and {@link ConstraintSatisfactionProblem}'s own merge cache
+     * hands back the same {@code source} reference at every node in between -- so the index really is
+     * built once per distinct {@code source} and reused across all the nodes that share it, exactly
+     * like {@link FilterCache#filtered} itself. The two reverted eager-nogood-index attempts {@link
+     * NogoodFixpointConsistency} documents were rebuilds on an unboundedly growing set at essentially
+     * every node of a learning search, which is the cost this is not.
      */
     @SuppressWarnings({"unchecked", "rawtypes"})
     private FilterCache filterCache(ConstraintSatisfactionProblem csp) {
