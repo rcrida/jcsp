@@ -1,10 +1,14 @@
 package io.github.rcrida.jcsp.benchmark;
 
+import io.github.rcrida.jcsp.ConstraintSatisfactionProblem;
 import io.github.rcrida.jcsp.assignments.Assignment;
+import io.github.rcrida.jcsp.solver.LinearObjective;
+import io.github.rcrida.jcsp.solver.ObjectiveCut;
 import io.github.rcrida.jcsp.assignments.Statistics;
 import io.github.rcrida.jcsp.parser.xcsp3.Xcsp3Instance;
 import io.github.rcrida.jcsp.parser.xcsp3.Xcsp3Parser;
 import io.github.rcrida.jcsp.solver.Cancellation;
+import io.github.rcrida.jcsp.solver.InconclusiveSearchException;
 import io.github.rcrida.jcsp.solver.RestartRandomization;
 import io.github.rcrida.jcsp.solver.Solver;
 import io.github.rcrida.jcsp.solver.SolverConfig;
@@ -35,8 +39,9 @@ public final class AnytimeTrajectoryBenchmark {
         long seconds = Long.parseLong(args[1]);
         long seed = Long.parseLong(args[2]);
 
+        boolean satisfactionOnly = args.length > 3 && args[3].equals("sat");
         Xcsp3Instance instance = Xcsp3Parser.parse(instancePath);
-        if (instance.objective() == null) {
+        if (instance.objective() == null && !satisfactionOnly) {
             throw new IllegalArgumentException(instancePath + " has no objective");
         }
 
@@ -70,7 +75,19 @@ public final class AnytimeTrajectoryBenchmark {
         long start = System.nanoTime();
         int[] improving = new int[1];
         try {
-            Solver.Factory.INSTANCE.createSolver(instance.csp(), instance.objective(), config)
+            if (satisfactionOnly) {
+                try {
+                    ConstraintSatisfactionProblem problem = instance.csp();
+                    if (args.length > 4) {
+                        problem = new ObjectiveCut().enforce(problem, (LinearObjective) instance.objective(),
+                                Long.parseLong(args[4]) + 1);
+                    }
+                    System.out.println(Solver.Factory.INSTANCE.createSolver(problem, config).getSolution()
+                            .map(solution -> "SAT").orElse("UNSAT proven"));
+                } catch (InconclusiveSearchException e) {
+                    System.out.println("INCONCLUSIVE (" + e.getClass().getSimpleName() + ")");
+                }
+            } else Solver.Factory.INSTANCE.createSolver(instance.csp(), instance.objective(), config)
                     .getSolutions()
                     .forEach(solution -> {
                         improving[0]++;
