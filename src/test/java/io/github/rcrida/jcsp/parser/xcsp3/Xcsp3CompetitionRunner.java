@@ -43,8 +43,10 @@ import java.util.stream.Stream;
  * assignment that violates the instance's own constraints), not just a performance regression.
  * {@code SolutionChecker} can only validate a claimed solution, so a {@code s UNSATISFIABLE}
  * result is reported {@code "-"} (skipped) in the Check column rather than confirmed or refuted.
- * Each row's Model column (see {@link #modelInfo}) also reports variable/constraint counts both as
- * the source XCSP3 file itself declares them and as the parsed {@code
+ * The Objective column (see {@link #bestObjective}) carries the best objective value an
+ * optimization instance reached, blank for a satisfaction instance and {@code "-"} when no
+ * solution was found. Each row's Model column (see {@link #modelInfo}) also reports
+ * variable/constraint counts both as the source XCSP3 file itself declares them and as the parsed {@code
  * ConstraintSatisfactionProblem} ends up with -- the gap between the two is every synthetic
  * variable/constraint {@link Xcsp3CallbackHandler} adds internally (reification indicators, {@code
  * addIff}'s fresh indicators, etc.).
@@ -106,15 +108,15 @@ public final class Xcsp3CompetitionRunner {
         return Paths.get(resource.toURI());
     }
 
-    private static final String ROW_FORMAT = "%-32s %-8s %-20s %-10s %-24s %-14s %-14s %-14s %s";
+    private static final String ROW_FORMAT = "%-32s %-8s %-20s %-10s %-12s %-24s %-14s %-14s %-14s %s";
 
     static void run(Path directory, long timeLimitSeconds, long seed, PrintStream out) throws IOException, InterruptedException {
         List<Path> instances;
         try (Stream<Path> files = Files.list(directory)) {
             instances = files.filter(Xcsp3CompetitionRunner::isXcsp3Instance).sorted().toList();
         }
-        String header = ROW_FORMAT.formatted("Instance", "Time(s)", "Result", "Check", "Model (xcsp3->csp)",
-                "Space Before", "Space At Root", "Space Left", "Statistics");
+        String header = ROW_FORMAT.formatted("Instance", "Time(s)", "Result", "Check", "Objective",
+                "Model (xcsp3->csp)", "Space Before", "Space At Root", "Space Left", "Statistics");
         out.println(header);
         out.println("-".repeat(header.length()));
         int solved = 0, unknown = 0, failed = 0, checkMismatches = 0;
@@ -124,7 +126,7 @@ public final class Xcsp3CompetitionRunner {
         for (Path instance : instances) {
             Result result = runOne(instance, timeLimitSeconds, seed);
             out.println(ROW_FORMAT.formatted(instanceName(instance), "%.2f".formatted(result.elapsedSeconds()),
-                    result.summary(), result.crossCheck(), result.model(),
+                    result.summary(), result.crossCheck(), result.objective(), result.model(),
                     formatSearchSpace(result.searchSpaceBefore()), formatSearchSpace(result.searchSpaceAtRoot()),
                     formatSpaceLeftPercent(result.searchSpaceAtRoot(), result.searchSpaceLeft()),
                     result.statsLine()));
@@ -171,7 +173,7 @@ public final class Xcsp3CompetitionRunner {
     }
 
     private record Result(double elapsedSeconds, String summary, String statsLine, String crossCheck, String model,
-                           boolean optimization,
+                           boolean optimization, String objective,
                            String searchSpaceBefore, String searchSpaceAtRoot, String searchSpaceLeft) {}
 
     /**
@@ -264,12 +266,13 @@ public final class Xcsp3CompetitionRunner {
             process.destroyForcibly();
             return new Result(elapsedSeconds, "HUNG (killed after " + elapsedSeconds + "s)",
                     "(no stats -- process killed)", "-", model.info(), model.optimization(),
+                    bestObjective("", model.optimization()),
                     "(no search-space)", "(no search-space)", "(no search-space)");
         }
         String output = new String(process.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
         String summary = firstResultLine(output);
         return new Result(elapsedSeconds, summary, statsLine(output), crossCheck(instance, summary, output),
-                model.info(), model.optimization(),
+                model.info(), model.optimization(), bestObjective(output, model.optimization()),
                 cLine(output, "c search-space-before: "), cLine(output, "c search-space-at-root: "),
                 cLine(output, "c search-space-remaining: "));
     }
@@ -354,6 +357,30 @@ public final class Xcsp3CompetitionRunner {
                 .filter(line -> line.startsWith("c stats: "))
                 .findFirst()
                 .orElse("(no stats)");
+    }
+
+    /**
+     * The value on the last {@code o} line of a captured child transcript -- {@link
+     * Xcsp3ProblemRunner} prints one per improving solution, already converted back into the
+     * instance's own sense (a {@code maximize} instance's negated internal objective is un-negated
+     * there), so the last one is the best objective that solve reached. Whether that value is
+     * optimal is the Result column's business, not this one's: an {@code s SATISFIABLE} row's
+     * objective is the incumbent the budget ran out on.
+     * <p>
+     * Empty for a satisfaction instance, which has no objective to report, and {@code "-"} for an
+     * optimization instance that produced no {@code o} line at all (no solution found, a parse
+     * failure, or a killed process). {@code optimization} comes from {@link #modelInfo}'s parse
+     * rather than from the presence of {@code o} lines, so those two cases stay distinguishable.
+     */
+    private static String bestObjective(String output, boolean optimization) {
+        if (!optimization) {
+            return "";
+        }
+        return output.lines()
+                .filter(line -> line.startsWith("o "))
+                .reduce((earlier, later) -> later)
+                .map(line -> line.substring("o ".length()))
+                .orElse("-");
     }
 
     /**
