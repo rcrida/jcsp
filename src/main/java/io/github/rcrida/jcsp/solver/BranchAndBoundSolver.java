@@ -7,7 +7,6 @@ import lombok.Getter;
 import lombok.ToString;
 import lombok.Value;
 import lombok.extern.slf4j.Slf4j;
-import lombok.val;
 import io.github.rcrida.jcsp.ConstraintSatisfactionProblem;
 import io.github.rcrida.jcsp.assignments.Assignment;
 import io.github.rcrida.jcsp.assignments.NogoodStore;
@@ -19,6 +18,7 @@ import io.github.rcrida.jcsp.constraints.Constraint;
 import io.github.rcrida.jcsp.constraints.nary.LinearBoundConstraint;
 import io.github.rcrida.jcsp.domains.BoundedDomain;
 import io.github.rcrida.jcsp.solver.listener.SolverListener;
+import io.github.rcrida.jcsp.solver.backtrackingsearch.ForcedAssignment;
 import io.github.rcrida.jcsp.solver.backtrackingsearch.order.DomainValuesOrderer;
 import io.github.rcrida.jcsp.solver.backtrackingsearch.order.PhaseMemory;
 import io.github.rcrida.jcsp.solver.backtrackingsearch.selector.AdaptiveVariableSelector;
@@ -398,6 +398,11 @@ public class BranchAndBoundSolver implements Solver {
                                        boolean hasContinuous,
                                        Bound inherited,
                                        RunState run) {
+        Optional<Assignment> forced = ForcedAssignment.extend(csp, assignment);
+        if (forced.isEmpty()) {
+            return Stream.empty();
+        }
+        assignment = forced.get();
         if (assignment.isComplete(csp) || (hasContinuous && isDiscreteComplete(csp, assignment))) {
             return resolveComplete(csp, assignment, incumbent);
         }

@@ -8,6 +8,7 @@ import io.github.rcrida.jcsp.assignments.Statistics;
 import io.github.rcrida.jcsp.consistency.ConsistencyResult;
 import io.github.rcrida.jcsp.consistency.Inference;
 import io.github.rcrida.jcsp.solver.listener.SolverListener;
+import io.github.rcrida.jcsp.solver.backtrackingsearch.ForcedAssignment;
 import io.github.rcrida.jcsp.solver.backtrackingsearch.order.DomainValuesOrderer;
 import io.github.rcrida.jcsp.solver.backtrackingsearch.order.PhaseMemory;
 import io.github.rcrida.jcsp.solver.backtrackingsearch.selector.AdaptiveVariableSelector;
@@ -251,14 +252,19 @@ public class DomWdegLubySearch implements Solver {
                                             @NonNull Assignment assignment,
                                             @NonNull AdaptiveVariableSelector selector,
                                             long deadline) {
-        if (assignment.isComplete(csp)) {
-            listener.onSolutionFound(assignment);
-            return Stream.of(assignment);
+        Optional<Assignment> forced = ForcedAssignment.extend(csp, assignment);
+        if (forced.isEmpty()) {
+            return Stream.empty();
         }
-        Variable<?> variable = selector.select(csp, assignment);
-        return domainValuesOrderer.order(csp, variable, assignment)
+        Assignment current = forced.get();
+        if (current.isComplete(csp)) {
+            listener.onSolutionFound(current);
+            return Stream.of(current);
+        }
+        Variable<?> variable = selector.select(csp, current);
+        return domainValuesOrderer.order(csp, variable, current)
                 .flatMap(value -> {
-                    Assignment next = assignment.withValue((Variable<Object>) variable, value);
+                    Assignment next = current.withValue((Variable<Object>) variable, value);
                     if (limits.checkStop(cancellation, next.getStatistics().getNodesExplored(), deadline)
                             != SolverLimits.StopReason.NONE) {
                         if (cancellation.isCancelled()) {
@@ -321,16 +327,21 @@ public class DomWdegLubySearch implements Solver {
                                            long deadline,
                                            double weight,
                                            SearchProgress progress) {
-        if (assignment.isComplete(csp)) {
-            listener.onSolutionFound(assignment);
-            return Optional.of(assignment);
+        Optional<Assignment> forced = ForcedAssignment.extend(csp, assignment);
+        if (forced.isEmpty()) {
+            return Optional.empty();
         }
-        Variable<?> variable = selector.select(csp, assignment);
+        Assignment current = forced.get();
+        if (current.isComplete(csp)) {
+            listener.onSolutionFound(current);
+            return Optional.of(current);
+        }
+        Variable<?> variable = selector.select(csp, current);
         List<Object> candidates = phaseMemory.prioritise(variable,
-                (List<Object>) domainValuesOrderer.order(csp, variable, assignment).toList());
+                (List<Object>) domainValuesOrderer.order(csp, variable, current).toList());
         double childWeight = weight / candidates.size();
         for (Object value : candidates) {
-            Assignment next = assignment.withValue((Variable<Object>) variable, value);
+            Assignment next = current.withValue((Variable<Object>) variable, value);
             switch (limits.checkStop(cancellation, next.getStatistics().getNodesExplored(), deadline)) {
                 case CANCELLED -> {
                     statistics.updateCurrentSearchSpace(csp.getSearchSpace());

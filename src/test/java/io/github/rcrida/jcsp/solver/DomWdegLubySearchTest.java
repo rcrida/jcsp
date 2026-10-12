@@ -180,24 +180,15 @@ class DomWdegLubySearchTest {
 
     @Test
     void nogoodLearningDisabled_solvesWithoutRecordingNogoods() {
-        // Same x/y/w1/w2 CSP as nogoodsLearnedStatisticIncrementsOnFailedBranch: with
-        // DefaultValueOrderer, x=1 fails deterministically (y's domain wiped, a backtrack) before
-        // x=2 succeeds -- covering both outcomes of Inference.withoutReasonTracking's wrapped
+        // Same CSP as nogoodsLearnedStatisticIncrementsOnFailedBranch: with
+        // DefaultValueOrderer, y=1 fails deterministically (z's domain wiped, a backtrack) before
+        // y=2 succeeds -- covering both outcomes of Inference.withoutReasonTracking's wrapped
         // applyWithReason (its own apply() delegate returning empty vs present) in one
         // deterministic run, and confirming nothing ever gets recorded into the store.
         Variable<Integer> x = VF.create("nlx");
         Variable<Integer> y = VF.create("nly");
-        Variable<Integer> w1 = VF.create("nlw1");
-        Variable<Integer> w2 = VF.create("nlw2");
-        ConstraintSatisfactionProblem csp = ConstraintSatisfactionProblem.builder()
-                .variableDomain(x, IntRangeDomain.of(1, 2))
-                .variableDomain(y, IntRangeDomain.of(1, 1))
-                .variableDomain(w1, IntRangeDomain.of(5, 5))
-                .variableDomain(w2, IntRangeDomain.of(6, 6))
-                .notEqualsConstraint(x, y)
-                .notEqualsConstraint(x, w1)
-                .notEqualsConstraint(x, w2)
-                .build();
+        Variable<Integer> z = VF.create("nlz");
+        ConstraintSatisfactionProblem csp = failThenSucceedCsp(x, y, z);
 
         NogoodStore store = new NogoodStore();
         DomWdegLubySearch solver = DomWdegLubySearch.builder()
@@ -209,7 +200,7 @@ class DomWdegLubySearchTest {
         Optional<Assignment> solution = solver.getSolution(csp);
 
         assertThat(solution).isPresent();
-        assertThat(solution.get().getValue(x).orElseThrow()).isEqualTo(2);
+        assertThat(solution.get().getValue(y).orElseThrow()).isEqualTo(2);
         assertThat(solution.get().getStatistics().getNogoodsLearned()).isZero();
         assertThat(solution.get().getStatistics().getBacktracks()).isGreaterThan(0);
         assertThat(store.apply(csp)).isEqualTo(csp);
@@ -300,19 +291,45 @@ class DomWdegLubySearchTest {
         assertThatThrownBy(() -> solver.getSolution(csp)).isInstanceOf(RestartsExhaustedException.class);
     }
 
+    /**
+     * Neither domain starts as a singleton: a variable already down to one value is assigned
+     * without a node of its own, so a conflict among such variables is caught without any inference
+     * to learn a nogood from. Dom/wdeg decides {@code y} first (the only variable with two
+     * constraints), and both of its values wipe {@code z} out.
+     */
+    private static ConstraintSatisfactionProblem alwaysWipesOutCsp(Variable<Integer> x, Variable<Integer> y,
+                                                                    Variable<Integer> z) {
+        return ConstraintSatisfactionProblem.builder()
+                .variableDomain(x, IntRangeDomain.of(1, 2))
+                .variableDomain(y, IntRangeDomain.of(1, 2))
+                .variableDomain(z, IntRangeDomain.of(3, 4))
+                .notEqualsConstraint(x, y)
+                .equalsConstraint(y, z)
+                .build();
+    }
+
+    /**
+     * As {@link #alwaysWipesOutCsp} but with {@code z∈{2,3}}: {@code y=1} fails by wipeout and
+     * {@code y=2} succeeds, forcing {@code x=1} and {@code z=2}.
+     */
+    private static ConstraintSatisfactionProblem failThenSucceedCsp(Variable<Integer> x, Variable<Integer> y,
+                                                                     Variable<Integer> z) {
+        return ConstraintSatisfactionProblem.builder()
+                .variableDomain(x, IntRangeDomain.of(1, 2))
+                .variableDomain(y, IntRangeDomain.of(1, 2))
+                .variableDomain(z, IntRangeDomain.of(2, 3))
+                .notEqualsConstraint(x, y)
+                .equalsConstraint(y, z)
+                .build();
+    }
+
     @Test
     void exhaustsAllRestartsWhenBudgetAlwaysExceeded() {
-        // x=1 and y=1 forced, x≠y → every MAC attempt fails immediately.
+        // y∈{1,2} can never equal z∈{3,4} → every MAC attempt fails immediately.
         // With lubyUnit=1, maxRestarts=1: the first restart exceeds its budget on the first
         // inference failure, the loop exits, and getSolution throws after exhausting all restarts.
         // Covers: BudgetExceeded thrown, catch block, loop exhaustion, log.warn path.
-        Variable<Integer> x = VF.create("x");
-        Variable<Integer> y = VF.create("y");
-        ConstraintSatisfactionProblem csp = ConstraintSatisfactionProblem.builder()
-                .variableDomain(x, IntRangeDomain.of(1, 1))
-                .variableDomain(y, IntRangeDomain.of(1, 1))
-                .notEqualsConstraint(x, y)
-                .build();
+        ConstraintSatisfactionProblem csp = alwaysWipesOutCsp(VF.create("x"), VF.create("y"), VF.create("z"));
 
         DomWdegLubySearch extremelyTightSolver = DomWdegLubySearch.builder()
                 .lubyUnit(1)
@@ -409,20 +426,14 @@ class DomWdegLubySearchTest {
 
     @Test
     void nogoodsAreRecordedDuringSearch() {
-        // x∈{1}, y∈{1}, x≠y: assigning x=1 passes isConsistent (y is unassigned)
-        // but MAC then wipes out y's domain (removes 1 via x≠y) → inference failure
-        // → one nogood is recorded covering the current assignment.
-        Variable<Integer> x = VF.create("x");
-        Variable<Integer> y = VF.create("y");
-        ConstraintSatisfactionProblem csp = ConstraintSatisfactionProblem.builder()
-                .variableDomain(x, IntRangeDomain.of(1, 1))
-                .variableDomain(y, IntRangeDomain.of(1, 1))
-                .notEqualsConstraint(x, y)
-                .build();
+        // y=1 passes isConsistent (z is unassigned) but MAC then wipes out z's domain
+        // (y=z has no support in {2,3}) → inference failure → a nogood is recorded covering
+        // the current assignment.
+        ConstraintSatisfactionProblem csp = failThenSucceedCsp(VF.create("x"), VF.create("y"), VF.create("z"));
 
         NogoodStore store = new NogoodStore();
         DomWdegLubySearch solver = DomWdegLubySearch.builder()
-                .domainValuesOrderer(LeastConstrainingValueOrderer.INSTANCE)
+                .domainValuesOrderer(io.github.rcrida.jcsp.solver.backtrackingsearch.order.DefaultValueOrderer.INSTANCE)
                 .inference(Solver.Factory.FULL_PROPAGATION_INFERENCE)
                 .nogoodStore(store)
                 .build();
@@ -433,24 +444,14 @@ class DomWdegLubySearchTest {
 
     @Test
     void nogoodsLearnedStatisticIncrementsOnFailedBranch() {
-        // x ∈ {1,2} is weighted (via two extra constraints against singleton dummies w1,w2) so
-        // dom/wdeg selects x before the singleton y ∈ {1}. With ascending value order, x=1 is
-        // tried first — it passes isConsistent but MAC wipes out y's domain (only value 1 removed
-        // by x≠y) → nogood recorded, backtrack to x=2 → solution (2,1,5,6). The failed x=1 branch
-        // and the successful x=2 branch share the same root Statistics.
+        // y ∈ {1,2} carries two constraints, so dom/wdeg selects it first. With ascending value
+        // order, y=1 is tried first — it passes isConsistent but MAC wipes out z's domain (y=z has
+        // no support in {2,3}) → nogood recorded, backtrack to y=2 → solution (1,2,2). The failed
+        // y=1 branch and the successful y=2 branch share the same root Statistics.
         Variable<Integer> x = VF.create("x");
         Variable<Integer> y = VF.create("y");
-        Variable<Integer> w1 = VF.create("w1");
-        Variable<Integer> w2 = VF.create("w2");
-        ConstraintSatisfactionProblem csp = ConstraintSatisfactionProblem.builder()
-                .variableDomain(x, IntRangeDomain.of(1, 2))
-                .variableDomain(y, IntRangeDomain.of(1, 1))
-                .variableDomain(w1, IntRangeDomain.of(5, 5))
-                .variableDomain(w2, IntRangeDomain.of(6, 6))
-                .notEqualsConstraint(x, y)
-                .notEqualsConstraint(x, w1)
-                .notEqualsConstraint(x, w2)
-                .build();
+        Variable<Integer> z = VF.create("z");
+        ConstraintSatisfactionProblem csp = failThenSucceedCsp(x, y, z);
 
         NogoodStore store = new NogoodStore();
         DomWdegLubySearch solver = DomWdegLubySearch.builder()
@@ -461,24 +462,21 @@ class DomWdegLubySearchTest {
 
         List<Assignment> solutions = solver.getSolutions(csp).toList();
         assertThat(solutions).hasSize(1);
-        assertThat(solutions.get(0).getValue(x).orElseThrow()).isEqualTo(2);
+        assertThat(solutions.get(0).getValue(y).orElseThrow()).isEqualTo(2);
         assertThat(solutions.get(0).getStatistics().getNogoodsLearned()).isGreaterThan(0);
     }
 
     @Test
     void getSolutionUsesInferenceProvidedReasonNotRawAssignment() {
-        // Same setup as nogoodsAreRecordedDuringSearch, but via getSolution() (the Luby-restart
-        // path), and with a custom Inference (decorating FULL_PROPAGATION_INFERENCE) whose
-        // applyWithReason always reports the sentinel {x=99} instead of whatever the real failure
-        // would derive. If inferOrExplain recorded next.getValues() directly rather than trusting
-        // inference's own reason, the store would hold a nogood over {x=1}, not {x=99}.
+        // Same setup as alwaysWipesOutCsp, via getSolution() (the Luby-restart path; both values of
+        // y fail, so the problem is proven unsatisfiable), and with a custom Inference (decorating
+        // FULL_PROPAGATION_INFERENCE) whose applyWithReason always reports the sentinel {x=99}
+        // instead of whatever the real failure would derive. If inferOrExplain recorded
+        // next.getValues() directly rather than trusting inference's own reason, the store would
+        // hold a nogood over {y=1}, not {x=99}.
         Variable<Integer> x = VF.create("x");
         Variable<Integer> y = VF.create("y");
-        ConstraintSatisfactionProblem csp = ConstraintSatisfactionProblem.builder()
-                .variableDomain(x, IntRangeDomain.of(1, 1))
-                .variableDomain(y, IntRangeDomain.of(1, 1))
-                .notEqualsConstraint(x, y)
-                .build();
+        ConstraintSatisfactionProblem csp = alwaysWipesOutCsp(x, y, VF.create("z"));
 
         Inference sentinelInference = new Inference() {
             @Override
@@ -505,7 +503,7 @@ class DomWdegLubySearchTest {
         assertThat(solver.getSolution(csp)).isEmpty();
         var constraints = store.apply(csp).getConstraints();
         assertThat(constraints).contains(GroundNogoodConstraint.of(java.util.Map.of(x, 99)));
-        assertThat(constraints).doesNotContain(GroundNogoodConstraint.of(java.util.Map.of(x, 1)));
+        assertThat(constraints).doesNotContain(GroundNogoodConstraint.of(java.util.Map.of(y, 1)));
     }
 
     @Test
@@ -693,26 +691,14 @@ class DomWdegLubySearchTest {
 
     @Test
     void limitExceededStatisticsIncludeBacktracksAndNogoodsLearned() {
-        // Same x/y/w1/w2 CSP as nogoodsLearnedStatisticIncrementsOnFailedBranch: x=1 fails (a
-        // nogood is recorded and the branch backtracks), x=2 succeeds. A node limit of 2 lets that
-        // failed x=1 branch fully resolve -- recording the backtrack and the nogood -- before the
-        // limit fires on the very next node (the x=2 attempt). Before the fix, searchOne's
+        // Same CSP as nogoodsLearnedStatisticIncrementsOnFailedBranch: y=1 fails (a
+        // nogood is recorded and the branch backtracks), y=2 succeeds. A node limit of 2 lets that
+        // failed y=1 branch fully resolve -- recording the backtrack and the nogood -- before the
+        // limit fires on the very next node (the y=2 attempt). Before the fix, searchOne's
         // limit-exceeded path reported a fresh, zeroed Statistics here (backtracks=0,
         // nogoodsLearned=0) despite this real activity already having happened; it should now
         // reuse the real accumulated Statistics instead.
-        Variable<Integer> x = VF.create("x");
-        Variable<Integer> y = VF.create("y");
-        Variable<Integer> w1 = VF.create("w1");
-        Variable<Integer> w2 = VF.create("w2");
-        ConstraintSatisfactionProblem csp = ConstraintSatisfactionProblem.builder()
-                .variableDomain(x, IntRangeDomain.of(1, 2))
-                .variableDomain(y, IntRangeDomain.of(1, 1))
-                .variableDomain(w1, IntRangeDomain.of(5, 5))
-                .variableDomain(w2, IntRangeDomain.of(6, 6))
-                .notEqualsConstraint(x, y)
-                .notEqualsConstraint(x, w1)
-                .notEqualsConstraint(x, w2)
-                .build();
+        ConstraintSatisfactionProblem csp = failThenSucceedCsp(VF.create("x"), VF.create("y"), VF.create("z"));
 
         DomWdegLubySearch limited = DomWdegLubySearch.builder()
                 .domainValuesOrderer(io.github.rcrida.jcsp.solver.backtrackingsearch.order.DefaultValueOrderer.INSTANCE)
@@ -834,23 +820,11 @@ class DomWdegLubySearchTest {
 
     @Test
     void listenerReceivesNodeExploredBacktrackNogoodLearnedAndSolutionFoundEvents() {
-        // Same x/y/w1/w2 shape as nogoodsLearnedStatisticIncrementsOnFailedBranch: x=1 fails (a
-        // backtrack plus a recorded nogood), x=2 succeeds -- gives at least one of every event to
+        // Same CSP as nogoodsLearnedStatisticIncrementsOnFailedBranch: y=1 fails (a
+        // backtrack plus a recorded nogood), y=2 succeeds -- gives at least one of every event to
         // assert on, and lets onNodeExplored/onBacktrack/onNogoodLearned counts be cross-checked
         // exactly against the same Statistics counters DomWdegLubySearch already maintains.
-        Variable<Integer> x = VF.create("lx");
-        Variable<Integer> y = VF.create("ly");
-        Variable<Integer> w1 = VF.create("lw1");
-        Variable<Integer> w2 = VF.create("lw2");
-        ConstraintSatisfactionProblem csp = ConstraintSatisfactionProblem.builder()
-                .variableDomain(x, IntRangeDomain.of(1, 2))
-                .variableDomain(y, IntRangeDomain.of(1, 1))
-                .variableDomain(w1, IntRangeDomain.of(5, 5))
-                .variableDomain(w2, IntRangeDomain.of(6, 6))
-                .notEqualsConstraint(x, y)
-                .notEqualsConstraint(x, w1)
-                .notEqualsConstraint(x, w2)
-                .build();
+        ConstraintSatisfactionProblem csp = failThenSucceedCsp(VF.create("lx"), VF.create("ly"), VF.create("lz"));
 
         AtomicInteger nodesExplored = new AtomicInteger();
         AtomicInteger backtracks = new AtomicInteger();

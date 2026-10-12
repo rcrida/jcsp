@@ -184,6 +184,21 @@ public class BranchAndBoundSolverTest {
         assertThat(result).isEmpty();
     }
 
+    @Test
+    void forcedVariablesThatConflictEndTheSearchWithoutASolution() {
+        // Both domains are already singletons, so they are assigned together at the root; the batch
+        // check rejects the pair before any node is branched on.
+        Variable<Integer> x = F.create("forcedx");
+        Variable<Integer> y = F.create("forcedy");
+        ConstraintSatisfactionProblem csp = ConstraintSatisfactionProblem.builder()
+                .variableDomain(x, IntRangeDomain.of(1, 1))
+                .variableDomain(y, IntRangeDomain.of(1, 1))
+                .notEqualsConstraint(x, y)
+                .build();
+
+        assertThat(solver(a -> 0.0).getSolutions(csp).toList()).isEmpty();
+    }
+
     // ── Cancellation ─────────────────────────────────────────────────────────
 
     @Test
@@ -252,17 +267,19 @@ public class BranchAndBoundSolverTest {
     // ── Nogood learning ──────────────────────────────────────────────────────
 
     // x=1 is tried first (fixed selector order, ascending values) and fails deterministically --
-    // notEqualsConstraint(x, y) wipes y's singleton domain -- before x=2 succeeds. Mirrors
+    // equalsConstraint(x, y) wipes y's {2, 3} domain -- before x=2 succeeds. No domain starts as a
+    // singleton, because a variable already down to one value is assigned without a node of its
+    // own and so would fail without any inference to learn from. Mirrors
     // DomWdegLubySearchTest#nogoodLearningDisabled_solvesWithoutRecordingNogoods, adapted to
     // BranchAndBoundSolver's own (non dom/wdeg) variable/value ordering.
     private static ConstraintSatisfactionProblem deterministicFailThenSucceedCsp(
             Variable<Integer> x, Variable<Integer> y, Variable<Integer> w1, Variable<Integer> w2) {
         return ConstraintSatisfactionProblem.builder()
                 .variableDomain(x, IntRangeDomain.of(1, 2))
-                .variableDomain(y, IntRangeDomain.of(1, 1))
-                .variableDomain(w1, IntRangeDomain.of(5, 5))
-                .variableDomain(w2, IntRangeDomain.of(6, 6))
-                .notEqualsConstraint(x, y)
+                .variableDomain(y, IntRangeDomain.of(2, 3))
+                .variableDomain(w1, IntRangeDomain.of(5, 6))
+                .variableDomain(w2, IntRangeDomain.of(5, 6))
+                .equalsConstraint(x, y)
                 .notEqualsConstraint(x, w1)
                 .notEqualsConstraint(x, w2)
                 .build();
