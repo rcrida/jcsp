@@ -1,6 +1,6 @@
 # 0049. Layer the objective bound into the fixpoint, instead of narrowing with it outside
 
-**Status**: Accepted
+**Status**: Superseded by [0050](0050-the-objective-cut-is-an-ordinary-constraint.md)
 
 ## Context
 

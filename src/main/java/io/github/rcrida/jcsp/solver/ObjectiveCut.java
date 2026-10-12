@@ -30,17 +30,16 @@ import java.util.concurrent.atomic.AtomicReference;
  * latest start through the precedence chain, which is why asking a <em>tighter</em> question can be
  * easier than asking a loose one.
  *
- * <p>Shared by the two callers that need it, which put the same cut into a problem two different
- * ways: {@link BranchAndBoundSolver} layers its incumbent's cut on via {@link
- * ConstraintSatisfactionProblem#withObjectiveBound}, replacing it as the incumbent improves
+ * <p>Shared by the two callers that need it, both of which put the cut into the problem's own
+ * constraint set: {@link BranchAndBoundSolver} replaces its incumbent's cut there as the incumbent
+ * improves
  * (<a href="../../../../../../../docs/adr/0029-objective-cut-as-a-propagated-constraint.md">ADR-0029</a>,
- * <a href="../../../../../../../docs/adr/0049-layer-the-objective-bound-into-the-fixpoint.md">ADR-0049</a>),
- * while {@link BoundedFirstSolution} {@link #enforce}s a probe's bound into the constraint set once
- * per probe
+ * <a href="../../../../../../../docs/adr/0050-the-objective-cut-is-an-ordinary-constraint.md">ADR-0050</a>),
+ * while {@link BoundedFirstSolution} {@link #enforce}s a probe's bound once per probe
  * (<a href="../../../../../../../docs/adr/0044-bounded-probes-for-the-starting-incumbent.md">ADR-0044</a>).
- * See {@link #enforce} for why a bound fixed for a whole search and one that moves want different
- * mechanisms. An instance carries a single-slot cache, since the bound changes rarely relative to the
- * rate it is consulted at, and rebuilding the constraint copies a variable set.
+ * An instance carries a single-slot cache, since the bound changes rarely relative to the rate it is
+ * consulted at, and rebuilding the constraint copies a variable set; branch-and-bound's staleness
+ * check is reference equality against exactly that cache.
  */
 public final class ObjectiveCut {
     /**
@@ -100,12 +99,11 @@ public final class ObjectiveCut {
      * and a caller must hand the result to a {@link FixpointPropagation} built for <em>it</em> rather
      * than for {@code csp} -- {@link FixpointPropagation.Factory#forProblem} filters on the constraint
      * types present, so a {@link LinearBoundConstraint} the original problem didn't have would
-     * otherwise never be propagated at all. {@link BranchAndBoundSolver} gets the same effect without
-     * either rebuild, via {@link ConstraintSatisfactionProblem#withObjectiveBound}: its bound changes
-     * per improving solution rather than per search, so it layers the constraint on an untouched
-     * graph instead of adding it (see
-     * <a href="../../../../../../../docs/adr/0049-layer-the-objective-bound-into-the-fixpoint.md">ADR-0049</a>).
-     * A probe's bound is fixed for its whole search, so there is nothing for it to gain from that.
+     * otherwise never be propagated at all. {@link BranchAndBoundSolver} replaces its own cut the
+     * same way and pays the same rebuild, which at once per improving solution is affordable (see
+     * <a href="../../../../../../../docs/adr/0050-the-objective-cut-is-an-ordinary-constraint.md">ADR-0050</a>);
+     * it does not use this method only because it must <em>replace</em> an earlier cut rather than add
+     * to the set, which a probe -- whose bound is fixed for its whole search -- never needs.
      */
     public @NonNull ConstraintSatisfactionProblem enforce(@NonNull ConstraintSatisfactionProblem csp,
                                                           @NonNull LinearObjective objective,

@@ -847,6 +847,18 @@ public class BranchAndBoundSolverTest {
         assertThat(improving.getLast().getValues()).containsEntry(CUT_A, 3);
     }
 
+    /**
+     * The objective cut branch-and-bound has put into {@code problem}'s constraint set, if any. The
+     * fixtures below declare no linear constraint of their own, so any {@link LinearBoundConstraint}
+     * present is the solver's cut.
+     */
+    private static Optional<Number> carriedCut(ConstraintSatisfactionProblem problem) {
+        return problem.getConstraints().stream()
+                .filter(io.github.rcrida.jcsp.constraints.nary.LinearBoundConstraint.class::isInstance)
+                .map(c -> (Number) ((io.github.rcrida.jcsp.constraints.nary.LinearBoundConstraint<?>) c).getBound())
+                .findFirst();
+    }
+
     /** Three variables with a floor of 1, so a bound that bites narrows every one of them. */
     private static final Variable<Integer> SEED_P = F.create("seeded_cut_p");
     private static final Variable<Integer> SEED_Q = F.create("seeded_cut_q");
@@ -854,10 +866,10 @@ public class BranchAndBoundSolverTest {
 
     @Test
     void objectiveBound_isCarriedByTheProblemAndDeclaredToTheInference() {
-        // ADR-0049: the bound is a constraint the problem carries, not a hand-run pass, so it is
-        // re-propagated by the ordinary fixpoint at every node. Both levels of that fixpoint are
-        // woken by changed variables, so its scope is declared to each inference call -- without
-        // that the layered constraint would be visited less often than the pass it replaced.
+        // The bound is a constraint in the problem's own constraint set, not a hand-run pass, so it
+        // is re-propagated by the ordinary fixpoint. Both levels of that fixpoint are woken by
+        // changed variables, so its scope is declared to the inference at the node that takes it on
+        // -- without that a constraint new to the problem would go unvisited.
         var csp = ConstraintSatisfactionProblem.builder()
                 .variableDomain(SEED_P, IntRangeDomain.of(1, 5))
                 .variableDomain(SEED_Q, IntRangeDomain.of(1, 5))
@@ -877,10 +889,10 @@ public class BranchAndBoundSolverTest {
             @Override
             public ConsistencyResult applyWithReason(ConstraintSatisfactionProblem problem, Variable<?> variable,
                                                       Assignment assignment, Set<Variable<?>> alsoChanged) {
-                if (problem.getObjectiveBound() != null) {
-                    carried.add(problem.getObjectiveBound().getBound());
+                carriedCut(problem).ifPresent(cut -> {
+                    carried.add(cut.intValue());
                     declared.add(alsoChanged);
-                }
+                });
                 return ConsistencyResult.feasible(apply(problem, variable, assignment).orElseThrow());
             }
         };
@@ -909,36 +921,6 @@ public class BranchAndBoundSolverTest {
     }
 
     @Test
-    void inheritedObjectiveBound_isDiscardedAtTheRoot() {
-        // withObjectiveBound is public API, so a caller can hand in a problem still carrying a bound
-        // from somewhere else. A bound is only valid relative to the incumbent that justified it, and
-        // this search starts unbounded -- keeping it would prune away solutions this solve is
-        // entitled to find, including its own optimum. Same hazard as ADR-0048's inherited nogoods.
-        var csp = ConstraintSatisfactionProblem.builder()
-                .variableDomain(SEED_P, IntRangeDomain.of(1, 5))
-                .variableDomain(SEED_Q, IntRangeDomain.of(1, 5))
-                .build();
-        LinearObjective objective = LinearObjective.builder()
-                .coefficient(SEED_P, 1.0).coefficient(SEED_Q, 1.0).build();
-        // "cost <= 1" is unsatisfiable here (each variable is at least 1), so a solve that kept it
-        // would prove the problem has no solution at all rather than finding the optimum of 2.
-        var preBounded = csp.withObjectiveBound(
-                io.github.rcrida.jcsp.constraints.nary.LinearBoundConstraint.of(
-                        java.util.Map.of(SEED_P, 1, SEED_Q, 1), Operator.LEQ, 1));
-        BranchAndBoundSolver solver = BranchAndBoundSolver.builder()
-                .objective(objective)
-                .selectorFactory(constraints -> MinimumRemainingValuesSelector.INSTANCE)
-                .domainValuesOrderer(DefaultValueOrderer.INSTANCE)
-                .inference(Solver.Factory.FULL_PROPAGATION_INFERENCE)
-                .build();
-
-        var improving = solver.getSolutions(preBounded).toList();
-
-        assertThat(improving).isNotEmpty();
-        assertThat(objective.applyAsDouble(improving.getLast())).isEqualTo(2.0);
-    }
-
-    @Test
     void objectiveBound_tightensAsTheIncumbentImproves() {
         // One constraint object per improving solution, replacing the last: the staleness check is
         // reference equality against ObjectiveCut's cache, so an unchanged incumbent rebuilds nothing.
@@ -961,9 +943,7 @@ public class BranchAndBoundSolverTest {
             @Override
             public Optional<ConstraintSatisfactionProblem> apply(ConstraintSatisfactionProblem problem,
                                                                   Variable<?> variable, Assignment assignment) {
-                if (problem.getObjectiveBound() != null) {
-                    bounds.add(problem.getObjectiveBound().getBound());
-                }
+                carriedCut(problem).ifPresent(cut -> bounds.add(cut.intValue()));
                 return narrowAssignedToSingleton().apply(problem, variable, assignment);
             }
         };

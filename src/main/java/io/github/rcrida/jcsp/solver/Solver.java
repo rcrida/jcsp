@@ -144,8 +144,9 @@ public interface Solver {
             if (!(objective instanceof LinearObjective linear) || !ObjectiveCut.isExpressible(linear, csp)) {
                 return csp;
             }
-            return csp.withObjectiveBound(new ObjectiveCut()
-                    .constraintFor(linear, linear.getConstant() + 1, csp));
+            return csp.toBuilder()
+                    .constraint(new ObjectiveCut().constraintFor(linear, linear.getConstant() + 1, csp))
+                    .build();
         }
 
         /**

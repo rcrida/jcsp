@@ -212,26 +212,8 @@ public class ConstraintSatisfactionProblem {
     // value just means "unknown, fall back to a full scan of nogoods" -- so it's excluded from
     // equals/hashCode/toString exactly like the other derived caches here.
     @EqualsAndHashCode.Exclude @ToString.Exclude @Nullable Map<Variable<?>, Set<NogoodConstraint>> nogoodsByVariable;
-    /**
-     * One derived constraint a <em>search</em> may layer on, exactly as {@link #nogoods} are layered:
-     * today branch-and-bound's objective bound, "no solution costing as much as the incumbent"
-     * (see {@code BranchAndBoundSolver} and
-     * <a href="docs/adr/0049-layer-the-objective-bound-into-the-fixpoint.md">ADR-0049</a>), replaced
-     * via {@link #withObjectiveBound} whenever the incumbent improves.
-     * <p>
-     * Typed to {@link LinearBoundConstraint} rather than to {@link Constraint}, because what makes
-     * layering safe is not generic: like a {@link NogoodConstraint} this is n-ary and neither a
-     * {@link BinaryConstraint} nor {@link BinaryDecomposable}, so it contributes nothing to
-     * neighbours, binary decomposition or cycle analysis and the {@link #constraintGraph} can be
-     * reused untouched. A layered <em>binary</em> constraint would be invisible to exactly that
-     * analysis, so the slot does not accept one.
-     * <p>
-     * Excluded from equals/hashCode for {@link #nogoods}' reason: it is derived from what a search
-     * has found so far, not part of the problem's identity.
-     */
-    @EqualsAndHashCode.Exclude @ToString.Exclude @Nullable LinearBoundConstraint<Integer> objectiveBound;
-    // Excluded: purely a derived cache of constraintGraph's constraints + nogoods + objectiveBound
-    // (see mergedWithLayers), already covered transitively by the three of them above.
+    // Excluded: purely a derived cache of constraintGraph's constraints + nogoods (see
+    // mergedWithNogoods), already covered transitively by constraintGraph and nogoods above.
     @Getter(AccessLevel.NONE) @EqualsAndHashCode.Exclude @ToString.Exclude Set<Constraint> allConstraints;
     // Mutable-state-inside-@Value cache (same pattern as NogoodStore/SolverLimits), threaded forward
     // via toBuilder() exactly like constraintGraph is: remembers the single most recent (nogoods
@@ -240,14 +222,7 @@ public class ConstraintSatisfactionProblem {
     // skip rebuilding allConstraints entirely instead of paying for it on every search node.
     @Getter(AccessLevel.NONE) @EqualsAndHashCode.Exclude @ToString.Exclude AtomicReference<NogoodMergeCache> nogoodMergeCache;
 
-    /**
-     * The most recent merge, keyed on <em>both</em> layered slots by reference: a hit requires the
-     * same {@link #nogoods} set and the same {@link #objectiveBound} object, since either changing
-     * changes the union.
-     */
-    private record NogoodMergeCache(Set<NogoodConstraint> nogoods,
-                                    @Nullable LinearBoundConstraint<Integer> objectiveBound,
-                                    Set<Constraint> merged) {
+    private record NogoodMergeCache(Set<NogoodConstraint> nogoods, Set<Constraint> merged) {
     }
 
     /**
@@ -279,10 +254,9 @@ public class ConstraintSatisfactionProblem {
      * @param nogoods learned nogoods folded into {@link #getConstraints()} but excluded from the constraint graph
      * @param nogoodMergeCache pre-existing merge cache to reuse (see the field javadoc), or {@code null} for a fresh one
      * @param nogoodsByVariable live index from the originating {@link NogoodStore} (see the field javadoc), or {@code null} if unknown
-     * @param objectiveBound a search's derived bound, layered like {@code nogoods} (see the field javadoc), or {@code null}
      */
     @Builder
-    ConstraintSatisfactionProblem(@Singular("variableDomainEntry") Map<Variable<?>, Domain<?>> variableDomains, @Singular Set<Constraint> constraints, @Nullable ConstraintGraph constraintGraph, @Nullable Set<NogoodConstraint> nogoods, @Nullable AtomicReference<NogoodMergeCache> nogoodMergeCache, @Nullable Map<Variable<?>, Set<NogoodConstraint>> nogoodsByVariable, @Nullable LinearBoundConstraint<Integer> objectiveBound) {
+    ConstraintSatisfactionProblem(@Singular("variableDomainEntry") Map<Variable<?>, Domain<?>> variableDomains, @Singular Set<Constraint> constraints, @Nullable ConstraintGraph constraintGraph, @Nullable Set<NogoodConstraint> nogoods, @Nullable AtomicReference<NogoodMergeCache> nogoodMergeCache, @Nullable Map<Variable<?>, Set<NogoodConstraint>> nogoodsByVariable) {
         this.variableDomains = variableDomains;
         if (constraintGraph != null
                 && (constraintGraph.getConstraints() == constraints || constraintGraph.getConstraints().equals(constraints))) {
@@ -295,14 +269,8 @@ public class ConstraintSatisfactionProblem {
         assert this.nogoods.stream().flatMap(n -> n.getVariables().stream()).allMatch(variableDomains::containsKey)
                 : "Nogoods reference unknown variables";
         this.nogoodsByVariable = nogoodsByVariable;
-        this.objectiveBound = objectiveBound;
-        assert objectiveBound == null
-                || objectiveBound.getVariables().stream().allMatch(variableDomains::containsKey)
-                : "Objective bound references unknown variables";
         this.nogoodMergeCache = nogoodMergeCache != null ? nogoodMergeCache : new AtomicReference<>();
-        this.allConstraints = this.nogoods.isEmpty() && objectiveBound == null
-                ? this.constraintGraph.getConstraints()
-                : mergedWithLayers(this.nogoods, objectiveBound);
+        this.allConstraints = this.nogoods.isEmpty() ? this.constraintGraph.getConstraints() : mergedWithNogoods(this.nogoods);
     }
 
     /**
@@ -320,19 +288,13 @@ public class ConstraintSatisfactionProblem {
      * every one of those misses, which JFR profiling of a hard XCSP3 BinPacking instance found to
      * dominate search wall-clock time.
      */
-    private Set<Constraint> mergedWithLayers(Set<NogoodConstraint> nogoods,
-                                              @Nullable LinearBoundConstraint<Integer> bound) {
+    private Set<Constraint> mergedWithNogoods(Set<NogoodConstraint> nogoods) {
         NogoodMergeCache cached = nogoodMergeCache.get();
-        if (cached != null && cached.nogoods() == nogoods && cached.objectiveBound() == bound) {
+        if (cached != null && cached.nogoods() == nogoods) {
             return cached.merged();
         }
-        // Nested views rather than a three-way union: the bound is one element, and a copy would
-        // call every nogood's hashCode/equals -- the cost this method exists to avoid.
-        Set<Constraint> withNogoods = nogoods.isEmpty()
-                ? constraintGraph.getConstraints()
-                : LightweightSets.unionView(constraintGraph.getConstraints(), nogoods);
-        Set<Constraint> result = bound == null ? withNogoods : LightweightSets.unionView(withNogoods, Set.of(bound));
-        nogoodMergeCache.set(new NogoodMergeCache(nogoods, bound, result));
+        Set<Constraint> result = LightweightSets.unionView(constraintGraph.getConstraints(), nogoods);
+        nogoodMergeCache.set(new NogoodMergeCache(nogoods, result));
         return result;
     }
 
@@ -349,8 +311,7 @@ public class ConstraintSatisfactionProblem {
                 .constraintGraph(constraintGraph)
                 .nogoods(nogoods)
                 .nogoodMergeCache(nogoodMergeCache)
-                .nogoodsByVariable(nogoodsByVariable)
-                .objectiveBound(objectiveBound);
+                .nogoodsByVariable(nogoodsByVariable);
     }
 
     /**
@@ -391,7 +352,7 @@ public class ConstraintSatisfactionProblem {
     public ConstraintSatisfactionProblem withNogoods(@NonNull Set<NogoodConstraint> newNogoods,
             @Nullable Map<Variable<?>, Set<NogoodConstraint>> index) {
         if (newNogoods == this.nogoods) return this;
-        return new ConstraintSatisfactionProblem(variableDomains, constraintGraph.getConstraints(), constraintGraph, newNogoods, nogoodMergeCache, index, objectiveBound);
+        return new ConstraintSatisfactionProblem(variableDomains, constraintGraph.getConstraints(), constraintGraph, newNogoods, nogoodMergeCache, index);
     }
 
     /**
@@ -414,7 +375,7 @@ public class ConstraintSatisfactionProblem {
     public ConstraintSatisfactionProblem withDomain(@NonNull Variable<?> variable, @NonNull Domain<?> domain) {
         Map<Variable<?>, Domain<?>> newDomains = new LinkedHashMap<>(variableDomains);
         newDomains.put(variable, domain);
-        return new ConstraintSatisfactionProblem(Collections.unmodifiableMap(newDomains), constraintGraph.getConstraints(), constraintGraph, nogoods, nogoodMergeCache, nogoodsByVariable, objectiveBound);
+        return new ConstraintSatisfactionProblem(Collections.unmodifiableMap(newDomains), constraintGraph.getConstraints(), constraintGraph, nogoods, nogoodMergeCache, nogoodsByVariable);
     }
 
     /** As {@link #withDomain}, applying every entry of {@code updates} in one pass; returns {@code this} unchanged if {@code updates} is empty. */
@@ -422,26 +383,7 @@ public class ConstraintSatisfactionProblem {
         if (updates.isEmpty()) return this;
         Map<Variable<?>, Domain<?>> newDomains = new LinkedHashMap<>(variableDomains);
         newDomains.putAll(updates);
-        return new ConstraintSatisfactionProblem(Collections.unmodifiableMap(newDomains), constraintGraph.getConstraints(), constraintGraph, nogoods, nogoodMergeCache, nogoodsByVariable, objectiveBound);
-    }
-
-    /**
-     * Returns this problem carrying {@code newBound} as its {@link #objectiveBound}, or {@code this}
-     * when it is already carrying that exact object. Reuses the {@link ConstraintGraph} untouched for
-     * the reason {@link #withNogoods} does — see the {@link #objectiveBound} field Javadoc — so only
-     * the flat set behind {@link #getConstraints()} changes.
-     * <p>
-     * A caller that replaces the bound is making a change the propagation machinery cannot see for
-     * itself: {@code FixpointConsistency}'s worklist is seeded from changed <em>variables</em>, so a
-     * constraint that is new to the problem fires only once one of its own variables happens to be
-     * dirty. The caller therefore declares the bound's variables to its next inference pass, through
-     * {@link io.github.rcrida.jcsp.consistency.Inference#applyWithReason(ConstraintSatisfactionProblem,
-     * Variable, io.github.rcrida.jcsp.assignments.Assignment, Set)} — once per replacement, not once
-     * per node.
-     */
-    public ConstraintSatisfactionProblem withObjectiveBound(@Nullable LinearBoundConstraint<Integer> newBound) {
-        if (newBound == objectiveBound) return this;
-        return new ConstraintSatisfactionProblem(variableDomains, constraintGraph.getConstraints(), constraintGraph, nogoods, nogoodMergeCache, nogoodsByVariable, newBound);
+        return new ConstraintSatisfactionProblem(Collections.unmodifiableMap(newDomains), constraintGraph.getConstraints(), constraintGraph, nogoods, nogoodMergeCache, nogoodsByVariable);
     }
 
     private static void validateConstraints(Map<Variable<?>, Domain<?>> variableDomains, Set<Constraint> constraints) {
@@ -600,16 +542,11 @@ public class ConstraintSatisfactionProblem {
                 computeAuxiliaryCacheIfAbsent(TouchingIndex.class, ConstraintSatisfactionProblem::buildTouchingIndex)
                         .byVariable();
         Set<Constraint> structural = structuralIndex.getOrDefault(variable, Set.of());
-        // The layered bound is one constraint over a known variable set, so it is tested directly
-        // rather than indexed.
-        Set<Constraint> withBound = objectiveBound != null && objectiveBound.getVariables().contains(variable)
-                ? LightweightSets.unionView(structural, Set.of(objectiveBound))
-                : structural;
-        if (nogoods.isEmpty()) return withBound;
+        if (nogoods.isEmpty()) return structural;
         Set<NogoodConstraint> relevantNogoods = nogoodsByVariable == null
                 ? nogoods
                 : nogoodsByVariable.getOrDefault(variable, Set.of());
-        return relevantNogoods.isEmpty() ? withBound : LightweightSets.unionView(withBound, relevantNogoods);
+        return relevantNogoods.isEmpty() ? structural : LightweightSets.unionView(structural, relevantNogoods);
     }
 
     private static TouchingIndex buildTouchingIndex(ConstraintSatisfactionProblem csp) {

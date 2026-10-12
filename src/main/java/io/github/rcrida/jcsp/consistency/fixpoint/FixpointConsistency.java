@@ -65,17 +65,15 @@ public class FixpointConsistency implements ConstraintConsistency {
      * last time (a cheap identity check — always correct on a miss, since it just falls back to a
      * fresh filter). Note {@code csp.getConstraints()}, unlike {@code getAllBinaryConstraints()},
      * changes reference whenever a nogood is learned, not just when the structural constraint set
-     * changes — and, since
-     * <a href="../../../../../../../docs/adr/0049-layer-the-objective-bound-into-the-fixpoint.md">ADR-0049</a>,
-     * whenever branch-and-bound's layered {@link ConstraintSatisfactionProblem#getObjectiveBound}
-     * is replaced as its incumbent improves. Learned nogoods never change any filtered result here
-     * (they are a {@link NogoodConstraint} subtype, handled separately by {@link
-     * NogoodFixpointConsistency}, and no {@link FixpointConsistency} in the solver chains targets
-     * one), but the objective bound is a {@link
-     * io.github.rcrida.jcsp.constraints.nary.LinearBoundConstraint} — an ordinary structural type —
-     * so for that one entry the filtered contents genuinely do change mid-solve. The
-     * reference-equality check below is what makes this correct in both cases rather than reliant on
-     * either of those observations.
+     * changes. Learned nogoods never change any filtered result here (they are a {@link
+     * NogoodConstraint} subtype, handled separately by {@link NogoodFixpointConsistency}, and no
+     * {@link FixpointConsistency} in the solver chains targets one), but a caller that rebuilds the
+     * constraint set mid-solve does: branch-and-bound replaces its objective cut — an ordinary
+     * {@link io.github.rcrida.jcsp.constraints.nary.LinearBoundConstraint} — on every improving
+     * solution
+     * (<a href="../../../../../../../docs/adr/0050-the-objective-cut-is-an-ordinary-constraint.md">ADR-0050</a>),
+     * so for that entry the filtered contents genuinely do change mid-solve. The reference-equality
+     * check below is what makes this correct in both cases rather than reliant on either observation.
      * <p>
      * This instance's cache holder is keyed per {@link ConstraintSatisfactionProblem} structure (via
      * {@link ConstraintSatisfactionProblem#computeAuxiliaryCacheIfAbsent}, on {@link
@@ -90,15 +88,15 @@ public class FixpointConsistency implements ConstraintConsistency {
      * {@link NogoodFixpointConsistency}'s own {@code NogoodStore#byVariable} index is.
      * <p>
      * That is still worth it, but not because {@code source} is immutable for a solve: it is not. Each
-     * nogood learned and each objective-bound replacement produces a fresh {@code source} reference,
-     * and every entry consulted after one of those re-filters and rebuilds its index. What keeps the
+     * nogood learned and each objective-cut replacement produces a fresh {@code source} reference, and
+     * every entry consulted after one of those re-filters and rebuilds its index. What keeps the
      * tradeoff one-sided is the <em>rate</em>. Those events are bounded by learned nogoods and
-     * improving solutions, never by nodes, and {@link ConstraintSatisfactionProblem}'s own merge cache
-     * hands back the same {@code source} reference at every node in between -- so the index really is
-     * built once per distinct {@code source} and reused across all the nodes that share it, exactly
-     * like {@link FilterCache#filtered} itself. The two reverted eager-nogood-index attempts {@link
-     * NogoodFixpointConsistency} documents were rebuilds on an unboundedly growing set at essentially
-     * every node of a learning search, which is the cost this is not.
+     * improving solutions, never by nodes, and the problem reuses the same {@code source} reference at
+     * every node in between -- so the index really is built once per distinct {@code source} and reused
+     * across all the nodes that share it, exactly like {@link FilterCache#filtered} itself. The two
+     * reverted eager-nogood-index attempts {@link NogoodFixpointConsistency} documents were rebuilds on
+     * an unboundedly growing set at essentially every node of a learning search, which is the cost this
+     * is not.
      */
     @SuppressWarnings({"unchecked", "rawtypes"})
     private FilterCache filterCache(ConstraintSatisfactionProblem csp) {

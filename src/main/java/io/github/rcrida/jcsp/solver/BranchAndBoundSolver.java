@@ -15,6 +15,7 @@ import io.github.rcrida.jcsp.assignments.SolverLimits;
 import io.github.rcrida.jcsp.assignments.Statistics;
 import io.github.rcrida.jcsp.consistency.ConsistencyResult;
 import io.github.rcrida.jcsp.consistency.Inference;
+import io.github.rcrida.jcsp.constraints.Constraint;
 import io.github.rcrida.jcsp.constraints.nary.LinearBoundConstraint;
 import io.github.rcrida.jcsp.domains.BoundedDomain;
 import io.github.rcrida.jcsp.solver.listener.SolverListener;
@@ -102,7 +103,7 @@ import java.util.stream.Stream;
  * {@link BoundedDomain} one, since no {@link DomainValuesOrderer} can enumerate one.
  * <p>
  * Reaching the <em>first</em> solution is a pure feasibility search: there is no incumbent yet, so
- * neither the bound check in {@link #searchCut} nor {@link #applyObjectiveBound} can prune anything,
+ * neither the bound check in {@link #searchCut} nor the objective cut itself can prune anything,
  * and on a heavy-tailed problem one descent can commit to a subtree it never escapes. An optional
  * {@link #incumbentSeeder} is given that job instead, and how it goes about it is entirely its own
  * business -- {@link Solver.Factory} supplies a {@link BoundedFirstSolution} over the satisfaction
@@ -130,7 +131,7 @@ public class BranchAndBoundSolver implements Solver {
     Object lpModelCacheKey = new Object();
 
     /**
-     * Builds the incumbent's bound as a propagated constraint; see {@link #applyObjectiveBound}. Carries its
+     * Builds the incumbent's bound as a propagated constraint; see {@link Bound}. Carries its
      * own single-slot cache, since the incumbent changes only when a strictly better solution is
      * found -- rare relative to the per-node rate it is consulted at -- so rebuilding the constraint
      * (which copies a variable set) at every node would be pure waste. Same field conventions and
@@ -159,7 +160,7 @@ public class BranchAndBoundSolver implements Solver {
     /**
      * Accumulates the nogoods this search learns, and is emptied at the start of each {@link
      * #getSolutions} call: unlike {@link DomWdegLubySearch}'s, these are not unconditional facts.
-     * A reason derived here comes from domains {@link #applyObjectiveBound}'s bound has narrowed, so it means
+     * A reason derived here comes from domains the objective cut has narrowed, so it means
      * "fails while costing less than the incumbent" -- sound for the rest of one search, where the
      * incumbent only tightens, and unsound for the next one, which starts unbounded again and would
      * otherwise inherit nogoods that refuse the prefix of its own optimum.
@@ -215,17 +216,16 @@ public class BranchAndBoundSolver implements Solver {
         // Per-solve state, like the selector and the LP gate built below: a nogood here is relative
         // to the incumbent it was derived under, and this search starts unbounded -- see nogoodStore.
         nogoodStore.clear();
-        // Any bound the problem arrives carrying is discarded, for the reason nogoodStore is emptied
-        // above: a bound is relative to the incumbent that justified it, this search starts
-        // unbounded, and withObjectiveBound is public API, so a caller can hand in a problem still
-        // carrying one. Keeping it would prune away solutions this solve is entitled to find --
-        // including, in the worst case, its own optimum. Returns the same problem when there is
-        // nothing to clear, which is every ordinary call.
-        ConstraintSatisfactionProblem root = csp.withObjectiveBound(null);
+        // The cut-free constraint set, captured once: within this search nothing but our own cut
+        // changes it, so it is what each node's cut is applied on top of. Any LinearBoundConstraint
+        // csp already holds is the caller's own constraint and stays in this baseline -- there is no
+        // mechanism by which a cut of ours could arrive on an incoming problem, so the stale-bound
+        // hazard ADR-0048 guards against for nogoods cannot arise here at all.
+        Bound rootBound = new Bound(csp.getConstraints(), null);
         // Fallback for a directly-constructed solver; in the full chain PropagationFixpointSolver
         // has already recorded the post-preprocessing figure and first-write-wins keeps it.
-        statistics.updateRootSearchSpace(root.getSearchSpace());
-        Optional<Assignment> seed = seedIncumbent(root, incumbent);
+        statistics.updateRootSearchSpace(csp.getSearchSpace());
+        Optional<Assignment> seed = seedIncumbent(csp, incumbent);
         // The search-space snapshots are first-write-wins, so whatever the seeder's own searches
         // recorded (a probe that was cancelled mid-descent, say) would otherwise stand in for this
         // search's figures -- which is what getRemainingSearchSpace documents them to be.
@@ -233,15 +233,50 @@ public class BranchAndBoundSolver implements Solver {
         // Whether any domain is continuous is invariant for a solve -- narrowing an IntervalDomain
         // yields an IntervalDomain -- so it is decided once here rather than rediscovered by
         // isDiscreteComplete scanning every domain at every node of a problem that has none.
-        boolean hasContinuous = root.getVariableDomains().values().stream().anyMatch(BoundedDomain.class::isInstance);
-        Stream<Assignment> improvements = search(root, rootAssignment(), incumbent, deadline, 1.0, new SearchProgress(),
-                selectorFactory.createSelector(root.getConstraints()), lpGateFor(root), hasContinuous);
+        boolean hasContinuous = csp.getVariableDomains().values().stream().anyMatch(BoundedDomain.class::isInstance);
+        Stream<Assignment> improvements = search(csp, rootAssignment(), incumbent, deadline, 1.0, new SearchProgress(),
+                selectorFactory.createSelector(csp.getConstraints()), lpGateFor(csp), hasContinuous, rootBound);
         return seed.map(solution -> Stream.concat(Stream.of(solution), improvements)).orElse(improvements);
     }
 
     /**
-     * The LP-bound policy for one solve: the ordinary backing-off {@link LpGate} when {@link
-     * #applyObjectiveBound} will carry the incumbent, and {@link LpGate#alwaysSolving} when it cannot.
+     * The incumbent's cut as this search carries it: the solve's cut-free structural constraint set,
+     * plus whichever cut is currently in the problem ({@code null} before the first incumbent).
+     * <p>
+     * The pair lives in the search rather than on the problem, which is the point of carrying the cut
+     * structurally: {@link #cut} is the O(1) answer to "is the problem already carrying the current
+     * bound", which a layered slot used to provide and which scanning the constraint set per node
+     * would not. {@link #structural} is invariant for the solve -- nothing between this class and the
+     * fixpoint adds a constraint -- so a new cut is applied on top of it rather than by removing the
+     * old one from whatever the node happens to hold.
+     */
+    private record Bound(@NonNull Set<Constraint> structural,
+                         @Nullable LinearBoundConstraint<Integer> cut) {
+
+        /**
+         * This bound tightened to {@code incumbent}, or {@code this} when there is nothing to change
+         * -- no incumbent yet, no expressible cut, or the cut for this incumbent is the one already
+         * applied. Reference equality suffices because {@link ObjectiveCut} caches one constraint
+         * object per bound value.
+         */
+        Bound tightenedTo(ToDoubleFunction<Assignment> objective, ObjectiveCut objectiveCut,
+                           ConstraintSatisfactionProblem csp, double incumbent) {
+            if (!(objective instanceof LinearObjective linearObjective) || incumbent == Double.MAX_VALUE) {
+                return this;
+            }
+            LinearBoundConstraint<Integer> next = objectiveCut.constraintFor(linearObjective, incumbent, csp);
+            return next == null || next == cut ? this : new Bound(structural, next);
+        }
+
+        /** {@code csp} with this cut in its constraint set, replacing any earlier one. */
+        ConstraintSatisfactionProblem applyTo(ConstraintSatisfactionProblem csp) {
+            return csp.toBuilder().clearConstraints().constraints(structural).constraint(cut).build();
+        }
+    }
+
+    /**
+     * The LP-bound policy for one solve: the ordinary backing-off {@link LpGate} when the objective
+     * cut will carry the incumbent, and {@link LpGate#alwaysSolving} when it cannot.
      * <p>
      * Backing off is sound either way -- a skipped bound forgoes pruning rather than admitting
      * anything -- but it is only affordable while something else enforces the incumbent. An objective
@@ -294,38 +329,39 @@ public class BranchAndBoundSolver implements Solver {
                                        SearchProgress progress,
                                        AdaptiveVariableSelector selector,
                                        LpGate lpGate,
-                                       boolean hasContinuous) {
+                                       boolean hasContinuous,
+                                       Bound inherited) {
         if (assignment.isComplete(csp) || (hasContinuous && isDiscreteComplete(csp, assignment))) {
             return resolveComplete(csp, assignment, incumbent);
         }
-        ConstraintSatisfactionProblem bounded = applyObjectiveBound(csp, incumbent[0]);
-        // Declared exactly when this node took on a bound the problem was not already carrying --
-        // reference inequality, since ObjectiveCut caches per bound value. Both levels of the
-        // fixpoint are woken by changed *variables*, so a constraint new to the problem is in no
-        // diff the inference can take and would otherwise go unvisited.
+        Bound bound = inherited.tightenedTo(objective, objectiveCut, csp, incumbent[0]);
+        // Rebuilding the constraint set rebuilds the ConstraintGraph, and with it every structural
+        // memo cached against that graph -- so this happens only when the cut actually changed, which
+        // is once per improving solution per path, not per node.
+        ConstraintSatisfactionProblem bounded = bound == inherited ? csp : bound.applyTo(csp);
+        // Declared exactly when this node took a new cut on. Both levels of the fixpoint are woken by
+        // changed *variables*, so a constraint new to the problem is in no diff the inference can
+        // take, however it reached the problem, and would otherwise go unvisited.
         //
-        // Only on change, not every node, because the bound reads nothing but its own variables: if
-        // none of them has moved since it last ran, re-propagating it cannot narrow anything, and
-        // the dirty-driven mechanism already visits it whenever one of them does move. Declaring per
-        // node pays an O(scope) propagation at every node to re-derive what it derived at the
-        // parent -- which is what made the first measurement of this design slower per node than the
-        // hand-run pass it replaced.
-        // Null exactly when this node applied nothing new: applyObjectiveBound either hands back the
-        // same problem or one carrying a non-null bound, so there is no third case to test for.
-        LinearBoundConstraint<Integer> applied = bounded == csp ? null : bounded.getObjectiveBound();
-        Set<Variable<?>> boundVariables = applied == null ? Set.of() : applied.getVariables();
-        return searchCut(bounded, boundVariables, assignment, incumbent, deadline, weight, progress, selector,
-                lpGate, hasContinuous);
+        // Only on change, not every node, because the cut reads nothing but its own variables: if
+        // none of them has moved since it last ran, re-propagating it cannot narrow anything, and the
+        // dirty-driven mechanism already visits it whenever one of them does move. Declaring per node
+        // measured 22 optima against 23, and slower (ADR-0049).
+        Set<Variable<?>> boundVariables = bound == inherited ? Set.of() : bound.cut().getVariables();
+        return searchCut(bounded, boundVariables, bound, assignment, incumbent, deadline, weight, progress,
+                selector, lpGate, hasContinuous);
     }
 
     /**
-     * {@link #search}'s continuation once the objective cut has been folded into {@code csp}.
-     * {@code boundVariables} is the layered objective bound's own scope, carried down to {@link
-     * #inferOrExplain} so the child's propagation is seeded with it -- see {@link
-     * ConstraintSatisfactionProblem#withObjectiveBound} and {@link #search}.
+     * {@link #search}'s continuation once the objective cut is in {@code csp}'s constraint set.
+     * {@code boundVariables} is that cut's own scope when this node took it on, empty otherwise,
+     * carried down to {@link #inferOrExplain} so the child's propagation is seeded with it;
+     * {@code appliedBound} is handed to the children so each can tell whether its own cut is already
+     * applied -- see {@link Bound} and {@link #search}.
      */
     private Stream<Assignment> searchCut(ConstraintSatisfactionProblem csp,
                                          Set<Variable<?>> boundVariables,
+                                         Bound appliedBound,
                                          Assignment assignment,
                                          double[] incumbent,
                                          long deadline,
@@ -348,40 +384,15 @@ public class BranchAndBoundSolver implements Solver {
             // Gated off: no LP bound and no most-fractional hint this node, and no fallback to the
             // objective.applyAsDouble check below either -- that evaluates a LinearObjective over a
             // *partial* assignment, which is not a lower bound once any coefficient is negative.
-            // Nothing is lost by it: the incumbent is enforced by applyObjectiveBound above, and a
-            // search whose objective has no expressible cut is given a gate that never backs off
+            // Nothing is lost by it: the incumbent is enforced by the cut in the constraint set, and
+            // a search whose objective has no expressible cut is given a gate that never backs off
             // (see getSolutions), so this node is reached only when the cut is carrying the bound.
         } else if (objective.applyAsDouble(assignment) >= incumbent[0]) {
             return Stream.empty();
         }
         Variable<?> variable = branchVariable(csp, assignment, hint.orElseGet(() -> selector.select(csp, assignment)));
-        return searchValues(variable, csp, boundVariables, assignment, incumbent, deadline, weight, progress,
-                selector, lpGate, hasContinuous);
-    }
-
-    /**
-     * {@code csp} carrying the current incumbent's bound as a layered constraint -- "no solution
-     * costing as much as what we hold" -- or {@code csp} itself when there is no incumbent yet, no
-     * expressible cut, or the problem already carries this exact bound.
-     * <p>
-     * The bound is a real constraint in the problem rather than a predicate {@link #search} tests
-     * nodes against, which is the point: a predicate rejects one node, whereas a constraint in the
-     * fixpoint is re-propagated at every node against that node's narrowed domains and compounds
-     * with every other propagator. {@link ObjectiveCut} builds and caches it, shared with
-     * {@link BoundedFirstSolution}, which bounds its probes the same way. See
-     * <a href="../../../../../../../docs/adr/0049-layer-the-objective-bound-into-the-fixpoint.md">ADR-0049</a>.
-     * <p>
-     * The staleness check is reference equality, which works because {@link
-     * ObjectiveCut#constraintFor} caches per bound: an unchanged incumbent hands back the same
-     * object, so {@link ConstraintSatisfactionProblem#withObjectiveBound} returns the same problem
-     * and nothing is rebuilt.
-     */
-    private ConstraintSatisfactionProblem applyObjectiveBound(ConstraintSatisfactionProblem csp, double incumbent) {
-        if (!(objective instanceof LinearObjective linearObjective) || incumbent == Double.MAX_VALUE) {
-            return csp;
-        }
-        LinearBoundConstraint<Integer> bound = objectiveCut.constraintFor(linearObjective, incumbent, csp);
-        return bound == null ? csp : csp.withObjectiveBound(bound);
+        return searchValues(variable, csp, boundVariables, appliedBound, assignment, incumbent, deadline, weight,
+                progress, selector, lpGate, hasContinuous);
     }
 
     /**
@@ -578,6 +589,7 @@ public class BranchAndBoundSolver implements Solver {
     private <T> Stream<Assignment> searchValues(Variable<T> variable,
                                                  ConstraintSatisfactionProblem csp,
                                                  Set<Variable<?>> boundVariables,
+                                                 Bound appliedBound,
                                                  Assignment assignment,
                                                  double[] incumbent,
                                                  long deadline,
@@ -624,7 +636,7 @@ public class BranchAndBoundSolver implements Solver {
                     try {
                         child = inferOrExplain(nogoodStore.apply(csp), variable, next, boundVariables, selector)
                                 .map(inferred -> search(inferred, next, incumbent, deadline, childWeight, progress,
-                                        selector, lpGate, hasContinuous))
+                                        selector, lpGate, hasContinuous, appliedBound))
                                 .orElseGet(Stream::empty);
                     } catch (SolverCancelledException e) {
                         child = Stream.empty();
@@ -645,12 +657,11 @@ public class BranchAndBoundSolver implements Solver {
      * case, since choosing whether/how to explain is entirely {@link #inference}'s job.
      * <p>
      * {@code boundVariables} is declared to the {@link Inference} as already changed, which is what
-     * gets the layered objective bound visited: the fixpoint's queues are seeded from changed
-     * variables at both levels, and a constraint reaching the problem through {@link
-     * ConstraintSatisfactionProblem#withObjectiveBound} is in no diff the inference can take for
-     * itself. Declaring its scope every node (rather than only when the bound changes) is what makes
-     * the bound propagate at least as often as the single hand-run pass it replaced, and compound
-     * with every other propagator besides -- see {@link #search}.
+     * gets a newly applied objective cut visited: the fixpoint's queues are seeded from changed
+     * variables at both levels, so a constraint that was not in the problem a moment ago is in no
+     * diff the inference can take for itself, however it got there. Empty at every node that merely
+     * inherited the cut, since a constraint reading only its own variables derives nothing when none
+     * of them has moved -- see {@link #search}.
      */
     private Optional<ConstraintSatisfactionProblem> inferOrExplain(ConstraintSatisfactionProblem cspWithNogoods,
                                                                      Variable<?> variable,
