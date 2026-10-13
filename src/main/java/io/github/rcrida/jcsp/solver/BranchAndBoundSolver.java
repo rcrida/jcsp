@@ -107,8 +107,10 @@ import java.util.stream.Stream;
  * and on a heavy-tailed problem one descent can commit to a subtree it never escapes. An optional
  * {@link #incumbentSeeder} is given that job instead, and how it goes about it is entirely its own
  * business -- {@link Solver.Factory} supplies a {@link BoundedFirstSolution} over the satisfaction
- * chain's own search. The search that follows is the unchanged, unrestarted one, which is what keeps
+ * chain's own search. The search that follows restarts on a growing fail cutoff (see {@link
+ * #failBudget}); the cutoff is unbounded, so the last run is never aborted, which is what keeps
  * draining this stream a proof of optimality. See
+ * <a href="../../../../../../../docs/adr/0051-fail-driven-restarts-for-branch-and-bound.md">ADR-0051</a>,
  * <a href="../../../../../../../docs/adr/0041-reuse-the-satisfaction-search-for-the-first-solution.md">ADR-0041</a>
  * and <a href="../../../../../../../docs/adr/0044-bounded-probes-for-the-starting-incumbent.md">ADR-0044</a>.
  */
@@ -208,6 +210,48 @@ public class BranchAndBoundSolver implements Solver {
     @Builder.Default
     @Nullable IncumbentSeeder incumbentSeeder = null;
 
+    /** Failed candidates the first run may see before it is abandoned; see {@link #failBudget}. */
+    @Builder.Default
+    long restartFailBase = DomWdegLubySearch.DEFAULT_RESTART_FAIL_BASE;
+    /** Factor by which each run's cutoff exceeds the last's; must exceed {@code 1}. */
+    @Builder.Default
+    double restartGrowth = DomWdegLubySearch.DEFAULT_RESTART_GROWTH;
+    /** Reseeds the selector's tie-breaking at the start of each run. */
+    @Builder.Default
+    @NonNull RestartRandomization restartRandomization = RestartRandomization.NONE;
+
+    /**
+     * One run's failure count against its cutoff. A run is abandoned by setting this, not by
+     * throwing: an exception thrown while a lazy stream is being consumed would escape to the
+     * caller's terminal operation, where nothing can recover from it.
+     */
+    private static final class RunState {
+        private final long failBudget;
+        private long fails;
+
+        RunState(long failBudget) {
+            this.failBudget = failBudget;
+        }
+
+        void fail() {
+            fails++;
+        }
+
+        boolean aborted() {
+            return fails >= failBudget;
+        }
+    }
+
+    /**
+     * The cutoff of run {@code k} (1-based): {@code base * growth^(k-1)}, saturating at {@link
+     * Long#MAX_VALUE}. It grows without bound, so some run outlasts the whole tree and ends
+     * un-aborted -- which is what makes a drained stream a proof of optimality.
+     */
+    static long failBudget(long base, double growth, int k) {
+        double budget = base * Math.pow(growth, k - 1);
+        return budget >= Long.MAX_VALUE ? Long.MAX_VALUE : (long) Math.ceil(budget);
+    }
+
     @Override
     public Stream<Assignment> getSolutions(@NonNull ConstraintSatisfactionProblem csp) {
         log.info("Search space before branch-and-bound = {}", csp.getSearchSpace());
@@ -234,8 +278,30 @@ public class BranchAndBoundSolver implements Solver {
         // yields an IntervalDomain -- so it is decided once here rather than rediscovered by
         // isDiscreteComplete scanning every domain at every node of a problem that has none.
         boolean hasContinuous = csp.getVariableDomains().values().stream().anyMatch(BoundedDomain.class::isInstance);
-        Stream<Assignment> improvements = search(csp, rootAssignment(), incumbent, deadline, 1.0, new SearchProgress(),
-                selectorFactory.createSelector(csp.getConstraints()), lpGateFor(csp), hasContinuous, rootBound);
+        if (restartFailBase <= 0 || restartGrowth <= 1.0) {
+            throw new IllegalArgumentException("restartFailBase must be positive and restartGrowth above 1, got: "
+                    + restartFailBase + ", " + restartGrowth);
+        }
+        AdaptiveVariableSelector selector = selectorFactory.createSelector(csp.getConstraints());
+        LpGate lpGate = lpGateFor(csp);
+        RunState[] previous = new RunState[1];
+        // Each run is a complete DFS from the root under whatever incumbent exists by then; one
+        // that hits its cutoff is abandoned and the next starts, so the stream is a proof of
+        // optimality only when a run ends un-aborted. A flat iterate/flatMap rather than a nested
+        // concat per run: the latter's depth would grow with the number of restarts.
+        Stream<Assignment> improvements = Stream.iterate(1, k -> k + 1)
+                .takeWhile(k -> k == 1 || (previous[0].aborted() && !cancellation.isCancelled()))
+                .flatMap(k -> {
+                    if (k > 1) {
+                        statistics.addRestarts(1);
+                        listener.onRestart(k - 1);
+                    }
+                    RunState run = new RunState(failBudget(restartFailBase, restartGrowth, k));
+                    previous[0] = run;
+                    selector.onRestart(restartRandomization.randomFor(k));
+                    return search(csp, rootAssignment(), incumbent, deadline, 1.0, new SearchProgress(),
+                            selector, lpGate, hasContinuous, rootBound, run);
+                });
         return seed.map(solution -> Stream.concat(Stream.of(solution), improvements)).orElse(improvements);
     }
 
@@ -330,7 +396,8 @@ public class BranchAndBoundSolver implements Solver {
                                        AdaptiveVariableSelector selector,
                                        LpGate lpGate,
                                        boolean hasContinuous,
-                                       Bound inherited) {
+                                       Bound inherited,
+                                       RunState run) {
         if (assignment.isComplete(csp) || (hasContinuous && isDiscreteComplete(csp, assignment))) {
             return resolveComplete(csp, assignment, incumbent);
         }
@@ -349,7 +416,7 @@ public class BranchAndBoundSolver implements Solver {
         // measured 22 optima against 23, and slower (ADR-0049).
         Set<Variable<?>> boundVariables = bound == inherited ? Set.of() : bound.cut().getVariables();
         return searchCut(bounded, boundVariables, bound, assignment, incumbent, deadline, weight, progress,
-                selector, lpGate, hasContinuous);
+                selector, lpGate, hasContinuous, run);
     }
 
     /**
@@ -369,7 +436,8 @@ public class BranchAndBoundSolver implements Solver {
                                          SearchProgress progress,
                                          AdaptiveVariableSelector selector,
                                          LpGate lpGate,
-                                         boolean hasContinuous) {
+                                         boolean hasContinuous,
+                                         RunState run) {
         Optional<Variable<?>> hint = Optional.empty();
         if (objective instanceof LinearObjective linearObjective) {
             if (lpGate.solveThisNode()) {
@@ -392,7 +460,7 @@ public class BranchAndBoundSolver implements Solver {
         }
         Variable<?> variable = branchVariable(csp, assignment, hint.orElseGet(() -> selector.select(csp, assignment)));
         return searchValues(variable, csp, boundVariables, appliedBound, assignment, incumbent, deadline, weight,
-                progress, selector, lpGate, hasContinuous);
+                progress, selector, lpGate, hasContinuous, run);
     }
 
     /**
@@ -597,7 +665,8 @@ public class BranchAndBoundSolver implements Solver {
                                                  SearchProgress progress,
                                                  AdaptiveVariableSelector selector,
                                                  LpGate lpGate,
-                                                 boolean hasContinuous) {
+                                                 boolean hasContinuous,
+                                                 RunState run) {
         // Merged once for the direct check below, which reads the store's live by-variable index and
         // so sees everything recorded since. The merged constraint *set* a fixpoint propagates is a
         // snapshot, though, so the one handed to the inference is re-taken per candidate inside the
@@ -609,7 +678,10 @@ public class BranchAndBoundSolver implements Solver {
         List<T> candidates = (List<T>) phaseMemory.prioritise(variable,
                 (List<Object>) domainValuesOrderer.order(csp, variable, assignment).toList());
         double childWeight = weight / candidates.size();
+        // takeWhile pulls lazily, so a cutoff reached anywhere below stops this frame at its next
+        // candidate and every frame above it in turn: the whole run unwinds without an exception.
         return candidates.stream()
+                .takeWhile(value -> !run.aborted())
                 .map(value -> assignment.withValue(variable, value))
                 .filter(next -> {
                     if (limits.checkStop(cancellation, next.getStatistics().getNodesExplored(), deadline)
@@ -627,6 +699,7 @@ public class BranchAndBoundSolver implements Solver {
                         selector.onValueRejected(variable);
                         listener.onBacktrack(variable, next);
                         progress.complete(childWeight);
+                        run.fail();
                         return false;
                     }
                     return true;
@@ -634,9 +707,14 @@ public class BranchAndBoundSolver implements Solver {
                 .flatMap(next -> {
                     Stream<Assignment> child;
                     try {
-                        child = inferOrExplain(nogoodStore.apply(csp), variable, next, boundVariables, selector)
+                        Optional<ConstraintSatisfactionProblem> propagated =
+                                inferOrExplain(nogoodStore.apply(csp), variable, next, boundVariables, selector);
+                        if (propagated.isEmpty()) {
+                            run.fail();
+                        }
+                        child = propagated
                                 .map(inferred -> search(inferred, next, incumbent, deadline, childWeight, progress,
-                                        selector, lpGate, hasContinuous, appliedBound))
+                                        selector, lpGate, hasContinuous, appliedBound, run))
                                 .orElseGet(Stream::empty);
                     } catch (SolverCancelledException e) {
                         child = Stream.empty();

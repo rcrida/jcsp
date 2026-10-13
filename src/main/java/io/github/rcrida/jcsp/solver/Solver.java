@@ -422,6 +422,9 @@ public interface Solver {
                         .statistics(config.getStatistics())
                         .listener(config.getListener())
                         .cancellation(cancellation)
+                        // The seeder's searches take indices 0 upwards; this one takes the last, so
+                        // its tie-breaking is never a replay of any of theirs.
+                        .restartRandomization(config.getRestartRandomization().forSearch(Integer.MAX_VALUE))
                         .incumbentSeeder(incumbentSeeder)
                         .build();
                 Solver afterPropagation = hasSets

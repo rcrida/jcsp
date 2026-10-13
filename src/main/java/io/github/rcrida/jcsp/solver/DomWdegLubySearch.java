@@ -101,6 +101,11 @@ public class DomWdegLubySearch implements Solver {
     public static final int DEFAULT_LUBY_UNIT = 100;
     public static final int DEFAULT_MAX_RESTARTS = 512;
 
+    /** First cutoff, in failed candidates, of {@link BranchAndBoundSolver}'s restart schedule. */
+    static final long DEFAULT_RESTART_FAIL_BASE = 50;
+    /** Factor by which {@link BranchAndBoundSolver}'s cutoff grows from one restart to the next. */
+    static final double DEFAULT_RESTART_GROWTH = 1.3;
+
     /**
      * Consecutive restarts that may fail to reach a new deepest assignment before {@link
      * #getSolution} resets the selector's accumulated weights. Chosen from the corpus rather than

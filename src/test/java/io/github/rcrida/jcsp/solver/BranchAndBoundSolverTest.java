@@ -5,6 +5,7 @@ import io.github.rcrida.jcsp.ConstraintSatisfactionProblem;
 import io.github.rcrida.jcsp.assignments.Assignment;
 import io.github.rcrida.jcsp.assignments.NogoodStore;
 import io.github.rcrida.jcsp.assignments.SolverLimits;
+import io.github.rcrida.jcsp.assignments.Statistics;
 import io.github.rcrida.jcsp.consistency.ConsistencyResult;
 import io.github.rcrida.jcsp.consistency.Inference;
 import io.github.rcrida.jcsp.constraints.Operator;
@@ -79,6 +80,87 @@ public class BranchAndBoundSolverTest {
             assertThat(sum(improving.get(i))).isLessThan(sum(improving.get(i - 1)));
         }
         assertThat(sum(improving.getLast())).isEqualTo(6);
+    }
+
+    // ── Fail-driven restarts ─────────────────────────────────────────────────
+
+    private static BranchAndBoundSolver restarting(long base, double growth, Statistics statistics,
+                                                   SolverListener listener, Cancellation cancellation) {
+        return BranchAndBoundSolver.builder()
+                .objective(BranchAndBoundSolverTest::sum)
+                .selectorFactory(constraints -> MinimumRemainingValuesSelector.INSTANCE)
+                .domainValuesOrderer(DefaultValueOrderer.INSTANCE)
+                .inference((problem, variable, assignment) -> Optional.of(problem))
+                .restartFailBase(base)
+                .restartGrowth(growth)
+                .statistics(statistics)
+                .listener(listener)
+                .cancellation(cancellation)
+                .build();
+    }
+
+    @Test
+    void restartingStillDrainsToTheOptimum() {
+        Statistics statistics = new Statistics();
+        var restarts = new CopyOnWriteArrayList<Integer>();
+        SolverListener listener = new SolverListener() {
+            @Override
+            public void onRestart(int restartNumber) {
+                restarts.add(restartNumber);
+            }
+        };
+
+        List<Assignment> improving = restarting(1, 2.0, statistics, listener, Cancellation.NEVER)
+                .getSolutions(CSP).toList();
+
+        assertThat(sum(improving.getLast())).isEqualTo(6);
+        for (int i = 1; i < improving.size(); i++) {
+            assertThat(sum(improving.get(i))).isLessThan(sum(improving.get(i - 1)));
+        }
+        assertThat(restarts).isNotEmpty().startsWith(1);
+        assertThat(statistics.getRestarts()).isEqualTo(restarts.size());
+    }
+
+    @Test
+    void aGenerousCutoffNeverRestarts() {
+        Statistics statistics = new Statistics();
+
+        List<Assignment> improving = restarting(1_000_000, 2.0, statistics, SolverListener.NONE, Cancellation.NEVER)
+                .getSolutions(CSP).toList();
+
+        assertThat(sum(improving.getLast())).isEqualTo(6);
+        assertThat(statistics.getRestarts()).isZero();
+    }
+
+    @Test
+    void cancellationAtTheCutoffEndsTheStreamInsteadOfStartingAnotherRun() {
+        var cancellation = new Cancellation();
+        Statistics statistics = new Statistics();
+        SolverListener listener = new SolverListener() {
+            @Override
+            public void onBacktrack(Variable<?> variable, Assignment assignment) {
+                cancellation.cancel();
+            }
+        };
+
+        restarting(1, 2.0, statistics, listener, cancellation).getSolutions(CSP).toList();
+
+        assertThat(statistics.getRestarts()).isZero();
+    }
+
+    @Test
+    void failBudgetGrowsGeometricallyAndSaturates() {
+        assertThat(BranchAndBoundSolver.failBudget(50, 1.3, 1)).isEqualTo(50);
+        assertThat(BranchAndBoundSolver.failBudget(10, 2.0, 4)).isEqualTo(80);
+        assertThat(BranchAndBoundSolver.failBudget(50, 1.3, 1_000_000)).isEqualTo(Long.MAX_VALUE);
+    }
+
+    @Test
+    void aCutoffThatCannotGrowIsRejectedBecauseItWouldNeverProveAnything() {
+        assertThatThrownBy(() -> restarting(0, 2.0, new Statistics(), SolverListener.NONE, Cancellation.NEVER)
+                .getSolutions(CSP)).isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> restarting(1, 1.0, new Statistics(), SolverListener.NONE, Cancellation.NEVER)
+                .getSolutions(CSP)).isInstanceOf(IllegalArgumentException.class);
     }
 
     @Test

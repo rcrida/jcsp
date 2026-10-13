@@ -17,6 +17,10 @@
 > satisfaction chain — which already restarts, so it tests the mechanism without rebuilding
 > anything here — this decision should be reopened.
 
+> **Reopened by [ADR-0051](0051-fail-driven-restarts-for-branch-and-bound.md) (2026-10-13), for a
+> different mechanism.** Branch-and-bound now restarts on a fail-driven geometric schedule, not on
+> solution; this ADR's rejection of restart-on-solution is unchanged.
+
 ## Context
 
 ADR-0026 gave `BranchAndBoundSolver` solution-guided value ordering and closed by naming the
