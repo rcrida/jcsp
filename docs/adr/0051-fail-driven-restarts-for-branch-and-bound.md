@@ -78,14 +78,11 @@ not investigated.
 
 ## Rejected alternatives
 
-- **Assigning propagation-forced variables in one step first** (a plan prerequisite). Built, then not
-  adopted. The premise was that a restart would otherwise re-pay a 325-node tail of functionally
-  determined variables on every descent; measured, branch-and-bound's own search spends 975 nodes of
-  225,757 on them, and a bounded probe spends none, because its dives die in the `x` levels. The change
-  also alters dom/wdeg's picks (assigning early changes which constraints count as active), so it is
-  not a pure saving: it ran 19% fewer `x` nodes in the same time on bur26a and lost
-  `Taillard-os-04-04-0`'s proof on one of four seeds. The work is kept on the `avenue-e-phase-1`
-  branch.
+- **Assigning propagation-forced variables in one step first** (a plan prerequisite). Its stated
+  premise did not hold, so it was first left out; it was adopted afterwards for what it measured on top
+  of this change, not for that premise. See
+  [ADR-0052](0052-assign-propagation-forced-variables-in-one-step.md), whose bur26a numbers for the two
+  together supersede the "ADR-0051 alone" figures above for the shipped configuration.
 - **Luby.** See Decision.
 - **A `SolverConfig` knob or a fallback to the unrestarted search.** It leaves two code paths against a
   100% branch-coverage gate with nothing measuring the unused one.
