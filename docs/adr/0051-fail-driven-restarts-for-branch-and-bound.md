@@ -83,6 +83,29 @@ not investigated.
   of this change, not for that premise. See
   [ADR-0052](0052-assign-propagation-forced-variables-in-one-step.md), whose bur26a numbers for the two
   together supersede the "ADR-0051 alone" figures above for the shipped configuration.
+- **Restart nogoods.** As each aborted run unwound, every frame forbade the sibling subtrees it had
+  searched to the end (a ground nogood over the path prefix plus that value), the standard companion of
+  fail-driven restarts and the part of Choco's gain attributed to them. Sound for the rest of one solve,
+  because a fully searched subtree holds nothing cheaper than the incumbent and the incumbent only
+  improves. They had to be exempt from `NogoodStore`'s largest-arity-first eviction, which discards
+  exactly such deep prefixes, so the store gained a pinned category with a count cap (10 per variable)
+  that stops recording rather than evicting. Built, measured and removed. `QuadraticAssignment-bur26a`,
+  60s, the same three seeds, against the shipped configuration (1,951,405 / 1,940,161 / 1,888,116):
+
+  | arm | 20260830 | 1 | 2 | `nogoodRejections` |
+  |---|---|---|---|---|
+  | checked directly, learning off | 1,947,769 | 1,925,602 | 1,872,495 | 15 / 5 / 15 in ~2M nodes |
+  | nogood propagator added, learning off | 1,927,540 | 1,922,932 | 1,882,649 | 0 |
+
+  Every difference is under 1.3%, inside the seed-to-seed spread, and the propagating arm explored
+  slightly fewer nodes. Turning `nogoodLearningEnabled` on was not informative: it cuts throughput about
+  20x (~95k nodes in 60s), so the seeder used the whole budget, branch-and-bound never restarted, and
+  both arms returned the seeder's single solution. Two limits on the evidence: with learning off the
+  direct check fires only when a later run assigns exactly the same variables to the same values, which
+  dom/wdeg's reordering makes unlikely; and `nogoodRejections` counts wipeouts the nogood propagator
+  causes, not values it prunes without one, so the propagating arm's firing rate is not known. Consistent
+  with [ADR-0030](0030-nogood-learning-is-not-cdcl.md), which found conflict nogoods essentially never
+  fire. What would change this verdict is a pruning counter showing the propagating arm firing often.
 - **Luby.** See Decision.
 - **A `SolverConfig` knob or a fallback to the unrestarted search.** It leaves two code paths against a
   100% branch-coverage gate with nothing measuring the unused one.
@@ -95,6 +118,4 @@ not investigated.
   solve: each run has its own `SearchProgress`.
 - A proof that already took many fails now costs up to ~4.3x the work to reach, which is the price of
   the improvements above and is visible as the 2-3x slowdowns listed.
-- Restart nogoods (recording each finished subtree as the run unwinds) are not built. They are an
-  efficiency device and not part of the proof, and would be measured separately, with the caveat that
-  [ADR-0030](0030-nogood-learning-is-not-cdcl.md) found conflict nogoods essentially never fire.
+- Restart nogoods were built and not kept; see Rejected alternatives.
