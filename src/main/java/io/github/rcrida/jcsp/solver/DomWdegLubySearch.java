@@ -19,6 +19,8 @@ import lombok.Value;
 import lombok.extern.slf4j.Slf4j;
 import org.jspecify.annotations.NonNull;
 
+import java.util.ArrayDeque;
+import java.util.Deque;
 import java.util.List;
 import java.util.Optional;
 import java.util.stream.Stream;
@@ -318,6 +320,39 @@ public class DomWdegLubySearch implements Solver {
         return Optional.of(inferred.problem());
     }
 
+    /**
+     * One node of {@link #searchOne}: the problem and assignment it was entered with, the variable
+     * chosen there, and how far through that variable's candidate values the search has got.
+     */
+    private static final class Frame {
+        final ConstraintSatisfactionProblem csp;
+        final Assignment current;
+        final Variable<?> variable;
+        final List<Object> candidates;
+        final double childWeight;
+        int next;
+
+        Frame(ConstraintSatisfactionProblem csp, Assignment current, Variable<?> variable,
+              List<Object> candidates, double weight) {
+            this.csp = csp;
+            this.current = current;
+            this.variable = variable;
+            this.candidates = candidates;
+            this.childWeight = weight / candidates.size();
+        }
+    }
+
+    /**
+     * A depth-first search over an explicit stack of {@link Frame}s rather than recursion: the depth
+     * is the number of branching decisions, which for a problem with thousands of variables exceeds
+     * what a thread's stack holds (about 3,500 levels on the default 2MB), and a stack overflow is
+     * not something a caller can recover a search from. {@link #searchStream}, the lazy
+     * {@link #getSolutions} path, is still recursive.
+     * <p>
+     * A candidate resolved without a solution calls {@code progress.complete(childWeight)} exactly
+     * once, wherever it ends: immediately for a rejected or failed value, or when the child node it
+     * led to failed outright or ran out of candidates.
+     */
     @SuppressWarnings("unchecked")
     private Optional<Assignment> searchOne(@NonNull ConstraintSatisfactionProblem csp,
                                            @NonNull Assignment assignment,
@@ -327,24 +362,44 @@ public class DomWdegLubySearch implements Solver {
                                            long deadline,
                                            double weight,
                                            SearchProgress progress) {
-        Optional<Assignment> forced = ForcedAssignment.extend(csp, assignment);
-        if (forced.isEmpty()) {
-            return Optional.empty();
-        }
-        Assignment current = forced.get();
-        if (current.isComplete(csp)) {
-            listener.onSolutionFound(current);
-            return Optional.of(current);
-        }
-        Variable<?> variable = selector.select(csp, current);
-        List<Object> candidates = phaseMemory.prioritise(variable,
-                (List<Object>) domainValuesOrderer.order(csp, variable, current).toList());
-        double childWeight = weight / candidates.size();
-        for (Object value : candidates) {
-            Assignment next = current.withValue((Variable<Object>) variable, value);
+        Deque<Frame> stack = new ArrayDeque<>();
+        ConstraintSatisfactionProblem enterCsp = csp;
+        Assignment enterFrom = assignment;
+        double enterWeight = weight;
+        while (true) {
+            if (enterCsp != null) {
+                Optional<Assignment> forced = ForcedAssignment.extend(enterCsp, enterFrom);
+                if (forced.isPresent()) {
+                    Assignment current = forced.get();
+                    if (current.isComplete(enterCsp)) {
+                        listener.onSolutionFound(current);
+                        return Optional.of(current);
+                    }
+                    Variable<?> variable = selector.select(enterCsp, current);
+                    List<Object> candidates = phaseMemory.prioritise(variable,
+                            (List<Object>) domainValuesOrderer.order(enterCsp, variable, current).toList());
+                    stack.push(new Frame(enterCsp, current, variable, candidates, enterWeight));
+                } else if (!stack.isEmpty()) {
+                    progress.complete(stack.peek().childWeight);
+                }
+                enterCsp = null;
+            }
+            if (stack.isEmpty()) {
+                return Optional.empty();
+            }
+            Frame frame = stack.peek();
+            if (frame.next == frame.candidates.size()) {
+                stack.pop();
+                if (!stack.isEmpty()) {
+                    progress.complete(stack.peek().childWeight);
+                }
+                continue;
+            }
+            Object value = frame.candidates.get(frame.next++);
+            Assignment next = frame.current.withValue((Variable<Object>) frame.variable, value);
             switch (limits.checkStop(cancellation, next.getStatistics().getNodesExplored(), deadline)) {
                 case CANCELLED -> {
-                    statistics.updateCurrentSearchSpace(csp.getSearchSpace());
+                    statistics.updateCurrentSearchSpace(frame.csp.getSearchSpace());
                     statistics.getRootSearchSpace()
                             .ifPresent(root -> statistics.updateRemainingSearchSpace(progress.remainingOf(root)));
                     throw new SolverCancelledException(statistics);
@@ -352,27 +407,26 @@ public class DomWdegLubySearch implements Solver {
                 case LIMIT_EXCEEDED -> throw LimitsExceeded.INSTANCE;
                 case NONE -> {}
             }
-            ConstraintSatisfactionProblem cspWithNogoods = nogoodStore.apply(csp);
-            if (!next.isConsistentAmong(cspWithNogoods.getConstraintsTouching(variable))) {
+            ConstraintSatisfactionProblem cspWithNogoods = nogoodStore.apply(frame.csp);
+            if (!next.isConsistentAmong(cspWithNogoods.getConstraintsTouching(frame.variable))) {
                 next.getStatistics().incrementBacktracks();
-                selector.onValueRejected(variable);
-                listener.onBacktrack(variable, next);
-                progress.complete(childWeight);
+                selector.onValueRejected(frame.variable);
+                listener.onBacktrack(frame.variable, next);
+                progress.complete(frame.childWeight);
                 continue;
             }
-            Optional<ConstraintSatisfactionProblem> inferred = inferOrExplain(cspWithNogoods, variable, next, selector);
+            Optional<ConstraintSatisfactionProblem> inferred =
+                    inferOrExplain(cspWithNogoods, frame.variable, next, selector);
             if (inferred.isEmpty()) {
-                progress.complete(childWeight);
+                progress.complete(frame.childWeight);
                 if (++failures[0] >= budget) throw BudgetExceeded.INSTANCE;
                 continue;
             }
             phaseMemory.recordIfDeepest(next.getValues());
-            Optional<Assignment> result =
-                    searchOne(inferred.get(), next, selector, failures, budget, deadline, childWeight, progress);
-            if (result.isPresent()) return result;
-            progress.complete(childWeight);
+            enterCsp = inferred.get();
+            enterFrom = next;
+            enterWeight = frame.childWeight;
         }
-        return Optional.empty();
     }
 
     /**

@@ -25,6 +25,7 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -83,6 +84,57 @@ class DomWdegLubySearchTest {
         int xv = solution.get().getValue(x).orElseThrow();
         int yv = solution.get().getValue(y).orElseThrow();
         assertThat(xv).isNotEqualTo(yv);
+    }
+
+    @Test
+    void getSolution_searchDepthIsNotBoundedByTheThreadStack() throws InterruptedException {
+        // The search is as deep as the number of branching decisions. Recursing once per decision
+        // overflowed a default 2MB stack at about 3,500 variables (bmc-ibm-3-04_X2 has 14,930); a
+        // 256KB stack reaches the same failure at a depth cheap enough to build in a unit test.
+        int variables = 1500;
+        var builder = ConstraintSatisfactionProblem.builder();
+        for (int i = 0; i < variables; i++) {
+            builder.variableDomain(VF.<Integer>create("deep" + i), IntRangeDomain.of(0, 1));
+        }
+        ConstraintSatisfactionProblem csp = builder.build();
+        var result = new AtomicReference<Optional<Assignment>>();
+        var failure = new AtomicReference<Throwable>();
+        var thread = new Thread(null, () -> {
+            try {
+                result.set(solver().getSolution(csp));
+            } catch (Throwable t) {
+                failure.set(t);
+            }
+        }, "small-stack", 256 * 1024);
+        thread.start();
+        thread.join();
+
+        assertThat(failure.get()).isNull();
+        assertThat(result.get()).hasValueSatisfying(solution -> assertThat(solution.getValues()).hasSize(variables));
+    }
+
+    @Test
+    void getSolution_childWhoseForcedAssignmentFailsOutright_isAFailedCandidate() {
+        // The inference pins b to a's value without checking the constraint between them, so the
+        // conflict only surfaces when the child node assigns the variable that is now forced.
+        Variable<Integer> a = VF.create("forcedA");
+        Variable<Integer> b = VF.create("forcedB");
+        ConstraintSatisfactionProblem csp = ConstraintSatisfactionProblem.builder()
+                .variableDomain(a, IntRangeDomain.of(1, 2))
+                .variableDomain(b, IntRangeDomain.of(1, 2))
+                .notEqualsConstraint(a, b)
+                .build();
+        Inference pinsBToA = (problem, variable, assignment) -> {
+            if (!variable.equals(a)) return Optional.of(problem);
+            int value = assignment.getValue(a).orElseThrow();
+            return Optional.of(problem.withDomain(b, IntRangeDomain.of(value, value)));
+        };
+        DomWdegLubySearch search = DomWdegLubySearch.builder()
+                .domainValuesOrderer(LeastConstrainingValueOrderer.INSTANCE)
+                .inference(pinsBToA)
+                .build();
+
+        assertThat(search.getSolution(csp)).isEmpty();
     }
 
     @Test
