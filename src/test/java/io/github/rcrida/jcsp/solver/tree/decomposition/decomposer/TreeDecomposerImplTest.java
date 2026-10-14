@@ -98,16 +98,8 @@ public class TreeDecomposerImplTest {
         assertThat(treeDecomposer.decompose(ConstraintSatisfactionProblem.builder().build(), 1024)).isEmpty();
     }
 
-    @Test
-    void decompose_cancelled_abandonsTheDecomposition() {
-        // Enumerating one clique's joint domain is the one long uninterruptible stretch on the
-        // satisfaction chain; before it checked Cancellation, a 60s limit on Tpp-3-3-20-1 ran for
-        // 70s+ and had to be killed. Abandoned as empty rather than thrown, because decompose() is
-        // on the getSolutions() path too, where cancellation truncates silently.
-        val cancellation = new Cancellation();
-        cancellation.cancel();
-        val cancelledDecomposer = new TreeDecomposerImpl(ArbitraryVariableSelector.Factory.INSTANCE, cancellation);
-        val csp = ConstraintSatisfactionProblem.builder()
+    private static ConstraintSatisfactionProblem twoTriangles() {
+        return ConstraintSatisfactionProblem.builder()
                 .variableDomain(V0, DOMAIN)
                 .variableDomain(V1, DOMAIN)
                 .variableDomain(V2, DOMAIN)
@@ -118,10 +110,47 @@ public class TreeDecomposerImplTest {
                 .notEqualsConstraint(V1, V3)
                 .notEqualsConstraint(V2, V3)
                 .build();
+    }
+
+    @Test
+    void decompose_cancelledBeforeElimination_abandonsTheDecomposition() {
+        // Abandoned as empty rather than thrown, because decompose() is on the getSolutions() path
+        // too, where cancellation truncates silently.
+        val cancellation = new Cancellation();
+        cancellation.cancel();
+        val cancelledDecomposer = new TreeDecomposerImpl(ArbitraryVariableSelector.Factory.INSTANCE, cancellation);
 
         // Not vacuous: the same problem decomposes successfully when nothing is cancelled.
-        assertThat(treeDecomposer.decompose(csp, 1024)).isPresent();
-        assertThat(cancelledDecomposer.decompose(csp, 1024)).isEmpty();
+        assertThat(treeDecomposer.decompose(twoTriangles(), 1024)).isPresent();
+        assertThat(cancelledDecomposer.decompose(twoTriangles(), 1024)).isEmpty();
+    }
+
+    @Test
+    void decompose_cancelledAfterElimination_abandonsCliqueEnumeration() {
+        // Enumerating one clique's joint domain is the other long stretch on the satisfaction chain;
+        // before it checked Cancellation, a 60s limit on Tpp-3-3-20-1 ran for 70s+ and had to be
+        // killed. Cancelling from inside the last elimination step lets elimination finish and
+        // leaves the enumeration as the first thing to see the signal.
+        val cancellation = new Cancellation();
+        val cancellingOnLastVertex = new TreeDecomposerImpl(neighbours -> {
+            if (neighbours.size() == 1) {
+                cancellation.cancel();
+            }
+            return ArbitraryVariableSelector.Factory.INSTANCE.create(neighbours);
+        }, cancellation);
+
+        assertThat(cancellingOnLastVertex.decompose(twoTriangles(), 1024)).isEmpty();
+        assertThat(cancellation.isCancelled()).isTrue();
+    }
+
+    @Test
+    void decompose_bagOverTheDomainCap_abandonsDuringElimination() {
+        // Each triangle's joint domain is 3^3 = 27. Over the cap the decomposition can only be
+        // declined, so it is declined while the bags are built -- before the fill-in, the
+        // maximal-clique filter and the clique graph that a problem too wide to decompose would
+        // otherwise spend its time on. bmc-ibm-4-04_X2 took 70s on a 10s limit doing exactly that.
+        assertThat(treeDecomposer.decompose(twoTriangles(), 27)).isPresent();
+        assertThat(treeDecomposer.decompose(twoTriangles(), 26)).isEmpty();
     }
 
     @Test

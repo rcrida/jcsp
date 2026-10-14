@@ -29,9 +29,8 @@ import java.util.stream.Collectors;
 public class TreeDecomposerImpl implements TreeDecomposer {
     VariableSelectionHeuristic.Factory variableHeuristicFactory;
     /**
-     * Checked while enumerating each clique's joint domain, which is where this class spends
-     * essentially all of its time on a problem large enough to matter -- see {@link
-     * AssignmentDomain#of} for why a bounded enumeration still needs interrupting. Construction-time
+     * Checked once per eliminated vertex, and while enumerating each clique's joint domain -- see
+     * {@link AssignmentDomain#of} for why a bounded enumeration still needs interrupting. Construction-time
      * rather than a {@link #decompose} parameter, the same way every solver in the chain takes its
      * {@link Cancellation}.
      */
@@ -77,30 +76,26 @@ public class TreeDecomposerImpl implements TreeDecomposer {
         if (csp.isEmpty() || csp.isTree()) {
             return Optional.empty();
         }
-        List<Set<Variable<?>>> maximal = getMaximalCliqueBags(csp);
+        val maximalBags = getMaximalCliqueBags(csp, maxDomainSize);
+        if (maximalBags.isEmpty()) {
+            return Optional.empty();
+        }
+        List<Set<Variable<?>>> maximal = maximalBags.get();
 
         List<CliqueEdge> edges = getCliqueEdges(maximal);
 
         Map<Integer, Set<Integer>> tree = getMaximumSpanningTree(maximal, edges);
 
-        // Every clique's joint domain size first, from a BigInteger product that enumerates nothing,
-        // and only then the enumeration. Interleaving the two -- size-check clique i, enumerate
-        // clique i, size-check clique i+1 -- means a clique that busts the cap discards every
-        // enumeration already done for the cliques before it. The sizes are the cheap part and the
-        // decision is all-or-nothing, so there is no reason to pay for any of it before deciding:
+        // Every clique's domains first, and only then the enumeration. Interleaving the two --
+        // size-check clique i, enumerate clique i, size-check clique i+1 -- means a clique that busts
+        // the cap discards every enumeration already done for the cliques before it.
         // QuadraticAssignment-bur26a spent 74s enumerating and then returned empty on a later clique.
+        // The size check itself now happens while the bags are built, so no clique reaching here can
+        // exceed maxDomainSize.
         val cliqueDomainsByClique = new ArrayList<Map<Variable<?>, Domain<?>>>(maximal.size());
         for (val clique : maximal) {
             val cliqueVariableDomains = new java.util.HashMap<Variable<?>, Domain<?>>();
             clique.forEach(v -> cliqueVariableDomains.put(v, csp.getDomain(v)));
-            val cliqueDomainMaxSize = cliqueVariableDomains.values().stream()
-                    .map(Domain::size)
-                    .map(BigInteger::valueOf)
-                    .reduce(BigInteger.ONE, BigInteger::multiply);
-            if (cliqueDomainMaxSize.compareTo(BigInteger.valueOf(maxDomainSize)) > 0) {
-                log.debug("Maximum clique domain size {} exceeded by {}", maxDomainSize, cliqueDomainMaxSize);
-                return Optional.empty();
-            }
             cliqueDomainsByClique.add(cliqueVariableDomains);
         }
 
@@ -155,17 +150,38 @@ public class TreeDecomposerImpl implements TreeDecomposer {
      * {@link IllegalArgumentException}, regardless of which real constraint originally connected
      * them (2026-07-15).
      */
-    private @NonNull List<Set<Variable<?>>> getMaximalCliqueBags(@NonNull ConstraintSatisfactionProblem csp) {
+    private @NonNull Optional<List<Set<Variable<?>>>> getMaximalCliqueBags(
+            @NonNull ConstraintSatisfactionProblem csp, int maxDomainSize) {
         val neighbours = new HashMap<Variable<?>, Set<Variable<?>>>();
         csp.getNeighbours().forEach((v, ns) -> neighbours.put(v, new HashSet<>(ns)));
+        val maxJointSize = BigInteger.valueOf(maxDomainSize);
 
         val bags = new ArrayList<Set<Variable<?>>>();
         while (!neighbours.isEmpty()) {
+            // Elimination is where a problem too wide to decompose spends its time: each step's
+            // fill-in is quadratic in the bag, and the maximal-clique filter and clique graph after
+            // it are quadratic in the bag count. Checked per vertex, it is the one place that can
+            // stop that work early.
+            if (cancellation.isCancelled()) {
+                log.debug("Abandoning tree decomposition: cancelled during elimination");
+                return Optional.empty();
+            }
             // build bag = pick U neighbours (uneliminated)
             val pick = selectVertex(neighbours);
             val N = neighbours.get(pick);
             val bag = new HashSet<>(N);
             bag.add(pick);
+            // Every maximal clique is one of these bags, and a bag only ever grows into the clique
+            // containing it, so a bag over the cap means the decomposition is going to be declined.
+            // Saying so now, before the fill-in below and everything after it, is what keeps a wide
+            // problem from building a decomposition only to discard it.
+            val bagJointSize = bag.stream()
+                    .map(v -> BigInteger.valueOf(csp.getDomain(v).size()))
+                    .reduce(BigInteger.ONE, BigInteger::multiply);
+            if (bagJointSize.compareTo(maxJointSize) > 0) {
+                log.debug("Maximum clique domain size {} exceeded by {}", maxDomainSize, bagJointSize);
+                return Optional.empty();
+            }
             bags.add(bag);
 
             // add fill edges: make neighbors a clique
@@ -200,7 +216,7 @@ public class TreeDecomposerImpl implements TreeDecomposer {
             return false;
         });
         log.debug("Maximal = {}", maximal);
-        return maximal;
+        return Optional.of(maximal);
     }
 
     private Variable<?> selectVertex(@NonNull Map<Variable<?>, Set<Variable<?>>> neighbours) {
