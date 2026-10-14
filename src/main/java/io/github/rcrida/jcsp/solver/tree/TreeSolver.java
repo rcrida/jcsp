@@ -10,6 +10,7 @@ import io.github.rcrida.jcsp.domains.Domain;
 import io.github.rcrida.jcsp.consistency.arc.AC3;
 import io.github.rcrida.jcsp.consistency.arc.Arc;
 import io.github.rcrida.jcsp.solver.backtrackingsearch.order.DomainValuesOrderer;
+import io.github.rcrida.jcsp.solver.Cancellation;
 import io.github.rcrida.jcsp.solver.Solver;
 import io.github.rcrida.jcsp.solver.tree.selector.TreeUnassignedVariableSelector;
 import io.github.rcrida.jcsp.solver.tree.sorter.TopologicalSorter;
@@ -25,6 +26,7 @@ public class TreeSolver implements Solver {
     @NonNull TopologicalSorter topologicalSorter;
     @NonNull DomainValuesOrderer orderer;
     TreeUnassignedVariableSelector.Factory selectorFactory;
+    @NonNull Cancellation cancellation;
 
     @Override
     public Stream<Assignment> getSolutions(@NonNull ConstraintSatisfactionProblem tcsp) {
@@ -67,6 +69,11 @@ public class TreeSolver implements Solver {
 
     Stream<Assignment> populateAssignment(@NonNull ConstraintSatisfactionProblem tcsp, @NonNull Assignment assignment, @NonNull TreeUnassignedVariableSelector selector) {
         log.debug("Searching tree with assignment: {}", assignment);
+        // Truncates silently, like every getSolutions() stream; the callers that need to tell a
+        // cancelled search from an UNSAT one check the token themselves.
+        if (cancellation.isCancelled()) {
+            return Stream.empty();
+        }
         if (assignment.isComplete(tcsp)) {
             log.debug("Found tree solution {}", assignment);
             return Stream.of(assignment);

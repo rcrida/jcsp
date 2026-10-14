@@ -147,7 +147,12 @@ public class CutsetConditioningSolver extends SolverDecorator {
     @Override
     public Optional<Assignment> getSolution(@NonNull ConstraintSatisfactionProblem csp) {
         if (csp.isTree()) {
-            return treeSolver.getSolution(csp);
+            Optional<Assignment> solution = treeSolver.getSolution(csp);
+            if (solution.isEmpty() && cancellation.isCancelled()) {
+                statistics.updateCurrentSearchSpace(csp.getSearchSpace());
+                throw new SolverCancelledException(statistics);
+            }
+            return solution;
         }
         Optional<Decomposition> decomposition = decomposeCsp(csp);
         if (decomposition.isEmpty()) {

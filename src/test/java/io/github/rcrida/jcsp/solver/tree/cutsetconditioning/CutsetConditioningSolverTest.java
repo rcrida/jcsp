@@ -195,6 +195,25 @@ public class CutsetConditioningSolverTest {
     }
 
     @Test
+    void getSolution_treeProblemUnsatisfiableAndNotCancelled_isEmpty() {
+        val treeCsp = AUSTRALIA_WITHOUT_SA;
+        when(treeSolver.getSolution(treeCsp)).thenReturn(Optional.empty());
+        assertThat(cutsetConditioningSolver.getSolution(treeCsp)).isEmpty();
+    }
+
+    @Test
+    void getSolution_treeProblemCancelled_throwsSolverCancelledExceptionNotUnsat() {
+        val treeCsp = AUSTRALIA_WITHOUT_SA;
+        when(treeSolver.getSolution(treeCsp)).thenReturn(Optional.empty());
+        Cancellation cancellation = new Cancellation();
+        cancellation.cancel();
+        val cancellable = CutsetConditioningSolver.builder()
+                .inner(cycleCutsetSolver).treeSolver(treeSolver).cancellation(cancellation).build();
+        assertThatThrownBy(() -> cancellable.getSolution(treeCsp))
+                .isInstanceOf(SolverCancelledException.class);
+    }
+
+    @Test
     void getSolution_complexityImprovement() {
         val cutset = ConstraintSatisfactionProblem.builder()
                 .variableDomain(C, DOMAIN)

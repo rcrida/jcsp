@@ -8,6 +8,7 @@ import io.github.rcrida.jcsp.domains.Domain;
 import io.github.rcrida.jcsp.domains.EnumDomain;
 import io.github.rcrida.jcsp.domains.IntRangeDomain;
 import io.github.rcrida.jcsp.domains.IntervalDomain;
+import io.github.rcrida.jcsp.solver.Cancellation;
 import io.github.rcrida.jcsp.solver.backtrackingsearch.order.DefaultValueOrderer;
 import io.github.rcrida.jcsp.solver.tree.selector.TreeUnassignedVariableSelector;
 import io.github.rcrida.jcsp.solver.tree.sorter.BFSTopologicalSorter;
@@ -44,7 +45,15 @@ public class TreeSolverTest {
             .notEqualsConstraint(Q, NSW)
             .notEqualsConstraint(NSW, V)
             .build();
-    TreeSolver treeSolver = new TreeSolver(BFSTopologicalSorter.INSTANCE, DefaultValueOrderer.INSTANCE, TreeUnassignedVariableSelector.Factory.INSTANCE);
+    TreeSolver treeSolver = new TreeSolver(BFSTopologicalSorter.INSTANCE, DefaultValueOrderer.INSTANCE, TreeUnassignedVariableSelector.Factory.INSTANCE, Cancellation.NEVER);
+
+    @Test
+    void getSolutions_cancelled_truncatesSilently() {
+        val cancellation = new Cancellation();
+        cancellation.cancel();
+        val cancelled = new TreeSolver(BFSTopologicalSorter.INSTANCE, DefaultValueOrderer.INSTANCE, TreeUnassignedVariableSelector.Factory.INSTANCE, cancellation);
+        assertThat(cancelled.getSolutions(AUSTRALIA_WITHOUT_SA)).isEmpty();
+    }
 
     @Test
     void getSolution() {
