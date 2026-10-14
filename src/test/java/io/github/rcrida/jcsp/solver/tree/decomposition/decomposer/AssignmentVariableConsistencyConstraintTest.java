@@ -53,8 +53,35 @@ public class AssignmentVariableConsistencyConstraintTest {
     }
 
     @Test
+    void isSatisfiedBy_requiresEverySharedVariableToAgree() {
+        val both = AssignmentVariableConsistencyConstraint.builder().left(V1).right(V2)
+                .cliqueVariable(CLIQUE_VARIABLE).cliqueVariable(ANOTHER_CLIQUE_VARIABLE).build();
+        val left = Assignment.of(Map.of(CLIQUE_VARIABLE, VALUE_1, ANOTHER_CLIQUE_VARIABLE, VALUE_1));
+        val agrees = Assignment.of(Map.of(CLIQUE_VARIABLE, VALUE_1, ANOTHER_CLIQUE_VARIABLE, VALUE_1));
+        val firstDiffers = Assignment.of(Map.of(CLIQUE_VARIABLE, VALUE_2, ANOTHER_CLIQUE_VARIABLE, VALUE_1));
+        val secondDiffers = Assignment.of(Map.of(CLIQUE_VARIABLE, VALUE_1, ANOTHER_CLIQUE_VARIABLE, VALUE_2));
+        assertThat(both.isSatisfiedBy(Assignment.of(Map.of(V1, left, V2, agrees)))).isTrue();
+        // Each variable has a matching partner in some value, but no single value matches on both --
+        // exactly what a constraint per variable cannot express.
+        assertThat(both.isSatisfiedBy(Assignment.of(Map.of(V1, left, V2, firstDiffers)))).isFalse();
+        assertThat(both.isSatisfiedBy(Assignment.of(Map.of(V1, left, V2, secondDiffers)))).isFalse();
+    }
+
+    @Test
+    void isSatisfiedBy_comparesValuesByEqualityNotIdentity() {
+        // Integers outside the small-value cache are distinct objects: reference equality would call
+        // these different.
+        Object thousand1 = Integer.valueOf(1000);
+        Object thousand2 = Integer.valueOf(1000);
+        assertThat(thousand1).isNotSameAs(thousand2);
+        val big1 = Assignment.of(Map.of(CLIQUE_VARIABLE, thousand1));
+        val big2 = Assignment.of(Map.of(CLIQUE_VARIABLE, thousand2));
+        assertThat(CONSTRAINT.isSatisfiedBy(Assignment.of(Map.of(V1, big1, V2, big2)))).isTrue();
+    }
+
+    @Test
     void testToString() {
-        assertThat(CONSTRAINT.toString()).isEqualTo("<(V1, V2), CV1 clique consistent>");
+        assertThat(CONSTRAINT.toString()).isEqualTo("<(V1, V2), [CV1] clique consistent>");
     }
 
     @Test

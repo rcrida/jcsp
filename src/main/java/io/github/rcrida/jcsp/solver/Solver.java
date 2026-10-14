@@ -266,6 +266,8 @@ public interface Solver {
                     .treeDecomposer(new TreeDecomposerImpl(MinimumDegreeVariableSelector.Factory.INSTANCE, cancellation))
                     .treeSolver(treeSolver)
                     .targetTreewidth(7)
+                    .cancellation(cancellation)
+                    .statistics(config.getStatistics())
                     .build();
         }
 

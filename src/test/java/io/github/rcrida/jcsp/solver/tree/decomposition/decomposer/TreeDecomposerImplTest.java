@@ -84,12 +84,10 @@ public class TreeDecomposerImplTest {
         Variable<Assignment> treeVariable4 = VARIABLE_FACTORY.create("[V3, V4, V5]");
         assertThat(treeDecomposition.getVariableDomains()).containsOnlyKeys(treeVariable1, treeVariable2, treeVariable3, treeVariable4);
         assertThat(treeDecomposition.getConstraints()).containsOnly(
-                AssignmentVariableConsistencyConstraint.builder().left(treeVariable1).right(treeVariable2).cliqueVariable(V1).build(),
-                AssignmentVariableConsistencyConstraint.builder().left(treeVariable1).right(treeVariable2).cliqueVariable(V2).build(),
-                AssignmentVariableConsistencyConstraint.builder().left(treeVariable2).right(treeVariable3).cliqueVariable(V2).build(),
-                AssignmentVariableConsistencyConstraint.builder().left(treeVariable2).right(treeVariable3).cliqueVariable(V3).build(),
-                AssignmentVariableConsistencyConstraint.builder().left(treeVariable3).right(treeVariable4).cliqueVariable(V3).build(),
-                AssignmentVariableConsistencyConstraint.builder().left(treeVariable3).right(treeVariable4).cliqueVariable(V4).build()
+                // One constraint per tree edge, carrying the whole separator
+                AssignmentVariableConsistencyConstraint.builder().left(treeVariable1).right(treeVariable2).cliqueVariable(V1).cliqueVariable(V2).build(),
+                AssignmentVariableConsistencyConstraint.builder().left(treeVariable2).right(treeVariable3).cliqueVariable(V2).cliqueVariable(V3).build(),
+                AssignmentVariableConsistencyConstraint.builder().left(treeVariable3).right(treeVariable4).cliqueVariable(V3).cliqueVariable(V4).build()
         );
     }
 

@@ -114,3 +114,4 @@ section instead.
 | [0050](0050-the-objective-cut-is-an-ordinary-constraint.md) | The objective cut is an ordinary constraint, not a layer on the problem | Accepted |
 | [0051](0051-fail-driven-restarts-for-branch-and-bound.md) | Restart branch-and-bound on a geometric fail-driven schedule whose growing cutoff keeps a drained stream a proof | Accepted |
 | [0052](0052-assign-propagation-forced-variables-in-one-step.md) | Assign variables propagation has already forced to one value in a single step, instead of a search node each | Accepted |
+| [0053](0053-a-decomposed-refutation-is-final.md) | A decomposed refutation is final, and the decomposition declines as soon as it is too wide | Accepted |

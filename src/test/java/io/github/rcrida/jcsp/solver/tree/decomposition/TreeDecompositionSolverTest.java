@@ -4,7 +4,9 @@ import lombok.val;
 import io.github.rcrida.jcsp.ConstraintSatisfactionProblem;
 import io.github.rcrida.jcsp.assignments.Assignment;
 import io.github.rcrida.jcsp.domains.IntRangeDomain;
+import io.github.rcrida.jcsp.solver.Cancellation;
 import io.github.rcrida.jcsp.solver.Solver;
+import io.github.rcrida.jcsp.solver.SolverCancelledException;
 import io.github.rcrida.jcsp.solver.tree.decomposition.decomposer.TreeDecomposer;
 import io.github.rcrida.jcsp.variables.Variable;
 import org.junit.jupiter.api.BeforeEach;
@@ -18,9 +20,11 @@ import java.util.Optional;
 import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.when;
 
@@ -119,6 +123,30 @@ public class TreeDecompositionSolverTest {
         when(treeSolver.getSolution(TREE_CSP)).thenReturn(Optional.of(treeSolution));
 
         assertThat(solver.getSolution(ORIGINAL_CSP)).contains(originalAssignment);
+    }
+
+    @Test
+    void getSolution_treeProvesUnsatisfiable_isNotRedoneByInner() {
+        // The tree solver's empty answer is a proof. It used to be indistinguishable from "not
+        // decomposed" and fell through to the inner search, which redid the whole problem the slow
+        // way -- Dubois-050's tree refutes instantly, while its inner search never finished.
+        when(treeDecomposer.decompose(eq(ORIGINAL_CSP), anyInt())).thenReturn(Optional.of(TREE_CSP));
+        when(treeSolver.getSolution(TREE_CSP)).thenReturn(Optional.empty());
+
+        assertThat(solver.getSolution(ORIGINAL_CSP)).isEmpty();
+        verifyNoInteractions(defaultSolver);
+    }
+
+    @Test
+    void getSolution_treeSearchCancelled_throwsInsteadOfClaimingUnsatisfiable() {
+        val cancellation = new Cancellation();
+        cancellation.cancel();
+        val cancellable = TreeDecompositionSolver.builder().inner(defaultSolver).treeDecomposer(treeDecomposer)
+                .treeSolver(treeSolver).targetTreewidth(7).cancellation(cancellation).build();
+        when(treeDecomposer.decompose(eq(ORIGINAL_CSP), anyInt())).thenReturn(Optional.of(TREE_CSP));
+        when(treeSolver.getSolution(TREE_CSP)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> cancellable.getSolution(ORIGINAL_CSP)).isInstanceOf(SolverCancelledException.class);
     }
 
     @Test

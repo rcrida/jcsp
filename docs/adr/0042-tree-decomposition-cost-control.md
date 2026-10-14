@@ -90,3 +90,6 @@ it is a real behaviour change on the satisfaction chain, not only on the path AD
 
 `Cancellation`'s class Javadoc enumerates its check sites; the clique enumeration joins that list.
 Future additions should keep it accurate — it is the only place the set is written down.
+
+The all-cliques size check described under Decision has since moved earlier, into elimination itself,
+and elimination checks `Cancellation` too; see [ADR-0053](0053-a-decomposed-refutation-is-final.md).

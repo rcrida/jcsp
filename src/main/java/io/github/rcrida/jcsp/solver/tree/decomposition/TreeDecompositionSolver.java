@@ -1,13 +1,18 @@
 package io.github.rcrida.jcsp.solver.tree.decomposition;
 
+import lombok.Builder;
 import lombok.EqualsAndHashCode;
 import lombok.experimental.SuperBuilder;
 import lombok.extern.slf4j.Slf4j;
+import lombok.val;
 import io.github.rcrida.jcsp.ConstraintSatisfactionProblem;
 import io.github.rcrida.jcsp.assignments.Assignment;
+import io.github.rcrida.jcsp.assignments.Statistics;
 import io.github.rcrida.jcsp.domains.DiscreteDomain;
 import io.github.rcrida.jcsp.domains.Domain;
+import io.github.rcrida.jcsp.solver.Cancellation;
 import io.github.rcrida.jcsp.solver.Solver;
+import io.github.rcrida.jcsp.solver.SolverCancelledException;
 import io.github.rcrida.jcsp.solver.SolverDecorator;
 import io.github.rcrida.jcsp.solver.tree.decomposition.decomposer.TreeDecomposer;
 import org.jspecify.annotations.NonNull;
@@ -38,6 +43,8 @@ public class TreeDecompositionSolver extends SolverDecorator {
     @NonNull TreeDecomposer treeDecomposer;
     @NonNull Solver treeSolver;
     int targetTreewidth;
+    @Builder.Default @NonNull Cancellation cancellation = Cancellation.NEVER;
+    @Builder.Default @NonNull Statistics statistics = new Statistics();
 
     @Override
     public Stream<Assignment> getSolutions(@NonNull ConstraintSatisfactionProblem csp) {
@@ -55,9 +62,19 @@ public class TreeDecompositionSolver extends SolverDecorator {
      */
     @Override
     public Optional<Assignment> getSolution(@NonNull ConstraintSatisfactionProblem csp) {
-        return decomposeIfWorthwhile(csp)
-                .flatMap(treeCsp -> treeSolver.getSolution(treeCsp).map(this::recomposeAssignment))
-                .or(() -> getInner().getSolution(csp));
+        val treeCsp = decomposeIfWorthwhile(csp);
+        if (treeCsp.isEmpty()) {
+            return getInner().getSolution(csp);
+        }
+        // Once decomposed, the tree solver's answer is final: an empty result is a proof that the
+        // problem is unsatisfiable, so it must not fall through to the inner search, which would
+        // redo the whole problem the slow way. (Optional#flatMap/or cannot tell the two empties
+        // apart, which is how it used to.) The one empty that is not a proof is a cancelled search.
+        val solution = treeSolver.getSolution(treeCsp.get()).map(this::recomposeAssignment);
+        if (solution.isEmpty() && cancellation.isCancelled()) {
+            throw new SolverCancelledException(statistics);
+        }
+        return solution;
     }
 
     /**

@@ -115,15 +115,15 @@ public class TreeDecomposerImpl implements TreeDecomposer {
         for (val treeEntry : tree.entrySet()) {
             val clique = maximal.get(treeEntry.getKey());
             for (val neighbourIndex : treeEntry.getValue()) {
-                val neighbour = new HashSet<>(maximal.get(neighbourIndex));
-                neighbour.retainAll(clique);
-                neighbour.forEach(variable ->
-                    consistencyConstraints.add(AssignmentVariableConsistencyConstraint.builder()
-                            .left(cliqueVariables.get(treeEntry.getKey()))
-                            .right(cliqueVariables.get(neighbourIndex))
-                            .cliqueVariable(variable)
-                            .build())
-                );
+                val shared = new HashSet<>(maximal.get(neighbourIndex));
+                shared.retainAll(clique);
+                // One constraint for the whole separator -- see its Javadoc for why one per shared
+                // variable is not equivalent under arc consistency.
+                consistencyConstraints.add(AssignmentVariableConsistencyConstraint.builder()
+                        .left(cliqueVariables.get(treeEntry.getKey()))
+                        .right(cliqueVariables.get(neighbourIndex))
+                        .cliqueVariables(shared)
+                        .build());
             }
         }
         treeBuilder.constraints(consistencyConstraints);
