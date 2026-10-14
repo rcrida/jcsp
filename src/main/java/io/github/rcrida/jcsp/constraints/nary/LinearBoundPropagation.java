@@ -7,6 +7,7 @@ import io.github.rcrida.jcsp.domains.Domain;
 import io.github.rcrida.jcsp.variables.Variable;
 
 import java.util.ArrayList;
+import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -28,11 +29,75 @@ import java.util.Set;
  * is insufficient for {@code EQ} over gapped discrete domains.
  */
 final class LinearBoundPropagation {
+    private static final Set<Operator> BOUNDS_OPERATORS = EnumSet.of(Operator.EQ, Operator.LEQ, Operator.GEQ);
+
     private LinearBoundPropagation() {}
+
+    /** Whether {@link #propagateInt} does anything for {@code operator}. */
+    static boolean propagatesInt(Operator operator) {
+        return BOUNDS_OPERATORS.contains(operator) || operator == Operator.NEQ;
+    }
+
+    /**
+     * Whether {@link #propagateDouble} does anything for {@code operator}. {@code NEQ} is not among
+     * them: that pass derives bounds, which for a disequality it would wrongly treat as equality.
+     */
+    static boolean propagatesDouble(Operator operator) {
+        return BOUNDS_OPERATORS.contains(operator);
+    }
+
+    /**
+     * {@code Σ coefficients[i]*vars[i] ≠ bound} propagates only once a single term is left open:
+     * the sum of the fixed terms then leaves exactly one value for it that would reach the bound,
+     * and that value is removed. With every term fixed the constraint is violated when the sum is
+     * the bound. With two or more terms open nothing can be concluded, and bounds say nothing about
+     * a disequality, so this is a separate pass from the bounds derivation below. A term with
+     * coefficient {@code 0} never matters and is skipped whether or not it is fixed.
+     */
+    @SuppressWarnings("unchecked")
+    private static <N extends Number> Optional<Map<Variable<?>, Domain<?>>> propagateNotEqual(
+            List<Variable<N>> vars, int[] coeffs, int bound, Map<Variable<?>, Domain<?>> domains) {
+        long fixed = 0;
+        int open = -1;
+        for (int i = 0; i < vars.size(); i++) {
+            if (coeffs[i] == 0) continue;
+            Domain<?> domain = domains.get(vars.get(i));
+            if (domain.isSingleton()) {
+                fixed += (long) coeffs[i] * ((Number) domain.singleValue().orElseThrow()).longValue();
+            } else if (open >= 0) {
+                return Optional.of(Map.of());
+            } else {
+                open = i;
+            }
+        }
+        long remaining = bound - fixed;
+        if (open < 0) {
+            return remaining == 0 ? Optional.empty() : Optional.of(Map.of());
+        }
+        if (remaining % coeffs[open] != 0) {
+            return Optional.of(Map.of());
+        }
+        long forbidden = remaining / coeffs[open];
+        DiscreteDomain<N> domain = (DiscreteDomain<N>) domains.get(vars.get(open));
+        DiscreteDomain.Builder<N> builder = null;
+        for (N value : domain.toList()) {
+            if (value.longValue() == forbidden) {
+                builder = domain.toBuilder();
+                builder.delete(value);
+                break;
+            }
+        }
+        return builder == null
+                ? Optional.of(Map.of())
+                : Optional.of(Map.of(vars.get(open), builder.build()));
+    }
 
     static <N extends Number> Optional<Map<Variable<?>, Domain<?>>> propagateInt(
             List<Variable<N>> vars, int[] coeffs, int bound, Operator operator,
             Map<Variable<?>, Domain<?>> domains) {
+        if (operator == Operator.NEQ) {
+            return propagateNotEqual(vars, coeffs, bound, domains);
+        }
         int n = vars.size();
         int[] minContribs = new int[n];
         int[] maxContribs = new int[n];

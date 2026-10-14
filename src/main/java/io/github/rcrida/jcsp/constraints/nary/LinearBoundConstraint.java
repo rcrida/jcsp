@@ -13,11 +13,9 @@ import org.jspecify.annotations.NonNull;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Comparator;
-import java.util.EnumSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.Set;
 import java.util.stream.Collectors;
 
 /**
@@ -32,8 +30,6 @@ import java.util.stream.Collectors;
 @SuperBuilder
 @EqualsAndHashCode(callSuper = true)
 public class LinearBoundConstraint<N extends Number> extends NaryConstraint implements Propagatable {
-    private static final Set<Operator> PROPAGATING_OPERATORS = EnumSet.of(Operator.EQ, Operator.LEQ, Operator.GEQ);
-
     @Getter @NonNull private final Map<Variable<N>, N> coefficients;
     @Getter @NonNull private final Operator operator;
     @Getter @NonNull private final N bound;
@@ -59,14 +55,15 @@ public class LinearBoundConstraint<N extends Number> extends NaryConstraint impl
      * Bounds propagation for weighted sums. For each variable {@code v_i} with coefficient {@code c_i},
      * computes the tightest domain bounds consistent with the constraint given the current domains of
      * all other variables. Negative coefficients flip the min/max contributions and reverse the bound
-     * direction when deriving per-variable limits. Only applied for EQ, LEQ, and GEQ operators.
+     * direction when deriving per-variable limits. Applied for EQ, LEQ, and GEQ; NEQ removes the one
+     * value of the last open variable that would reach the bound, and only for integral bounds.
      */
     @Override
     public Optional<Map<Variable<?>, Domain<?>>> propagate(@NonNull Map<Variable<?>, Domain<?>> domains) {
-        if (!PROPAGATING_OPERATORS.contains(operator)) {
-            return Optional.of(Map.of());
+        if (bound instanceof Double || bound instanceof Float) {
+            return LinearBoundPropagation.propagatesDouble(operator) ? propagateDouble(domains) : Optional.of(Map.of());
         }
-        return (bound instanceof Double || bound instanceof Float) ? propagateDouble(domains) : propagateInt(domains);
+        return LinearBoundPropagation.propagatesInt(operator) ? propagateInt(domains) : Optional.of(Map.of());
     }
 
     @SuppressWarnings("unchecked")
@@ -102,6 +99,11 @@ public class LinearBoundConstraint<N extends Number> extends NaryConstraint impl
      */
     @Override
     public Optional<NogoodConstraint> explainInfeasible(@NonNull Map<Variable<?>, Domain<?>> domains) {
+        // A disequality is violated only by one exact combination, so a nogood over bounding
+        // intervals would claim far more than propagate() ever established.
+        if (operator == Operator.NEQ) {
+            return ValueSetNogoodConstraint.fromCurrentState(getVariables(), domains);
+        }
         return RangeNogoodConstraint.fromCurrentBounds(getVariables(), domains)
                 .or(() -> ValueSetNogoodConstraint.fromCurrentState(getVariables(), domains));
     }

@@ -234,11 +234,106 @@ public class LinearBoundConstraintTest {
 
     @Test
     void propagate_otherOperator_returnsNoChange() {
-        var neq = LinearBoundConstraint.of(Map.of(x, 2, y, 3), Operator.NEQ, 12);
+        var lt = LinearBoundConstraint.of(Map.of(x, 2, y, 3), Operator.LT, 12);
         var domains = Map.<Variable<?>, Domain<?>>of(
                 x, IntRangeDomain.of(0, 9),
                 y, IntRangeDomain.of(0, 9));
-        var result = neq.propagate(domains);
+        var result = lt.propagate(domains);
+        assertThat(result).isPresent();
+        assertThat(result.get()).isEmpty();
+    }
+
+    // ── NEQ: prunes only once a single term is left open ──
+
+    private static Set<?> values(Map<Variable<?>, Domain<?>> updated, Variable<?> variable) {
+        return Set.copyOf(((DiscreteDomain<?>) updated.get(variable)).toList());
+    }
+
+    @Test
+    void propagate_neq_oneOpenTerm_removesTheValueThatReachesTheBound() {
+        // 2*3 + 3*y != 12, so y loses 2 and nothing else.
+        var neq = LinearBoundConstraint.of(Map.of(x, 2, y, 3), Operator.NEQ, 12);
+        var result = neq.propagate(Map.of(x, IntRangeDomain.of(3, 3), y, IntRangeDomain.of(0, 9)));
+        assertThat(result).isPresent();
+        assertThat(result.get()).containsOnlyKeys(y);
+        assertThat(values(result.get(), y)).isEqualTo(Set.of(0, 1, 3, 4, 5, 6, 7, 8, 9));
+    }
+
+    @Test
+    void propagate_neq_negativeCoefficientOnTheOpenTerm() {
+        // 2*3 - 3*y != 0, so y loses 2.
+        var neq = LinearBoundConstraint.of(Map.of(x, 2, y, -3), Operator.NEQ, 0);
+        var result = neq.propagate(Map.of(x, IntRangeDomain.of(3, 3), y, IntRangeDomain.of(0, 9)));
+        assertThat(values(result.get(), y)).isEqualTo(Set.of(0, 1, 3, 4, 5, 6, 7, 8, 9));
+    }
+
+    @Test
+    void propagate_neq_remainderNotDivisibleByTheCoefficient_changesNothing() {
+        // 2*3 + 3*y == 13 has no integer solution in y, so there is nothing to forbid.
+        var neq = LinearBoundConstraint.of(Map.of(x, 2, y, 3), Operator.NEQ, 13);
+        var result = neq.propagate(Map.of(x, IntRangeDomain.of(3, 3), y, IntRangeDomain.of(0, 9)));
+        assertThat(result).isPresent();
+        assertThat(result.get()).isEmpty();
+    }
+
+    @Test
+    void propagate_neq_valueAlreadyAbsent_changesNothing() {
+        var neq = LinearBoundConstraint.of(Map.of(x, 2, y, 3), Operator.NEQ, 12);
+        var result = neq.propagate(Map.of(x, IntRangeDomain.of(3, 3), y, IntRangeDomain.of(3, 9)));
+        assertThat(result).isPresent();
+        assertThat(result.get()).isEmpty();
+    }
+
+    @Test
+    void propagate_neq_twoOpenTerms_concludesNothing() {
+        var neq = LinearBoundConstraint.of(Map.of(x, 2, y, 3), Operator.NEQ, 12);
+        var result = neq.propagate(Map.of(x, IntRangeDomain.of(0, 9), y, IntRangeDomain.of(0, 9)));
+        assertThat(result).isPresent();
+        assertThat(result.get()).isEmpty();
+    }
+
+    @Test
+    void propagate_neq_zeroCoefficientTermIsIgnoredWhetherOrNotFixed() {
+        // z is open but contributes nothing, so y is still the only open term that matters.
+        Variable<Integer> z = F.create("z");
+        var neq = LinearBoundConstraint.of(Map.of(x, 2, y, 3, z, 0), Operator.NEQ, 12);
+        var result = neq.propagate(Map.of(
+                x, IntRangeDomain.of(3, 3), y, IntRangeDomain.of(0, 9), z, IntRangeDomain.of(0, 9)));
+        assertThat(result.get()).containsOnlyKeys(y);
+        assertThat(values(result.get(), y)).isEqualTo(Set.of(0, 1, 3, 4, 5, 6, 7, 8, 9));
+    }
+
+    @Test
+    void propagate_neq_everyTermFixedAtTheBound_isInfeasible() {
+        var neq = LinearBoundConstraint.of(Map.of(x, 2, y, 3), Operator.NEQ, 12);
+        assertThat(neq.propagate(Map.of(x, IntRangeDomain.of(3, 3), y, IntRangeDomain.of(2, 2)))).isEmpty();
+    }
+
+    @Test
+    void propagate_neq_everyTermFixedAwayFromTheBound_isFeasible() {
+        var neq = LinearBoundConstraint.of(Map.of(x, 2, y, 3), Operator.NEQ, 12);
+        var result = neq.propagate(Map.of(x, IntRangeDomain.of(3, 3), y, IntRangeDomain.of(5, 5)));
+        assertThat(result).isPresent();
+        assertThat(result.get()).isEmpty();
+    }
+
+    @Test
+    void propagateWithReasons_neq_citesTheExactCombinationNotItsBounds() {
+        // Only one exact combination violates a disequality, so a nogood over bounding intervals
+        // would claim more than propagate() established; the reason must be the ground values.
+        var neq = LinearBoundConstraint.of(Map.of(x, 2, y, 3), Operator.NEQ, 12);
+        var result = neq.propagateWithReasons(Map.of(x, IntRangeDomain.of(3, 3), y, IntRangeDomain.of(2, 2)));
+        assertThat(result.isInfeasible()).isTrue();
+        assertThat(result.reason()).isEqualTo(GroundNogoodConstraint.of(Map.of(x, 3, y, 2)));
+    }
+
+    @Test
+    void propagate_neq_floatingPointBound_isNotPropagated() {
+        // The bounds pass would read a disequality as an equality, so it is deliberately not run.
+        Variable<Double> dx = F.create("dx");
+        Variable<Double> dy = F.create("dy");
+        var neq = LinearBoundConstraint.of(Map.of(dx, 2.0, dy, 3.0), Operator.NEQ, 6.0);
+        var result = neq.propagate(Map.of(dx, IntervalDomain.of(3.0, 3.0), dy, IntervalDomain.of(0.0, 0.0)));
         assertThat(result).isPresent();
         assertThat(result.get()).isEmpty();
     }

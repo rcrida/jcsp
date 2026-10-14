@@ -184,11 +184,80 @@ public class SumBoundConstraintTest {
 
     @Test
     void propagate_otherOperator_returnsNoChange() {
-        var c = SumBoundConstraint.of(Set.of(v1, v2), Operator.NEQ, 5);
+        var c = SumBoundConstraint.of(Set.of(v1, v2), Operator.LT, 5);
         var domains = Map.<Variable<?>, io.github.rcrida.jcsp.domains.Domain<?>>of(
                 v1, IntRangeDomain.of(1, 9),
                 v2, IntRangeDomain.of(1, 9));
         var result = c.propagate(domains);
+        assertThat(result).isPresent();
+        assertThat(result.get()).isEmpty();
+    }
+
+    // ── NEQ: prunes only once a single term is left open ──
+
+    SumBoundConstraint<Integer> neq10() {
+        return SumBoundConstraint.of(Set.of(v1, v2, v3), Operator.NEQ, 10);
+    }
+
+    @Test
+    void propagate_neq_oneOpenTerm_removesTheValueThatReachesTheBound() {
+        // 3 + 3 + v3 != 10, so v3 loses 4 and nothing else.
+        var result = neq10().propagate(Map.of(
+                v1, IntRangeDomain.of(3, 3), v2, IntRangeDomain.of(3, 3), v3, IntRangeDomain.of(1, 9)));
+        assertThat(result).isPresent();
+        assertThat(result.get()).containsOnlyKeys(v3);
+        assertThat(Set.copyOf(((DiscreteDomain<?>) result.get().get(v3)).toList()))
+                .isEqualTo(Set.of(1, 2, 3, 5, 6, 7, 8, 9));
+    }
+
+    @Test
+    void propagate_neq_oneOpenTerm_valueAlreadyAbsent_changesNothing() {
+        var result = neq10().propagate(Map.of(
+                v1, IntRangeDomain.of(3, 3), v2, IntRangeDomain.of(3, 3), v3, IntRangeDomain.of(5, 9)));
+        assertThat(result).isPresent();
+        assertThat(result.get()).isEmpty();
+    }
+
+    @Test
+    void propagate_neq_twoOpenTerms_concludesNothing() {
+        var result = neq10().propagate(Map.of(
+                v1, IntRangeDomain.of(1, 9), v2, IntRangeDomain.of(1, 9), v3, IntRangeDomain.of(3, 3)));
+        assertThat(result).isPresent();
+        assertThat(result.get()).isEmpty();
+    }
+
+    @Test
+    void propagate_neq_everyTermFixedAtTheBound_isInfeasible() {
+        assertThat(neq10().propagate(Map.of(
+                v1, IntRangeDomain.of(3, 3), v2, IntRangeDomain.of(3, 3), v3, IntRangeDomain.of(4, 4)))).isEmpty();
+    }
+
+    @Test
+    void propagate_neq_everyTermFixedAwayFromTheBound_isFeasible() {
+        var result = neq10().propagate(Map.of(
+                v1, IntRangeDomain.of(3, 3), v2, IntRangeDomain.of(3, 3), v3, IntRangeDomain.of(5, 5)));
+        assertThat(result).isPresent();
+        assertThat(result.get()).isEmpty();
+    }
+
+    @Test
+    void propagateWithReasons_neq_citesTheExactCombinationNotItsBounds() {
+        // A bounds nogood here would claim every variable inside [3,3]/[3,3]/[4,4] is infeasible,
+        // which is true -- but only because each is a singleton. The same citation over wider
+        // intervals would be unsound for a disequality, so the reason must be the ground combination.
+        var result = neq10().propagateWithReasons(Map.of(
+                v1, IntRangeDomain.of(3, 3), v2, IntRangeDomain.of(3, 3), v3, IntRangeDomain.of(4, 4)));
+        assertThat(result.isInfeasible()).isTrue();
+        assertThat(result.reason()).isEqualTo(GroundNogoodConstraint.of(Map.of(v1, 3, v2, 3, v3, 4)));
+    }
+
+    @Test
+    void propagate_neq_floatingPointBound_isNotPropagated() {
+        // The bounds pass would read a disequality as an equality, so it is deliberately not run.
+        Variable<Double> d1 = F.create("d1");
+        Variable<Double> d2 = F.create("d2");
+        var c = SumBoundConstraint.of(Set.of(d1, d2), Operator.NEQ, 5.0);
+        var result = c.propagate(Map.of(d1, IntervalDomain.of(5.0, 5.0), d2, IntervalDomain.of(0.0, 0.0)));
         assertThat(result).isPresent();
         assertThat(result.get()).isEmpty();
     }
