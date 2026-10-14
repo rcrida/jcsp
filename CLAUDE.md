@@ -255,6 +255,7 @@ Everything else is in each class's own Javadoc.
   - `NogoodPropagationBenchmark` — nogood-store overhead.
   - `CsplibBenchmarks` — JMH ([ADR-0013](docs/adr/0013-in-tree-jmh-benchmarks.md)).
   - `Xcsp3CompetitionRunner` — runs the bundled corpus at `src/test/resources/xcsp3/competition/`, one process per instance, cross-checking every solution with `SolutionChecker`. Use it for regression checks after parser or solver changes.
+  - `src/test/resources/xcsp3/sat/` — SAT-shaped instances from the XCSP3 `Sat` and `Dubois` series, kept out of the competition corpus so its sweep time is unaffected. Pass it to `Xcsp3CompetitionRunner` as the instance directory.
 
 Run any of them with:
 
