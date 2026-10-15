@@ -15,6 +15,7 @@ import org.jspecify.annotations.NonNull;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
@@ -135,6 +136,23 @@ public record Assignment(@Singular Map<Variable<?>, Object> values, Statistics s
         val next = toBuilder().value(variable, value).build();
         next.statistics.incrementNodesExplored();
         next.listener.onNodeExplored(variable, value, next);
+        return next;
+    }
+
+    /**
+     * This assignment extended with every entry of {@code additions}, copying the values once
+     * rather than once per entry as repeated {@link #withValue} would. Each entry still counts as
+     * an explored node and fires {@link SolverListener#onNodeExplored}, but every event carries the
+     * finished assignment, not an intermediate one.
+     */
+    public Assignment withValues(@NonNull Map<Variable<?>, Object> additions) {
+        Map<Variable<?>, Object> merged = new LinkedHashMap<>(values);
+        merged.putAll(additions);
+        val next = ofTrusted(merged, statistics, listener, cancellation);
+        additions.forEach((variable, value) -> {
+            statistics.incrementNodesExplored();
+            listener.onNodeExplored(variable, value, next);
+        });
         return next;
     }
 

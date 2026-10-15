@@ -5,6 +5,7 @@ import io.github.rcrida.jcsp.ConstraintSatisfactionProblem;
 import io.github.rcrida.jcsp.constraints.nary.GroundNogoodConstraint;
 import io.github.rcrida.jcsp.constraints.nary.NogoodConstraint;
 import io.github.rcrida.jcsp.domains.Domain;
+import io.github.rcrida.jcsp.solver.Cancellation;
 import io.github.rcrida.jcsp.solver.listener.SolverListener;
 import io.github.rcrida.jcsp.variables.Variable;
 import org.junit.jupiter.api.Test;
@@ -12,6 +13,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Set;
 import java.util.function.Predicate;
@@ -88,6 +90,54 @@ public class AssignmentTest {
         assertThat(captured[0]).isSameAs(variable);
         assertThat(captured[1]).isSameAs(value);
         assertThat(captured[2]).isSameAs(next);
+    }
+
+    @Test
+    void withValuesAddsEveryEntryAndLeavesTheOriginalUntouched() {
+        val assignment = Assignment.of(Map.of(variable, value));
+
+        val next = assignment.withValues(Map.of(anotherVariable, anotherValue));
+
+        assertThat(next.getValues()).containsExactlyInAnyOrderEntriesOf(Map.of(variable, value, anotherVariable, anotherValue));
+        assertThat(assignment.getValues()).containsExactlyInAnyOrderEntriesOf(Map.of(variable, value));
+    }
+
+    @Test
+    void withValuesCountsEachEntryAsAnExploredNode() {
+        val assignment = Assignment.empty();
+
+        val next = assignment.withValues(Map.of(variable, value, anotherVariable, anotherValue));
+
+        assertThat(assignment.getStatistics().getNodesExplored()).isEqualTo(2);
+        assertThat(next.getStatistics()).isSameAs(assignment.getStatistics());
+    }
+
+    @Test
+    void withValuesNotifiesTheListenerOncePerEntryWithTheFinishedAssignment() {
+        Map<Variable<?>, Assignment> seen = new LinkedHashMap<>();
+        SolverListener recorder = new SolverListener() {
+            @Override
+            public void onNodeExplored(Variable<?> v, Object v2, Assignment a) {
+                seen.put(v, a);
+            }
+        };
+        val assignment = Assignment.builder().listener(recorder).build();
+
+        val next = assignment.withValues(Map.of(variable, value, anotherVariable, anotherValue));
+
+        assertThat(seen).containsOnlyKeys(variable, anotherVariable);
+        assertThat(seen.values()).allSatisfy(a -> assertThat(a).isSameAs(next));
+    }
+
+    @Test
+    void withValuesKeepsTheCancellationAndListener() {
+        val cancellation = new Cancellation();
+        val assignment = Assignment.builder().cancellation(cancellation).build();
+
+        val next = assignment.withValues(Map.of(variable, value));
+
+        assertThat(next.cancellation()).isSameAs(cancellation);
+        assertThat(next.listener()).isSameAs(SolverListener.NONE);
     }
 
     @Test

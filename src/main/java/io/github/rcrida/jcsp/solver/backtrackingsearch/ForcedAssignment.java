@@ -10,6 +10,7 @@ import org.jspecify.annotations.NonNull;
 
 import java.util.Collections;
 import java.util.IdentityHashMap;
+import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
@@ -43,7 +44,7 @@ public final class ForcedAssignment {
     @SuppressWarnings("unchecked")
     public static @NonNull Optional<Assignment> extend(@NonNull ConstraintSatisfactionProblem csp,
                                                        @NonNull Assignment assignment) {
-        Assignment extended = assignment;
+        Map<Variable<?>, Object> forced = null;
         Set<Constraint> touched = null;
         Variable<?> last = null;
         for (Map.Entry<Variable<?>, Domain<?>> entry : csp.getVariableDomains().entrySet()) {
@@ -52,14 +53,19 @@ public final class ForcedAssignment {
                 continue;
             }
             Variable<Object> variable = (Variable<Object>) entry.getKey();
-            extended = extended.withValue(variable, domain.singleValue().orElseThrow());
             if (touched == null) {
+                forced = new LinkedHashMap<>();
                 touched = Collections.newSetFromMap(new IdentityHashMap<>());
             }
+            forced.put(variable, domain.singleValue().orElseThrow());
             touched.addAll(csp.getConstraintsTouching(variable));
             last = variable;
         }
-        if (touched == null || extended.isConsistentAmong(touched)) {
+        if (touched == null) {
+            return Optional.of(assignment);
+        }
+        Assignment extended = assignment.withValues(forced);
+        if (extended.isConsistentAmong(touched)) {
             return Optional.of(extended);
         }
         extended.getStatistics().incrementBacktracks();
