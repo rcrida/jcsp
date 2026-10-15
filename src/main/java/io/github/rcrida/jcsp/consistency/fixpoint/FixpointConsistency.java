@@ -3,6 +3,7 @@ package io.github.rcrida.jcsp.consistency.fixpoint;
 import io.github.rcrida.jcsp.ConstraintSatisfactionProblem;
 import io.github.rcrida.jcsp.consistency.ConsistencyResult;
 import io.github.rcrida.jcsp.consistency.ConstraintConsistency;
+import io.github.rcrida.jcsp.consistency.DomainOverlay;
 import io.github.rcrida.jcsp.consistency.Propagatable;
 import io.github.rcrida.jcsp.constraints.Constraint;
 import io.github.rcrida.jcsp.constraints.nary.NogoodConstraint;
@@ -18,7 +19,9 @@ import org.jspecify.annotations.Nullable;
 
 import java.util.ArrayList;
 import java.util.BitSet;
+import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -187,27 +190,38 @@ public class FixpointConsistency implements ConstraintConsistency {
     @Override
     public Optional<ConstraintSatisfactionProblem> apply(ConstraintSatisfactionProblem csp,
                                                           @Nullable Set<Variable<?>> changedSinceLastRun) {
-        FilterCache cache = filterCache(csp);
+        Map<Variable<?>, Domain<?>> updates = new HashMap<>();
+        return narrow(csp, DomainOverlay.of(csp.getVariableDomains(), updates), updates, changedSinceLastRun)
+                .map(changed -> csp.withDomains(updates));
+    }
+
+    /**
+     * Runs this type's constraints to their own fixpoint against {@code view}, writing each
+     * narrowing into {@code updates} as it goes so the next constraint sees it.
+     */
+    @Override
+    public Optional<Set<Variable<?>>> narrow(ConstraintSatisfactionProblem csp,
+                                             Map<Variable<?>, Domain<?>> view,
+                                             Map<Variable<?>, Domain<?>> updates,
+                                             @Nullable Set<Variable<?>> changedSinceLastRun) {
         var name = constraintType.getSimpleName();
-        ConstraintQueue queue = new ConstraintQueue(cache, changedSinceLastRun);
-        if (queue.isEmpty()) {
-            return Optional.of(csp);
-        }
-        DomainAccumulator domains = new DomainAccumulator(csp.getVariableDomains());
+        ConstraintQueue queue = new ConstraintQueue(filterCache(csp), changedSinceLastRun);
+        Set<Variable<?>> changed = new HashSet<>();
         for (Propagatable constraint = queue.poll(); constraint != null; constraint = queue.poll()) {
-            var result = constraint.propagate(domains.view());
+            var result = constraint.propagate(view);
             if (result.isEmpty()) {
                 log.debug("{}: infeasible detected", name);
                 return Optional.empty();
             }
-            var updates = result.get();
-            if (!updates.isEmpty()) {
-                domains.record(updates);
-                queue.wake(updates.keySet());
+            var narrowed = result.get();
+            if (!narrowed.isEmpty()) {
+                updates.putAll(narrowed);
+                changed.addAll(narrowed.keySet());
+                queue.wake(narrowed.keySet());
             }
         }
         log.debug("{}: fixpoint reached", name);
-        return Optional.of(domains.finish(csp));
+        return Optional.of(Collections.unmodifiableSet(changed));
     }
 
     /**

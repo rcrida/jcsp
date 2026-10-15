@@ -208,6 +208,59 @@ public class FixpointPropagationTest {
     }
 
     @Test
+    void isObserved_isTrueWhenDebugLoggingOrAListenerIsWatching() {
+        SolverListener listener = new SolverListener() {};
+
+        assertThat(FixpointPropagation.isObserved(false, SolverListener.NONE)).isFalse();
+        assertThat(FixpointPropagation.isObserved(true, SolverListener.NONE)).isTrue();
+        assertThat(FixpointPropagation.isObserved(false, listener)).isTrue();
+    }
+
+    @Test
+    void applyFixpoint_cancelledBetweenPropagators_throwsWithoutBuildingTheFinalProblem() {
+        // Cancelled by the first propagator's own narrowing, so the loop is already running when
+        // it notices -- the in-place path, which has no current problem to hand checkCancelled
+        // and has to build one from the updates so far.
+        Variable<Integer> x = F.create("midcancelx");
+        var csp = ConstraintSatisfactionProblem.builder().variableDomain(x, IntRangeDomain.of(1, 5)).build();
+        var cancellation = new Cancellation();
+        var statistics = new Statistics();
+        ConstraintConsistency cancelsWhileNarrowing = problem -> {
+            cancellation.cancel();
+            return java.util.Optional.of(problem.withDomain(x, IntRangeDomain.of(1, 2)));
+        };
+        var propagation = FixpointPropagation.builder()
+                .propagators(java.util.List.of(cancelsWhileNarrowing))
+                .build();
+
+        assertThatThrownBy(() -> propagation.applyFixpoint(csp, null, SolverListener.NONE, statistics, cancellation))
+                .isInstanceOf(SolverCancelledException.class)
+                .extracting(e -> ((SolverCancelledException) e).getStatistics())
+                .isSameAs(statistics);
+    }
+
+    @Test
+    void applyFixpoint_reachesTheSameDomainsWhetherOrNotAnythingIsObserving() {
+        // A listener switches to the per-propagator loop; the in-place loop must agree with it.
+        Variable<Integer> a = F.create("eqa"), b = F.create("eqb"), c = F.create("eqc");
+        var csp = ConstraintSatisfactionProblem.builder()
+                .variableDomain(a, IntRangeDomain.of(0, 5))
+                .variableDomain(b, IntRangeDomain.of(0, 5))
+                .variableDomain(c, IntRangeDomain.of(0, 5))
+                .offsetConstraint(a, 1, io.github.rcrida.jcsp.constraints.Operator.LEQ, b)
+                .offsetConstraint(b, 1, io.github.rcrida.jcsp.constraints.Operator.LEQ, c)
+                .build();
+
+        var inPlace = FixpointPropagation.FULL.applyFixpoint(csp, null, SolverListener.NONE, new Statistics(), Cancellation.NEVER);
+        var observed = FixpointPropagation.FULL.applyFixpoint(csp, null, new SolverListener() {}, new Statistics(), Cancellation.NEVER);
+
+        assertThat(inPlace).isPresent();
+        assertThat(inPlace.get().getDomain(a)).isEqualTo(IntRangeDomain.of(0, 3));
+        assertThat(inPlace.get().getDomain(c)).isEqualTo(IntRangeDomain.of(2, 5));
+        assertThat(inPlace.get().getVariableDomains()).isEqualTo(observed.orElseThrow().getVariableDomains());
+    }
+
+    @Test
     void propagatorThatDoesNotConvergeInternally_isRewokenByItsOwnNarrowing() {
         // Worklist#wake skips re-queueing the propagator that caused a change only when that
         // propagator converges internally; one that does not must be woken by its own narrowing.

@@ -11,6 +11,7 @@ import io.github.rcrida.jcsp.ConstraintSatisfactionProblem;
 import io.github.rcrida.jcsp.assignments.Statistics;
 import io.github.rcrida.jcsp.consistency.ConsistencyResult;
 import io.github.rcrida.jcsp.consistency.ConstraintConsistency;
+import io.github.rcrida.jcsp.consistency.DomainOverlay;
 import io.github.rcrida.jcsp.consistency.fixpoint.FixpointConsistency;
 import io.github.rcrida.jcsp.consistency.fixpoint.NogoodFixpointConsistency;
 import io.github.rcrida.jcsp.consistency.arc.AC3;
@@ -95,7 +96,6 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicReference;
@@ -372,8 +372,31 @@ public class FixpointPropagation {
             @NonNull SolverListener listener, @NonNull Statistics statistics, @NonNull Cancellation cancellation) {
         log.debug("applyFixpoint");
         checkCancelled(csp, statistics, cancellation);
-        var current = csp;
         var worklist = new Worklist(propagators, coverageFor(csp), initialSeed);
+        return isObserved(log.isDebugEnabled(), listener)
+                ? applyObserved(csp, worklist, listener, statistics, cancellation)
+                : applyInPlace(csp, worklist, statistics, cancellation);
+    }
+
+    /**
+     * Whether anything is watching each propagator's progress: debug logging, or a listener other
+     * than {@link SolverListener#NONE} (reference equality, not {@code instanceof}). Package-private
+     * so a same-package test can exercise every combination, since the debug level is fixed at
+     * first use.
+     */
+    static boolean isObserved(boolean debugEnabled, SolverListener listener) {
+        return debugEnabled || listener != SolverListener.NONE;
+    }
+
+    /**
+     * The fixpoint loop when anything is watching each propagator's progress: a new problem per
+     * propagator, because {@link SolverListener#onPropagatorProgress} is handed the domains before
+     * and after it.
+     */
+    private Optional<ConstraintSatisfactionProblem> applyObserved(
+            ConstraintSatisfactionProblem csp, Worklist worklist, SolverListener listener,
+            Statistics statistics, Cancellation cancellation) {
+        var current = csp;
         for (int i = worklist.next(); i >= 0; i = worklist.next()) {
             checkCancelled(current, statistics, cancellation);
             var propagator = propagators.get(i);
@@ -389,12 +412,38 @@ public class FixpointPropagation {
         return Optional.of(current);
     }
 
+    /**
+     * The same fixpoint without a problem per propagator: every {@link
+     * ConstraintConsistency#narrow} writes into one shared update map, read back through a {@link
+     * DomainOverlay}, and the problem is built once at the end.
+     */
+    private Optional<ConstraintSatisfactionProblem> applyInPlace(
+            ConstraintSatisfactionProblem csp, Worklist worklist, Statistics statistics, Cancellation cancellation) {
+        Map<Variable<?>, Domain<?>> updates = new HashMap<>();
+        var view = DomainOverlay.of(csp.getVariableDomains(), updates);
+        for (int i = worklist.next(); i >= 0; i = worklist.next()) {
+            if (cancellation.isCancelled()) {
+                throw cancelled(csp.withDomains(updates), statistics);
+            }
+            var changed = propagators.get(i).narrow(csp, view, updates, worklist.takeDirty(i));
+            if (changed.isEmpty()) return Optional.empty();
+            if (!changed.get().isEmpty()) {
+                worklist.wake(i, changed.get());
+            }
+        }
+        return Optional.of(csp.withDomains(updates));
+    }
+
     private static void checkCancelled(ConstraintSatisfactionProblem csp, Statistics statistics,
                                         Cancellation cancellation) {
         if (cancellation.isCancelled()) {
-            statistics.updateCurrentSearchSpace(csp.getSearchSpace());
-            throw new SolverCancelledException(statistics);
+            throw cancelled(csp, statistics);
         }
+    }
+
+    private static SolverCancelledException cancelled(ConstraintSatisfactionProblem csp, Statistics statistics) {
+        statistics.updateCurrentSearchSpace(csp.getSearchSpace());
+        return new SolverCancelledException(statistics);
     }
 
     /**
@@ -610,13 +659,7 @@ public class FixpointPropagation {
      */
     public static Set<Variable<?>> changedVariables(Map<Variable<?>, Domain<?>> before,
                                                       Map<Variable<?>, Domain<?>> after) {
-        Set<Variable<?>> result = new HashSet<>();
-        for (var entry : after.entrySet()) {
-            if (!Objects.equals(entry.getValue(), before.get(entry.getKey()))) {
-                result.add(entry.getKey());
-            }
-        }
-        return Collections.unmodifiableSet(result);
+        return ConstraintConsistency.changedVariables(before, after);
     }
 
     /**
@@ -680,7 +723,7 @@ public class FixpointPropagation {
                                        @NonNull ConstraintSatisfactionProblem after,
                                        boolean debugEnabled,
                                        @NonNull SolverListener listener) {
-        if (!debugEnabled && listener == SolverListener.NONE) return;
+        if (!isObserved(debugEnabled, listener)) return;
         SumComparison sums = notifyIfDomainSumReduced(propagator, before, after, listener);
         if (sums.reduced()) {
             log.debug("{} reduced domain-sum from {} to {}", propagator, sums.before(), sums.after());

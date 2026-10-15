@@ -2,9 +2,14 @@ package io.github.rcrida.jcsp.consistency;
 
 import io.github.rcrida.jcsp.ConstraintSatisfactionProblem;
 import io.github.rcrida.jcsp.constraints.nary.NogoodConstraint;
+import io.github.rcrida.jcsp.domains.Domain;
 import io.github.rcrida.jcsp.variables.Variable;
 import org.jspecify.annotations.Nullable;
 
+import java.util.Collections;
+import java.util.HashSet;
+import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 
@@ -37,6 +42,51 @@ public interface ConstraintConsistency {
     default Optional<ConstraintSatisfactionProblem> apply(ConstraintSatisfactionProblem csp,
                                                            @Nullable Set<Variable<?>> changedSinceLastRun) {
         return apply(csp);
+    }
+
+    /**
+     * Variant of {@link #apply(ConstraintSatisfactionProblem, Set)} that narrows in place instead of
+     * returning a new problem, so a caller running several passes to a shared fixpoint copies the
+     * domain map once at the end rather than once per pass. {@code updates} holds every narrowing
+     * made so far, and {@code view} is the problem's own domains with {@code updates} layered over
+     * them (see {@link DomainOverlay}) -- it reads {@code updates} live, so a pass that writes to
+     * {@code updates} sees its own narrowings. Writes this pass's narrowings into {@code updates}
+     * and returns the variables whose domain actually changed, unmodifiable and never touched
+     * again: callers share one such set across every pass it wakes. {@link Optional#empty()}
+     * means infeasible, after which {@code updates} is meaningless.
+     * <p>
+     * The default is correct for any implementor, at the old cost: it applies the pass to a copy of
+     * {@code csp} carrying {@code updates} and diffs the result.
+     */
+    default Optional<Set<Variable<?>>> narrow(ConstraintSatisfactionProblem csp,
+                                              Map<Variable<?>, Domain<?>> view,
+                                              Map<Variable<?>, Domain<?>> updates,
+                                              @Nullable Set<Variable<?>> changedSinceLastRun) {
+        ConstraintSatisfactionProblem before = csp.withDomains(updates);
+        return apply(before, changedSinceLastRun).map(after -> {
+            Set<Variable<?>> changed = changedVariables(before.getVariableDomains(), after.getVariableDomains());
+            for (Variable<?> variable : changed) {
+                updates.put(variable, after.getVariableDomains().get(variable));
+            }
+            return changed;
+        });
+    }
+
+    /**
+     * Every variable whose domain in {@code after} differs from its domain in {@code before}
+     * (added/removed variables cannot occur -- every pass narrows an existing domain, never changes
+     * the variable set). Unmodifiable, and effectively immutable rather than merely a read-only
+     * view: the backing {@link HashSet} is built here and no other reference to it escapes.
+     */
+    static Set<Variable<?>> changedVariables(Map<Variable<?>, Domain<?>> before,
+                                             Map<Variable<?>, Domain<?>> after) {
+        Set<Variable<?>> result = new HashSet<>();
+        for (var entry : after.entrySet()) {
+            if (!Objects.equals(entry.getValue(), before.get(entry.getKey()))) {
+                result.add(entry.getKey());
+            }
+        }
+        return Collections.unmodifiableSet(result);
     }
 
     /**
