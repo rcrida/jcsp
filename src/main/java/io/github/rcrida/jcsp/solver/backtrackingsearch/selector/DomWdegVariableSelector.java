@@ -11,8 +11,9 @@ import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collection;
 import java.util.HashMap;
-import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Random;
@@ -30,8 +31,8 @@ import java.util.Set;
  * therefore chosen last.
  * <p>
  * The constructor's {@code constraints} set is fixed for the life of the instance and indexed
- * once into {@link #constraintsByVariable}, rather than re-derived from the live CSP on every
- * {@link #select}/{@link #onConflict} call: {@link NogoodConstraint}s are never active
+ * once into integer arrays (see {@link #variableIndex}), rather than re-derived from the live CSP
+ * on every {@link #select}/{@link #onConflict} call: {@link NogoodConstraint}s are never active
  * (see below) and {@code csp.getConstraints()} in production always includes every nogood
  * learned so far (up to {@code 20 * variableCount}, see {@link io.github.rcrida.jcsp.assignments.NogoodStore}), so re-scanning it
  * per unassigned variable per node would mean re-discovering and discarding every one of those
@@ -60,21 +61,27 @@ import java.util.Set;
 public class DomWdegVariableSelector implements AdaptiveVariableSelector {
 
     /**
-     * Keyed by object identity, not {@link Constraint#equals}/{@link Constraint#hashCode}: the
-     * constraint objects populating this map are fixed at construction and the exact same
-     * references are looked up throughout the life of the selector (structural constraints never
-     * get rebuilt mid-search -- only nogoods are added, tracked separately and never indexed
-     * here), so identity is not just adequate but the actually-intended semantics for this
-     * per-instance bookkeeping. Matters because {@link #ratio} calls {@link Map#getOrDefault} once
-     * per active constraint per unassigned variable per node -- for a constraint whose {@code
-     * hashCode}/{@code equals} isn't {@code O(1)} (e.g. {@link
-     * io.github.rcrida.jcsp.constraints.nary.NaryTuplesConstraint} over a large table), a plain
-     * {@link HashMap} recomputes that cost on every single lookup. Confirmed via JFR profiling of
-     * a real XCSP3 instance ({@code Steiner3-08.xml.lzma}, 36 table constraints averaging 80,640
-     * tuples each) where this was found to dominate search wall-clock time.
+     * The constraint graph as integer indices into flat arrays, built once, so that {@link #select},
+     * which runs at every search node, flags the assigned variables in one pass, counts each
+     * constraint's unassigned ones in another, and otherwise reads arrays -- no per-constraint
+     * hash lookup (a {@link Constraint#hashCode} is not {@code O(1)} for a large table) and no
+     * {@link Assignment} query per scope entry.
+     * <p>
+     * Only variables that appear in some structural constraint are indexed; any other has no
+     * weighted degree, so {@link #select} gives it the worst ratio without looking further.
      */
-    private final Map<Constraint, Long> weights;
-    private final Map<Variable<?>, List<Constraint>> constraintsByVariable;
+    private final Map<Variable<?>, Integer> variableIndex = new HashMap<>();
+    private final Variable<?>[] variables;
+    /** Per constraint, the indices of its variables. */
+    private final int[][] scope;
+    /** Per variable, the indices of the constraints it appears in. */
+    private final int[][] incident;
+    /** Per constraint; each starts at 1 and is raised by {@link #onConflict}. */
+    private final long[] weights;
+    /** Per variable, scratch for {@link #select}: whether the assignment holds it. */
+    private final boolean[] assigned;
+    /** Per constraint, scratch for {@link #select}: how many of its variables are unassigned. */
+    private final int[] unassigned;
     private @Nullable Random tieBreakRandom;
     private @Nullable Variable<?> lastConflictVariable;
 
@@ -87,15 +94,38 @@ public class DomWdegVariableSelector implements AdaptiveVariableSelector {
      * the filter exists for direct/test construction with a nogood already present.
      */
     public DomWdegVariableSelector(@NonNull Set<Constraint> constraints) {
-        weights = new IdentityHashMap<>(constraints.size() * 2);
-        constraintsByVariable = new HashMap<>();
-        for (Constraint c : constraints) {
-            if (c instanceof NogoodConstraint) continue;
-            weights.put(c, 1L);
-            for (Variable<?> v : c.getVariables()) {
-                constraintsByVariable.computeIfAbsent(v, k -> new ArrayList<>()).add(c);
+        List<Constraint> structural = constraints.stream().filter(c -> !(c instanceof NogoodConstraint)).toList();
+        List<Variable<?>> indexed = new ArrayList<>();
+        scope = new int[structural.size()][];
+        for (int ci = 0; ci < structural.size(); ci++) {
+            Collection<? extends Variable<?>> vars = structural.get(ci).getVariables();
+            scope[ci] = new int[vars.size()];
+            int k = 0;
+            for (Variable<?> v : vars) {
+                Integer index = variableIndex.get(v);
+                if (index == null) {
+                    index = indexed.size();
+                    variableIndex.put(v, index);
+                    indexed.add(v);
+                }
+                scope[ci][k++] = index;
             }
         }
+        variables = indexed.toArray(new Variable<?>[0]);
+        int[] degree = new int[variables.length];
+        for (int[] vars : scope) {
+            for (int v : vars) degree[v]++;
+        }
+        incident = new int[variables.length][];
+        for (int v = 0; v < variables.length; v++) incident[v] = new int[degree[v]];
+        int[] filled = new int[variables.length];
+        for (int ci = 0; ci < scope.length; ci++) {
+            for (int v : scope[ci]) incident[v][filled[v]++] = ci;
+        }
+        weights = new long[scope.length];
+        Arrays.fill(weights, 1L);
+        assigned = new boolean[variables.length];
+        unassigned = new int[scope.length];
     }
 
     /**
@@ -106,9 +136,11 @@ public class DomWdegVariableSelector implements AdaptiveVariableSelector {
      */
     @Override
     public void onConflict(@NonNull Variable<?> variable, @NonNull Assignment nextAssignment) {
-        for (Constraint c : constraintsByVariable.getOrDefault(variable, List.of())) {
-            if (isActive(c, variable, nextAssignment)) {
-                weights.merge(c, 1L, Long::sum);
+        Integer index = variableIndex.get(variable);
+        if (index == null) return;
+        for (int ci : incident[index]) {
+            if (isActive(ci, index, nextAssignment)) {
+                weights[ci]++;
             }
         }
     }
@@ -140,7 +172,7 @@ public class DomWdegVariableSelector implements AdaptiveVariableSelector {
      */
     @Override
     public void onStagnation() {
-        weights.replaceAll((constraint, weight) -> 1L);
+        Arrays.fill(weights, 1L);
         lastConflictVariable = null;
     }
 
@@ -162,11 +194,20 @@ public class DomWdegVariableSelector implements AdaptiveVariableSelector {
                 && !assignment.isAssigned(lastConflictVariable)) {
             return lastConflictVariable;
         }
+        markAssigned(assignment);
         double bestRatio = Double.MAX_VALUE;
         List<Variable<?>> tied = new ArrayList<>();
         for (Map.Entry<Variable<?>, Domain<?>> e : csp.getVariableDomains().entrySet()) {
-            if (assignment.isAssigned(e.getKey())) continue;
-            double ratio = ratio(e.getKey(), e.getValue().size(), assignment);
+            Integer index = variableIndex.get(e.getKey());
+            double ratio;
+            if (index == null) {
+                // In no structural constraint, so nothing to weigh it by -- but still has to be unassigned.
+                if (assignment.isAssigned(e.getKey())) continue;
+                ratio = Double.MAX_VALUE;
+            } else {
+                if (assigned[index]) continue;
+                ratio = ratio(index, e.getValue().size());
+            }
             if (ratio < bestRatio) {
                 bestRatio = ratio;
                 tied.clear();
@@ -181,11 +222,35 @@ public class DomWdegVariableSelector implements AdaptiveVariableSelector {
                 : tied.get(tieBreakRandom.nextInt(tied.size()));
     }
 
-    private double ratio(@NonNull Variable<?> variable, long domainSize, @NonNull Assignment assignment) {
+    /**
+     * Fills {@link #assigned} and {@link #unassigned} from {@code assignment}: one pass over the
+     * assignment's variables, then one over every constraint's scope.
+     */
+    private void markAssigned(@NonNull Assignment assignment) {
+        Arrays.fill(assigned, false);
+        for (Variable<?> held : assignment.getValues().keySet()) {
+            Integer index = variableIndex.get(held);
+            if (index != null) assigned[index] = true;
+        }
+        for (int ci = 0; ci < scope.length; ci++) {
+            int open = 0;
+            for (int v : scope[ci]) {
+                if (!assigned[v]) open++;
+            }
+            unassigned[ci] = open;
+        }
+    }
+
+    /**
+     * The weighted degree sums the weights of {@code variable}'s constraints that have at least one
+     * other unassigned variable. {@code variable} is itself unassigned, so that is a constraint
+     * with two or more unassigned variables.
+     */
+    private double ratio(int variable, long domainSize) {
         long wdeg = 0;
-        for (Constraint c : constraintsByVariable.getOrDefault(variable, List.of())) {
-            if (isActive(c, variable, assignment)) {
-                wdeg += weights.getOrDefault(c, 1L);
+        for (int ci : incident[variable]) {
+            if (unassigned[ci] >= 2) {
+                wdeg += weights[ci];
             }
         }
         return wdeg == 0 ? Double.MAX_VALUE : (double) domainSize / wdeg;
@@ -193,18 +258,12 @@ public class DomWdegVariableSelector implements AdaptiveVariableSelector {
 
     /** A constraint is "active" w.r.t. {@code variable} if it has at least one other variable
      *  still unassigned in {@code assignment}. Callers only ever pass a constraint drawn from
-     *  {@link #constraintsByVariable}'s entry for {@code variable}, so it's already guaranteed
-     *  to involve {@code variable} and to not be a {@link NogoodConstraint}.
-     *  <p>
-     *  A plain loop over {@link Assignment#getValues()} rather than a {@code stream().anyMatch(...)}
-     *  over {@link Assignment#getValue}: this runs once per (unassigned variable × incident
-     *  constraint) at every search node, so the stream pipeline and the {@link java.util.Optional}
-     *  per variable examined were among the largest allocation sources in the whole solver -- the
-     *  same stream-construction cost {@code NogoodFixpointConsistency#relevant} and {@link
-     *  Assignment#isConsistentAmong} were each already fixed for. */
-    private boolean isActive(@NonNull Constraint c, @NonNull Variable<?> variable, @NonNull Assignment assignment) {
-        for (Variable<?> v : c.getVariables()) {
-            if (!v.equals(variable) && !assignment.isAssigned(v)) return true;
+     *  {@code variable}'s own {@link #incident} entry, so it's already guaranteed to involve it and
+     *  to not be a {@link NogoodConstraint}. Only {@link #onConflict} asks, which is rare beside
+     *  {@link #select}, so it questions the {@link Assignment} directly. */
+    private boolean isActive(int constraint, int variable, @NonNull Assignment assignment) {
+        for (int v : scope[constraint]) {
+            if (v != variable && !assignment.isAssigned(variables[v])) return true;
         }
         return false;
     }
