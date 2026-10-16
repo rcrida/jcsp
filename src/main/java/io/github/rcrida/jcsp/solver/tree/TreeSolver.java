@@ -16,9 +16,18 @@ import io.github.rcrida.jcsp.solver.tree.selector.TreeUnassignedVariableSelector
 import io.github.rcrida.jcsp.solver.tree.sorter.TopologicalSorter;
 import io.github.rcrida.jcsp.variables.Variable;
 import org.jspecify.annotations.NonNull;
+import org.jspecify.annotations.Nullable;
 
+import java.util.ArrayDeque;
+import java.util.Deque;
+import java.util.Iterator;
+import java.util.List;
 import java.util.Optional;
+import java.util.Spliterator;
+import java.util.Spliterators;
+import java.util.function.Consumer;
 import java.util.stream.Stream;
+import java.util.stream.StreamSupport;
 
 @Slf4j
 @Value
@@ -68,20 +77,66 @@ public class TreeSolver implements Solver {
     }
 
     Stream<Assignment> populateAssignment(@NonNull ConstraintSatisfactionProblem tcsp, @NonNull Assignment assignment, @NonNull TreeUnassignedVariableSelector selector) {
-        log.debug("Searching tree with assignment: {}", assignment);
-        // Truncates silently, like every getSolutions() stream; the callers that need to tell a
-        // cancelled search from an UNSAT one check the token themselves.
-        if (cancellation.isCancelled()) {
-            return Stream.empty();
+        return StreamSupport.stream(new Descent(tcsp, assignment, selector), false);
+    }
+
+    /**
+     * Depth-first search below one assignment, yielding each complete one lazily and in order.
+     * <p>
+     * The levels live in an explicit stack of candidate iterators rather than in nested streams: a
+     * tree is searched one variable per level, so a recursive {@code flatMap} per level overflowed
+     * the thread stack at a few thousand variables, where this is bounded by the heap.
+     */
+    private final class Descent extends Spliterators.AbstractSpliterator<Assignment> {
+        private final ConstraintSatisfactionProblem tcsp;
+        private final TreeUnassignedVariableSelector selector;
+        /** One iterator of still-untried candidates per level, innermost level on top. */
+        private final Deque<Iterator<Assignment>> levels = new ArrayDeque<>();
+
+        Descent(ConstraintSatisfactionProblem tcsp, Assignment start, TreeUnassignedVariableSelector selector) {
+            super(Long.MAX_VALUE, Spliterator.ORDERED);
+            this.tcsp = tcsp;
+            this.selector = selector;
+            levels.push(List.of(start).iterator());
+        }   
+
+        @Override
+        public boolean tryAdvance(Consumer<? super Assignment> action) {
+            Assignment solution = advance();
+            if (solution == null) {
+                return false;
+            }
+            action.accept(solution);
+            return true;
         }
-        if (assignment.isComplete(tcsp)) {
-            log.debug("Found tree solution {}", assignment);
-            return Stream.of(assignment);
+
+        /** The next complete assignment, or {@code null} once the search is exhausted or cancelled. */
+        private @Nullable Assignment advance() {
+            while (!levels.isEmpty()) {
+                Iterator<Assignment> candidates = levels.peek();
+                if (!candidates.hasNext()) {
+                    levels.pop();
+                    continue;
+                }
+                Assignment assignment = candidates.next();
+                log.debug("Searching tree with assignment: {}", assignment);
+                // Truncates silently, like every getSolutions() stream; the callers that need to tell a
+                // cancelled search from an UNSAT one check the token themselves.
+                if (cancellation.isCancelled()) {
+                    levels.clear();
+                    return null;
+                }
+                if (assignment.isComplete(tcsp)) {
+                    log.debug("Found tree solution {}", assignment);
+                    return assignment;
+                }
+                val variable = selector.select(tcsp, assignment);
+                levels.push(orderer.order(tcsp, variable, assignment)
+                        .map(value -> assignment.withValue(variable, value))
+                        .filter(next -> next.isConsistent(tcsp))
+                        .iterator());
+            }
+            return null;
         }
-        val variable = selector.select(tcsp, assignment);
-        return orderer.order(tcsp, variable, assignment)
-                .map(value -> assignment.withValue(variable, value))
-                .filter(next -> next.isConsistent(tcsp))
-                .flatMap(next -> populateAssignment(tcsp, next, selector));
     }
 }

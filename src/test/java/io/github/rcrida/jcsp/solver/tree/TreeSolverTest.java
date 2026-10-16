@@ -15,10 +15,13 @@ import io.github.rcrida.jcsp.solver.tree.sorter.BFSTopologicalSorter;
 import io.github.rcrida.jcsp.variables.Variable;
 import org.junit.jupiter.api.Test;
 
+import java.util.ArrayList;
 import java.util.EnumSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicReference;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -53,6 +56,43 @@ public class TreeSolverTest {
         cancellation.cancel();
         val cancelled = new TreeSolver(BFSTopologicalSorter.INSTANCE, DefaultValueOrderer.INSTANCE, TreeUnassignedVariableSelector.Factory.INSTANCE, cancellation);
         assertThat(cancelled.getSolutions(AUSTRALIA_WITHOUT_SA)).isEmpty();
+    }
+
+    @Test
+    void getSolution_aTreeTooDeepToRecurseThroughIsSolvedOnAnExplicitStack() throws InterruptedException {
+        // A path of 3,000 variables is a tree 3,000 levels deep, and a search that recurses once per
+        // level needs a stack of megabytes for it. This one runs on 256KB, which only a search whose
+        // depth lives on the heap survives.
+        var builder = ConstraintSatisfactionProblem.builder();
+        List<Variable<Integer>> path = new ArrayList<>();
+        for (int i = 0; i < 3_000; i++) {
+            Variable<Integer> variable = Variable.Factory.INSTANCE.create("path" + i);
+            path.add(variable);
+            builder.variableDomain(variable, IntRangeDomain.of(0, 1));
+        }
+        for (int i = 0; i + 1 < path.size(); i++) {
+            builder.notEqualsConstraint(path.get(i), path.get(i + 1));
+        }
+        ConstraintSatisfactionProblem csp = builder.build();
+        AtomicReference<Optional<Assignment>> solution = new AtomicReference<>();
+        AtomicReference<Throwable> failure = new AtomicReference<>();
+
+        Thread smallStack = new Thread(null, () -> {
+            try {
+                solution.set(treeSolver.getSolution(csp));
+            } catch (Throwable t) {
+                failure.set(t);
+            }
+        }, "small-stack", 256 * 1024);
+        smallStack.start();
+        smallStack.join();
+
+        assertThat(failure.get()).isNull();
+        assertThat(solution.get()).hasValueSatisfying(found -> {
+            for (int i = 0; i + 1 < path.size(); i++) {
+                assertThat(found.getValue(path.get(i))).isNotEqualTo(found.getValue(path.get(i + 1)));
+            }
+        });
     }
 
     @Test
