@@ -286,6 +286,17 @@ BoundSolver solver = Solver.Factory.INSTANCE.createSolver(csp,
 
 Pass `RestartRandomization.NONE` instead to disable this entirely and restore fully deterministic tie-breaking (ties always go to the first-encountered candidate).
 
+**Restart schedule** — how many failed candidates each restart may spend before it is abandoned. The default, `RestartSchedule.LUBY`, restarts often, which suits satisfiable problems whose solve time is heavy-tailed. A hard *unsatisfiable* problem can need one run longer than that schedule reaches for a long time; `INTERLEAVED` alternates by work between the Luby schedule and a geometric one so such a run eventually comes round, at the price of up to twice the time to a solution on a hard satisfiable problem:
+
+```java
+BoundSolver solver = Solver.Factory.INSTANCE.createSolver(csp,
+    SolverConfig.builder()
+        .restartSchedule(RestartSchedule.INTERLEAVED)  // for unsatisfiable-heavy workloads
+        .build());
+```
+
+It affects only how the search is cut up, never which assignments it may visit, so results stay sound and complete either way.
+
 **Variable ordering** — both terminal solvers order the variables they branch on with dom/wdeg plus last-conflict reasoning. `variableSelectorFactory` replaces that wholesale, for a problem where domain size is a poor guide to what is worth deciding first:
 
 ```java

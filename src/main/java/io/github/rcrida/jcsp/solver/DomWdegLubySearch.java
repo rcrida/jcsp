@@ -23,6 +23,7 @@ import java.util.ArrayDeque;
 import java.util.Deque;
 import java.util.List;
 import java.util.Optional;
+import java.util.function.LongSupplier;
 import java.util.stream.Stream;
 
 /**
@@ -45,9 +46,9 @@ import java.util.stream.Stream;
  * stream must be consumed sequentially; it shares a mutable {@link DomWdegVariableSelector}
  * across all nodes, so calling {@code .parallel()} would cause data races in the weight map.
  * <p>
- * <b>{@link #getSolution}</b> overrides the default and applies Luby restarts: it uses the
- * sequence 1, 1, 2, 1, 1, 2, 4, … (multiplied by {@link #lubyUnit}) as per-restart failure
- * budgets, preserving weights across restarts so accumulated failure knowledge steers each new
+ * <b>{@link #getSolution}</b> overrides the default and applies restarts: per-restart failure
+ * budgets come from {@link #restartSchedule}, by default the Luby sequence 1, 1, 2, 1, 1, 2, 4, …
+ * (multiplied by {@link #lubyUnit}), preserving weights across restarts so accumulated failure knowledge steers each new
  * attempt — except after {@link #STAGNANT_RESTART_LIMIT} consecutive restarts that fail to reach a
  * new deepest assignment, when {@link AdaptiveVariableSelector#onStagnation} discards them so the
  * restarts become independent draws again rather than variations on one doomed ordering (see
@@ -143,6 +144,8 @@ public class DomWdegLubySearch implements Solver {
     @NonNull SolverListener listener;
     @NonNull Cancellation cancellation;
     @NonNull RestartRandomization restartRandomization;
+    /** How many failed candidates each restart of {@link #getSolution} may spend; see {@link RestartSchedule}. */
+    @NonNull RestartSchedule restartSchedule;
     /**
      * Builds this search's variable ordering, once per {@link #getSolutions}/{@link #getSolution}
      * call -- a factory rather than a selector because an {@link AdaptiveVariableSelector}
@@ -162,12 +165,13 @@ public class DomWdegLubySearch implements Solver {
         private SolverListener listener = SolverListener.NONE;
         private Cancellation cancellation = Cancellation.NEVER;
         private RestartRandomization restartRandomization = RestartRandomization.NONE;
+        private RestartSchedule restartSchedule = RestartSchedule.LUBY;
         private AdaptiveVariableSelector.Factory selectorFactory = AdaptiveVariableSelector.Factory.INSTANCE;
 
         public DomWdegLubySearch build() {
             if (lubyUnit <= 0) throw new IllegalArgumentException("lubyUnit must be positive, got: " + lubyUnit);
             if (maxRestarts <= 0) throw new IllegalArgumentException("maxRestarts must be positive, got: " + maxRestarts);
-            return new DomWdegLubySearch(lubyUnit, maxRestarts, domainValuesOrderer, inference, limits, nogoodStore, statistics, phaseMemory, listener, cancellation, restartRandomization, selectorFactory);
+            return new DomWdegLubySearch(lubyUnit, maxRestarts, domainValuesOrderer, inference, limits, nogoodStore, statistics, phaseMemory, listener, cancellation, restartRandomization, restartSchedule, selectorFactory);
         }
     }
 
@@ -198,6 +202,7 @@ public class DomWdegLubySearch implements Solver {
         // has already recorded the post-preprocessing figure, and first-write-wins keeps it.
         statistics.updateRootSearchSpace(csp.getSearchSpace());
         SearchProgress progress = new SearchProgress();
+        LongSupplier budgets = restartSchedule.budgets(lubyUnit);
         for (int k = 1; k <= maxRestarts; k++) {
             progress.reset();
             if (phaseMemory.bestDepth() > deepestSeen) {
@@ -216,7 +221,7 @@ public class DomWdegLubySearch implements Solver {
                 stagnantRestarts = 0;
             }
             selector.onRestart(restartRandomization.randomFor(k));
-            long budget = (long) lubyUnit * luby(k);
+            long budget = budgets.getAsLong();
             int[] failures = {0};
             try {
                 Assignment root = Assignment.builder().statistics(statistics).listener(listener).cancellation(cancellation).build();

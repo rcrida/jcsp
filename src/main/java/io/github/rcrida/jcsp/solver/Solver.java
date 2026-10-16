@@ -268,6 +268,7 @@ public interface Solver {
                     .listener(config.getListener())
                     .cancellation(cancellation)
                     .restartRandomization(config.getRestartRandomization().forSearch(searchIndex))
+                    .restartSchedule(config.getRestartSchedule())
                     .selectorFactory(config.getVariableSelectorFactory())
                     .maxRestarts(maxRestarts)
                     .build();

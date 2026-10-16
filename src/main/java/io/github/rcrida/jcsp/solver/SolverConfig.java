@@ -96,6 +96,15 @@ public class SolverConfig {
             RestartRandomization.seeded(ThreadLocalRandom.current().nextLong());
 
     /**
+     * How many failed candidates each restart of the satisfaction chain's {@link DomWdegLubySearch}
+     * may spend. Defaults to {@link RestartSchedule#LUBY}; {@link RestartSchedule#INTERLEAVED}
+     * lets a refutation that needs one long run finish, at some cost in time to a solution on hard
+     * satisfiable instances -- see ADR-0054. Affects only how the search is cut up, never which
+     * assignments it may visit, so soundness and completeness are untouched.
+     */
+    @Builder.Default @NonNull RestartSchedule restartSchedule = RestartSchedule.LUBY;
+
+    /**
      * How {@link DomWdegLubySearch} orders the variables it branches on. Defaults to
      * {@link AdaptiveVariableSelector.Factory#INSTANCE}, dom/wdeg with last-conflict; supply
      * another to search the same problem in a different order. A factory rather than a selector

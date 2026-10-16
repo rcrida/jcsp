@@ -314,6 +314,43 @@ class DomWdegLubySearchTest {
     }
 
     @Test
+    void anInterleavedScheduleProvesWhatTheLubyScheduleCannotAtTheSameRestartCount() {
+        // The same unsatisfiable problem as the test above. Within 200 restarts the Luby schedule's
+        // budgets stay too small to exhaust the tree; the interleaved schedule's geometric track
+        // reaches one long enough, and proves it at restart 46.
+        var builder = ConstraintSatisfactionProblem.builder();
+        List<Variable<Integer>> vars = new ArrayList<>();
+        for (int i = 0; i < 6; i++) {
+            Variable<Integer> v = VF.create("iv" + i);
+            vars.add(v);
+            builder.variableDomain(v, IntRangeDomain.of(1, 5));
+        }
+        for (int i = 0; i < vars.size(); i++) {
+            for (int j = i + 1; j < vars.size(); j++) {
+                builder.notEqualsConstraint(vars.get(i), vars.get(j));
+            }
+        }
+        ConstraintSatisfactionProblem csp = builder.build();
+
+        DomWdegLubySearch luby = DomWdegLubySearch.builder()
+                .lubyUnit(1)
+                .maxRestarts(200)
+                .domainValuesOrderer(LeastConstrainingValueOrderer.INSTANCE)
+                .inference(Solver.Factory.FULL_PROPAGATION_INFERENCE)
+                .build();
+        DomWdegLubySearch interleaved = DomWdegLubySearch.builder()
+                .lubyUnit(1)
+                .maxRestarts(200)
+                .restartSchedule(RestartSchedule.INTERLEAVED)
+                .domainValuesOrderer(LeastConstrainingValueOrderer.INSTANCE)
+                .inference(Solver.Factory.FULL_PROPAGATION_INFERENCE)
+                .build();
+
+        assertThatThrownBy(() -> luby.getSolution(csp)).isInstanceOf(RestartsExhaustedException.class);
+        assertThat(interleaved.getSolution(csp)).isEmpty();
+    }
+
+    @Test
     void aRestartThatReachesANewDeepestAssignmentClearsTheStagnationCount() {
         // Four variables pairwise different over three values: unsatisfiable, but only provably so
         // below three successful descents (binary ≠ gives no root-level Hall reasoning). So the

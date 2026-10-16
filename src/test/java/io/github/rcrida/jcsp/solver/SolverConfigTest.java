@@ -147,4 +147,15 @@ class SolverConfigTest {
         assertThat(SolverConfig.builder().restartRandomization(RestartRandomization.NONE).build().getRestartRandomization())
                 .isSameAs(RestartRandomization.NONE);
     }
+
+    @Test
+    void restartSchedule_defaultsToLuby() {
+        assertThat(SolverConfig.builder().build().getRestartSchedule()).isSameAs(RestartSchedule.LUBY);
+    }
+
+    @Test
+    void restartSchedule_canBeOverridden() {
+        assertThat(SolverConfig.builder().restartSchedule(RestartSchedule.INTERLEAVED).build().getRestartSchedule())
+                .isSameAs(RestartSchedule.INTERLEAVED);
+    }
 }
