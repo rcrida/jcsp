@@ -236,16 +236,15 @@ public final class Xcsp3CompetitionRunner {
      * draining the child's output, not after -- reading first would let a genuinely wedged child
      * (unresponsive to its own internal {@link io.github.rcrida.jcsp.solver.Cancellation} budget)
      * block this call forever, since {@link java.io.InputStream#readAllBytes()} has no timeout of
-     * its own. Waiting first is safe from the opposite risk (the child blocking on a full pipe
-     * while this method isn't draining it) only because {@code -Dorg.slf4j.simpleLogger.defaultLogLevel=error}
-     * is passed to the child, keeping its output to {@link Xcsp3ProblemRunner}'s own handful of
-     * status/solution lines -- without it, an optimization instance whose solver logs every
-     * improving incumbent at INFO (e.g. {@code BranchAndBoundSolver}) can produce well over 100KB
-     * of log output, overflow the OS pipe buffer, and block the child's own search thread on that
-     * write before it ever reaches its {@link io.github.rcrida.jcsp.solver.Cancellation} check --
-     * a genuine deadlock this harness previously (and wrongly) reported as the child having
-     * "HUNG", confirmed by reproducing it directly via an isolated single-instance corpus run
-     * plus a minimal {@link ProcessBuilder} repro comparing default vs. suppressed child logging.
+     * its own. The child's output goes to a temporary file, not a pipe, which is what makes waiting
+     * first safe: a pipe fills at 64KB, and the child then blocks on the write before it can exit
+     * or reach its {@link io.github.rcrida.jcsp.solver.Cancellation} check, a deadlock this harness
+     * would report as the child having "HUNG". Two things have produced that much output: an
+     * optimization solver logging every incumbent at INFO (suppressed by
+     * {@code -Dorg.slf4j.simpleLogger.defaultLogLevel=error}), and a satisfiable instance with
+     * thousands of variables, whose single {@code v} solution line is 150KB or more
+     * ({@code bmc-ibm-3-04_X2}). The first was fixed by suppressing the logging, which cannot help the
+     * second.
      */
     private static Result runOne(Path instance, long timeLimitSeconds, long seed) throws IOException, InterruptedException {
         Model model = modelInfo(instance);
@@ -257,24 +256,30 @@ public final class Xcsp3CompetitionRunner {
                 Xcsp3ProblemRunner.class.getName(), instance.toString(), String.valueOf(timeLimitSeconds),
                 String.valueOf(seed));
         builder.redirectErrorStream(true);
+        Path outputFile = Files.createTempFile("xcsp3-child-", ".out");
+        builder.redirectOutput(outputFile.toFile());
 
-        long startNanos = System.nanoTime();
-        Process process = builder.start();
-        boolean finished = process.waitFor(timeLimitSeconds + PROCESS_KILL_MARGIN_SECONDS, TimeUnit.SECONDS);
-        double elapsedSeconds = (System.nanoTime() - startNanos) / 1_000_000_000.0;
-        if (!finished) {
-            process.destroyForcibly();
-            return new Result(elapsedSeconds, "HUNG (killed after " + elapsedSeconds + "s)",
-                    "(no stats -- process killed)", "-", model.info(), model.optimization(),
-                    bestObjective("", model.optimization()),
-                    "(no search-space)", "(no search-space)", "(no search-space)");
+        try {
+            long startNanos = System.nanoTime();
+            Process process = builder.start();
+            boolean finished = process.waitFor(timeLimitSeconds + PROCESS_KILL_MARGIN_SECONDS, TimeUnit.SECONDS);
+            double elapsedSeconds = (System.nanoTime() - startNanos) / 1_000_000_000.0;
+            if (!finished) {
+                process.destroyForcibly();
+                return new Result(elapsedSeconds, "HUNG (killed after " + elapsedSeconds + "s)",
+                        "(no stats -- process killed)", "-", model.info(), model.optimization(),
+                        bestObjective("", model.optimization()),
+                        "(no search-space)", "(no search-space)", "(no search-space)");
+            }
+            String output = Files.readString(outputFile, StandardCharsets.UTF_8);
+            String summary = firstResultLine(output);
+            return new Result(elapsedSeconds, summary, statsLine(output), crossCheck(instance, summary, output),
+                    model.info(), model.optimization(), bestObjective(output, model.optimization()),
+                    cLine(output, "c search-space-before: "), cLine(output, "c search-space-at-root: "),
+                    cLine(output, "c search-space-remaining: "));
+        } finally {
+            Files.deleteIfExists(outputFile);
         }
-        String output = new String(process.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
-        String summary = firstResultLine(output);
-        return new Result(elapsedSeconds, summary, statsLine(output), crossCheck(instance, summary, output),
-                model.info(), model.optimization(), bestObjective(output, model.optimization()),
-                cLine(output, "c search-space-before: "), cLine(output, "c search-space-at-root: "),
-                cLine(output, "c search-space-remaining: "));
     }
 
     /**
