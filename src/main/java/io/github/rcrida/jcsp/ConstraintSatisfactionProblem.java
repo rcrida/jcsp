@@ -107,6 +107,7 @@ import org.jspecify.annotations.Nullable;
 
 import java.math.BigInteger;
 import java.util.ArrayDeque;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -786,20 +787,43 @@ public class ConstraintSatisfactionProblem {
      * io.github.rcrida.jcsp.solver.BisectionConditioningSolver} invokes at most once per
      * discrete-complete branch-and-bound leaf, not once per search node the way the cached,
      * unrestricted adjacency is.
+     * <p>
+     * Held in full only while the whole thing needs no more than {@link
+     * ConstraintGraph#EAGER_NEIGHBOUR_BUDGET} entries; past it, a variable with over {@link
+     * ConstraintGraph#LAZY_NEIGHBOUR_THRESHOLD} of them gets a {@link LazyNeighbours} instead, as
+     * {@link ConstraintGraph} does, because a constraint over {@code k} counted variables costs
+     * {@code k²} entries.
      */
     @NonNull
     private Map<Variable<?>, Set<Variable<?>>> computeRestrictedNeighbours(@NonNull Set<Variable<?>> connectedVariables) {
-        val result = new HashMap<Variable<?>, Set<Variable<?>>>();
-        connectedVariables.forEach(v -> result.put(v, new HashSet<>()));
+        return computeRestrictedNeighbours(connectedVariables,
+                ConstraintGraph.EAGER_NEIGHBOUR_BUDGET, ConstraintGraph.LAZY_NEIGHBOUR_THRESHOLD);
+    }
+
+    @NonNull
+    Map<Variable<?>, Set<Variable<?>>> computeRestrictedNeighbours(@NonNull Set<Variable<?>> connectedVariables,
+                                                                   long eagerBudget, int lazyThreshold) {
+        val scopesByVariable = new HashMap<Variable<?>, List<Set<Variable<?>>>>();
+        connectedVariables.forEach(v -> scopesByVariable.put(v, new ArrayList<>()));
         for (Constraint c : getConstraints()) {
-            val touching = c.getVariables().stream().filter(connectedVariables::contains).toList();
+            val touching = c.getVariables().stream()
+                    .filter(connectedVariables::contains)
+                    .collect(Collectors.toCollection(LinkedHashSet::new));
             if (touching.size() < 2) continue;
             for (Variable<?> a : touching) {
-                for (Variable<?> b : touching) {
-                    if (a != b) result.get(a).add(b);
-                }
+                scopesByVariable.get(a).add(touching);
             }
         }
+        long totalNeighbours = 0;
+        for (List<Set<Variable<?>>> scopes : scopesByVariable.values()) {
+            totalNeighbours += LazyNeighbours.upperBound(scopes);
+        }
+        boolean allEager = totalNeighbours <= eagerBudget;
+        val result = new HashMap<Variable<?>, Set<Variable<?>>>();
+        scopesByVariable.forEach((variable, scopes) -> result.put(variable,
+                allEager || LazyNeighbours.upperBound(scopes) <= lazyThreshold
+                        ? LazyNeighbours.build(variable, scopes, true)
+                        : new LazyNeighbours(variable, scopes, true)));
         return result;
     }
 

@@ -1,12 +1,16 @@
 package io.github.rcrida.jcsp;
 
+import io.github.rcrida.jcsp.constraints.Constraint;
 import io.github.rcrida.jcsp.domains.IntRangeDomain;
 import io.github.rcrida.jcsp.variables.Variable;
 import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Random;
 import java.util.Set;
 
@@ -63,6 +67,82 @@ class ConstraintGraphTest {
             }
             assertThat(lazy.isCyclic()).isEqualTo(built.isCyclic());
             assertThat(lazy.isFullyConnected()).isEqualTo(built.isFullyConnected());
+        }
+    }
+
+    /** The restricted adjacency exactly as it was built before it could be lazy. */
+    private static Map<Variable<?>, Set<Variable<?>>> restrictedNeighboursAsTheyWere(
+            ConstraintSatisfactionProblem csp, Set<Variable<?>> connectedVariables) {
+        Map<Variable<?>, Set<Variable<?>>> result = new HashMap<>();
+        connectedVariables.forEach(v -> result.put(v, new HashSet<>()));
+        for (Constraint c : csp.getConstraints()) {
+            var touching = c.getVariables().stream().filter(connectedVariables::contains).toList();
+            if (touching.size() < 2) continue;
+            for (Variable<?> a : touching) {
+                for (Variable<?> b : touching) {
+                    if (a != b) result.get(a).add(b);
+                }
+            }
+        }
+        return result;
+    }
+
+    @Test
+    void restrictedNeighboursMatchTheOriginalWhetherBuiltOrLazy() {
+        Random rng = new Random(23);
+        for (int trial = 0; trial < 500; trial++) {
+            ConstraintSatisfactionProblem csp = randomProblem(rng, 10_000 + trial);
+            Set<Variable<?>> connected = new LinkedHashSet<>();
+            for (Variable<?> variable : csp.getVariableDomains().keySet()) {
+                if (rng.nextInt(4) != 0) connected.add(variable);
+            }
+            var original = restrictedNeighboursAsTheyWere(csp, connected);
+
+            var built = csp.computeRestrictedNeighbours(connected, ConstraintGraph.EAGER_NEIGHBOUR_BUDGET,
+                    ConstraintGraph.LAZY_NEIGHBOUR_THRESHOLD);
+            var lazy = csp.computeRestrictedNeighbours(connected, 0, 0);
+
+            for (var candidate : List.of(built, lazy)) {
+                assertThat(candidate.keySet()).isEqualTo(original.keySet());
+                for (Variable<?> variable : original.keySet()) {
+                    // Same elements in the same order, as the original HashSet iterates them.
+                    assertThat(candidate.get(variable)).containsExactlyElementsOf(original.get(variable));
+                    assertThat(candidate.get(variable).size()).isEqualTo(original.get(variable).size());
+                    for (Variable<?> other : connected) {
+                        assertThat(candidate.get(variable).contains(other)).isEqualTo(original.get(variable).contains(other));
+                    }
+                }
+            }
+        }
+    }
+
+    @Test
+    void restrictedNeighboursMatchTheOriginalOnAHashSetResizeBoundary() {
+        // A constraint over 13 variables gives each 12 neighbours, exactly a default HashSet's
+        // capacity-16 threshold. Adding the variable itself and removing it afterwards would grow the
+        // table one element sooner than never adding it, and can reorder the iteration; 25 variables
+        // is the same boundary at capacity 32. The restricted adjacency must keep the original's order.
+        for (int arity : new int[]{13, 25}) {
+            var builder = ConstraintSatisfactionProblem.builder();
+            Set<Variable<Integer>> scope = new LinkedHashSet<>();
+            for (int i = 0; i < arity; i++) {
+                Variable<Integer> variable = VF.create("boundary" + arity + "_" + i);
+                scope.add(variable);
+                builder.variableDomain(variable, IntRangeDomain.of(0, 1));
+            }
+            builder.sumConstraint(scope, io.github.rcrida.jcsp.constraints.Operator.LEQ, arity);
+            ConstraintSatisfactionProblem csp = builder.build();
+            Set<Variable<?>> connected = new LinkedHashSet<>(scope);
+            var original = restrictedNeighboursAsTheyWere(csp, connected);
+
+            var built = csp.computeRestrictedNeighbours(connected, ConstraintGraph.EAGER_NEIGHBOUR_BUDGET,
+                    ConstraintGraph.LAZY_NEIGHBOUR_THRESHOLD);
+            var lazy = csp.computeRestrictedNeighbours(connected, 0, 0);
+
+            for (Variable<?> variable : connected) {
+                assertThat(built.get(variable)).containsExactlyElementsOf(original.get(variable));
+                assertThat(lazy.get(variable)).containsExactlyElementsOf(original.get(variable));
+            }
         }
     }
 

@@ -13,7 +13,6 @@ import io.github.rcrida.jcsp.variables.Variable;
 import org.jspecify.annotations.NonNull;
 
 import java.util.AbstractMap;
-import java.util.AbstractSet;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -218,75 +217,10 @@ class ConstraintGraph {
             Variable<?> variable = entry.getKey();
             List<Set<Variable<?>>> scopes = entry.getValue();
             result.put(variable, allEager || LazyNeighbours.upperBound(scopes) <= lazyThreshold
-                    ? Collections.unmodifiableSet(LazyNeighbours.build(variable, scopes))
-                    : new LazyNeighbours(variable, scopes));
+                    ? Collections.unmodifiableSet(LazyNeighbours.build(variable, scopes, false))
+                    : new LazyNeighbours(variable, scopes, false));
         }
         return Collections.unmodifiableMap(result);
-    }
-
-    /**
-     * The neighbours of one variable -- every variable that shares a constraint with it -- built
-     * from the scopes of the constraints it is in rather than held. Read-only.
-     * <p>
-     * Every read builds the set afresh with exactly the operations {@link #computeNeighbours} uses
-     * for an eager one (add each scope in constraint order, then remove the variable itself), so
-     * iteration order is the same as the {@link HashSet} it stands in for, and nothing downstream
-     * that depends on that order can tell the two apart. {@link #size} is remembered; the rest are
-     * answered from the scopes where that is cheaper than building.
-     */
-    private static final class LazyNeighbours extends AbstractSet<Variable<?>> {
-        private final Variable<?> self;
-        private final List<Set<Variable<?>>> scopes;
-        private int size = -1;
-
-        LazyNeighbours(Variable<?> self, List<Set<Variable<?>>> scopes) {
-            this.self = self;
-            this.scopes = scopes;
-        }
-
-        /** An upper bound on the neighbours: the scopes' sizes, counting a repeat and the variable itself. */
-        static long upperBound(List<Set<Variable<?>>> scopes) {
-            long bound = 0;
-            for (Set<Variable<?>> scope : scopes) {
-                bound += scope.size();
-            }
-            return bound;
-        }
-
-        static Set<Variable<?>> build(Variable<?> self, List<Set<Variable<?>>> scopes) {
-            Set<Variable<?>> neighbours = new HashSet<>();
-            for (Set<Variable<?>> scope : scopes) {
-                neighbours.addAll(scope);
-            }
-            neighbours.remove(self);
-            return neighbours;
-        }
-
-        @Override
-        public Iterator<Variable<?>> iterator() {
-            return Collections.unmodifiableSet(build(self, scopes)).iterator();
-        }
-
-        @Override
-        public int size() {
-            if (size < 0) {
-                size = build(self, scopes).size();
-            }
-            return size;
-        }
-
-        @Override
-        public boolean contains(Object candidate) {
-            if (self.equals(candidate)) {
-                return false;
-            }
-            for (Set<Variable<?>> scope : scopes) {
-                if (scope.contains(candidate)) {
-                    return true;
-                }
-            }
-            return false;
-        }
     }
 
     /**
