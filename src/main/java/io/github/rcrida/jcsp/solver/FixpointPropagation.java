@@ -370,12 +370,27 @@ public class FixpointPropagation {
     public Optional<ConstraintSatisfactionProblem> applyFixpoint(
             @NonNull ConstraintSatisfactionProblem csp, @Nullable Set<Variable<?>> initialSeed,
             @NonNull SolverListener listener, @NonNull Statistics statistics, @NonNull Cancellation cancellation) {
+        return applyFixpoint(csp, Map.of(), initialSeed, listener, statistics, cancellation);
+    }
+
+    /**
+     * As {@link #applyFixpoint(ConstraintSatisfactionProblem, Set, SolverListener, Statistics,
+     * Cancellation)}, but starting from {@code csp} with {@code initialUpdates} already applied to
+     * its domains, without first building a problem that carries them. A caller that narrows one
+     * domain just before propagating -- a search node assigning its variable -- hands that narrowing
+     * here, and the result is built once rather than twice. {@code initialSeed} must already name
+     * every variable {@code initialUpdates} changed.
+     */
+    public Optional<ConstraintSatisfactionProblem> applyFixpoint(
+            @NonNull ConstraintSatisfactionProblem csp, @NonNull Map<Variable<?>, Domain<?>> initialUpdates,
+            @Nullable Set<Variable<?>> initialSeed, @NonNull SolverListener listener,
+            @NonNull Statistics statistics, @NonNull Cancellation cancellation) {
         log.debug("applyFixpoint");
         checkCancelled(csp, statistics, cancellation);
         var worklist = new Worklist(propagators, coverageFor(csp), initialSeed);
         return isObserved(log.isDebugEnabled(), listener)
-                ? applyObserved(csp, worklist, listener, statistics, cancellation)
-                : applyInPlace(csp, worklist, statistics, cancellation);
+                ? applyObserved(csp.withDomains(initialUpdates), worklist, listener, statistics, cancellation)
+                : applyInPlace(csp, initialUpdates, worklist, statistics, cancellation);
     }
 
     /**
@@ -418,8 +433,9 @@ public class FixpointPropagation {
      * DomainOverlay}, and the problem is built once at the end.
      */
     private Optional<ConstraintSatisfactionProblem> applyInPlace(
-            ConstraintSatisfactionProblem csp, Worklist worklist, Statistics statistics, Cancellation cancellation) {
-        Map<Variable<?>, Domain<?>> updates = new HashMap<>();
+            ConstraintSatisfactionProblem csp, Map<Variable<?>, Domain<?>> initialUpdates, Worklist worklist,
+            Statistics statistics, Cancellation cancellation) {
+        Map<Variable<?>, Domain<?>> updates = new HashMap<>(initialUpdates);
         var view = DomainOverlay.of(csp.getVariableDomains(), updates);
         for (int i = worklist.next(); i >= 0; i = worklist.next()) {
             if (cancellation.isCancelled()) {

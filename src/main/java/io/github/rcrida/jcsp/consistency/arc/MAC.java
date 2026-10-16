@@ -5,6 +5,7 @@ import io.github.rcrida.jcsp.ConstraintSatisfactionProblem;
 import io.github.rcrida.jcsp.assignments.Assignment;
 import io.github.rcrida.jcsp.consistency.ConsistencyResult;
 import io.github.rcrida.jcsp.consistency.Inference;
+import io.github.rcrida.jcsp.domains.Domain;
 import io.github.rcrida.jcsp.domains.ObjectSingletonDomain;
 import io.github.rcrida.jcsp.variables.Variable;
 
@@ -32,12 +33,31 @@ public class MAC implements Inference {
      *         is successful and maintains consistency; otherwise, an empty {@link Optional}.
      */
     @Override
-    @SuppressWarnings("unchecked")
     public Optional<ConstraintSatisfactionProblem> apply(ConstraintSatisfactionProblem problem, Variable<?> variable, Assignment assignment) {
-        val value = assignment.getValue(variable).orElseThrow();
         return AC3.INSTANCE.applyQueue(
-                problem.withDomain((Variable<Object>) variable, new ObjectSingletonDomain<>(value)),
+                problem.withDomain(variable, assignedDomain(variable, assignment)),
                 seedQueue(problem, variable, assignment));
+    }
+
+    /**
+     * The singleton domain {@link #apply} narrows {@code variable} to: the value {@code assignment}
+     * gave it.
+     */
+    public static Domain<?> assignedDomain(Variable<?> variable, Assignment assignment) {
+        return new ObjectSingletonDomain<>(assignment.getValue(variable).orElseThrow());
+    }
+
+    /**
+     * Whether {@link #apply} has no arc to revise after {@code variable} was assigned, so that it
+     * does nothing beyond narrowing {@code variable} to {@link #assignedDomain}. A caller that can
+     * apply that narrowing itself then needn't build a problem for it.
+     */
+    public static boolean revisesNothing(ConstraintSatisfactionProblem problem, Variable<?> variable,
+                                          Assignment assignment) {
+        for (Arc arc : AC3.INSTANCE.arcsInto(problem, variable)) {
+            if (!assignment.isAssigned(arc.getFrom())) return false;
+        }
+        return true;
     }
 
     /**
@@ -47,11 +67,9 @@ public class MAC implements Inference {
      * to {@link #apply} on the feasible path.
      */
     @Override
-    @SuppressWarnings("unchecked")
     public ConsistencyResult applyWithReason(ConstraintSatisfactionProblem problem, Variable<?> variable, Assignment assignment) {
-        val value = assignment.getValue(variable).orElseThrow();
         return AC3.INSTANCE.applyQueueWithReason(
-                problem.withDomain((Variable<Object>) variable, new ObjectSingletonDomain<>(value)),
+                problem.withDomain(variable, assignedDomain(variable, assignment)),
                 seedQueue(problem, variable, assignment));
     }
 

@@ -261,6 +261,31 @@ public class FixpointPropagationTest {
     }
 
     @Test
+    void applyFixpoint_startsFromTheInitialUpdatesWithoutBuildingAProblemForThem() {
+        // a + 1 <= b with the caller having just narrowed a to {3}: b must follow to {4, 5}. Both
+        // loops start from the updates, the in-place one folding them into its own map.
+        Variable<Integer> a = F.create("initua"), b = F.create("initub");
+        var csp = ConstraintSatisfactionProblem.builder()
+                .variableDomain(a, IntRangeDomain.of(0, 5))
+                .variableDomain(b, IntRangeDomain.of(0, 5))
+                .offsetConstraint(a, 1, io.github.rcrida.jcsp.constraints.Operator.LEQ, b)
+                .build();
+        Map<Variable<?>, Domain<?>> updates = Map.of(a, IntRangeDomain.of(3, 3));
+
+        var inPlace = FixpointPropagation.FULL.applyFixpoint(csp, updates, Set.of(a),
+                SolverListener.NONE, new Statistics(), Cancellation.NEVER);
+        var observed = FixpointPropagation.FULL.applyFixpoint(csp, updates, Set.of(a),
+                new SolverListener() {}, new Statistics(), Cancellation.NEVER);
+
+        for (var result : java.util.List.of(inPlace, observed)) {
+            assertThat(result).isPresent();
+            assertThat(result.get().getDomain(a).singleValue()).contains(3);
+            assertThat(result.get().getDomain(b)).isEqualTo(IntRangeDomain.of(4, 5));
+        }
+        assertThat(csp.getDomain(a)).isEqualTo(IntRangeDomain.of(0, 5));
+    }
+
+    @Test
     void propagatorThatDoesNotConvergeInternally_isRewokenByItsOwnNarrowing() {
         // Worklist#wake skips re-queueing the propagator that caused a change only when that
         // propagator converges internally; one that does not must be woken by its own narrowing.

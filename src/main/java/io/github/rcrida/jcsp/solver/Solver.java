@@ -9,6 +9,7 @@ import io.github.rcrida.jcsp.consistency.Inference;
 import io.github.rcrida.jcsp.consistency.arc.MAC;
 import io.github.rcrida.jcsp.constraints.nary.GroundNogoodConstraint;
 import io.github.rcrida.jcsp.domains.BoundedDomain;
+import io.github.rcrida.jcsp.domains.Domain;
 import io.github.rcrida.jcsp.domains.SetBoundedDomain;
 import io.github.rcrida.jcsp.variables.Variable;
 import io.github.rcrida.jcsp.solver.backtrackingsearch.order.DefaultValueOrderer;
@@ -25,6 +26,7 @@ import lombok.val;
 import org.jspecify.annotations.NonNull;
 
 import java.util.HashSet;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.function.ToDoubleFunction;
@@ -93,6 +95,16 @@ public interface Solver {
                 public Optional<ConstraintSatisfactionProblem> apply(ConstraintSatisfactionProblem problem,
                                                                       Variable<?> variable, Assignment assignment,
                                                                       Set<Variable<?>> alsoChanged) {
+                    if (MAC.revisesNothing(problem, variable, assignment)) {
+                        // MAC would only narrow `variable`, so give that narrowing to the fixpoint
+                        // rather than building a whole problem to carry it.
+                        Domain<?> assigned = MAC.assignedDomain(variable, assignment);
+                        Set<Variable<?>> narrowed = assigned.equals(problem.getVariableDomains().get(variable))
+                                ? Set.of() : Set.of(variable);
+                        return fixpointPropagation.applyFixpoint(problem, Map.of(variable, assigned),
+                                seed(narrowed, alsoChanged),
+                                assignment.listener(), assignment.getStatistics(), assignment.cancellation());
+                    }
                     return MAC.INSTANCE.apply(problem, variable, assignment)
                             .flatMap(afterMac -> fixpointPropagation.applyFixpoint(afterMac,
                                     seed(problem, afterMac, alsoChanged),
@@ -163,12 +175,16 @@ public interface Solver {
         private static Set<Variable<?>> seed(ConstraintSatisfactionProblem problem,
                                               ConstraintSatisfactionProblem afterMac,
                                               Set<Variable<?>> alsoChanged) {
-            Set<Variable<?>> changed = FixpointPropagation.changedVariables(
-                    problem.getVariableDomains(), afterMac.getVariableDomains());
+            return seed(FixpointPropagation.changedVariables(
+                    problem.getVariableDomains(), afterMac.getVariableDomains()), alsoChanged);
+        }
+
+        /** {@code narrowed}, plus {@code alsoChanged} if there is any. */
+        private static Set<Variable<?>> seed(Set<Variable<?>> narrowed, Set<Variable<?>> alsoChanged) {
             if (alsoChanged.isEmpty()) {
-                return changed;
+                return narrowed;
             }
-            Set<Variable<?>> union = new HashSet<>(changed);
+            Set<Variable<?>> union = new HashSet<>(narrowed);
             union.addAll(alsoChanged);
             return union;
         }
