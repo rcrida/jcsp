@@ -8,6 +8,7 @@ import lombok.val;
 import io.github.rcrida.jcsp.ConstraintSatisfactionProblem;
 import io.github.rcrida.jcsp.assignments.Assignment;
 import io.github.rcrida.jcsp.assignments.Statistics;
+import io.github.rcrida.jcsp.constraints.Constraint;
 import io.github.rcrida.jcsp.domains.DiscreteDomain;
 import io.github.rcrida.jcsp.domains.Domain;
 import io.github.rcrida.jcsp.solver.Cancellation;
@@ -15,6 +16,7 @@ import io.github.rcrida.jcsp.solver.Solver;
 import io.github.rcrida.jcsp.solver.SolverCancelledException;
 import io.github.rcrida.jcsp.solver.SolverDecorator;
 import io.github.rcrida.jcsp.solver.tree.decomposition.decomposer.TreeDecomposer;
+import io.github.rcrida.jcsp.variables.Variable;
 import org.jspecify.annotations.NonNull;
 
 import java.math.BigInteger;
@@ -84,18 +86,42 @@ public class TreeDecompositionSolver extends SolverDecorator {
      * decomposition's estimated complexity doesn't beat the original problem's).
      */
     private Optional<ConstraintSatisfactionProblem> decomposeIfWorthwhile(@NonNull ConstraintSatisfactionProblem csp) {
-        if (isMinDegreeTooHigh(csp, targetTreewidth)) {
-            log.debug("Skipping tree decomposition: minimum degree >= targetTreewidth {}", targetTreewidth);
-            return Optional.empty();
-        }
         int d = csp.getVariableDomains().values().stream()
                 .mapToInt(Domain::size)
                 .max()
                 .orElse(1);
         int maxDomainSize = (int) Math.min(Math.pow(d, targetTreewidth), MAX_DOMAIN_SIZE_CAP);
         log.debug("d={}, targetTreewidth={}, maxDomainSize={}", d, targetTreewidth, maxDomainSize);
+        if (isConstraintTooWide(csp, maxDomainSize)) {
+            log.debug("Skipping tree decomposition: a constraint's joint domain exceeds {}", maxDomainSize);
+            return Optional.empty();
+        }
+        if (isMinDegreeTooHigh(csp, targetTreewidth)) {
+            log.debug("Skipping tree decomposition: minimum degree >= targetTreewidth {}", targetTreewidth);
+            return Optional.empty();
+        }
         return treeDecomposer.decompose(csp, maxDomainSize)
                 .filter(treeCsp -> shouldApplyDecomposition(treeCsp, csp));
+    }
+
+    /**
+     * Returns true when some constraint's variables have more than {@code maxDomainSize} joint
+     * values, which makes the decomposer certain to return empty: whatever order it eliminates in,
+     * the first of a constraint's variables to go has all the others as neighbours, so one bag holds
+     * the whole constraint. Exact, like {@link #isMinDegreeTooHigh}, and it needs only the
+     * constraints, so a very wide one is declined without ever building its neighbour sets.
+     */
+    static boolean isConstraintTooWide(@NonNull ConstraintSatisfactionProblem csp, int maxDomainSize) {
+        for (Constraint constraint : csp.getConstraints()) {
+            long jointSize = 1;
+            for (Variable<?> variable : constraint.getVariables()) {
+                jointSize *= csp.getDomain(variable).size();
+                if (jointSize > maxDomainSize) {
+                    return true;
+                }
+            }
+        }
+        return false;
     }
 
     /**

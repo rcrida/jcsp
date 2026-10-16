@@ -3,6 +3,7 @@ package io.github.rcrida.jcsp.solver.tree.decomposition;
 import lombok.val;
 import io.github.rcrida.jcsp.ConstraintSatisfactionProblem;
 import io.github.rcrida.jcsp.assignments.Assignment;
+import io.github.rcrida.jcsp.constraints.Operator;
 import io.github.rcrida.jcsp.domains.IntRangeDomain;
 import io.github.rcrida.jcsp.solver.Cancellation;
 import io.github.rcrida.jcsp.solver.Solver;
@@ -15,8 +16,10 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import java.util.LinkedHashSet;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -255,6 +258,42 @@ public class TreeDecompositionSolverTest {
     @Test
     void isMinDegreeTooHigh_k8_returnsTrue() {
         assertThat(TreeDecompositionSolver.isMinDegreeTooHigh(K8_CSP, 7)).isTrue();
+    }
+
+    @Test
+    void isConstraintTooWide_noConstraints_returnsFalse() {
+        assertThat(TreeDecompositionSolver.isConstraintTooWide(ORIGINAL_CSP, 1)).isFalse();
+    }
+
+    @Test
+    void isConstraintTooWide_jointDomainAtTheCap_returnsFalse() {
+        // Every K8 constraint is binary over domains of 3: 9 joint values, which is not more than 9.
+        assertThat(TreeDecompositionSolver.isConstraintTooWide(K8_CSP, 9)).isFalse();
+    }
+
+    @Test
+    void isConstraintTooWide_jointDomainOverTheCap_returnsTrue() {
+        assertThat(TreeDecompositionSolver.isConstraintTooWide(K8_CSP, 8)).isTrue();
+    }
+
+    @Test
+    void getSolutions_aConstraintTooWideToDecompose_skipsDecomposer() {
+        // Twelve variables of three values in one sum constraint: 531,441 joint values, far over
+        // the 2,187 the decomposer allows, so it is declined without being asked (or building any neighbours).
+        var builder = ConstraintSatisfactionProblem.builder();
+        Set<Variable<Integer>> wide = new LinkedHashSet<>();
+        for (int i = 0; i < 12; i++) {
+            Variable<Integer> variable = F.create("wideTd" + i);
+            wide.add(variable);
+            builder.variableDomain(variable, IntRangeDomain.of(1, 3));
+        }
+        builder.sumConstraint(wide, Operator.LEQ, 30);
+        var csp = builder.build();
+        val fallback = Assignment.of(Map.of(K1, 1));
+        when(defaultSolver.getSolutions(csp)).thenReturn(Stream.of(fallback));
+
+        assertThat(solver.getSolutions(csp)).containsExactly(fallback);
+        verify(treeDecomposer, never()).decompose(eq(csp), anyInt());
     }
 
     @Test

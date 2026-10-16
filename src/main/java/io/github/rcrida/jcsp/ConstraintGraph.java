@@ -13,7 +13,9 @@ import io.github.rcrida.jcsp.variables.Variable;
 import org.jspecify.annotations.NonNull;
 
 import java.util.AbstractMap;
+import java.util.AbstractSet;
 import java.util.ArrayDeque;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Deque;
 import java.util.HashMap;
@@ -96,11 +98,25 @@ class ConstraintGraph {
         return (T) auxiliaryCache.computeIfAbsent(key, k -> compute.apply(this));
     }
 
+    /**
+     * Neighbours totalling no more than this many entries across the whole graph are all built
+     * eagerly. A constraint of arity {@code k} contributes {@code k²} entries, so the budget is what
+     * a very wide constraint runs past; see {@link #computeNeighbours}.
+     */
+    static final long EAGER_NEIGHBOUR_BUDGET = 4_000_000;
+    /** Once over {@link #EAGER_NEIGHBOUR_BUDGET}, a variable with at most this many neighbours still gets a built set. */
+    static final int LAZY_NEIGHBOUR_THRESHOLD = 1_024;
+
     ConstraintGraph(@NonNull Set<Constraint> constraints, @NonNull Map<Variable<?>, Domain<?>> variableDomains) {
+        this(constraints, variableDomains, EAGER_NEIGHBOUR_BUDGET, LAZY_NEIGHBOUR_THRESHOLD);
+    }
+
+    ConstraintGraph(@NonNull Set<Constraint> constraints, @NonNull Map<Variable<?>, Domain<?>> variableDomains,
+                    long eagerNeighbourBudget, int lazyNeighbourThreshold) {
         this.constraints = constraints;
         this.declaredDomains = variableDomains;
         Set<Variable<?>> variables = variableDomains.keySet();
-        this.neighbours = computeNeighbours(constraints, variables);
+        this.neighbours = computeNeighbours(constraints, variables, eagerNeighbourBudget, lazyNeighbourThreshold);
         this.allBinaryConstraints = computeAllBinaryConstraints(constraints);
         this.allBinaryArcConstraints = computeAllBinaryArcConstraints(this.allBinaryConstraints);
         val visited = new HashSet<Variable<?>>();
@@ -173,24 +189,104 @@ class ConstraintGraph {
      * .iterator().next()} (used by cycle detection) and any other neighbour-set iteration depend
      * on this map's/these sets' iteration order, so removing the salt here closes the same class of
      * launch-to-launch search noise as that fix, for the {@code neighbours} structure specifically.
+     * <p>
+     * A constraint of arity {@code k} makes each of its variables the neighbour of the other
+     * {@code k - 1}, so building every set costs {@code k²} entries -- over a gigabyte at arity 4,000.
+     * While the whole graph needs no more than {@code eagerBudget} entries every set is built here,
+     * exactly as always. Past it, a variable with more than {@code lazyThreshold} neighbours gets a
+     * {@link LazyNeighbours} instead, which builds the identical set when it is read and keeps nothing.
      */
-    private static Map<Variable<?>, Set<Variable<?>>> computeNeighbours(Set<Constraint> constraints, Set<Variable<?>> variables) {
-        val neighbours = new HashMap<Variable<?>, Set<Variable<?>>>();
+    private static Map<Variable<?>, Set<Variable<?>>> computeNeighbours(Set<Constraint> constraints, Set<Variable<?>> variables,
+                                                                       long eagerBudget, int lazyThreshold) {
+        val scopesByVariable = new HashMap<Variable<?>, List<Set<Variable<?>>>>();
         for (Variable<?> variable : variables) {
-            neighbours.put(variable, new HashSet<>());
+            scopesByVariable.put(variable, new ArrayList<>());
         }
         for (Constraint constraint : constraints) {
-            val constraintVariables = constraint.getVariables();
-            for (Variable<?> variable : constraintVariables) {
-                neighbours.get(variable).addAll(constraintVariables);
+            val scope = constraint.getVariables();
+            for (Variable<?> variable : scope) {
+                scopesByVariable.get(variable).add(scope);
             }
         }
+        long totalNeighbours = 0;
+        for (List<Set<Variable<?>>> scopes : scopesByVariable.values()) {
+            totalNeighbours += LazyNeighbours.upperBound(scopes);
+        }
+        boolean allEager = totalNeighbours <= eagerBudget;
         val result = new HashMap<Variable<?>, Set<Variable<?>>>();
-        for (Map.Entry<Variable<?>, Set<Variable<?>>> entry : neighbours.entrySet()) {
-            entry.getValue().remove(entry.getKey());
-            result.put(entry.getKey(), Collections.unmodifiableSet(entry.getValue()));
+        for (Map.Entry<Variable<?>, List<Set<Variable<?>>>> entry : scopesByVariable.entrySet()) {
+            Variable<?> variable = entry.getKey();
+            List<Set<Variable<?>>> scopes = entry.getValue();
+            result.put(variable, allEager || LazyNeighbours.upperBound(scopes) <= lazyThreshold
+                    ? Collections.unmodifiableSet(LazyNeighbours.build(variable, scopes))
+                    : new LazyNeighbours(variable, scopes));
         }
         return Collections.unmodifiableMap(result);
+    }
+
+    /**
+     * The neighbours of one variable -- every variable that shares a constraint with it -- built
+     * from the scopes of the constraints it is in rather than held. Read-only.
+     * <p>
+     * Every read builds the set afresh with exactly the operations {@link #computeNeighbours} uses
+     * for an eager one (add each scope in constraint order, then remove the variable itself), so
+     * iteration order is the same as the {@link HashSet} it stands in for, and nothing downstream
+     * that depends on that order can tell the two apart. {@link #size} is remembered; the rest are
+     * answered from the scopes where that is cheaper than building.
+     */
+    private static final class LazyNeighbours extends AbstractSet<Variable<?>> {
+        private final Variable<?> self;
+        private final List<Set<Variable<?>>> scopes;
+        private int size = -1;
+
+        LazyNeighbours(Variable<?> self, List<Set<Variable<?>>> scopes) {
+            this.self = self;
+            this.scopes = scopes;
+        }
+
+        /** An upper bound on the neighbours: the scopes' sizes, counting a repeat and the variable itself. */
+        static long upperBound(List<Set<Variable<?>>> scopes) {
+            long bound = 0;
+            for (Set<Variable<?>> scope : scopes) {
+                bound += scope.size();
+            }
+            return bound;
+        }
+
+        static Set<Variable<?>> build(Variable<?> self, List<Set<Variable<?>>> scopes) {
+            Set<Variable<?>> neighbours = new HashSet<>();
+            for (Set<Variable<?>> scope : scopes) {
+                neighbours.addAll(scope);
+            }
+            neighbours.remove(self);
+            return neighbours;
+        }
+
+        @Override
+        public Iterator<Variable<?>> iterator() {
+            return Collections.unmodifiableSet(build(self, scopes)).iterator();
+        }
+
+        @Override
+        public int size() {
+            if (size < 0) {
+                size = build(self, scopes).size();
+            }
+            return size;
+        }
+
+        @Override
+        public boolean contains(Object candidate) {
+            if (self.equals(candidate)) {
+                return false;
+            }
+            for (Set<Variable<?>> scope : scopes) {
+                if (scope.contains(candidate)) {
+                    return true;
+                }
+            }
+            return false;
+        }
     }
 
     /**
