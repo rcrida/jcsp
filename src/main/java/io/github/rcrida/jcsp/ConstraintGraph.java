@@ -13,9 +13,12 @@ import io.github.rcrida.jcsp.variables.Variable;
 import org.jspecify.annotations.NonNull;
 
 import java.util.AbstractMap;
+import java.util.ArrayDeque;
 import java.util.Collections;
+import java.util.Deque;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -106,7 +109,7 @@ class ConstraintGraph {
             this.isFullyConnected = false;
         } else {
             val startingVariable = this.neighbours.keySet().iterator().next();
-            this.isCyclic = isCyclicFrom(startingVariable, null, this.neighbours, visited);
+            this.isCyclic = isCyclicFrom(startingVariable, this.neighbours, visited);
             this.isFullyConnected = visited.size() == this.neighbours.size();
         }
     }
@@ -122,18 +125,41 @@ class ConstraintGraph {
         return allBinaryArcConstraints.keySet();
     }
 
-    private static boolean isCyclicFrom(Variable<?> src, Variable<?> parent, Map<Variable<?>, Set<Variable<?>>> neighbours, Set<Variable<?>> visited) {
-        visited.add(src);
-        for (Variable<?> neighbour : neighbours.get(src)) {
+    /**
+     * Whether the component containing {@code start} has a cycle, found by a depth-first search that
+     * records every variable it reaches in {@code visited}. Iterative, with the path on an explicit
+     * stack, because a path-shaped graph is as deep as it is long and a recursive search overflowed
+     * the thread stack between 30,000 and 100,000 variables. It visits neighbours in the same order
+     * and stops at the same point as the recursion did, so {@code visited} -- which {@link
+     * #isFullyConnected} is read from -- comes out identical, including when a cycle ends the search
+     * early.
+     */
+    private static boolean isCyclicFrom(Variable<?> start, Map<Variable<?>, Set<Variable<?>>> neighbours, Set<Variable<?>> visited) {
+        Deque<PathStep> path = new ArrayDeque<>();
+        visited.add(start);
+        path.push(new PathStep(start, null, neighbours.get(start).iterator()));
+        while (!path.isEmpty()) {
+            PathStep step = path.peek();
+            if (!step.untried().hasNext()) {
+                path.pop();
+                continue;
+            }
+            Variable<?> neighbour = step.untried().next();
             if (!visited.contains(neighbour)) {
-                if (isCyclicFrom(neighbour, src, neighbours, visited)) {
-                    return true;
-                }
-            } else if (neighbour != parent) {
+                visited.add(neighbour);
+                path.push(new PathStep(neighbour, step.node(), neighbours.get(neighbour).iterator()));
+            } else if (neighbour != step.parent()) {
                 return true;
             }
         }
         return false;
+    }
+
+    /**
+     * One variable on the path of {@link #isCyclicFrom}'s search: the variable, the one it was
+     * reached from, and its neighbours not yet tried.
+     */
+    private record PathStep(Variable<?> node, Variable<?> parent, Iterator<Variable<?>> untried) {
     }
 
     /**

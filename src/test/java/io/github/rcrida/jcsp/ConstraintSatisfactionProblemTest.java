@@ -21,9 +21,11 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicReference;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -323,6 +325,38 @@ public class ConstraintSatisfactionProblemTest {
                 .variableDomain(a, domain)
                 .build();
         assertThat(csp.isTree()).isTrue();
+    }
+
+    @Test
+    void isTree_aPathTooLongToRecurseAlongIsAnalysedOnAnExplicitStack() throws InterruptedException {
+        // Cycle detection walks the constraint graph depth first, and a path of n variables is n
+        // levels deep. 20,000 of them on a 256KB stack overflow a search that recurses once per
+        // variable, and are fine for one that keeps its path on the heap.
+        AtomicReference<Boolean> isTree = new AtomicReference<>();
+        AtomicReference<Throwable> failure = new AtomicReference<>();
+
+        Thread smallStack = new Thread(null, () -> {
+            try {
+                var builder = ConstraintSatisfactionProblem.builder();
+                List<Variable<Integer>> path = new ArrayList<>();
+                for (int i = 0; i < 20_000; i++) {
+                    Variable<Integer> variable = VARIABLE_FACTORY.create("path" + i);
+                    path.add(variable);
+                    builder.variableDomain(variable, domain);
+                }
+                for (int i = 0; i + 1 < path.size(); i++) {
+                    builder.notEqualsConstraint(path.get(i), path.get(i + 1));
+                }
+                isTree.set(builder.build().isTree());
+            } catch (Throwable t) {
+                failure.set(t);
+            }
+        }, "small-stack", 256 * 1024);
+        smallStack.start();
+        smallStack.join();
+
+        assertThat(failure.get()).isNull();
+        assertThat(isTree.get()).isTrue();
     }
 
     @Test
