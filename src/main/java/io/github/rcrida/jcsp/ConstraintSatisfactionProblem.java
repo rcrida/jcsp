@@ -199,7 +199,7 @@ public class ConstraintSatisfactionProblem {
                     PartitionConstraint.class, GroundNogoodConstraint.class, SetBoundsNogoodConstraint.class,
                     SetMembershipConstraint.class);
 
-    Map<Variable<?>, Domain<?>> variableDomains;
+    @Getter(AccessLevel.NONE) DomainMap variableDomains;
     // Included in equals/hashCode (via ConstraintGraph's own, which compares constraints/isCyclic/
     // isFullyConnected and excludes only its derived neighbours/allBinaryConstraints caches) so that
     // two CSPs with the same variables but different constraints are correctly distinct.
@@ -258,13 +258,13 @@ public class ConstraintSatisfactionProblem {
      */
     @Builder
     ConstraintSatisfactionProblem(@Singular("variableDomainEntry") Map<Variable<?>, Domain<?>> variableDomains, @Singular Set<Constraint> constraints, @Nullable ConstraintGraph constraintGraph, @Nullable Set<NogoodConstraint> nogoods, @Nullable AtomicReference<NogoodMergeCache> nogoodMergeCache, @Nullable Map<Variable<?>, Set<NogoodConstraint>> nogoodsByVariable) {
-        this.variableDomains = variableDomains;
+        this.variableDomains = DomainMap.of(variableDomains);
         if (constraintGraph != null
                 && (constraintGraph.getConstraints() == constraints || constraintGraph.getConstraints().equals(constraints))) {
             this.constraintGraph = constraintGraph;
         } else {
-            validateConstraints(variableDomains, constraints);
-            this.constraintGraph = new ConstraintGraph(constraints, variableDomains);
+            validateConstraints(this.variableDomains, constraints);
+            this.constraintGraph = new ConstraintGraph(constraints, this.variableDomains);
         }
         this.nogoods = nogoods == null ? Set.of() : nogoods;
         assert this.nogoods.stream().flatMap(n -> n.getVariables().stream()).allMatch(variableDomains::containsKey)
@@ -367,24 +367,28 @@ public class ConstraintSatisfactionProblem {
      * update goes through this or {@link #withDomains}), so this exists specifically to make that
      * path cheap.
      * <p>
-     * Uses {@link LinkedHashMap} throughout, not {@link Map#copyOf}: the latter's iteration order
-     * is deliberately unspecified, which silently broke {@link io.github.rcrida.jcsp.solver.SetBranchingSolver#findMostUndeterminedSet}'s
-     * (and any other iteration-order-sensitive tie-breaking's) reproducibility the first time this
-     * method was written — variable iteration order needs to stay exactly what {@code
-     * variableDomains}' own order already was, insertion order preserved.
+     * The domains are a {@link DomainMap}, which keeps declaration order exactly and copies only an
+     * array of domains, not a hash map of them. The order matters and is not a detail: {@link
+     * Map#copyOf}'s deliberately unspecified order once silently broke {@link io.github.rcrida.jcsp.solver.SetBranchingSolver#findMostUndeterminedSet}'s
+     * (and any other iteration-order-sensitive tie-breaking's) reproducibility, so variable
+     * iteration order needs to stay exactly what it was declared as.
      */
     public ConstraintSatisfactionProblem withDomain(@NonNull Variable<?> variable, @NonNull Domain<?> domain) {
-        Map<Variable<?>, Domain<?>> newDomains = new LinkedHashMap<>(variableDomains);
-        newDomains.put(variable, domain);
-        return new ConstraintSatisfactionProblem(Collections.unmodifiableMap(newDomains), constraintGraph.getConstraints(), constraintGraph, nogoods, nogoodMergeCache, nogoodsByVariable);
+        return new ConstraintSatisfactionProblem(variableDomains.with(variable, domain), constraintGraph.getConstraints(), constraintGraph, nogoods, nogoodMergeCache, nogoodsByVariable);
     }
 
     /** As {@link #withDomain}, applying every entry of {@code updates} in one pass; returns {@code this} unchanged if {@code updates} is empty. */
     public ConstraintSatisfactionProblem withDomains(@NonNull Map<Variable<?>, Domain<?>> updates) {
         if (updates.isEmpty()) return this;
-        Map<Variable<?>, Domain<?>> newDomains = new LinkedHashMap<>(variableDomains);
-        newDomains.putAll(updates);
-        return new ConstraintSatisfactionProblem(Collections.unmodifiableMap(newDomains), constraintGraph.getConstraints(), constraintGraph, nogoods, nogoodMergeCache, nogoodsByVariable);
+        return new ConstraintSatisfactionProblem(variableDomains.withAll(updates), constraintGraph.getConstraints(), constraintGraph, nogoods, nogoodMergeCache, nogoodsByVariable);
+    }
+
+    /**
+     * Every variable of this problem and its current domain, in the order the variables were
+     * declared. Read-only.
+     */
+    public Map<Variable<?>, Domain<?>> getVariableDomains() {
+        return variableDomains;
     }
 
     private static void validateConstraints(Map<Variable<?>, Domain<?>> variableDomains, Set<Constraint> constraints) {
