@@ -427,7 +427,7 @@ public class DomWdegLubySearch implements Solver {
                 if (++failures[0] >= budget) throw BudgetExceeded.INSTANCE;
                 continue;
             }
-            phaseMemory.recordIfDeepest(next.getValues());
+            phaseMemory.recordIfDeepest(next);
             enterCsp = inferred.get();
             enterFrom = next;
             enterWeight = frame.childWeight;

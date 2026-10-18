@@ -347,8 +347,8 @@ final class Xcsp3CallbackHandler implements XCallbacks2 {
         // the loop runs and the result is a real product rather than the initial infinity.
         double smallest = Double.POSITIVE_INFINITY;
         for (Assignment tuple : table.getTuples()) {
-            Object w = tuple.getValues().get(width);
-            Object h = tuple.getValues().get(height);
+            Object w = tuple.getValueOrNull(width);
+            Object h = tuple.getValueOrNull(height);
             if (!(w instanceof Number wide) || !(h instanceof Number high)) return null;
             smallest = Math.min(smallest, wide.doubleValue() * high.doubleValue());
         }

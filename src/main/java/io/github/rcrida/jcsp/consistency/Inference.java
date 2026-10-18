@@ -31,7 +31,7 @@ public interface Inference {
     default ConsistencyResult applyWithReason(ConstraintSatisfactionProblem problem, Variable<?> variable, Assignment assignment) {
         return apply(problem, variable, assignment)
                 .map(ConsistencyResult::feasible)
-                .orElseGet(() -> ConsistencyResult.infeasible(GroundNogoodConstraint.of(assignment.getValues())));
+                .orElseGet(() -> ConsistencyResult.infeasible(GroundNogoodConstraint.of(assignment)));
     }
 
     /**

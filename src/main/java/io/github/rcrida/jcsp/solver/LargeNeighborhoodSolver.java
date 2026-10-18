@@ -149,9 +149,9 @@ public class LargeNeighborhoodSolver implements LocalSolver {
                 .filter(c -> !Collections.disjoint(c.getVariables(), relaxedVars))
                 .toList();
 
-        Map<Variable<?>, Object> baseValues = new HashMap<>(current.getValues());
-        for (var v : relaxedVars) baseValues.put(v, false);
-        Assignment base = Assignment.ofTrusted(baseValues, current.getStatistics(), current.listener(), current.cancellation());
+        var baseBuilder = current.toBuilder();
+        for (var v : relaxedVars) baseBuilder.value(v, false);
+        Assignment base = baseBuilder.build();
 
         return enumerate(relaxedSlots).stream()
                 .map(combo -> applyCombo(base, combo))
@@ -179,16 +179,12 @@ public class LargeNeighborhoodSolver implements LocalSolver {
         return result;
     }
 
-    // Bypasses Assignment's builder (which copies the map twice) in favour of a single HashMap
-    // copy-constructor pass plus Assignment.ofTrusted's direct record construction -- profiling
-    // ParkrunSchedulingTest found AssignmentBuilder.values/build the dominant cost here, since this
-    // runs once per enumerated combo (up to slotsPerStep-many candidates' worth of Cartesian
-    // product) rather than once per step.
+    // Runs once per enumerated combo (up to slotsPerStep-many candidates' worth of Cartesian
+    // product) rather than once per step, so the builder must copy the map only once -- profiling
+    // ParkrunSchedulingTest found a two-pass construction the dominant cost here.
     private Assignment applyCombo(@NonNull Assignment base,
                                    @NonNull Map<Variable<Boolean>, Boolean> combo) {
-        Map<Variable<?>, Object> merged = new HashMap<>(base.getValues());
-        merged.putAll(combo);
-        return Assignment.ofTrusted(merged, base.getStatistics(), base.listener(), base.cancellation());
+        return base.toBuilder().values(combo).build();
     }
 
     private long violationCount(@NonNull Assignment a, @NonNull List<Constraint> constraints) {

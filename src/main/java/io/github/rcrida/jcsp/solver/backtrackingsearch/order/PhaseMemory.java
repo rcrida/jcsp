@@ -1,5 +1,6 @@
 package io.github.rcrida.jcsp.solver.backtrackingsearch.order;
 
+import io.github.rcrida.jcsp.assignments.Assignment;
 import io.github.rcrida.jcsp.variables.Variable;
 import org.jspecify.annotations.NonNull;
 
@@ -77,10 +78,10 @@ public final class PhaseMemory {
      * which on a highly symmetric problem is a trap the restart exists to escape. Depth is a
      * monotone proxy for progress, so only a genuinely new best path can overwrite the memory.
      */
-    public void recordIfDeepest(@NonNull Map<Variable<?>, Object> assignment) {
+    public void recordIfDeepest(@NonNull Assignment assignment) {
         if (assignment.size() <= bestDepth) return;
         bestDepth = assignment.size();
-        bestPath.putAll(assignment);
+        assignment.forEach(bestPath::put);
     }
 
     /**
@@ -93,9 +94,9 @@ public final class PhaseMemory {
      * incumbent has strictly improved -- so the newest solution is always the better guide and an
      * unconditional overwrite is the right rule rather than a laxer one.
      */
-    public void recordSolution(@NonNull Map<Variable<?>, Object> solution) {
+    public void recordSolution(@NonNull Assignment solution) {
         bestDepth = solution.size();
-        bestPath.putAll(solution);
+        solution.forEach(bestPath::put);
     }
 
     /**

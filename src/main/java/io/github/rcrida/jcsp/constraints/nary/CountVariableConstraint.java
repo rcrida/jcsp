@@ -58,7 +58,7 @@ public class CountVariableConstraint<T> extends NaryConstraint implements Propag
 
     @Override
     public boolean isSatisfiedBy(@NonNull Assignment assignment) {
-        if (!assignment.getValues().keySet().containsAll(getVariables())) return true;
+        if (!assignment.containsAll(getVariables())) return true;
         int count = (int) countedVariables.stream()
                 .filter(v -> value.equals(assignment.getValue(v).orElseThrow())).count();
         int targetValue = assignment.getValue(target).orElseThrow();

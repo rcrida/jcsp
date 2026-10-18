@@ -57,7 +57,7 @@ public class LinearBooleanVariableConstraint<N extends Number> extends NaryConst
 
     @Override
     public boolean isSatisfiedBy(@NonNull Assignment assignment) {
-        if (!assignment.getValues().keySet().containsAll(getVariables())) return true;
+        if (!assignment.containsAll(getVariables())) return true;
         N targetValue = assignment.getValue(target).orElseThrow();
         return operator.compare(LinearBooleanSupport.weightedSumOfTrue(coefficients, assignment, targetValue), targetValue);
     }

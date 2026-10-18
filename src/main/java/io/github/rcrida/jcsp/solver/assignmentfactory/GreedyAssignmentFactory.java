@@ -13,9 +13,7 @@ import io.github.rcrida.jcsp.variables.Variable;
 import org.jspecify.annotations.NonNull;
 
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Stream;
@@ -43,7 +41,7 @@ public class GreedyAssignmentFactory implements InitialAssignmentFactory {
         var current = Assignment.empty();
         for (Variable<?> variable : csp.getVariableDomains().keySet()) {
             val value = leastConflictingValue(variable, current, csp);
-            current = Assignment.of(addEntry(current, variable, value));
+            current = current.toBuilder().value(variable, value).build();
         }
         return current;
     }
@@ -56,7 +54,7 @@ public class GreedyAssignmentFactory implements InitialAssignmentFactory {
         AtomicInteger bestViolations = new AtomicInteger(Integer.MAX_VALUE);
         List<Object> bestValues = new ArrayList<>();
         candidateSeedValues(csp.getDomain(variable)).forEach(value -> {
-            val candidate = Assignment.of(addEntry(current, variable, value));
+            val candidate = current.toBuilder().value(variable, value).build();
             int violations = (int) constraintsOnVariable.stream()
                     .filter(c -> c.getVariables().stream().allMatch(v -> candidate.getValue(v).isPresent()))
                     .filter(c -> !c.isSatisfiedBy(candidate))
@@ -85,9 +83,4 @@ public class GreedyAssignmentFactory implements InitialAssignmentFactory {
         return ((DiscreteDomain<?>) domain).stream();
     }
 
-    private static Map<Variable<?>, Object> addEntry(Assignment current, Variable<?> variable, Object value) {
-        val map = new HashMap<>(current.getValues());
-        map.put(variable, value);
-        return map;
-    }
 }

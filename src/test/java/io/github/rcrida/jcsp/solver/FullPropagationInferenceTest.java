@@ -63,7 +63,7 @@ class FullPropagationInferenceTest {
         var assignment = Assignment.of(Map.of(x, 1));
         ConsistencyResult result = Solver.Factory.FULL_PROPAGATION_INFERENCE.applyWithReason(csp, x, assignment);
         assertThat(result.isInfeasible()).isTrue();
-        assertThat(result.reason()).isEqualTo(GroundNogoodConstraint.of(assignment.getValues()));
+        assertThat(result.reason()).isEqualTo(GroundNogoodConstraint.of(assignment));
     }
 
     @Test
@@ -127,7 +127,7 @@ class FullPropagationInferenceTest {
         assertThat(result.isInfeasible()).isTrue();
         assertThat(result.reason()).isEqualTo(RangeNogoodConstraint.of(
                 Map.of(s1, IntervalDomain.of(5, 5), s2, IntervalDomain.of(0, 3))));
-        assertThat(result.reason()).isNotEqualTo(GroundNogoodConstraint.of(assignment.getValues()));
+        assertThat(result.reason()).isNotEqualTo(GroundNogoodConstraint.of(assignment));
     }
 
     @Test

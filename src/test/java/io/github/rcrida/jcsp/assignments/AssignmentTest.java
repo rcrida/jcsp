@@ -37,7 +37,7 @@ public class AssignmentTest {
 
     @Test
     void empty() {
-        assertThat(Assignment.empty().getValues()).isEmpty();
+        assertThat(Assignment.empty().size()).isZero();
     }
 
     @Test
@@ -55,7 +55,7 @@ public class AssignmentTest {
     void extractPartialAssignment() {
         val assignment = Assignment.of(Map.of(variable, value, anotherVariable, anotherValue));
         val partialAssignment = assignment.extractPartialAssignment(Set.of(variable));
-        assertThat(partialAssignment.getValues()).isEqualTo(Map.of(variable, value));
+        assertThat(partialAssignment).isEqualTo(Assignment.of(Map.of(variable, value)));
     }
 
     @Test
@@ -98,8 +98,8 @@ public class AssignmentTest {
 
         val next = assignment.withValues(Map.of(anotherVariable, anotherValue));
 
-        assertThat(next.getValues()).containsExactlyInAnyOrderEntriesOf(Map.of(variable, value, anotherVariable, anotherValue));
-        assertThat(assignment.getValues()).containsExactlyInAnyOrderEntriesOf(Map.of(variable, value));
+        assertThat(next).isEqualTo(Assignment.of(Map.of(variable, value, anotherVariable, anotherValue)));
+        assertThat(assignment).isEqualTo(Assignment.of(Map.of(variable, value)));
     }
 
     @Test
@@ -150,7 +150,7 @@ public class AssignmentTest {
         val assignment1 = Assignment.of(Map.of(variable, value));
         val assignment2 = Assignment.of(Map.of(anotherVariable, anotherValue));
         assertThat(assignment1.merge(assignment2)).satisfies(merged -> {
-            assertThat(merged.getValues()).containsExactlyInAnyOrderEntriesOf(Map.of(variable, value, anotherVariable, anotherValue));
+            assertThat(merged).isEqualTo(Assignment.of(Map.of(variable, value, anotherVariable, anotherValue)));
         });
     }
 
@@ -296,21 +296,92 @@ public class AssignmentTest {
     void builderHandlesZeroOneAndManyEntries() {
         val a = Variable.Factory.INSTANCE.<Integer>create("a");
         val b = Variable.Factory.INSTANCE.<Integer>create("b");
-        assertThat(Assignment.builder().build().getValues()).isEmpty();
-        assertThat(Assignment.builder().value(a, 1).build().getValues()).containsExactlyEntriesOf(Map.of(a, 1));
+        assertThat(Assignment.builder().build().size()).isZero();
+        assertThat(Assignment.builder().value(a, 1).build()).isEqualTo(Assignment.of(Map.of(a, 1)));
         val many = Assignment.builder().value(a, 1).values(Map.of(a, 5, b, 2)).build();
-        assertThat(many.getValues()).containsExactlyInAnyOrderEntriesOf(Map.of(a, 5, b, 2));
-        assertThatThrownBy(() -> many.getValues().put(a, 9)).isInstanceOf(UnsupportedOperationException.class);
+        assertThat(many).isEqualTo(Assignment.of(Map.of(a, 5, b, 2)));
+    }
+
+    @Test
+    void accessorsReadEntriesWithoutExposingTheMap() {
+        val a = Variable.Factory.INSTANCE.<Integer>create("a");
+        val b = Variable.Factory.INSTANCE.<Integer>create("b");
+        val c = Variable.Factory.INSTANCE.<Integer>create("c");
+        val assignment = Assignment.builder().value(a, 1).value(b, 2).build();
+
+        assertThat(assignment.size()).isEqualTo(2);
+        assertThat(assignment.variables()).containsExactlyInAnyOrder(a, b);
+        assertThat(assignment.getValueOrNull(a)).isEqualTo(1);
+        assertThat(assignment.getValueOrNull(c)).isNull();
+        assertThat(assignment.containsAll(Set.of(a, b))).isTrue();
+        assertThat(assignment.containsAll(Set.of(a, c))).isFalse();
+        assertThat(assignment.containsAny(Set.of(c, b))).isTrue();
+        assertThat(assignment.containsAny(Set.of(c))).isFalse();
+        Map<Variable<?>, Object> seen = new LinkedHashMap<>();
+        assignment.forEach(seen::put);
+        assertThat(seen).containsExactlyInAnyOrderEntriesOf(Map.of(a, 1, b, 2));
+    }
+
+    @Test
+    void entriesAreReadOnly() {
+        val a = Variable.Factory.INSTANCE.<Integer>create("a");
+        val b = Variable.Factory.INSTANCE.<Integer>create("b");
+        val assignment = Assignment.builder().value(a, 1).value(b, 2).build();
+
+        assertThat(assignment.entries()).extracting(Map.Entry::getKey).containsExactlyInAnyOrder(a, b);
+        assertThat(assignment.entryStream().mapToInt(e -> (Integer) e.getValue()).sum()).isEqualTo(3);
+        assertThatThrownBy(() -> assignment.entries().iterator().next().setValue(9))
+                .isInstanceOf(UnsupportedOperationException.class);
+    }
+
+    @Test
+    void equalsAnyValuationWithTheSameEntries() {
+        val a = Variable.Factory.INSTANCE.<Integer>create("a");
+        val b = Variable.Factory.INSTANCE.<Integer>create("b");
+        val assignment = Assignment.builder().value(a, 1).value(b, 2).build();
+
+        assertThat(assignment).isEqualTo(new EntriesOnly(Map.of(a, 1, b, 2)));
+        assertThat(assignment).isNotEqualTo(new EntriesOnly(Map.of(a, 1, b, 3)));
+        assertThat(assignment).isNotEqualTo(new EntriesOnly(Map.of(a, 1)));
+    }
+
+    /** A {@link Valuation} that is not a {@link MapAssignment}, to reach the generic {@code equals} path. */
+    private record EntriesOnly(Map<Variable<?>, Object> values) implements Valuation {
+        @Override
+        public Object getValueOrNull(Variable<?> variable) {
+            return values.get(variable);
+        }
+
+        @Override
+        public boolean isAssigned(Variable<?> variable) {
+            return values.containsKey(variable);
+        }
+
+        @Override
+        public int size() {
+            return values.size();
+        }
+
+        @Override
+        public Set<Variable<?>> variables() {
+            return values.keySet();
+        }
+
+        @Override
+        public Iterable<Map.Entry<Variable<?>, Object>> entries() {
+            return values.entrySet();
+        }
     }
 
     @Test
     void builderIsReusableAfterBuild() {
         val a = Variable.Factory.INSTANCE.<Integer>create("a");
         val b = Variable.Factory.INSTANCE.<Integer>create("b");
-        val builder = Assignment.builder().value(a, 1);
+        val c = Variable.Factory.INSTANCE.<Integer>create("c");
+        val builder = Assignment.builder().value(a, 1).value(b, 2);
         val first = builder.build();
-        builder.value(b, 2);
-        assertThat(first.getValues()).containsOnlyKeys(a);
-        assertThat(builder.build().getValues()).containsOnlyKeys(a, b);
+        builder.value(c, 3);
+        assertThat(first.variables()).containsExactlyInAnyOrder(a, b);
+        assertThat(builder.build().variables()).containsExactlyInAnyOrder(a, b, c);
     }
 }

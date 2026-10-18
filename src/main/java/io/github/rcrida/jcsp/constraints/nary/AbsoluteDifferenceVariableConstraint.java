@@ -60,7 +60,7 @@ public class AbsoluteDifferenceVariableConstraint<N extends Number> extends Nary
 
     @Override
     public boolean isSatisfiedBy(@NonNull Assignment assignment) {
-        if (!assignment.getValues().keySet().containsAll(getVariables())) return true;
+        if (!assignment.containsAll(getVariables())) return true;
         double diff = Math.abs(assignment.getValue(left).orElseThrow().doubleValue()
                 - assignment.getValue(right).orElseThrow().doubleValue());
         double targetValue = assignment.getValue(target).orElseThrow().doubleValue();

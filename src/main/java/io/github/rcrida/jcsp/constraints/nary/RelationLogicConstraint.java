@@ -139,7 +139,7 @@ public class RelationLogicConstraint extends NaryConstraint implements Propagata
 
     @Override
     public boolean isSatisfiedBy(@NonNull Assignment assignment) {
-        if (!assignment.getValues().keySet().containsAll(getVariables())) return true;
+        if (!assignment.containsAll(getVariables())) return true;
         return operator.apply(left.holds(assignment), right.holds(assignment));
     }
 

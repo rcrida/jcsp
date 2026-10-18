@@ -24,6 +24,7 @@ import org.ojalgo.optimisation.ExpressionsBasedModel;
 import org.ojalgo.optimisation.Optimisation;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -489,7 +490,11 @@ public final class LpModelBuilder {
         if (table instanceof NaryTuplesConstraint t) {
             return t.getTuples().stream()
                     .filter(tuple -> t.getVariables().stream().allMatch(v -> csp.getDomain(v).contains(tuple.getValue(v).orElseThrow())))
-                    .map(Assignment::getValues)
+                    .map(tuple -> {
+                        Map<Variable<?>, Object> cells = new HashMap<>();
+                        tuple.forEach(cells::put);
+                        return cells;
+                    })
                     .toList();
         }
         NaryStarredTuplesConstraint t = (NaryStarredTuplesConstraint) table;

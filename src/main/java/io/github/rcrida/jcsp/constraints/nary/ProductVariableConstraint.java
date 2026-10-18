@@ -64,7 +64,7 @@ public class ProductVariableConstraint<N extends Number> extends NaryConstraint 
     /** Optimistically satisfied for a partial assignment -- only evaluated once every variable is assigned. */
     @Override
     public boolean isSatisfiedBy(@NonNull Assignment assignment) {
-        if (!assignment.getValues().keySet().containsAll(getVariables())) return true;
+        if (!assignment.containsAll(getVariables())) return true;
         double product = factors.stream()
                 .mapToDouble(v -> assignment.getValue(v).orElseThrow().doubleValue())
                 .reduce(1.0, (a, b) -> a * b);

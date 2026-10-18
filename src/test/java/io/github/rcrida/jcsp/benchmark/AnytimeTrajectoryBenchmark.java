@@ -52,7 +52,7 @@ public final class AnytimeTrajectoryBenchmark {
             @Override
             public void onNodeExplored(Variable<?> variable, Object value, Assignment assignment) {
                 nodesByPrefix.computeIfAbsent(prefix(variable), k -> new LongAdder()).increment();
-                nodesByDepth.computeIfAbsent(assignment.getValues().size(), k -> new LongAdder()).increment();
+                nodesByDepth.computeIfAbsent(assignment.size(), k -> new LongAdder()).increment();
             }
 
             @Override

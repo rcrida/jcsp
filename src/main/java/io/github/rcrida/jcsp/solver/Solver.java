@@ -124,14 +124,14 @@ public interface Solver {
                     ConsistencyResult macResult = MAC.INSTANCE.applyWithReason(problem, variable, assignment);
                     if (macResult.isInfeasible()) {
                         return macResult.reason() != null ? macResult
-                                : ConsistencyResult.infeasible(GroundNogoodConstraint.of(assignment.getValues()));
+                                : ConsistencyResult.infeasible(GroundNogoodConstraint.of(assignment));
                     }
                     ConstraintSatisfactionProblem afterMac = macResult.problem();
                     ConsistencyResult fixpointResult = fixpointPropagation.applyFixpointWithReason(afterMac,
                             seed(problem, afterMac, alsoChanged),
                             assignment.listener(), assignment.getStatistics(), assignment.cancellation());
                     if (fixpointResult.isInfeasible() && fixpointResult.reason() == null) {
-                        return ConsistencyResult.infeasible(GroundNogoodConstraint.of(assignment.getValues()));
+                        return ConsistencyResult.infeasible(GroundNogoodConstraint.of(assignment));
                     }
                     return fixpointResult;
                 }

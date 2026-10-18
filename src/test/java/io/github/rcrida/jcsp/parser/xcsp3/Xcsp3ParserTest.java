@@ -91,7 +91,7 @@ class Xcsp3ParserTest {
                 "<intension> eq(x,2) </intension>");
         Optional<Assignment> solution = Solver.Factory.INSTANCE.createSolver(instance.csp()).getSolution();
         assertThat(solution).isPresent();
-        assertThat((Object) solution.get().getValues().values().iterator().next()).isEqualTo(2);
+        assertThat((Object) solution.get().entries().iterator().next().getValue()).isEqualTo(2);
     }
 
     @Test void explicitValueListDomain_excludesGaps() throws IOException {
@@ -100,7 +100,7 @@ class Xcsp3ParserTest {
                 "<intension> eq(x,3) </intension>");
         Optional<Assignment> solution = Solver.Factory.INSTANCE.createSolver(instance.csp()).getSolution();
         assertThat(solution).isPresent();
-        assertThat((Object) solution.get().getValues().values().iterator().next()).isEqualTo(3);
+        assertThat((Object) solution.get().entries().iterator().next().getValue()).isEqualTo(3);
     }
 
     @Test void rangeDomainTooLargeToMaterialize_throwsUnsupported() {
@@ -117,8 +117,8 @@ class Xcsp3ParserTest {
                 "<var id=\"x\"> 0..9 </var><var id=\"y\"> 0..9 </var>",
                 "<intension> eq(add(x,y),10) </intension>");
         for (Assignment solution : solutions(instance.csp())) {
-            int x = (int) solution.getValues().values().stream().toList().get(0);
-            int total = solution.getValues().values().stream().mapToInt(v -> (int) v).sum();
+            int x = (int) solution.entries().iterator().next().getValue();
+            int total = solution.entryStream().mapToInt(e -> (int) e.getValue()).sum();
             assertThat(total).isEqualTo(10);
         }
         assertThat(solutions(instance.csp())).isNotEmpty();
@@ -1515,7 +1515,7 @@ class Xcsp3ParserTest {
                 "<var id=\"x\"> 0..5 </var><var id=\"y\"> 0..5 </var>",
                 "<sum><list> x y </list><condition> (eq,5) </condition></sum>");
         for (Assignment solution : solutions(instance.csp())) {
-            int total = solution.getValues().values().stream().mapToInt(v -> (int) v).sum();
+            int total = solution.entryStream().mapToInt(e -> (int) e.getValue()).sum();
             assertThat(total).isEqualTo(5);
         }
         assertThat(solutions(instance.csp())).isNotEmpty();
@@ -2608,7 +2608,7 @@ class Xcsp3ParserTest {
         assertThat(instance.maximize()).isFalse();
         Optional<Assignment> solution = Solver.Factory.INSTANCE.createSolver(instance.csp(), instance.objective()).getSolution();
         assertThat(solution).isPresent();
-        assertThat((Object) solution.get().getValues().values().iterator().next()).isEqualTo(3);
+        assertThat((Object) solution.get().entries().iterator().next().getValue()).isEqualTo(3);
     }
 
     @Test void objectiveMaximizeVariable_solvesToUpperBound() throws IOException {
@@ -2619,7 +2619,7 @@ class Xcsp3ParserTest {
         assertThat(instance.maximize()).isTrue();
         Optional<Assignment> solution = Solver.Factory.INSTANCE.createSolver(instance.csp(), instance.objective()).getSolution();
         assertThat(solution).isPresent();
-        assertThat((Object) solution.get().getValues().values().iterator().next()).isEqualTo(6);
+        assertThat((Object) solution.get().entries().iterator().next().getValue()).isEqualTo(6);
     }
 
     @Test void objectiveMinimizeSum_buildsLinearObjective() throws IOException {
@@ -2629,7 +2629,7 @@ class Xcsp3ParserTest {
                 "<minimize type=\"sum\"><list> x y </list><coeffs> 1 1 </coeffs></minimize>");
         Optional<Assignment> solution = Solver.Factory.INSTANCE.createSolver(instance.csp(), instance.objective()).getSolution();
         assertThat(solution).isPresent();
-        int total = solution.get().getValues().values().stream().mapToInt(v -> (int) v).sum();
+        int total = solution.get().entryStream().mapToInt(e -> (int) e.getValue()).sum();
         assertThat(total).isEqualTo(2);
     }
 

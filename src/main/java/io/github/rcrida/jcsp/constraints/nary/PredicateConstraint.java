@@ -37,7 +37,7 @@ public class PredicateConstraint extends NaryConstraint {
 
     @Override
     public boolean isSatisfiedBy(@NonNull Assignment assignment) {
-        if (!assignment.getValues().keySet().containsAll(getVariables())) {
+        if (!assignment.containsAll(getVariables())) {
             return true;
         }
         return predicate.test(assignment);

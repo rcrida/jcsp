@@ -540,7 +540,7 @@ public class BranchAndBoundSolver implements Solver {
                 ? Optional.of(assignment)
                 : resolveContinuousResidual(csp, assignment, incumbent[0]);
         Optional<Assignment> accepted = complete.flatMap(solution -> accept(solution, incumbent));
-        accepted.ifPresent(solution -> phaseMemory.recordSolution(solution.getValues()));
+        accepted.ifPresent(solution -> phaseMemory.recordSolution(solution));
         return accepted.stream();
     }
 

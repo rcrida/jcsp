@@ -35,9 +35,8 @@ public class LinearObjective implements ToDoubleFunction<Assignment> {
     @Override
     public double applyAsDouble(@NonNull Assignment assignment) {
         double total = constant;
-        Map<Variable<?>, Object> values = assignment.getValues();
         for (var entry : coefficients.entrySet()) {
-            Object value = values.get(entry.getKey());
+            Object value = assignment.getValueOrNull(entry.getKey());
             if (value == null) continue;
             total += entry.getValue() * ((Number) value).doubleValue();
         }

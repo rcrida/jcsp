@@ -65,11 +65,10 @@ public class NaryElementConstraint<T> extends NaryConstraint implements Propagat
     @Override
     @SuppressWarnings("unchecked")
     public boolean isSatisfiedBy(@NonNull Assignment assignment) {
-        var assigned = assignment.getValues().keySet();
-        if (!assigned.contains(index)) return true;
+        if (!assignment.isAssigned(index)) return true;
         Integer i = (Integer) assignment.getValue(index).orElseThrow();
         if (i < 1 || i > vars.size()) return false;
-        if (!assigned.contains(result) || !assigned.contains(vars.get(i - 1))) return true;
+        if (!assignment.isAssigned(result) || !assignment.isAssigned(vars.get(i - 1))) return true;
         T r = (T) assignment.getValue(result).orElseThrow();
         T v = (T) assignment.getValue(vars.get(i - 1)).orElseThrow();
         return r.equals(v);

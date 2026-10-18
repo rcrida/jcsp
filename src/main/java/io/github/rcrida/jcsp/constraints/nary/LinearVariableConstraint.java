@@ -61,7 +61,7 @@ public class LinearVariableConstraint<N extends Number> extends NaryConstraint i
      */
     @Override
     public boolean isSatisfiedBy(@NonNull Assignment assignment) {
-        if (!assignment.getValues().keySet().containsAll(getVariables())) return true;
+        if (!assignment.containsAll(getVariables())) return true;
         N targetValue = assignment.getValue(target).orElseThrow();
         return operator.compare(weightedSum(assignment, targetValue), targetValue);
     }

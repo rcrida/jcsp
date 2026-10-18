@@ -174,9 +174,9 @@ public class TimetableSchedulingViaColouringTest {
     static void printTimetable(Assignment assignment) {
         val lookup = new java.util.HashMap<TimeSlot, java.util.Map<Group, String>>();
         for (TimeSlot ts : TimeSlot.values()) lookup.put(ts, new java.util.HashMap<>());
-        assignment.getValues().entrySet().forEach(e -> {
-            val gs = (GroupSubject) e.getKey();
-            val cs = (ClassSchedule) e.getValue();
+        assignment.forEach((variable, value) -> {
+            val gs = (GroupSubject) variable;
+            val cs = (ClassSchedule) value;
             lookup.get(cs.slot()).put(gs.group(), gs.subject() + " (" + cs.teacher() + ")");
         });
 

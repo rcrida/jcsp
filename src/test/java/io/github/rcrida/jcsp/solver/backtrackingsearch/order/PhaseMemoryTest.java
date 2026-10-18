@@ -1,5 +1,6 @@
 package io.github.rcrida.jcsp.solver.backtrackingsearch.order;
 
+import io.github.rcrida.jcsp.assignments.Assignment;
 import io.github.rcrida.jcsp.variables.Variable;
 import org.junit.jupiter.api.Test;
 
@@ -13,6 +14,14 @@ class PhaseMemoryTest {
     private final Variable<Integer> x = F.create("phase_x");
     private final Variable<Integer> y = F.create("phase_y");
 
+    private static Assignment assignment(Variable<?> v1, Object value1) {
+        return Assignment.of(Map.of(v1, value1));
+    }
+
+    private static Assignment assignment(Variable<?> v1, Object value1, Variable<?> v2, Object value2) {
+        return Assignment.of(Map.of(v1, value1, v2, value2));
+    }
+
     @Test
     void unknownVariable_leavesOrderUntouched() {
         assertThat(new PhaseMemory().prioritise(x, List.of(1, 2, 3))).containsExactly(1, 2, 3);
@@ -21,14 +30,14 @@ class PhaseMemoryTest {
     @Test
     void rememberedValue_movesToTheFrontKeepingTheRestInOrder() {
         var memory = new PhaseMemory();
-        memory.recordIfDeepest(Map.of(x, 3));
+        memory.recordIfDeepest(assignment(x, 3));
         assertThat(memory.prioritise(x, List.of(1, 2, 3, 4))).containsExactly(3, 1, 2, 4);
     }
 
     @Test
     void rememberedValueAlreadyFirst_returnsTheSameListWithoutCopying() {
         var memory = new PhaseMemory();
-        memory.recordIfDeepest(Map.of(x, 1));
+        memory.recordIfDeepest(assignment(x, 1));
         List<Object> values = List.of(1, 2, 3);
         assertThat(memory.prioritise(x, values)).isSameAs(values);
     }
@@ -36,7 +45,7 @@ class PhaseMemoryTest {
     @Test
     void rememberedValuePrunedSincePropagation_returnsTheSameList() {
         var memory = new PhaseMemory();
-        memory.recordIfDeepest(Map.of(x, 9));
+        memory.recordIfDeepest(assignment(x, 9));
         List<Object> values = List.of(1, 2, 3);
         assertThat(memory.prioritise(x, values)).isSameAs(values);
     }
@@ -45,25 +54,25 @@ class PhaseMemoryTest {
     void bestDepth_startsAtZeroAndTracksOnlyTheDeepestRecording() {
         var memory = new PhaseMemory();
         assertThat(memory.bestDepth()).isZero();
-        memory.recordIfDeepest(Map.of(x, 3, y, 7));
+        memory.recordIfDeepest(assignment(x, 3, y, 7));
         assertThat(memory.bestDepth()).isEqualTo(2);
-        memory.recordIfDeepest(Map.of(x, 1)); // shallower: leaves the depth alone
+        memory.recordIfDeepest(assignment(x, 1)); // shallower: leaves the depth alone
         assertThat(memory.bestDepth()).isEqualTo(2);
     }
 
     @Test
     void bestDepth_followsRecordSolutionEvenWhenItIsNotDeeper() {
         var memory = new PhaseMemory();
-        memory.recordIfDeepest(Map.of(x, 3, y, 7));
-        memory.recordSolution(Map.of(x, 1));
+        memory.recordIfDeepest(assignment(x, 3, y, 7));
+        memory.recordSolution(assignment(x, 1));
         assertThat(memory.bestDepth()).isEqualTo(1);
     }
 
     @Test
     void shallowerAssignment_doesNotOverwriteTheDeepestPath() {
         var memory = new PhaseMemory();
-        memory.recordIfDeepest(Map.of(x, 3, y, 7));
-        memory.recordIfDeepest(Map.of(x, 1)); // shallower: ignored outright
+        memory.recordIfDeepest(assignment(x, 3, y, 7));
+        memory.recordIfDeepest(assignment(x, 1)); // shallower: ignored outright
         assertThat(memory.prioritise(x, List.of(1, 2, 3))).containsExactly(3, 1, 2);
         assertThat(memory.prioritise(y, List.of(5, 7))).containsExactly(7, 5);
     }
@@ -71,8 +80,8 @@ class PhaseMemoryTest {
     @Test
     void strictlyDeeperAssignment_replacesTheRememberedValues() {
         var memory = new PhaseMemory();
-        memory.recordIfDeepest(Map.of(x, 3));
-        memory.recordIfDeepest(Map.of(x, 1, y, 5));
+        memory.recordIfDeepest(assignment(x, 3));
+        memory.recordIfDeepest(assignment(x, 1, y, 5));
         assertThat(memory.prioritise(x, List.of(1, 2, 3))).containsExactly(1, 2, 3);
         assertThat(memory.prioritise(y, List.of(4, 5))).containsExactly(5, 4);
     }
@@ -80,8 +89,8 @@ class PhaseMemoryTest {
     @Test
     void equalDepthAssignment_isIgnoredSoOnlyGenuineProgressCounts() {
         var memory = new PhaseMemory();
-        memory.recordIfDeepest(Map.of(x, 3));
-        memory.recordIfDeepest(Map.of(x, 2));
+        memory.recordIfDeepest(assignment(x, 3));
+        memory.recordIfDeepest(assignment(x, 2));
         assertThat(memory.prioritise(x, List.of(1, 2, 3))).containsExactly(3, 1, 2);
     }
 
@@ -93,8 +102,8 @@ class PhaseMemoryTest {
         // successive ones always tie on size. recordIfDeepest would keep the first one forever,
         // which for branch-and-bound means guiding by the *worst* solution ever found.
         var memory = new PhaseMemory();
-        memory.recordSolution(Map.of(x, 3, y, 4));
-        memory.recordSolution(Map.of(x, 1, y, 5));
+        memory.recordSolution(assignment(x, 3, y, 4));
+        memory.recordSolution(assignment(x, 1, y, 5));
         assertThat(memory.prioritise(x, List.of(1, 2, 3))).containsExactly(1, 2, 3);
         assertThat(memory.prioritise(y, List.of(4, 5))).containsExactly(5, 4);
     }
@@ -104,7 +113,7 @@ class PhaseMemoryTest {
         // After a reset the memory guides nothing: values come back in the order given, and the
         // depth signal starts again from zero so the next descent counts as progress.
         var memory = new PhaseMemory();
-        memory.recordIfDeepest(Map.of(x, 3, y, 4));
+        memory.recordIfDeepest(assignment(x, 3, y, 4));
         assertThat(memory.bestDepth()).isEqualTo(2);
 
         memory.reset();
@@ -117,9 +126,9 @@ class PhaseMemoryTest {
     @Test
     void reset_thenRecord_adoptsTheNewPath() {
         var memory = new PhaseMemory();
-        memory.recordIfDeepest(Map.of(x, 3, y, 4));
+        memory.recordIfDeepest(assignment(x, 3, y, 4));
         memory.reset();
-        memory.recordIfDeepest(Map.of(x, 1));
+        memory.recordIfDeepest(assignment(x, 1));
 
         assertThat(memory.bestDepth()).isEqualTo(1);
         assertThat(memory.prioritise(x, List.of(1, 2, 3))).containsExactly(1, 2, 3);
@@ -130,8 +139,8 @@ class PhaseMemoryTest {
         // The contrast, stated directly: identical calls through the depth-gated entry point keep
         // the original values, which is correct for satisfaction and wrong for optimization.
         var memory = new PhaseMemory();
-        memory.recordIfDeepest(Map.of(x, 3, y, 4));
-        memory.recordIfDeepest(Map.of(x, 1, y, 5));
+        memory.recordIfDeepest(assignment(x, 3, y, 4));
+        memory.recordIfDeepest(assignment(x, 1, y, 5));
         assertThat(memory.prioritise(x, List.of(1, 2, 3))).containsExactly(3, 1, 2);
         assertThat(memory.prioritise(y, List.of(4, 5))).containsExactly(4, 5);
     }

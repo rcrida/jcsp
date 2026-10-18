@@ -90,7 +90,7 @@ public class NaryTuplesConstraint extends NaryConstraint implements Propagatable
 
     public static NaryTuplesConstraint of(@NonNull Set<Assignment> tuples) {
         assert !tuples.isEmpty() : "tuples must not be empty";
-        var variableSets = tuples.stream().map(a -> a.getValues().keySet()).collect(Collectors.toSet());
+        var variableSets = tuples.stream().map(Assignment::variables).collect(Collectors.toSet());
         assert variableSets.size() == 1 : "all tuples must contain exactly the same variables";
         return NaryTuplesConstraint.builder()
                 .variables(variableSets.iterator().next())
@@ -100,7 +100,7 @@ public class NaryTuplesConstraint extends NaryConstraint implements Propagatable
 
     @Override
     public boolean isSatisfiedBy(@NonNull Assignment assignment) {
-        if (!assignment.getValues().keySet().containsAll(getVariables())) return true;
+        if (!assignment.containsAll(getVariables())) return true;
         return tuples.contains(assignment.extractPartialAssignment(getVariables()));
     }
 

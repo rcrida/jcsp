@@ -102,7 +102,7 @@ public class NaryConflictTuplesConstraint extends NaryConstraint implements Prop
 
     public static NaryConflictTuplesConstraint of(@NonNull Set<Assignment> conflicts) {
         assert !conflicts.isEmpty() : "conflicts must not be empty";
-        var variableSets = conflicts.stream().map(a -> a.getValues().keySet()).collect(Collectors.toSet());
+        var variableSets = conflicts.stream().map(Assignment::variables).collect(Collectors.toSet());
         assert variableSets.size() == 1 : "all conflict tuples must contain exactly the same variables";
         return NaryConflictTuplesConstraint.builder()
                 .variables(variableSets.iterator().next())
@@ -112,7 +112,7 @@ public class NaryConflictTuplesConstraint extends NaryConstraint implements Prop
 
     @Override
     public boolean isSatisfiedBy(@NonNull Assignment assignment) {
-        if (!assignment.getValues().keySet().containsAll(getVariables())) return true;
+        if (!assignment.containsAll(getVariables())) return true;
         return !conflicts.contains(assignment.extractPartialAssignment(getVariables()));
     }
 

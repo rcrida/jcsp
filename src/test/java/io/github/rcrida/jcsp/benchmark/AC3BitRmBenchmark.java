@@ -256,14 +256,14 @@ public class AC3BitRmBenchmark {
                 ConsistencyResult macResult = macApplyWithReason(variant, problem, variable, assignment);
                 if (macResult.isInfeasible()) {
                     return macResult.reason() != null ? macResult
-                            : ConsistencyResult.infeasible(GroundNogoodConstraint.of(assignment.getValues()));
+                            : ConsistencyResult.infeasible(GroundNogoodConstraint.of(assignment));
                 }
                 ConstraintSatisfactionProblem afterMac = macResult.problem();
                 ConsistencyResult fixpointResult = fixpointPropagation.applyFixpointWithReason(afterMac,
                         FixpointPropagation.changedVariables(problem.getVariableDomains(), afterMac.getVariableDomains()),
                         assignment.listener(), assignment.getStatistics(), assignment.cancellation());
                 if (fixpointResult.isInfeasible() && fixpointResult.reason() == null) {
-                    return ConsistencyResult.infeasible(GroundNogoodConstraint.of(assignment.getValues()));
+                    return ConsistencyResult.infeasible(GroundNogoodConstraint.of(assignment));
                 }
                 return fixpointResult;
             }

@@ -1,6 +1,7 @@
 package io.github.rcrida.jcsp.constraints.nary;
 
 import io.github.rcrida.jcsp.assignments.Assignment;
+import io.github.rcrida.jcsp.assignments.Valuation;
 import io.github.rcrida.jcsp.domains.DiscreteDomain;
 import io.github.rcrida.jcsp.domains.Domain;
 import io.github.rcrida.jcsp.variables.Variable;
@@ -28,16 +29,26 @@ import java.util.stream.Collectors;
 @SuperBuilder
 @EqualsAndHashCode(callSuper = true)
 public class GroundNogoodConstraint extends NaryConstraint implements NogoodConstraint {
-    @NonNull private final Map<Variable<?>, Object> forbidden;
+    @NonNull private final Valuation forbidden;
+
+    /**
+     * The nogood forbidding exactly {@code forbidden}'s entries. Keeps {@code forbidden} itself
+     * rather than a copy: a {@link Valuation} is immutable, and passing an {@link Assignment} keeps
+     * it reachable only as the values-only type, so its statistics, listener and cancellation are
+     * never read.
+     */
+    public static GroundNogoodConstraint of(@NonNull Valuation forbidden) {
+        // An empty forbidden valuation is the empty clause: propagate() would report infeasible for
+        // every state (undeterminedCount == 0), pruning the whole search. Callers must not record one.
+        assert forbidden.size() > 0 : "GroundNogoodConstraint requires at least one forbidden assignment";
+        return GroundNogoodConstraint.builder()
+                .variables(forbidden.variables())
+                .forbidden(forbidden)
+                .build();
+    }
 
     public static GroundNogoodConstraint of(@NonNull Map<Variable<?>, Object> forbidden) {
-        // An empty forbidden map is the empty clause: propagate() would report infeasible for every
-        // state (undeterminedCount == 0), pruning the whole search. Callers must not record one.
-        assert !forbidden.isEmpty() : "GroundNogoodConstraint requires at least one forbidden assignment";
-        return GroundNogoodConstraint.builder()
-                .variables(forbidden.keySet())
-                .forbidden(Map.copyOf(forbidden))
-                .build();
+        return of(Assignment.of(forbidden));
     }
 
     /**
@@ -54,9 +65,9 @@ public class GroundNogoodConstraint extends NaryConstraint implements NogoodCons
 
     @Override
     public boolean isSatisfiedBy(@NonNull Assignment assignment) {
-        for (var entry : forbidden.entrySet()) {
-            var value = assignment.getValue(entry.getKey());
-            if (value.isEmpty() || !value.get().equals(entry.getValue())) return true;
+        for (var entry : forbidden.entries()) {
+            Object value = assignment.getValueOrNull(entry.getKey());
+            if (value == null || !value.equals(entry.getValue())) return true;
         }
         return false;
     }
@@ -88,7 +99,7 @@ public class GroundNogoodConstraint extends NaryConstraint implements NogoodCons
         Object undeterminedValue = null;
         int undeterminedCount = 0;
 
-        for (var entry : forbidden.entrySet()) {
+        for (var entry : forbidden.entries()) {
             Variable<?> var = entry.getKey();
             Object value = entry.getValue();
             Domain<?> dom = domains.get(var);
@@ -125,7 +136,7 @@ public class GroundNogoodConstraint extends NaryConstraint implements NogoodCons
 
     @Override
     public String getRelation() {
-        return forbidden.entrySet().stream()
+        return forbidden.entryStream()
                 .map(e -> e.getKey() + "!=" + e.getValue())
                 .sorted()
                 .collect(Collectors.joining(" OR ", "nogood(", ")"));

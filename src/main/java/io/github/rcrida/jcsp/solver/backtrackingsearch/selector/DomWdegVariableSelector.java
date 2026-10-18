@@ -228,7 +228,7 @@ public class DomWdegVariableSelector implements AdaptiveVariableSelector {
      */
     private void markAssigned(@NonNull Assignment assignment) {
         Arrays.fill(assigned, false);
-        for (Variable<?> held : assignment.getValues().keySet()) {
+        for (Variable<?> held : assignment.variables()) {
             Integer index = variableIndex.get(held);
             if (index != null) assigned[index] = true;
         }

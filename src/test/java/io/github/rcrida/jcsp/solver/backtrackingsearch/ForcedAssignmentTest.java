@@ -42,7 +42,7 @@ class ForcedAssignmentTest {
         Optional<Assignment> extended = ForcedAssignment.extend(csp, Assignment.empty());
 
         assertThat(extended).isPresent();
-        assertThat(extended.get().getValues()).containsExactlyInAnyOrderEntriesOf(Map.of(x, 1, y, 2));
+        assertThat(extended.get()).isEqualTo(Assignment.of(Map.of(x, 1, y, 2)));
     }
 
     @Test

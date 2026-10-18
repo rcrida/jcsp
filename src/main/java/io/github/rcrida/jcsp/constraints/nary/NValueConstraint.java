@@ -70,13 +70,12 @@ public class NValueConstraint<T> extends NaryConstraint implements Propagatable 
     @Override
     @SuppressWarnings("unchecked")
     public boolean isSatisfiedBy(@NonNull Assignment assignment) {
-        var assigned = assignment.getValues().keySet();
-        if (!assigned.contains(count)) return true;
+        if (!assignment.isAssigned(count)) return true;
 
         Set<T> distinct = new HashSet<>();
         int assignedCount = 0;
         for (Variable<T> v : trackedVariables) {
-            if (assigned.contains(v)) {
+            if (assignment.isAssigned(v)) {
                 distinct.add((T) assignment.getValue(v).orElseThrow());
                 assignedCount++;
             }

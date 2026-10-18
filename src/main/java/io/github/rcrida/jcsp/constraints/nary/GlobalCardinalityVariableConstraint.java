@@ -71,7 +71,7 @@ public class GlobalCardinalityVariableConstraint<T> extends NaryConstraint imple
      */
     @Override
     public boolean isSatisfiedBy(@NonNull Assignment assignment) {
-        if (!assignment.getValues().keySet().containsAll(getVariables())) return true;
+        if (!assignment.containsAll(getVariables())) return true;
         Map<T, Integer> counts = new HashMap<>();
         for (Variable<T> v : countedVariables) {
             counts.merge(assignment.getValue(v).orElseThrow(), 1, Integer::sum);

@@ -110,7 +110,7 @@ class DomWdegLubySearchTest {
         thread.join();
 
         assertThat(failure.get()).isNull();
-        assertThat(result.get()).hasValueSatisfying(solution -> assertThat(solution.getValues()).hasSize(variables));
+        assertThat(result.get()).hasValueSatisfying(solution -> assertThat(solution.size()).isEqualTo(variables));
     }
 
     @Test

@@ -22,6 +22,7 @@ import org.junit.jupiter.api.Test;
 
 import java.time.Duration;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.CopyOnWriteArrayList;
@@ -392,7 +393,7 @@ public class BranchAndBoundSolverTest {
                 // is recorded before the remaining candidates are propagated.
                 return seen.size() == 1
                         ? ConsistencyResult.infeasible(
-                                io.github.rcrida.jcsp.constraints.nary.GroundNogoodConstraint.of(assignment.getValues()))
+                                io.github.rcrida.jcsp.constraints.nary.GroundNogoodConstraint.of(assignment))
                         : ConsistencyResult.feasible(problem);
             }
         };
@@ -508,7 +509,7 @@ public class BranchAndBoundSolverTest {
     private static Inference narrowAssignedToSingleton() {
         return (csp, variable, assignment) -> Optional.of(csp.toBuilder()
                 .variableDomain((Variable<Object>) variable,
-                        new io.github.rcrida.jcsp.domains.ObjectSingletonDomain(assignment.getValues().get(variable)))
+                        new io.github.rcrida.jcsp.domains.ObjectSingletonDomain(assignment.getValueOrNull(variable)))
                 .build());
     }
 
@@ -540,7 +541,7 @@ public class BranchAndBoundSolverTest {
             builder.variableDomain(bit, IntRangeDomain.of(0, 1));
         }
         builder.predicateConstraint(Set.copyOf(bits),
-                a -> a.getValues().values().stream().mapToInt(v -> (Integer) v).sum() == 7);
+                a -> a.entryStream().mapToInt(e -> (Integer) e.getValue()).sum() == 7);
         var csp = builder.build();
 
         var objectiveBuilder = LinearObjective.builder();
@@ -902,8 +903,7 @@ public class BranchAndBoundSolverTest {
         var improving = cutSolver(cutObjective(1.0, 0.0)).getSolutions(CUT_CSP).toList();
 
         assertThat(improving).hasSize(1);
-        assertThat(improving.getFirst().getValues())
-                .containsEntry(CUT_X, 0).containsEntry(CUT_Y, 0).containsEntry(CUT_A, 3);
+        assertThat(improving.getFirst()).isEqualTo(Assignment.of(Map.of(CUT_X, 0, CUT_Y, 0, CUT_A, 3)));
     }
 
     @Test
@@ -912,8 +912,7 @@ public class BranchAndBoundSolverTest {
         // so no cut is built at all -- the search must still be correct, just less pruned.
         var improving = cutSolver(cutObjective(0.5, 0.0)).getSolutions(CUT_CSP).toList();
 
-        assertThat(improving.getLast().getValues())
-                .containsEntry(CUT_X, 0).containsEntry(CUT_Y, 0).containsEntry(CUT_A, 3);
+        assertThat(improving.getLast()).isEqualTo(Assignment.of(Map.of(CUT_X, 0, CUT_Y, 0, CUT_A, 3)));
     }
 
     /** As {@link #CUT_CSP}, but {@code cut_x} cannot be zero -- see the test below for why. */
@@ -933,8 +932,7 @@ public class BranchAndBoundSolverTest {
         // leaves 0.5 * 0 whole and falls through to the coefficient check instead.
         var improving = cutSolver(cutObjective(0.5, 0.0)).getSolutions(CUT_CSP_NONZERO_X).toList();
 
-        assertThat(improving.getLast().getValues())
-                .containsEntry(CUT_X, 1).containsEntry(CUT_Y, 0).containsEntry(CUT_A, 3);
+        assertThat(improving.getLast()).isEqualTo(Assignment.of(Map.of(CUT_X, 1, CUT_Y, 0, CUT_A, 3)));
     }
 
     @Test
@@ -943,7 +941,7 @@ public class BranchAndBoundSolverTest {
         // a meaningless bound. The magnitude test is what stops that being a wrong cut.
         var improving = cutSolver(cutObjective(1e18, 0.0)).getSolutions(CUT_CSP).toList();
 
-        assertThat(improving.getLast().getValues()).containsEntry(CUT_A, 3);
+        assertThat(improving.getLast().getValueOrNull(CUT_A)).isEqualTo(3);
     }
 
     /**
@@ -1119,11 +1117,10 @@ public class BranchAndBoundSolverTest {
     @Test
     void nonLinearObjective_isLeftEntirelyAlone() {
         // No LinearObjective means no coefficients to read, so there is nothing to cut with.
-        var improving = cutSolver(a -> a.getValues().values().stream()
-                .mapToDouble(v -> ((Integer) v).doubleValue()).sum()).getSolutions(CUT_CSP).toList();
+        var improving = cutSolver(a -> a.entryStream()
+                .mapToDouble(e -> ((Integer) e.getValue()).doubleValue()).sum()).getSolutions(CUT_CSP).toList();
 
-        assertThat(improving.getLast().getValues())
-                .containsEntry(CUT_X, 0).containsEntry(CUT_Y, 0).containsEntry(CUT_A, 3);
+        assertThat(improving.getLast()).isEqualTo(Assignment.of(Map.of(CUT_X, 0, CUT_Y, 0, CUT_A, 3)));
     }
 
     // ── Seeded incumbent (ADR-0041) ───────────────────────────────────────────

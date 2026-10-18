@@ -61,7 +61,7 @@ class InferenceTest {
         ConsistencyResult result = ALWAYS_FAILS.applyWithReason(csp, x, assignment, Set.of(y));
 
         assertThat(result.isInfeasible()).isTrue();
-        assertThat(result.reason()).isEqualTo(GroundNogoodConstraint.of(assignment.getValues()));
+        assertThat(result.reason()).isEqualTo(GroundNogoodConstraint.of(assignment));
     }
 
     @Test
@@ -71,6 +71,6 @@ class InferenceTest {
         var assignment = Assignment.of(Map.of(x, 1));
         ConsistencyResult result = ALWAYS_FAILS.applyWithReason(csp, x, assignment);
         assertThat(result.isInfeasible()).isTrue();
-        assertThat(result.reason()).isEqualTo(GroundNogoodConstraint.of(assignment.getValues()));
+        assertThat(result.reason()).isEqualTo(GroundNogoodConstraint.of(assignment));
     }
 }
