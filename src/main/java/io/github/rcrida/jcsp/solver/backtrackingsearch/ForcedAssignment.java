@@ -9,8 +9,8 @@ import io.github.rcrida.jcsp.variables.Variable;
 import org.jspecify.annotations.NonNull;
 
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.IdentityHashMap;
-import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
@@ -54,7 +54,7 @@ public final class ForcedAssignment {
             }
             Variable<Object> variable = (Variable<Object>) entry.getKey();
             if (touched == null) {
-                forced = new LinkedHashMap<>();
+                forced = new HashMap<>();
                 touched = Collections.newSetFromMap(new IdentityHashMap<>());
             }
             forced.put(variable, domain.singleValue().orElseThrow());

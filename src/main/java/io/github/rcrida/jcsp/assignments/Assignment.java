@@ -1,7 +1,5 @@
 package io.github.rcrida.jcsp.assignments;
 
-import lombok.Builder;
-import lombok.Singular;
 import lombok.extern.slf4j.Slf4j;
 import lombok.val;
 import io.github.rcrida.jcsp.ConstraintSatisfactionProblem;
@@ -14,22 +12,81 @@ import org.jspecify.annotations.NonNull;
 
 import java.util.Collection;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.HashMap;
-import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 @Slf4j
-@Builder(toBuilder = true)
-public record Assignment(@Singular Map<Variable<?>, Object> values, Statistics statistics, SolverListener listener,
+public record Assignment(Map<Variable<?>, Object> values, Statistics statistics, SolverListener listener,
                           Cancellation cancellation) {
 
     public Assignment {
         if (statistics == null) statistics = new Statistics();
         if (listener == null) listener = SolverListener.NONE;
         if (cancellation == null) cancellation = Cancellation.NEVER;
+    }
+
+    public static AssignmentBuilder builder() {
+        return new AssignmentBuilder();
+    }
+
+    public AssignmentBuilder toBuilder() {
+        return new AssignmentBuilder().values(values).statistics(statistics).listener(listener).cancellation(cancellation);
+    }
+
+    /**
+     * Accumulates entries into a {@link HashMap}; {@link #build} copies them into an unmodifiable
+     * map, so the builder stays reusable. Entry order is unspecified, as for {@link Assignment#values}.
+     */
+    public static final class AssignmentBuilder {
+        private final Map<Variable<?>, Object> values = new HashMap<>();
+        private Statistics statistics;
+        private SolverListener listener;
+        private Cancellation cancellation;
+
+        private AssignmentBuilder() {
+        }
+
+        public AssignmentBuilder value(Variable<?> variable, Object value) {
+            values.put(variable, value);
+            return this;
+        }
+
+        public AssignmentBuilder values(Map<? extends Variable<?>, ?> additions) {
+            values.putAll(additions);
+            return this;
+        }
+
+        public AssignmentBuilder statistics(Statistics statistics) {
+            this.statistics = statistics;
+            return this;
+        }
+
+        public AssignmentBuilder listener(SolverListener listener) {
+            this.listener = listener;
+            return this;
+        }
+
+        public AssignmentBuilder cancellation(Cancellation cancellation) {
+            this.cancellation = cancellation;
+            return this;
+        }
+
+        public Assignment build() {
+            Map<Variable<?>, Object> built = switch (values.size()) {
+                case 0 -> Collections.emptyMap();
+                case 1 -> {
+                    Map.Entry<Variable<?>, Object> only = values.entrySet().iterator().next();
+                    yield Collections.singletonMap(only.getKey(), only.getValue());
+                }
+                default -> Collections.unmodifiableMap(new HashMap<>(values));
+            };
+            return new Assignment(built, statistics, listener, cancellation);
+        }
     }
 
     public static Assignment empty() {
@@ -101,14 +158,7 @@ public record Assignment(@Singular Map<Variable<?>, Object> values, Statistics s
      * {@link #values} never intentionally maps a variable to {@code null} (same assumption {@link
      * #getValue} already relies on via {@link Optional#ofNullable}), so a {@code null} lookup
      * result is only ever "not yet assigned", matching the original's membership-filter semantics.
-     * Deliberately backed by a plain {@link java.util.HashMap}, not a {@link
-     * java.util.LinkedHashMap}: this result is read-only and discarded immediately by its dominant
-     * caller (only {@link Map#values()} is ever read, never the entries themselves), so there's no
-     * order to preserve, and re-profiling after an earlier attempt to use {@link
-     * java.util.LinkedHashMap} here (for consistency with {@link #values}'s own iteration order)
-     * found it measurably regressed this exact hot path (~20% fewer LNS steps per second on
-     * {@code ParkrunSchedulingTest}, a test-scope class this main-sources Javadoc can't link to)
-     * for a guarantee nothing actually observes.
+     * Backed by a plain {@link java.util.HashMap}, like {@link #values}: entry order is unspecified.
      */
     public Map<Variable<?>, Object> partialValues(@NonNull Set<? extends Variable<?>> variables) {
         Map<Variable<?>, Object> partial = new HashMap<>();
@@ -146,7 +196,7 @@ public record Assignment(@Singular Map<Variable<?>, Object> values, Statistics s
      * finished assignment, not an intermediate one.
      */
     public Assignment withValues(@NonNull Map<Variable<?>, Object> additions) {
-        Map<Variable<?>, Object> merged = new LinkedHashMap<>(values);
+        Map<Variable<?>, Object> merged = new HashMap<>(values);
         merged.putAll(additions);
         val next = ofTrusted(merged, statistics, listener, cancellation);
         additions.forEach((variable, value) -> {
@@ -251,6 +301,9 @@ public record Assignment(@Singular Map<Variable<?>, Object> values, Statistics s
 
     @Override
     public String toString() {
-        return String.valueOf(values);
+        return values.entrySet().stream()
+                .sorted(Map.Entry.comparingByKey(Comparator.comparing(Variable::getName)))
+                .map(entry -> entry.getKey() + "=" + entry.getValue())
+                .collect(Collectors.joining(", ", "{", "}"));
     }
 }

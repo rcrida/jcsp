@@ -282,4 +282,35 @@ public class AssignmentTest {
         val assignment = Assignment.of(Map.of(variable, value));
         assertThat(assignment).asString().isEqualTo("{variable=value}");
     }
+
+    @Test
+    void testToStringSortsByVariableName() {
+        val a = Variable.Factory.INSTANCE.<Integer>create("a");
+        val b = Variable.Factory.INSTANCE.<Integer>create("b");
+        val c = Variable.Factory.INSTANCE.<Integer>create("c");
+        val assignment = Assignment.builder().value(c, 3).value(a, 1).value(b, 2).build();
+        assertThat(assignment).asString().isEqualTo("{a=1, b=2, c=3}");
+    }
+
+    @Test
+    void builderHandlesZeroOneAndManyEntries() {
+        val a = Variable.Factory.INSTANCE.<Integer>create("a");
+        val b = Variable.Factory.INSTANCE.<Integer>create("b");
+        assertThat(Assignment.builder().build().getValues()).isEmpty();
+        assertThat(Assignment.builder().value(a, 1).build().getValues()).containsExactlyEntriesOf(Map.of(a, 1));
+        val many = Assignment.builder().value(a, 1).values(Map.of(a, 5, b, 2)).build();
+        assertThat(many.getValues()).containsExactlyInAnyOrderEntriesOf(Map.of(a, 5, b, 2));
+        assertThatThrownBy(() -> many.getValues().put(a, 9)).isInstanceOf(UnsupportedOperationException.class);
+    }
+
+    @Test
+    void builderIsReusableAfterBuild() {
+        val a = Variable.Factory.INSTANCE.<Integer>create("a");
+        val b = Variable.Factory.INSTANCE.<Integer>create("b");
+        val builder = Assignment.builder().value(a, 1);
+        val first = builder.build();
+        builder.value(b, 2);
+        assertThat(first.getValues()).containsOnlyKeys(a);
+        assertThat(builder.build().getValues()).containsOnlyKeys(a, b);
+    }
 }

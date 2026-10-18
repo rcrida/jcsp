@@ -179,13 +179,11 @@ public class LargeNeighborhoodSolver implements LocalSolver {
         return result;
     }
 
-    // Bypasses Assignment's Lombok builder (a two-pass ArrayList-then-map construction) in favour
-    // of a single HashMap copy-constructor pass plus Assignment.ofTrusted's direct record
-    // construction -- profiling ParkrunSchedulingTest found AssignmentBuilder.values/build the
-    // dominant cost here, since this runs once per enumerated combo (up to slotsPerStep-many
-    // candidates' worth of Cartesian product) rather than once per step. Deliberately HashMap, not
-    // LinkedHashMap: an earlier attempt at the latter (for deterministic iteration order) measurably
-    // regressed this same hot path, for an ordering guarantee no current caller observes.
+    // Bypasses Assignment's builder (which copies the map twice) in favour of a single HashMap
+    // copy-constructor pass plus Assignment.ofTrusted's direct record construction -- profiling
+    // ParkrunSchedulingTest found AssignmentBuilder.values/build the dominant cost here, since this
+    // runs once per enumerated combo (up to slotsPerStep-many candidates' worth of Cartesian
+    // product) rather than once per step.
     private Assignment applyCombo(@NonNull Assignment base,
                                    @NonNull Map<Variable<Boolean>, Boolean> combo) {
         Map<Variable<?>, Object> merged = new HashMap<>(base.getValues());
