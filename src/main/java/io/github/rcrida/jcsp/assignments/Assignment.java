@@ -56,8 +56,23 @@ public interface Assignment extends Valuation {
 
     Cancellation cancellation();
 
-    /** This assignment plus {@code variable = value}; counts as an explored node. */
-    Assignment withValue(@NonNull Variable<?> variable, @NonNull Object value);
+    /** A builder pre-loaded with this assignment's entries, statistics, listener and cancellation. */
+    default AssignmentBuilder toBuilder() {
+        AssignmentBuilder builder = builder().statistics(getStatistics()).listener(listener()).cancellation(cancellation());
+        forEach(builder::value);
+        return builder;
+    }
+
+    /**
+     * This assignment plus {@code variable = value}; counts as an explored node. Layered over this
+     * assignment by {@link OverlayAssignment#over} where that copies nothing.
+     */
+    default Assignment withValue(@NonNull Variable<?> variable, @NonNull Object value) {
+        Assignment next = OverlayAssignment.over(this, variable, value);
+        next.getStatistics().incrementNodesExplored();
+        next.listener().onNodeExplored(variable, value, next);
+        return next;
+    }
 
     /**
      * This assignment extended with every entry of {@code additions}, copying the values once
@@ -65,13 +80,26 @@ public interface Assignment extends Valuation {
      * an explored node and fires {@link SolverListener#onNodeExplored}, but every event carries the
      * finished assignment, not an intermediate one.
      */
-    Assignment withValues(@NonNull Map<Variable<?>, Object> additions);
+    default Assignment withValues(@NonNull Map<Variable<?>, Object> additions) {
+        Map<Variable<?>, Object> merged = new HashMap<>(size() + additions.size());
+        forEach(merged::put);
+        merged.putAll(additions);
+        Assignment next = ofTrusted(merged, getStatistics(), listener(), cancellation());
+        additions.forEach((variable, value) -> {
+            getStatistics().incrementNodesExplored();
+            listener().onNodeExplored(variable, value, next);
+        });
+        return next;
+    }
 
     /** This assignment overlaid with every entry of {@code another}, whose statistics are added in. */
-    Assignment merge(@NonNull Assignment another);
-
-    /** A builder pre-loaded with this assignment's entries, statistics, listener and cancellation. */
-    AssignmentBuilder toBuilder();
+    default Assignment merge(@NonNull Assignment another) {
+        AssignmentBuilder builder = toBuilder();
+        another.forEach(builder::value);
+        Assignment merged = builder.build();
+        merged.getStatistics().add(another.getStatistics());
+        return merged;
+    }
 
     /**
      * Same lookup as {@link #partialValues} but wrapped in a full {@link Assignment} — needed by
