@@ -18,6 +18,9 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicReference;
 
+import static io.github.rcrida.jcsp.constraints.nary.BitValues.bit;
+import static io.github.rcrida.jcsp.constraints.nary.BitValues.valueLike;
+
 /**
  * A system of parity equations over boolean variables ({@link Boolean} or 0/1 integers): each
  * {@link Row} says the sum of its variables is even or odd. That is a linear system over GF(2), so {@link #propagate} runs Gauss-Jordan
@@ -95,16 +98,6 @@ public class ParitySystemConstraint extends NaryConstraint implements Propagatab
             if ((sum & 1) != row.parity()) return false;
         }
         return true;
-    }
-
-    /** {@code true} and 1 are 1; {@code false} and 0 are 0. */
-    private static int bit(Object value) {
-        return value instanceof Boolean flag ? (flag ? 1 : 0) : (Integer) value;
-    }
-
-    /** {@code bit} as a value of the same type as {@code sample}: a {@link Boolean} or an {@link Integer}. */
-    private static Object valueLike(Object sample, int bit) {
-        return sample instanceof Boolean ? (Object) (bit == 1) : (Object) bit;
     }
 
     /**

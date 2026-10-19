@@ -8,7 +8,6 @@ import io.github.rcrida.jcsp.consistency.ConsistencyResult;
 import io.github.rcrida.jcsp.consistency.Inference;
 import io.github.rcrida.jcsp.consistency.arc.MAC;
 import io.github.rcrida.jcsp.constraints.nary.GroundNogoodConstraint;
-import io.github.rcrida.jcsp.constraints.nary.ParitySystemConstraint;
 import io.github.rcrida.jcsp.domains.BoundedDomain;
 import io.github.rcrida.jcsp.domains.Domain;
 import io.github.rcrida.jcsp.domains.SetBoundedDomain;
@@ -16,6 +15,7 @@ import io.github.rcrida.jcsp.variables.Variable;
 import io.github.rcrida.jcsp.solver.backtrackingsearch.order.DefaultValueOrderer;
 import io.github.rcrida.jcsp.solver.backtrackingsearch.order.LeastConstrainingValueOrderer;
 import io.github.rcrida.jcsp.solver.backtrackingsearch.selector.MinimumRemainingValuesSelector;
+import io.github.rcrida.jcsp.solver.redundant.RedundantConstraints;
 import io.github.rcrida.jcsp.solver.tree.TreeSolver;
 import io.github.rcrida.jcsp.solver.tree.cutsetconditioning.CutsetConditioningSolver;
 import io.github.rcrida.jcsp.solver.tree.decomposition.TreeDecompositionSolver;
@@ -334,21 +334,20 @@ public interface Solver {
 
         Factory INSTANCE = new Factory() {
             /**
-             * Both chains work on {@code csp} plus the {@link ParitySystemConstraint}s its parity
-             * tables imply, which {@link ParitySystems} adds as redundant constraints; the caller's
-             * problem is not changed.
+             * Both chains work on {@code csp} plus the redundant constraints its tables and clauses
+             * imply, which {@link RedundantConstraints} adds; the caller's problem is not changed.
              */
             @Override
             public BoundSolver createSolver(@NonNull ConstraintSatisfactionProblem csp,
                                             @NonNull SolverConfig config) {
-                return satisfactionSolver(ParitySystems.withParitySystems(csp), config);
+                return satisfactionSolver(RedundantConstraints.withRedundantConstraints(csp), config);
             }
 
             @Override
             public BoundSolver createSolver(@NonNull ConstraintSatisfactionProblem csp,
                                             @NonNull ToDoubleFunction<Assignment> objective,
                                             @NonNull SolverConfig config) {
-                return optimizationSolver(ParitySystems.withParitySystems(csp), objective, config);
+                return optimizationSolver(RedundantConstraints.withRedundantConstraints(csp), objective, config);
             }
 
             private BoundSolver satisfactionSolver(ConstraintSatisfactionProblem csp, SolverConfig config) {

@@ -1,4 +1,4 @@
-package io.github.rcrida.jcsp.solver;
+package io.github.rcrida.jcsp.solver.redundant;
 
 import io.github.rcrida.jcsp.ConstraintSatisfactionProblem;
 import io.github.rcrida.jcsp.assignments.Assignment;
@@ -9,6 +9,8 @@ import io.github.rcrida.jcsp.constraints.nary.ParitySystemConstraint;
 import io.github.rcrida.jcsp.constraints.nary.ParitySystemConstraint.Row;
 import io.github.rcrida.jcsp.domains.BooleanDomain;
 import io.github.rcrida.jcsp.domains.IntRangeDomain;
+import io.github.rcrida.jcsp.solver.Solver;
+import io.github.rcrida.jcsp.solver.SolverConfig;
 import io.github.rcrida.jcsp.variables.Variable;
 import org.junit.jupiter.api.Test;
 
@@ -173,7 +175,7 @@ class ParitySystemsTest {
                 NaryTuplesConstraint.of(integerTuples(v.subList(0, 3), 1)),
                 NaryTuplesConstraint.of(integerTuples(v.subList(1, 4), 0)));
 
-        var augmented = ParitySystems.withParitySystems(csp);
+        var augmented = RedundantConstraints.withRedundantConstraints(csp);
 
         assertThat(augmented.getConstraints()).hasSize(csp.getConstraints().size() + 1);
         assertThat(augmented.getConstraints()).anyMatch(ParitySystemConstraint.class::isInstance);
@@ -188,7 +190,7 @@ class ParitySystemsTest {
         builder.constraint(NaryConflictTuplesConstraint.of(integerTuples(v.subList(0, 3), 0)));
         builder.constraint(NaryConflictTuplesConstraint.of(integerTuples(v.subList(1, 4), 1)));
 
-        var augmented = ParitySystems.withParitySystems(builder.build());
+        var augmented = RedundantConstraints.withRedundantConstraints(builder.build());
 
         assertThat(augmented.getConstraints()).anyMatch(ParitySystemConstraint.class::isInstance);
     }
@@ -201,7 +203,7 @@ class ParitySystemsTest {
         builder.allDiffConstraint(Set.copyOf(v));
         var csp = builder.build();
 
-        assertThat(ParitySystems.withParitySystems(csp)).isSameAs(csp);
+        assertThat(RedundantConstraints.withRedundantConstraints(csp)).isSameAs(csp);
     }
 
     // --- solving ---
@@ -285,7 +287,7 @@ class ParitySystemsTest {
         builder.constraint(NaryTuplesConstraint.of(tuplesOfParity(v.subList(0, 3), 1, bit -> bit == 1)));
         builder.constraint(NaryTuplesConstraint.of(tuplesOfParity(v.subList(1, 4), 1, bit -> bit == 1)));
 
-        assertThat(ParitySystems.withParitySystems(builder.build()).getConstraints())
+        assertThat(RedundantConstraints.withRedundantConstraints(builder.build()).getConstraints())
                 .anyMatch(ParitySystemConstraint.class::isInstance);
     }
 }

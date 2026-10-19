@@ -18,8 +18,9 @@ elimination over the variables still open, folding assigned variables into the r
 row reduced to `0 = 1` is a contradiction; a row left with one variable pins it. It accepts
 `Boolean` and 0/1 integer variables, alike or mixed in one row.
 
-`ParitySystems` finds the rows at the **model level**, in `Solver.Factory` before either chain is
-built, so every front end gets it rather than only the XCSP3 parser. A table is a parity row when
+`ParitySystems` finds the rows at the **model level**, in the `solver.redundant` package, which
+`Solver.Factory` applies before either chain is built through `RedundantConstraints`, so every front
+end gets it rather than only the XCSP3 parser. A table is a parity row when
 its tuples are exactly the `2^(k-1)` tuples of one parity over `k` distinct variables, holding only
 `0`/`1` or `false`/`true`; a conflict table of the opposite parity is the same row. Rows sharing
 variables form a group, and a group is posted when it has 2 to 512 rows and at least one row of three

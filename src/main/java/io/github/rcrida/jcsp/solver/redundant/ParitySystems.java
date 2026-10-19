@@ -1,4 +1,4 @@
-package io.github.rcrida.jcsp.solver;
+package io.github.rcrida.jcsp.solver.redundant;
 
 import io.github.rcrida.jcsp.ConstraintSatisfactionProblem;
 import io.github.rcrida.jcsp.assignments.Assignment;
@@ -19,10 +19,8 @@ import java.util.Optional;
 import java.util.Set;
 
 /**
- * Finds the parity equations a problem states as tables, and adds the {@link ParitySystemConstraint}s
- * that reason about them jointly. The tables themselves stay: the systems are redundant, so nothing
- * a solution must satisfy changes, and the solver works on the augmented copy while the caller's
- * problem is left alone.
+ * Finds the parity equations a problem states as tables, and builds the {@link ParitySystemConstraint}s
+ * that reason about them jointly, for {@link RedundantConstraints} to add. The tables themselves stay.
  * <p>
  * A table is a parity row when its tuples are exactly all those of one parity over its distinct
  * variables: {@code 2^(k-1)} tuples, each holding only {@code 0}/{@code 1} integers or
@@ -41,8 +39,8 @@ final class ParitySystems {
     private ParitySystems() {
     }
 
-    /** {@code csp} plus a system for each group of its parity tables, or {@code csp} itself when it has none. */
-    static @NonNull ConstraintSatisfactionProblem withParitySystems(@NonNull ConstraintSatisfactionProblem csp) {
+    /** A system for each group of {@code csp}'s parity tables. */
+    static @NonNull List<ParitySystemConstraint> systemsIn(@NonNull ConstraintSatisfactionProblem csp) {
         List<Row> rows = new ArrayList<>();
         for (Constraint constraint : csp.getConstraints()) {
             if (constraint instanceof NaryTuplesConstraint table) {
@@ -51,11 +49,7 @@ final class ParitySystems {
                 rowOf(table.getConflicts(), true).ifPresent(rows::add);
             }
         }
-        List<ParitySystemConstraint> systems = systemsOf(rows);
-        if (systems.isEmpty()) return csp;
-        ConstraintSatisfactionProblem.ConstraintSatisfactionProblemBuilder builder = csp.toBuilder();
-        systems.forEach(builder::constraint);
-        return builder.build();
+        return systemsOf(rows);
     }
 
     /**
@@ -82,7 +76,7 @@ final class ParitySystems {
     }
 
     /** 0 or 1 for {@code false}/{@code 0} or {@code true}/{@code 1}, and {@code -1} for anything else. */
-    private static int bitOf(Object value) {
+    static int bitOf(Object value) {
         if (value instanceof Boolean flag) return flag ? 1 : 0;
         if (value instanceof Integer number && (number == 0 || number == 1)) return number;
         return -1;
