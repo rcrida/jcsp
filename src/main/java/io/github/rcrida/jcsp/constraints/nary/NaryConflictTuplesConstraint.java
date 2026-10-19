@@ -6,6 +6,7 @@ import io.github.rcrida.jcsp.domains.DiscreteDomain;
 import io.github.rcrida.jcsp.domains.Domain;
 import io.github.rcrida.jcsp.variables.Variable;
 import lombok.EqualsAndHashCode;
+import lombok.Getter;
 import lombok.Singular;
 import lombok.experimental.SuperBuilder;
 import org.jspecify.annotations.NonNull;
@@ -51,7 +52,7 @@ import java.util.stream.Collectors;
 @SuperBuilder
 @EqualsAndHashCode(callSuper = true)
 public class NaryConflictTuplesConstraint extends NaryConstraint implements Propagatable {
-    @Singular Set<Assignment> conflicts;
+    @Getter @Singular Set<Assignment> conflicts;
 
     /**
      * Lazily-built, immutable inverted index from {@link #conflicts}: {@code

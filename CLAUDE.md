@@ -218,6 +218,7 @@ csp.impliesConstraint(b, constraint)  // b -> constraint
 - disjunctive: [ADR-0018](docs/adr/0018-disjunctive-edge-finding-propagator.md)
 - tables: [ADR-0021](docs/adr/0021-bitset-indexed-gac-for-table-constraints.md)
 - linear EQ: [ADR-0023](docs/adr/0023-subset-sum-gac-for-linear-equality-constraints.md)
+- parity tables: [ADR-0055](docs/adr/0055-parity-tables-are-reasoned-about-jointly-as-a-gf2-system.md)
 - circuit vs sub-circuit: [ADR-0027](docs/adr/0027-xcsp3-circuit-is-a-sub-circuit.md)
 - product: [ADR-0035](docs/adr/0035-signed-interval-and-coverage-product-propagation.md)
 - cumulative: [ADR-0037](docs/adr/0037-energetic-reasoning-for-cumulative-constraints.md)
