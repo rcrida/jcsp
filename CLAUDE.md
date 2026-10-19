@@ -15,7 +15,7 @@ Before adding a paragraph here, check whether it's actually Javadoc-shaped (put 
 <dependency>
     <groupId>io.github.rcrida</groupId>
     <artifactId>jcsp</artifactId>
-    <version>3.4.0</version>
+    <version>3.5.0</version>
 </dependency>
 ```
 
