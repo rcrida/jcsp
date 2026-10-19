@@ -1,13 +1,12 @@
 package io.github.rcrida.jcsp.solver.backtrackingsearch.order;
 
 import io.github.rcrida.jcsp.assignments.Assignment;
+import io.github.rcrida.jcsp.assignments.Valuation;
 import io.github.rcrida.jcsp.variables.Variable;
 import org.jspecify.annotations.NonNull;
 
 import java.util.ArrayList;
-import java.util.IdentityHashMap;
 import java.util.List;
-import java.util.Map;
 
 /**
  * Remembers the value each variable most recently descended into, so a later visit tries that value
@@ -26,15 +25,16 @@ import java.util.Map;
  * io.github.rcrida.jcsp.solver.DomWdegLubySearch#getSolutions} deliberately does not consult one:
  * that method promises a complete stream, never restarts, and so has nothing to recover.
  * <p>
- * Keyed by {@link IdentityHashMap}: the variables recorded here are the exact objects the solver
- * holds for the whole solve, so identity is both sufficient and cheaper than
- * {@link Variable}'s own {@code equals}/{@code hashCode}, which hash a {@link String} name.
+ * Holds the recorded {@link Assignment} itself rather than a copy of its entries: it is immutable,
+ * so recording is a field write however many variables it assigns.
  * <p>
  * Not thread-safe, and not meant to be: one instance belongs to one {@code getSolution} call, whose
  * search is single-threaded, exactly like the {@code DomWdegVariableSelector} it sits beside.
  */
 public final class PhaseMemory {
-    private final Map<Variable<?>, Object> bestPath = new IdentityHashMap<>();
+    private static final Valuation NOTHING = Assignment.empty();
+
+    private Valuation bestPath = NOTHING;
     private int bestDepth;
 
     /**
@@ -61,7 +61,7 @@ public final class PhaseMemory {
      * with the next.
      */
     public void reset() {
-        bestPath.clear();
+        bestPath = NOTHING;
         bestDepth = 0;
     }
 
@@ -81,7 +81,7 @@ public final class PhaseMemory {
     public void recordIfDeepest(@NonNull Assignment assignment) {
         if (assignment.size() <= bestDepth) return;
         bestDepth = assignment.size();
-        assignment.forEach(bestPath::put);
+        bestPath = assignment;
     }
 
     /**
@@ -96,7 +96,7 @@ public final class PhaseMemory {
      */
     public void recordSolution(@NonNull Assignment solution) {
         bestDepth = solution.size();
-        solution.forEach(bestPath::put);
+        bestPath = solution;
     }
 
     /**
@@ -106,7 +106,7 @@ public final class PhaseMemory {
      * search settles, and the reason this allocates nothing in steady state.
      */
     public @NonNull List<Object> prioritise(@NonNull Variable<?> variable, @NonNull List<Object> values) {
-        Object saved = bestPath.get(variable);
+        Object saved = bestPath.getValueOrNull(variable);
         if (saved == null) return values;
         int index = values.indexOf(saved);
         // <= 0 covers both "propagation has since pruned it" (-1) and "already first" (0), the
