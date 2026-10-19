@@ -75,16 +75,26 @@ public interface Assignment extends Valuation {
     }
 
     /**
-     * This assignment extended with every entry of {@code additions}, copying the values once
-     * rather than once per entry as repeated {@link #withValue} would. Each entry still counts as
-     * an explored node and fires {@link SolverListener#onNodeExplored}, but every event carries the
-     * finished assignment, not an intermediate one.
+     * This assignment extended with every entry of {@code additions}: a few are layered over this
+     * assignment as {@link #withValue} does, many are copied into one map once rather than once per
+     * entry. Each entry still counts as an explored node and fires
+     * {@link SolverListener#onNodeExplored}, but every event carries the finished assignment, not an
+     * intermediate one.
      */
     default Assignment withValues(@NonNull Map<Variable<?>, Object> additions) {
-        Map<Variable<?>, Object> merged = new HashMap<>(size() + additions.size());
-        forEach(merged::put);
-        merged.putAll(additions);
-        Assignment next = ofTrusted(merged, getStatistics(), listener(), cancellation());
+        Assignment next;
+        if (additions.size() <= OverlayAssignment.MAX_DEPTH) {
+            Assignment layered = this;
+            for (Map.Entry<Variable<?>, Object> addition : additions.entrySet()) {
+                layered = OverlayAssignment.over(layered, addition.getKey(), addition.getValue());
+            }
+            next = layered;
+        } else {
+            Map<Variable<?>, Object> merged = new HashMap<>(size() + additions.size());
+            forEach(merged::put);
+            merged.putAll(additions);
+            next = ofTrusted(merged, getStatistics(), listener(), cancellation());
+        }
         additions.forEach((variable, value) -> {
             getStatistics().incrementNodesExplored();
             listener().onNodeExplored(variable, value, next);

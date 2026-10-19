@@ -3,10 +3,8 @@ package io.github.rcrida.jcsp.assignments;
 import io.github.rcrida.jcsp.solver.Cancellation;
 import io.github.rcrida.jcsp.solver.listener.SolverListener;
 import io.github.rcrida.jcsp.variables.Variable;
-import lombok.val;
 import org.jspecify.annotations.NonNull;
 
-import java.util.HashMap;
 import java.util.Map;
 import java.util.Set;
 
@@ -51,18 +49,6 @@ record MapAssignment(Map<Variable<?>, Object> values, Statistics statistics, Sol
     @Override
     public Iterable<Map.Entry<Variable<?>, Object>> entries() {
         return values.entrySet();
-    }
-
-    @Override
-    public Assignment withValues(@NonNull Map<Variable<?>, Object> additions) {
-        Map<Variable<?>, Object> merged = new HashMap<>(values);
-        merged.putAll(additions);
-        val next = Assignment.ofTrusted(merged, statistics, listener, cancellation);
-        additions.forEach((variable, value) -> {
-            statistics.incrementNodesExplored();
-            listener.onNodeExplored(variable, value, next);
-        });
-        return next;
     }
 
     @Override

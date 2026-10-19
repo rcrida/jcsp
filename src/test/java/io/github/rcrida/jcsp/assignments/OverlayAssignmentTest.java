@@ -5,6 +5,7 @@ import io.github.rcrida.jcsp.variables.Variable;
 import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -175,6 +176,29 @@ class OverlayAssignmentTest {
         assertThat(next.getStatistics()).isSameAs(statistics);
         assertThat(next.listener()).isSameAs(base.listener());
         assertThat(next.cancellation()).isSameAs(base.cancellation());
+    }
+
+    @Test
+    void aSmallBatchIsLayeredAndALargeOneIsCopiedOnce() {
+        Assignment base = Assignment.of(Map.of(a, 1, b, 2));
+        Map<Variable<?>, Object> small = new HashMap<>();
+        Map<Variable<?>, Object> large = new HashMap<>();
+        for (int i = 0; i < OverlayAssignment.MAX_DEPTH + 1; i++) {
+            Variable<Integer> v = F.create("v" + i);
+            if (i < OverlayAssignment.MAX_DEPTH) small.put(v, i);
+            large.put(v, i);
+        }
+
+        Assignment layered = base.withValues(small);
+        Assignment copied = base.withValues(large);
+
+        assertThat(layered).isInstanceOf(OverlayAssignment.class);
+        assertThat(layered.size()).isEqualTo(2 + small.size());
+        assertThat(copied).isNotInstanceOf(OverlayAssignment.class);
+        assertThat(copied.size()).isEqualTo(2 + large.size());
+        large.forEach((variable, value) -> assertThat(copied.getValueOrNull(variable)).isEqualTo(value));
+        assertThat(copied.getValueOrNull(a)).isEqualTo(1);
+        assertThat(base.size()).isEqualTo(2);
     }
 
     @Test
