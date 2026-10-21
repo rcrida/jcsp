@@ -270,6 +270,7 @@ public interface Solver {
                     .cancellation(cancellation)
                     .restartRandomization(config.getRestartRandomization().forSearch(searchIndex))
                     .restartSchedule(config.getRestartSchedule())
+                    .lubyUnit(config.getLubyUnit())
                     .selectorFactory(config.getVariableSelectorFactory())
                     .maxRestarts(maxRestarts)
                     .build();

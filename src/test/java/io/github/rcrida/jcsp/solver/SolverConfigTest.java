@@ -2,11 +2,15 @@ package io.github.rcrida.jcsp.solver;
 
 import io.github.rcrida.jcsp.ConstraintSatisfactionProblem;
 import io.github.rcrida.jcsp.assignments.Assignment;
+import io.github.rcrida.jcsp.assignments.Statistics;
 import io.github.rcrida.jcsp.domains.IntRangeDomain;
 import io.github.rcrida.jcsp.domains.NumericDiscreteDomain;
 import io.github.rcrida.jcsp.solver.listener.SolverListener;
 import io.github.rcrida.jcsp.variables.Variable;
 import org.junit.jupiter.api.Test;
+
+import java.util.ArrayList;
+import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -157,5 +161,44 @@ class SolverConfigTest {
     void restartSchedule_canBeOverridden() {
         assertThat(SolverConfig.builder().restartSchedule(RestartSchedule.INTERLEAVED).build().getRestartSchedule())
                 .isSameAs(RestartSchedule.INTERLEAVED);
+    }
+
+    @Test
+    void lubyUnit_defaultsToTheSearchsOwnDefault() {
+        assertThat(SolverConfig.builder().build().getLubyUnit()).isEqualTo(DomWdegLubySearch.DEFAULT_LUBY_UNIT);
+    }
+
+    @Test
+    void lubyUnit_canBeOverridden() {
+        assertThat(SolverConfig.builder().lubyUnit(7).build().getLubyUnit()).isEqualTo(7);
+    }
+
+    @Test
+    void lubyUnit_reachesTheSearchThroughTheFactory() {
+        // Nine variables pairwise different over two values: unsatisfiable, refuted by two failed
+        // first descents, and with a treewidth of 8 beyond what tree decomposition takes (7), so it
+        // reaches the restarting search. A unit of 1 spends its first budget on one failure and
+        // restarts before the proof where a huge unit proves it in the first run.
+        List<Variable<Integer>> vars = new ArrayList<>();
+        var builder = ConstraintSatisfactionProblem.builder();
+        for (int i = 0; i < 9; i++) {
+            Variable<Integer> v = VF.create("lu" + i);
+            vars.add(v);
+            builder.variableDomain(v, IntRangeDomain.of(1, 2));
+        }
+        for (int i = 0; i < vars.size(); i++) {
+            for (int j = i + 1; j < vars.size(); j++) builder.notEqualsConstraint(vars.get(i), vars.get(j));
+        }
+        ConstraintSatisfactionProblem csp = builder.build();
+        Statistics small = new Statistics();
+        Statistics huge = new Statistics();
+
+        assertThat(Solver.Factory.INSTANCE.createSolver(csp, SolverConfig.builder().lubyUnit(1).statistics(small).build())
+                .getSolution()).isEmpty();
+        assertThat(Solver.Factory.INSTANCE.createSolver(csp, SolverConfig.builder().lubyUnit(10_000_000).statistics(huge).build())
+                .getSolution()).isEmpty();
+
+        assertThat(small.getRestarts()).isPositive();
+        assertThat(huge.getRestarts()).isZero();
     }
 }

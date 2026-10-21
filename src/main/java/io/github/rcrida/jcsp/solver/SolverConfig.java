@@ -105,6 +105,16 @@ public class SolverConfig {
     @Builder.Default @NonNull RestartSchedule restartSchedule = RestartSchedule.LUBY;
 
     /**
+     * The unit the {@link #restartSchedule}'s Luby track multiplies by: restart <i>k</i> of the
+     * satisfaction chain's {@link DomWdegLubySearch} may spend {@code lubyUnit * luby(k)} failed
+     * candidates. Defaults to {@link DomWdegLubySearch#DEFAULT_LUBY_UNIT}. A larger unit restarts
+     * less often, which lets a refutation that needs one long run finish and costs the heavy-tailed
+     * satisfiable instances their short restarts -- see ADR-0054. Affects only how the search is cut
+     * up, never which assignments it may visit. Must be positive.
+     */
+    @Builder.Default int lubyUnit = DomWdegLubySearch.DEFAULT_LUBY_UNIT;
+
+    /**
      * How {@link DomWdegLubySearch} orders the variables it branches on. Defaults to
      * {@link AdaptiveVariableSelector.Factory#INSTANCE}, dom/wdeg with last-conflict; supply
      * another to search the same problem in a different order. A factory rather than a selector
