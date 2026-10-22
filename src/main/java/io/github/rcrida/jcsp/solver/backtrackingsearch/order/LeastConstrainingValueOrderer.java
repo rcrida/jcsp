@@ -66,10 +66,9 @@ public class LeastConstrainingValueOrderer implements DomainValuesOrderer {
         }
 
         @SuppressWarnings("unchecked")
-        val binaryConstraints = (java.util.List<BinaryConstraint<?, ?>>) (java.util.List<?>) csp.getConstraints().stream()
+        val binaryConstraints = (java.util.List<BinaryConstraint<?, ?>>) (java.util.List<?>) csp.getStructuralConstraintsTouching(variable).stream()
                 .filter(BinaryConstraint.class::isInstance)
                 .map(c -> (BinaryConstraint<?, ?>) c)
-                .filter(constraint -> constraint.getLeft().equals(variable) || constraint.getRight().equals(variable))
                 .toList();
 
         return discrete.stream()
