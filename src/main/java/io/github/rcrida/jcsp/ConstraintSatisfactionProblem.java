@@ -543,15 +543,22 @@ public class ConstraintSatisfactionProblem {
      * would silently skip a nogood the caller asked about.
      */
     public Set<Constraint> getConstraintsTouching(@NonNull Variable<?> variable) {
-        Map<Variable<?>, Set<Constraint>> structuralIndex =
-                computeAuxiliaryCacheIfAbsent(TouchingIndex.class, ConstraintSatisfactionProblem::buildTouchingIndex)
-                        .byVariable();
-        Set<Constraint> structural = structuralIndex.getOrDefault(variable, Set.of());
+        Set<Constraint> structural = getStructuralConstraintsTouching(variable);
         if (nogoods.isEmpty()) return structural;
         Set<NogoodConstraint> relevantNogoods = nogoodsByVariable == null
                 ? nogoods
                 : nogoodsByVariable.getOrDefault(variable, Set.of());
         return relevantNogoods.isEmpty() ? structural : LightweightSets.unionView(structural, relevantNogoods);
+    }
+
+    /**
+     * {@link #getConstraintsTouching} without the learned {@link #nogoods}: the memoized structural
+     * half alone, for a caller whose propagation already enforces every nogood and that would only
+     * repeat that work by checking them here too.
+     */
+    public Set<Constraint> getStructuralConstraintsTouching(@NonNull Variable<?> variable) {
+        return computeAuxiliaryCacheIfAbsent(TouchingIndex.class, ConstraintSatisfactionProblem::buildTouchingIndex)
+                .byVariable().getOrDefault(variable, Set.of());
     }
 
     private static TouchingIndex buildTouchingIndex(ConstraintSatisfactionProblem csp) {

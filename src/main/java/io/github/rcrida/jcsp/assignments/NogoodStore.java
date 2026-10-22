@@ -9,6 +9,7 @@ import lombok.Getter;
 import lombok.ToString;
 import lombok.Value;
 
+import java.util.Collection;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
@@ -212,6 +213,22 @@ public class NogoodStore {
     public void clear() {
         nogoods.clear();
         byVariable.clear();
+        snapshot.set(null);
+    }
+
+    /**
+     * Forgets exactly {@code forgotten}, leaving every other recorded nogood in place -- for an
+     * owner that recorded some nogoods for its own reasons and has stopped wanting them, without
+     * discarding the ones another mechanism learned. A nogood not in the store is ignored, since
+     * {@link #evictIfOverCap} may already have removed it.
+     */
+    public void remove(Collection<? extends NogoodConstraint> forgotten) {
+        for (NogoodConstraint nogood : forgotten) {
+            if (!nogoods.remove(nogood)) continue;
+            for (Variable<?> v : nogood.getVariables()) {
+                byVariable.get(v).remove(nogood);
+            }
+        }
         snapshot.set(null);
     }
 

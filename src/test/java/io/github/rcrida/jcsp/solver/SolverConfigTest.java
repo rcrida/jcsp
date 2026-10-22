@@ -164,6 +164,27 @@ class SolverConfigTest {
     }
 
     @Test
+    void restartNogoods_defaultToAdaptive() {
+        assertThat(SolverConfig.builder().build().getRestartNogoods()).isSameAs(RestartNogoods.ADAPTIVE);
+    }
+
+    @Test
+    void restartNogoods_canBeTurnedOff() {
+        assertThat(SolverConfig.builder().restartNogoods(RestartNogoods.NONE).build().getRestartNogoods())
+                .isSameAs(RestartNogoods.NONE);
+    }
+
+    @Test
+    void satisfactionPropagatesNogoods_whenLearnedFromConflictsOrRecordedAtRestarts() {
+        assertThat(SolverConfig.builder().build().satisfactionPropagatesNogoods())
+                .as("restart nogoods are on by default").isTrue();
+        assertThat(SolverConfig.builder().restartNogoods(RestartNogoods.NONE).build().satisfactionPropagatesNogoods())
+                .as("neither mechanism on").isFalse();
+        assertThat(SolverConfig.builder().restartNogoods(RestartNogoods.NONE).nogoodLearningEnabled(true).build()
+                .satisfactionPropagatesNogoods()).as("conflict learning alone").isTrue();
+    }
+
+    @Test
     void lubyUnit_defaultsToTheSearchsOwnDefault() {
         assertThat(SolverConfig.builder().build().getLubyUnit()).isEqualTo(DomWdegLubySearch.DEFAULT_LUBY_UNIT);
     }

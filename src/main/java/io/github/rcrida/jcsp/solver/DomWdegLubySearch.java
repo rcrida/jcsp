@@ -7,6 +7,9 @@ import io.github.rcrida.jcsp.assignments.SolverLimits;
 import io.github.rcrida.jcsp.assignments.Statistics;
 import io.github.rcrida.jcsp.consistency.ConsistencyResult;
 import io.github.rcrida.jcsp.consistency.Inference;
+import io.github.rcrida.jcsp.constraints.Constraint;
+import io.github.rcrida.jcsp.constraints.nary.GroundNogoodConstraint;
+import io.github.rcrida.jcsp.constraints.nary.NogoodConstraint;
 import io.github.rcrida.jcsp.solver.listener.SolverListener;
 import io.github.rcrida.jcsp.solver.backtrackingsearch.ForcedAssignment;
 import io.github.rcrida.jcsp.solver.backtrackingsearch.order.DomainValuesOrderer;
@@ -20,9 +23,14 @@ import lombok.extern.slf4j.Slf4j;
 import org.jspecify.annotations.NonNull;
 
 import java.util.ArrayDeque;
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Deque;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.function.LongSupplier;
 import java.util.stream.Stream;
 
@@ -147,6 +155,13 @@ public class DomWdegLubySearch implements Solver {
     /** How many failed candidates each restart of {@link #getSolution} may spend; see {@link RestartSchedule}. */
     @NonNull RestartSchedule restartSchedule;
     /**
+     * Whether, and how, a run abandoned at its restart cutoff records the branches it had already
+     * refuted for the runs that follow -- see {@link RestartNogoods}. The recording is only worth
+     * having if {@link #inference} propagates nogoods; {@link Solver.Factory} arranges that
+     * whenever this is enabled.
+     */
+    @NonNull RestartNogoods restartNogoods;
+    /**
      * Builds this search's variable ordering, once per {@link #getSolutions}/{@link #getSolution}
      * call -- a factory rather than a selector because an {@link AdaptiveVariableSelector}
      * accumulates state about the search it is watching, so two calls must not share one. Defaults
@@ -166,12 +181,13 @@ public class DomWdegLubySearch implements Solver {
         private Cancellation cancellation = Cancellation.NEVER;
         private RestartRandomization restartRandomization = RestartRandomization.NONE;
         private RestartSchedule restartSchedule = RestartSchedule.LUBY;
+        private RestartNogoods restartNogoods = RestartNogoods.NONE;
         private AdaptiveVariableSelector.Factory selectorFactory = AdaptiveVariableSelector.Factory.INSTANCE;
 
         public DomWdegLubySearch build() {
             if (lubyUnit <= 0) throw new IllegalArgumentException("lubyUnit must be positive, got: " + lubyUnit);
             if (maxRestarts <= 0) throw new IllegalArgumentException("maxRestarts must be positive, got: " + maxRestarts);
-            return new DomWdegLubySearch(lubyUnit, maxRestarts, domainValuesOrderer, inference, limits, nogoodStore, statistics, phaseMemory, listener, cancellation, restartRandomization, restartSchedule, selectorFactory);
+            return new DomWdegLubySearch(lubyUnit, maxRestarts, domainValuesOrderer, inference, limits, nogoodStore, statistics, phaseMemory, listener, cancellation, restartRandomization, restartSchedule, restartNogoods, selectorFactory);
         }
     }
 
@@ -203,6 +219,8 @@ public class DomWdegLubySearch implements Solver {
         statistics.updateRootSearchSpace(csp.getSearchSpace());
         SearchProgress progress = new SearchProgress();
         LongSupplier budgets = restartSchedule.budgets(lubyUnit);
+        RestartMemory memory = new RestartMemory();
+        long backtracksAtStart = statistics.getBacktracks();
         for (int k = 1; k <= maxRestarts; k++) {
             progress.reset();
             if (phaseMemory.bestDepth() > deepestSeen) {
@@ -225,7 +243,7 @@ public class DomWdegLubySearch implements Solver {
             int[] failures = {0};
             try {
                 Assignment root = Assignment.builder().statistics(statistics).listener(listener).cancellation(cancellation).build();
-                Optional<Assignment> result = searchOne(csp, root, selector, failures, budget, deadline, 1.0, progress);
+                Optional<Assignment> result = searchOne(csp, root, selector, failures, budget, deadline, 1.0, progress, memory);
                 if (result.isPresent()) {
                     log.info("dom/wdeg+Luby: solution found at restart {}", k);
                     return result;
@@ -236,6 +254,7 @@ public class DomWdegLubySearch implements Solver {
                 log.debug("dom/wdeg+Luby: budget {} exceeded at restart {}, restarting", budget, k);
                 statistics.addRestarts(1);
                 listener.onRestart(k);
+                memory.restarted(statistics.getBacktracks() - backtracksAtStart);
             } catch (LimitsExceeded ignored) {
                 log.info("dom/wdeg+Luby: limit exceeded at restart {}", k);
                 throw new LimitExceededException(statistics);
@@ -366,7 +385,8 @@ public class DomWdegLubySearch implements Solver {
                                            long budget,
                                            long deadline,
                                            double weight,
-                                           SearchProgress progress) {
+                                           SearchProgress progress,
+                                           RestartMemory memory) {
         Deque<Frame> stack = new ArrayDeque<>();
         ConstraintSatisfactionProblem enterCsp = csp;
         Assignment enterFrom = assignment;
@@ -413,7 +433,13 @@ public class DomWdegLubySearch implements Solver {
                 case NONE -> {}
             }
             ConstraintSatisfactionProblem cspWithNogoods = nogoodStore.apply(frame.csp);
-            if (!next.isConsistentAmong(cspWithNogoods.getConstraintsTouching(frame.variable))) {
+            // When restart nogoods are on, inference propagates every nogood, so checking each one
+            // that touches the variable here as well would only repeat that, and with thousands
+            // recorded it was the largest cost in the search.
+            Set<Constraint> touching = restartNogoods.isEnabled()
+                    ? frame.csp.getStructuralConstraintsTouching(frame.variable)
+                    : cspWithNogoods.getConstraintsTouching(frame.variable);
+            if (!next.isConsistentAmong(touching)) {
                 next.getStatistics().incrementBacktracks();
                 selector.onValueRejected(frame.variable);
                 listener.onBacktrack(frame.variable, next);
@@ -424,13 +450,73 @@ public class DomWdegLubySearch implements Solver {
                     inferOrExplain(cspWithNogoods, frame.variable, next, selector);
             if (inferred.isEmpty()) {
                 progress.complete(frame.childWeight);
-                if (++failures[0] >= budget) throw BudgetExceeded.INSTANCE;
+                if (++failures[0] >= budget) {
+                    memory.record(stack);
+                    throw BudgetExceeded.INSTANCE;
+                }
                 continue;
             }
             phaseMemory.recordIfDeepest(next);
             enterCsp = inferred.get();
             enterFrom = next;
             enterWeight = frame.childWeight;
+        }
+    }
+
+    /**
+     * What one {@link #getSolution} call has recorded under {@link #restartNogoods} and whether it is
+     * still recording: made fresh per call, so two searches never share a hit count or a verdict.
+     */
+    private final class RestartMemory {
+        private final GroundNogoodConstraint.Hits hits = new GroundNogoodConstraint.Hits();
+        private final List<NogoodConstraint> recorded = new ArrayList<>();
+        private boolean recording = restartNogoods.isEnabled();
+        private boolean judged = !restartNogoods.isAdaptive();
+
+        /**
+         * One nogood per candidate the abandoned path had already refuted: the decisions above it plus
+         * the candidate. The candidate each lower frame is inside is interrupted, not refuted, and the
+         * top frame's has just failed, so it counts. Forced values are consequences of the decisions
+         * and are not cited. Nothing deeper than {@link RestartNogoods#maxArity()} decisions is kept.
+         */
+        void record(Deque<Frame> stack) {
+            if (!recording) return;
+            List<Frame> frames = new ArrayList<>(stack);
+            Collections.reverse(frames);
+            Map<Variable<?>, Object> decisions = new LinkedHashMap<>();
+            for (int i = 0; i < frames.size() && i < restartNogoods.maxArity(); i++) {
+                Frame frame = frames.get(i);
+                boolean top = i == frames.size() - 1;
+                int refuted = top ? frame.next : frame.next - 1;
+                for (int c = 0; c < refuted; c++) {
+                    Map<Variable<?>, Object> literals = new LinkedHashMap<>(decisions);
+                    literals.put(frame.variable, frame.candidates.get(c));
+                    NogoodConstraint nogood = GroundNogoodConstraint.of(Assignment.of(literals), hits);
+                    nogoodStore.record(nogood);
+                    recorded.add(nogood);
+                    statistics.incrementNogoodsLearned();
+                    listener.onNogoodLearned(nogood);
+                }
+                if (!top) decisions.put(frame.variable, frame.candidates.get(frame.next - 1));
+            }
+        }
+
+        /**
+         * Called at each restart with the backtracks spent so far. Once there are enough to judge by,
+         * keeps the recorded nogoods only if they have done work often enough; otherwise forgets them
+         * (and only them, not nogoods learned some other way) and stops recording.
+         */
+        void restarted(long backtracks) {
+            if (judged || backtracks < restartNogoods.window()) return;
+            judged = true;
+            double rate = hits.count() / (double) backtracks;
+            log.debug("dom/wdeg+Luby: restart nogoods did work {} times in {} backtracks ({} per backtrack, need {})",
+                    hits.count(), backtracks, rate, restartNogoods.minHitRate());
+            if (rate < restartNogoods.minHitRate()) {
+                nogoodStore.remove(recorded);
+                recorded.clear();
+                recording = false;
+            }
         }
     }
 

@@ -104,6 +104,9 @@ middle is what this ADR rules out.
 
 ## The down option was tried (2026-09-23)
 
+*Revisited in [ADR-0057](0057-restart-nogoods-adaptively-kept-by-the-hits-they-score.md): on an instance that spends its restarts
+re-refuting one space the same mechanism is decisive, and an adaptive form of it is now the default.*
+
 Restart nogood recording was implemented in `DomWdegLubySearch`: as the Luby budget exception
 unwinds, one clause per already-refuted candidate at each level of the abandoned path. Sound because
 those candidates were genuinely exhausted; the candidate the budget *interrupted* is excluded, since

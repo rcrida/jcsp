@@ -271,6 +271,7 @@ public interface Solver {
                     .restartRandomization(config.getRestartRandomization().forSearch(searchIndex))
                     .restartSchedule(config.getRestartSchedule())
                     .lubyUnit(config.getLubyUnit())
+                    .restartNogoods(config.getRestartNogoods())
                     .selectorFactory(config.getVariableSelectorFactory())
                     .maxRestarts(maxRestarts)
                     .build();
@@ -358,7 +359,7 @@ public interface Solver {
                         .anyMatch(BoundedDomain.class::isInstance);
                 boolean hasSets = csp.getVariableDomains().values().stream()
                         .anyMatch(SetBoundedDomain.class::isInstance);
-                val fixpointPropagation = FixpointPropagation.Factory.INSTANCE.forProblem(csp, config.learningEnabled());
+                val fixpointPropagation = FixpointPropagation.Factory.INSTANCE.forProblem(csp, config.satisfactionPropagatesNogoods());
                 // Integer.MAX_VALUE, not DEFAULT_MAX_RESTARTS: getSolution() reaches Luby-restart
                 // search directly (see BoundSolver#getSolution below), so a restart cap would silently
                 // turn SolverLimits.unlimited() into a bounded search. SolverLimits (node/time) remains
@@ -441,7 +442,7 @@ public interface Solver {
                         : BoundedFirstSolution.builder()
                                 .search((searchCsp, restartBudget, searchIndex) -> {
                                     val searchPropagation = FixpointPropagation.Factory.INSTANCE
-                                            .forProblem(searchCsp, config.learningEnabled());
+                                            .forProblem(searchCsp, config.satisfactionPropagatesNogoods());
                                     return PropagationFixpointSolver.builder()
                                             .inner(satisfactionSearch(config, searchIndex, searchPropagation, restartBudget))
                                             .snap(false)

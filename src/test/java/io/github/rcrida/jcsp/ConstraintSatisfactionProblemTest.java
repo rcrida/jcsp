@@ -275,6 +275,22 @@ public class ConstraintSatisfactionProblemTest {
     }
 
     @Test
+    void getStructuralConstraintsTouching_leavesOutTheNogoods() {
+        Variable<Integer> a = VARIABLE_FACTORY.create("touch_struct_a");
+        Variable<Integer> b = VARIABLE_FACTORY.create("touch_struct_b");
+        val ab = BinaryNotEqualsConstraint.of(a, b);
+        NogoodConstraint nogood = GroundNogoodConstraint.of(Map.of(a, 1));
+        val csp = ConstraintSatisfactionProblem.builder()
+                .variableDomain(a, IntRangeDomain.of(1, 3))
+                .variableDomain(b, IntRangeDomain.of(1, 3))
+                .constraint(ab)
+                .build()
+                .withNogoods(Set.of(nogood), Map.of(a, Set.of(nogood)));
+        assertThat(csp.getConstraintsTouching(a)).containsExactlyInAnyOrder(ab, nogood);
+        assertThat(csp.getStructuralConstraintsTouching(a)).containsExactly(ab);
+    }
+
+    @Test
     void getConstraintsTouching_withoutLiveIndex_returnsEveryNogood() {
         Variable<Integer> a = VARIABLE_FACTORY.create("touch_noidx_a");
         Variable<Integer> b = VARIABLE_FACTORY.create("touch_noidx_b");

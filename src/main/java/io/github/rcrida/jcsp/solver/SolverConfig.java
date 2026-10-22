@@ -115,6 +115,19 @@ public class SolverConfig {
     @Builder.Default int lubyUnit = DomWdegLubySearch.DEFAULT_LUBY_UNIT;
 
     /**
+     * Whether a run of the satisfaction chain's {@link DomWdegLubySearch} that is cut off at its
+     * restart budget remembers the branches it had refuted, so that later runs do not refute them
+     * again. Defaults to {@link RestartNogoods#ADAPTIVE}: remembered, and dropped again if they are
+     * not doing work. It lets the search prove an unsatisfiable instance that spends its restarts
+     * re-refuting the same space, at a small cost to the heavy-tailed satisfiable ones that the
+     * adaptive form mostly avoids -- see ADR-0057. {@link RestartNogoods#NONE} turns it off.
+     * Affects only what a restart repeats, never which assignments may be visited, so soundness and
+     * completeness are untouched. Independent of {@link #nogoodLearningEnabled}, which concerns the
+     * nogoods learned from each conflict.
+     */
+    @Builder.Default @NonNull RestartNogoods restartNogoods = RestartNogoods.ADAPTIVE;
+
+    /**
      * How {@link DomWdegLubySearch} orders the variables it branches on. Defaults to
      * {@link AdaptiveVariableSelector.Factory#INSTANCE}, dom/wdeg with last-conflict; supply
      * another to search the same problem in a different order. A factory rather than a selector
@@ -149,5 +162,14 @@ public class SolverConfig {
      */
     public boolean learningEnabled() {
         return Boolean.TRUE.equals(nogoodLearningEnabled);
+    }
+
+    /**
+     * Whether the satisfaction chain's fixpoint must propagate nogoods: when they are learned from
+     * conflicts or recorded at restarts. Branch-and-bound's own search asks {@link #learningEnabled}
+     * instead, since it records no restart nogoods.
+     */
+    boolean satisfactionPropagatesNogoods() {
+        return learningEnabled() || restartNogoods.isEnabled();
     }
 }

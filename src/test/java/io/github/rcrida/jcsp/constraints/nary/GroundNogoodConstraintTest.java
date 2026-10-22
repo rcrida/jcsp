@@ -137,6 +137,48 @@ public class GroundNogoodConstraintTest {
         assertThat(c.explainInfeasible(domains)).contains(c);
     }
 
+    // --- hits ---
+
+    @Test
+    void hits_countAPruningAndAFailureButNotASatisfiedNogood() {
+        Variable<Integer> x = F.create("hx"), y = F.create("hy");
+        var hits = new GroundNogoodConstraint.Hits();
+        var c = GroundNogoodConstraint.of(io.github.rcrida.jcsp.assignments.Assignment.of(Map.of(x, 1, y, 2)), hits);
+
+        c.propagate(Map.of(x, IntRangeDomain.of(1, 1), y, IntRangeDomain.of(1, 2)));
+        assertThat(hits.count()).as("x is fixed to its forbidden value, so y loses 2").isEqualTo(1);
+
+        c.propagate(Map.of(x, IntRangeDomain.of(1, 1), y, IntRangeDomain.of(2, 2)));
+        assertThat(hits.count()).as("both are fixed to theirs: infeasible").isEqualTo(2);
+
+        c.propagate(Map.of(x, IntRangeDomain.of(2, 2), y, IntRangeDomain.of(2, 2)));
+        c.propagate(Map.of(x, IntRangeDomain.of(1, 2), y, IntRangeDomain.of(1, 2)));
+        assertThat(hits.count()).as("satisfied, and with two literals open: nothing to do").isEqualTo(2);
+    }
+
+    @Test
+    void hits_areSharedByEveryNogoodGivenThem() {
+        Variable<Integer> x = F.create("hsx"), y = F.create("hsy");
+        var hits = new GroundNogoodConstraint.Hits();
+        var first = GroundNogoodConstraint.of(io.github.rcrida.jcsp.assignments.Assignment.of(Map.of(x, 1)), hits);
+        var second = GroundNogoodConstraint.of(io.github.rcrida.jcsp.assignments.Assignment.of(Map.of(y, 1)), hits);
+
+        first.propagate(Map.of(x, IntRangeDomain.of(1, 1)));
+        second.propagate(Map.of(y, IntRangeDomain.of(1, 1)));
+
+        assertThat(hits.count()).isEqualTo(2);
+    }
+
+    @Test
+    void hits_playNoPartInEquality() {
+        Variable<Integer> x = F.create("hex");
+        var forbidden = io.github.rcrida.jcsp.assignments.Assignment.of(Map.of(x, 1));
+
+        assertThat(GroundNogoodConstraint.of(forbidden, new GroundNogoodConstraint.Hits()))
+                .isEqualTo(GroundNogoodConstraint.of(forbidden))
+                .hasSameHashCodeAs(GroundNogoodConstraint.of(forbidden));
+    }
+
     // --- misc ---
 
     @Test

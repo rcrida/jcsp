@@ -11,6 +11,7 @@ import org.jspecify.annotations.NonNull;
 
 import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Collectors;
 
 /**
@@ -32,18 +33,47 @@ public class GroundNogoodConstraint extends NaryConstraint implements NogoodCons
     @NonNull private final Valuation forbidden;
 
     /**
+     * Where this nogood reports that it did work, or {@code null} when nobody is counting. Not part
+     * of equality: two nogoods forbidding the same values are the same nogood whoever counts them.
+     */
+    @EqualsAndHashCode.Exclude
+    private final Hits hits;
+
+    /**
+     * A tally of how often the nogoods that share it pruned a domain or proved a node infeasible,
+     * which is the evidence that recording them was worth it. One per search that wants the figure.
+     */
+    public static final class Hits {
+        private final AtomicLong count = new AtomicLong();
+
+        private void record() {
+            count.incrementAndGet();
+        }
+
+        public long count() {
+            return count.get();
+        }
+    }
+
+    /**
      * The nogood forbidding exactly {@code forbidden}'s entries. Keeps {@code forbidden} itself
      * rather than a copy: a {@link Valuation} is immutable, and passing an {@link Assignment} keeps
      * it reachable only as the values-only type, so its statistics, listener and cancellation are
      * never read.
      */
     public static GroundNogoodConstraint of(@NonNull Valuation forbidden) {
+        return of(forbidden, null);
+    }
+
+    /** As {@link #of(Valuation)}, reporting each pruning or failure it causes to {@code hits}. */
+    public static GroundNogoodConstraint of(@NonNull Valuation forbidden, Hits hits) {
         // An empty forbidden valuation is the empty clause: propagate() would report infeasible for
         // every state (undeterminedCount == 0), pruning the whole search. Callers must not record one.
         assert forbidden.size() > 0 : "GroundNogoodConstraint requires at least one forbidden assignment";
         return GroundNogoodConstraint.builder()
                 .variables(forbidden.variables())
                 .forbidden(forbidden)
+                .hits(hits)
                 .build();
     }
 
@@ -113,9 +143,13 @@ public class GroundNogoodConstraint extends NaryConstraint implements NogoodCons
             }
         }
 
-        if (undeterminedCount == 0) return Optional.empty(); // every literal falsified
+        if (undeterminedCount == 0) { // every literal falsified
+            if (hits != null) hits.record();
+            return Optional.empty();
+        }
 
         if (undeterminedCount == 1 && domains.get(undeterminedVar) instanceof DiscreteDomain<?> dom) {
+            if (hits != null) hits.record();
             DiscreteDomain<Object> discreteDom = (DiscreteDomain<Object>) dom;
             Domain<Object> newDom = discreteDom.toBuilder().delete(undeterminedValue).build();
             return Optional.of(Map.of(undeterminedVar, newDom));

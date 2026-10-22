@@ -161,6 +161,24 @@ class NogoodStoreTest {
     }
 
     @Test
+    void removeForgetsOnlyTheNamedNogoodsAndTheirIndexEntries() {
+        NogoodStore store = new NogoodStore();
+        var keptOnX = nogood(Map.of(X, 1));
+        var forgottenOnX = nogood(Map.of(X, 2, Y, 2));
+        var notRecorded = nogood(Map.of(Z, 3));
+        store.record(keptOnX);
+        store.record(forgottenOnX);
+
+        store.remove(java.util.List.of(forgottenOnX, notRecorded));
+
+        var augmented = store.apply(csp());
+        assertThat(store.size()).isEqualTo(1);
+        assertThat(augmented.getNogoods()).containsExactly(keptOnX);
+        assertThat(augmented.getNogoodsByVariable().get(X)).containsExactly(keptOnX);
+        assertThat(augmented.getNogoodsByVariable().get(Y)).isEmpty();
+    }
+
+    @Test
     void applyAttachesByVariableIndexToCsp() {
         NogoodStore store = new NogoodStore();
         var xOnly = nogood(Map.of(X, 1));
