@@ -3,6 +3,8 @@ package io.github.rcrida.jcsp.domains;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 
+import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.LinkedHashSet;
@@ -50,7 +52,14 @@ public interface NumericDiscreteDomain<N extends Number> extends NumericDomain<N
      * only {@link #delete} of a value that is itself a bound forces {@link #build} to rescan.
      */
     final class NumericDiscreteDomainBuilder<N extends Number> implements DiscreteDomain.Builder<N> {
-        private final Set<N> mutableValues;
+        /** Null while this builder only narrows {@link #source}; see {@link #materialize}. */
+        private @Nullable Set<N> mutableValues;
+        /**
+         * The values of the domain being narrowed, untouched: deletions are recorded in {@link
+         * #removed} and applied to its array by {@link #build}, so narrowing rehashes nothing.
+         */
+        private @Nullable OrderedValueSet<N> source;
+        private @Nullable List<Object> removed;
         private @Nullable N min;
         private @Nullable N max;
         /** Set by {@link #delete} when the removed value was itself a bound; see {@link #build}. */
@@ -61,6 +70,22 @@ public interface NumericDiscreteDomain<N extends Number> extends NumericDomain<N
         NumericDiscreteDomainBuilder(Set<N> initial) {
             this(initial.size());
             values(initial);
+        }
+
+        /**
+         * A builder for narrowing the domain holding {@code values}, whose bounds are {@code min}
+         * and {@code max}. Starts from {@code values} itself when it is an {@link OrderedValueSet}
+         * -- what every built domain holds -- and from a copy otherwise.
+         */
+        static <N extends Number> NumericDiscreteDomainBuilder<N> narrowing(
+                Set<N> values, @Nullable N min, @Nullable N max) {
+            if (!(values instanceof OrderedValueSet<N> ordered)) return new NumericDiscreteDomainBuilder<>(values);
+            NumericDiscreteDomainBuilder<N> builder = new NumericDiscreteDomainBuilder<>(0);
+            builder.mutableValues = null;
+            builder.source = ordered;
+            builder.min = min;
+            builder.max = max;
+            return builder;
         }
 
         /**
@@ -79,7 +104,19 @@ public interface NumericDiscreteDomain<N extends Number> extends NumericDomain<N
          */
         private Set<N> mutable() {
             assert !built : "a builder cannot be reused after build()";
+            if (source != null) materialize();
             return mutableValues;
+        }
+
+        /** Applies the recorded deletions to a hash set, for the rare builder that also adds values. */
+        @SuppressWarnings("unchecked")
+        private void materialize() {
+            mutableValues = LinkedHashSet.newLinkedHashSet(source.size());
+            for (Object value : source.elements()) {
+                if (removed == null || !removed.contains(value)) mutableValues.add((N) value);
+            }
+            source = null;
+            removed = null;
         }
 
         /**
@@ -102,14 +139,66 @@ public interface NumericDiscreteDomain<N extends Number> extends NumericDomain<N
 
         @Override
         public NumericDiscreteDomainBuilder<N> delete(@NonNull Object value) {
+            if (source != null) {
+                assert !built : "a builder cannot be reused after build()";
+                if (removed == null) removed = new ArrayList<>();
+                removed.add(value);
+                if (value.equals(min) || value.equals(max)) boundsStale = true;
+                return this;
+            }
             if (mutable().remove(value) && (value.equals(min) || value.equals(max))) {
                 boundsStale = true;
             }
             return this;
         }
 
+        /**
+         * Filters {@link #source}'s array by {@link #removed}, in one pass with one equality test
+         * per recorded deletion per value, and collapses as {@link #build} does.
+         */
+        @SuppressWarnings("unchecked")
+        private NumericDiscreteDomain<N> buildNarrowed() {
+            OrderedValueSet<N> from = source;
+            if (removed == null) return unchanged(from);
+            Object[] elements = from.elements();
+            Object[] kept = new Object[elements.length];
+            int count = 0;
+            for (Object element : elements) {
+                if (!removed.contains(element)) kept[count++] = element;
+            }
+            if (count == elements.length) return unchanged(from);
+            if (count == 0) return NumericEmptyDomain.instance();
+            if (count == 1) return new NumericSingletonDomain<>((N) kept[0]);
+            if (boundsStale) {
+                min = (N) extremum(kept, count, -1);
+                max = (N) extremum(kept, count, 1);
+                boundsStale = false;
+            }
+            built = true;
+            return new NumericSetDomain<>(OrderedValueSet.ofDistinct(Arrays.copyOf(kept, count)), min, max);
+        }
+
+        /** {@code values} as the domain it already is, with this builder's bounds. */
+        private NumericDiscreteDomain<N> unchanged(OrderedValueSet<N> values) {
+            if (values.isEmpty()) return NumericEmptyDomain.instance();
+            if (values.size() == 1) return new NumericSingletonDomain<>(values.iterator().next());
+            built = true;
+            return new NumericSetDomain<>(values, min, max);
+        }
+
+        /** As {@link NumericSetDomain#extremum}, over the first {@code count} of {@code elements}. */
+        private static Number extremum(Object[] elements, int count, int direction) {
+            Number extreme = (Number) elements[0];
+            for (int i = 1; i < count; i++) {
+                Number value = (Number) elements[i];
+                if (direction * Double.compare(value.doubleValue(), extreme.doubleValue()) > 0) extreme = value;
+            }
+            return extreme;
+        }
+
         @Override
         public NumericDiscreteDomain<N> build() {
+            if (source != null) return buildNarrowed();
             if (mutableValues.isEmpty()) {
                 return NumericEmptyDomain.instance();
             }

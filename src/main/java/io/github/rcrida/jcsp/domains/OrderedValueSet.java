@@ -4,6 +4,7 @@ import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 
 import java.util.AbstractSet;
+import java.util.HashSet;
 import java.util.Iterator;
 import java.util.NoSuchElementException;
 import java.util.Set;
@@ -27,17 +28,42 @@ import java.util.Spliterators;
  * #handingOver} is kept as the membership index rather than copied: a spent {@link
  * DiscreteDomain.DiscreteDomainBuilder} never touches its backing set again (it asserts as much),
  * so the two can share it, exactly as the {@code unmodifiableSet} view used to.
+ * <p>
+ * {@link #ofDistinct} is the other way in: an array alone, with the membership index left to the
+ * first {@link #contains} that needs one (or a scan, for a handful of elements). Narrowing a
+ * numeric domain builds its result that way -- see {@link
+ * NumericDiscreteDomain.NumericDiscreteDomainBuilder#narrowing} and
+ * docs/adr/0058.
  *
  * @param <T> the domain's value type
  */
 final class OrderedValueSet<T> extends AbstractSet<T> {
 
-    private final @NonNull Object[] elements;
-    private final @NonNull Set<T> membership;
+    /** Up to this many elements, {@link #contains} scans the array rather than building {@link #membership}. */
+    private static final int SCAN_LIMIT = 8;
 
-    private OrderedValueSet(@NonNull Object[] elements, @NonNull Set<T> membership) {
+    private final @NonNull Object[] elements;
+    /** Handed in by {@link #handingOver}; otherwise built by the first {@link #contains} that needs it. */
+    private volatile @Nullable Set<T> membership;
+
+    private OrderedValueSet(@NonNull Object[] elements, @Nullable Set<T> membership) {
         this.elements = elements;
         this.membership = membership;
+    }
+
+    /**
+     * Takes ownership of {@code distinct}, which must be duplicate-free and never mutated again,
+     * and builds no membership index: narrowing a domain filters the array it already holds, and
+     * most narrowed domains are only ever traversed. {@link #contains} builds the index on first
+     * use, or just scans a small array.
+     */
+    static <T> OrderedValueSet<T> ofDistinct(@NonNull Object[] distinct) {
+        return new OrderedValueSet<>(distinct, null);
+    }
+
+    /** The backing array itself, for a caller that reads it once and never writes it. */
+    @NonNull Object[] elements() {
+        return elements;
     }
 
     /**
@@ -61,8 +87,22 @@ final class OrderedValueSet<T> extends AbstractSet<T> {
     }
 
     @Override
+    @SuppressWarnings("unchecked")
     public boolean contains(@Nullable Object value) {
-        return membership.contains(value);
+        Set<T> index = membership;
+        if (index == null) {
+            if (elements.length <= SCAN_LIMIT) {
+                for (Object element : elements) {
+                    if (element.equals(value)) return true;
+                }
+                return false;
+            }
+            // Idempotent, so two threads racing here each build an equal set and either may win.
+            index = HashSet.newHashSet(elements.length);
+            for (Object element : elements) index.add((T) element);
+            membership = index;
+        }
+        return index.contains(value);
     }
 
     @Override

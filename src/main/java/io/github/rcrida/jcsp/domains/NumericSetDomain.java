@@ -93,6 +93,6 @@ public record NumericSetDomain<N extends Number>(@NonNull Set<N> values, @Nullab
      */
     @Override
     public NumericDiscreteDomain.NumericDiscreteDomainBuilder<N> toBuilder() {
-        return new NumericDiscreteDomain.NumericDiscreteDomainBuilder<>(values);
+        return NumericDiscreteDomain.NumericDiscreteDomainBuilder.narrowing(values, min, max);
     }
 }

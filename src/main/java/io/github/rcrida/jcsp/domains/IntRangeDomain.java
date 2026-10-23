@@ -47,7 +47,7 @@ public record IntRangeDomain(Set<Integer> values, int min, int max)
      */
     @Override
     public NumericDiscreteDomain.NumericDiscreteDomainBuilder<Integer> toBuilder() {
-        return new NumericDiscreteDomain.NumericDiscreteDomainBuilder<>(values);
+        return NumericDiscreteDomain.NumericDiscreteDomainBuilder.narrowing(values, min, max);
     }
 
     @Override

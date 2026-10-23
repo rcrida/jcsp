@@ -124,6 +124,135 @@ class NumericSetDomainTest {
      * assertion in {@link NumericSetDomain}'s canonical constructor is what would catch it
      * failing to.
      */
+    private static NumericSetDomain<Integer> of(Integer... values) {
+        return (NumericSetDomain<Integer>) NumericDiscreteDomain.of(values);
+    }
+
+    // ── Narrowing through toBuilder: deletions filter the existing array, nothing is rehashed ──
+
+    @Test
+    void toBuilder_deleteInterior_keepsOrderAndBounds() {
+        NumericDiscreteDomain<Integer> narrowed = of(4, 1, 3, 2).toBuilder().delete(3).build();
+
+        assertThat(narrowed.toList()).containsExactly(4, 1, 2);
+        assertThat(narrowed.getMin()).isEqualTo(1);
+        assertThat(narrowed.getMax()).isEqualTo(4);
+        assertThat(narrowed.contains(3)).isFalse();
+        assertThat(narrowed.contains(4)).isTrue();
+    }
+
+    @Test
+    void toBuilder_deleteMinimum_rescansTheBounds() {
+        NumericDiscreteDomain<Integer> narrowed = of(4, 1, 3, 2).toBuilder().delete(1).build();
+
+        assertThat(narrowed.getMin()).isEqualTo(2);
+        assertThat(narrowed.getMax()).isEqualTo(4);
+    }
+
+    @Test
+    void toBuilder_deleteMaximum_rescansTheBounds() {
+        NumericDiscreteDomain<Integer> narrowed = of(4, 1, 3, 2).toBuilder().delete(4).build();
+
+        assertThat(narrowed.getMin()).isEqualTo(1);
+        assertThat(narrowed.getMax()).isEqualTo(3);
+    }
+
+    @Test
+    void toBuilder_deleteAnAbsentValue_leavesTheDomainAsItWas() {
+        NumericDiscreteDomain<Integer> domain = of(1, 2, 3);
+
+        assertThat(domain.toBuilder().delete(99).build()).isEqualTo(domain);
+    }
+
+    @Test
+    void toBuilder_noDeletions_leavesTheDomainAsItWas() {
+        NumericDiscreteDomain<Integer> domain = of(1, 2, 3);
+
+        NumericDiscreteDomain<Integer> rebuilt = (NumericDiscreteDomain<Integer>) domain.toBuilder().build();
+
+        assertThat(rebuilt).isEqualTo(domain);
+        assertThat(rebuilt.getMax()).isEqualTo(3);
+    }
+
+    @Test
+    void toBuilder_deleteDownToOne_isASingleton() {
+        assertThat(of(1, 2, 3).toBuilder().delete(1).delete(3).build()).isInstanceOf(NumericSingletonDomain.class);
+    }
+
+    @Test
+    void toBuilder_deleteEverything_isEmpty() {
+        assertThat(of(1, 2).toBuilder().delete(1).delete(2).build()).isInstanceOf(NumericEmptyDomain.class);
+    }
+
+    @Test
+    void toBuilder_noDeletionsFromAnEmptyOrSingletonValueSet_collapsesAsBuildDoes() {
+        var empty = new NumericSetDomain<Integer>(OrderedValueSet.handingOver(new java.util.LinkedHashSet<>()));
+        var single = new NumericSetDomain<>(OrderedValueSet.handingOver(new java.util.LinkedHashSet<>(List.of(7))));
+
+        assertThat(empty.toBuilder().build()).isInstanceOf(NumericEmptyDomain.class);
+        assertThat(single.toBuilder().build()).isInstanceOf(NumericSingletonDomain.class);
+    }
+
+    @Test
+    void toBuilder_addAfterDeleting_appliesTheDeletionsFirst() {
+        NumericDiscreteDomain<Integer> built = of(1, 2, 3).toBuilder().delete(2).value(9).build();
+
+        assertThat(built.toList()).containsExactly(1, 3, 9);
+        assertThat(built.getMax()).isEqualTo(9);
+    }
+
+    @Test
+    void toBuilder_addWithoutDeleting_keepsEveryValue() {
+        NumericDiscreteDomain<Integer> built = of(1, 2, 3).toBuilder().value(9).build();
+
+        assertThat(built.toList()).containsExactly(1, 2, 3, 9);
+    }
+
+    @Test
+    void toBuilder_plainSetBackedDomain_isCopied() {
+        var domain = new NumericSetDomain<>(Set.of(1, 2, 3));
+
+        assertThat(domain.toBuilder().delete(1).build().toList()).containsExactlyInAnyOrder(2, 3);
+    }
+
+    @Test
+    void toBuilder_narrowedBuilderBuiltThenMutated_throwsAssertionError() {
+        var builder = of(1, 2, 3).toBuilder().delete(1);
+        builder.build();
+
+        assertThatThrownBy(() -> builder.delete(2)).isInstanceOf(AssertionError.class);
+    }
+
+    @Test
+    void toBuilder_intRangeDomain_narrowsWithoutLosingNumericness() {
+        NumericDiscreteDomain<Integer> narrowed = IntRangeDomain.of(1, 20).toBuilder().delete(1).delete(7).build();
+
+        assertThat(narrowed).isInstanceOf(NumericSetDomain.class);
+        assertThat(narrowed.getMin()).isEqualTo(2);
+        assertThat(narrowed.size()).isEqualTo(18);
+        assertThat(narrowed.contains(7)).isFalse();
+        assertThat(narrowed.contains(8)).isTrue();
+    }
+
+    @Test
+    void builder_deletedTheMaximum_rescansTheBounds() {
+        NumericDiscreteDomain<Integer> built =
+                NumericDiscreteDomain.<Integer>builder().values(List.of(1, 2, 3)).delete(3).build();
+
+        assertThat(built.getMin()).isEqualTo(1);
+        assertThat(built.getMax()).isEqualTo(2);
+    }
+
+    @Test
+    void builder_deletedAnInteriorOrAbsentValue_keepsTheBounds() {
+        NumericDiscreteDomain<Integer> built =
+                NumericDiscreteDomain.<Integer>builder().values(List.of(1, 2, 3)).delete(2).delete(99).build();
+
+        assertThat(built.toList()).containsExactly(1, 3);
+        assertThat(built.getMin()).isEqualTo(1);
+        assertThat(built.getMax()).isEqualTo(3);
+    }
+
     @Test
     void builder_deletedTheMinimum_rescansTheBounds() {
         NumericDiscreteDomain<Integer> built =

@@ -45,6 +45,32 @@ class OrderedValueSetTest {
     }
 
     @Test
+    void ofDistinct_smallSet_containsScansTheArray() {
+        OrderedValueSet<Integer> set = OrderedValueSet.ofDistinct(new Object[]{5, 1, 9});
+
+        assertThat(set).containsExactly(5, 1, 9);
+        assertThat(set.contains(1)).isTrue();
+        assertThat(set.contains(7)).isFalse();
+        assertThat(set.contains(null)).isFalse();
+    }
+
+    @Test
+    void ofDistinct_largeSet_containsBuildsTheIndexOnceAndReusesIt() {
+        Object[] values = new Object[20];
+        for (int i = 0; i < values.length; i++) values[i] = i * 2;
+        OrderedValueSet<Integer> set = OrderedValueSet.ofDistinct(values);
+
+        assertThat(set.contains(6)).isTrue();
+        assertThat(set.contains(7)).isFalse();
+        assertThat(set.contains(38)).isTrue();
+    }
+
+    @Test
+    void elements_isTheBackingArrayInOrder() {
+        assertThat(of(5, 1, 9).elements()).containsExactly(5, 1, 9);
+    }
+
+    @Test
     void iterator_exhausted_throws() {
         Iterator<Integer> iterator = of(5).iterator();
 
