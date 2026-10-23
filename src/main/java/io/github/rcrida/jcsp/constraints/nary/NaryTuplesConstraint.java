@@ -13,6 +13,7 @@ import org.jspecify.annotations.NonNull;
 
 import java.util.ArrayList;
 import java.util.BitSet;
+import java.util.Collection;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
@@ -116,25 +117,40 @@ public class NaryTuplesConstraint extends NaryConstraint implements Propagatable
     @Override
     public Optional<Map<Variable<?>, Domain<?>>> propagate(@NonNull Map<Variable<?>, Domain<?>> domains) {
         Map<Variable<?>, Map<Object, BitSet>> index = supportIndex();
+        // Each variable's domain and the support of each of its values in iteration order, so the
+        // second pass below reads them back instead of repeating every lookup.
+        int arity = getVariables().size();
+        DiscreteDomain<?>[] domainOf = new DiscreteDomain<?>[arity];
+        BitSet[][] supportOf = new BitSet[arity][];
         BitSet live = null;
+        int position = 0;
         for (Variable<?> v : getVariables()) {
             Map<Object, BitSet> supportByValue = index.get(v);
+            DiscreteDomain<?> dom = (DiscreteDomain<?>) domains.get(v);
+            Collection<?> values = dom.asCollection();
+            BitSet[] supports = new BitSet[values.size()];
             BitSet union = new BitSet(tuples.size());
-            for (Object value : ((DiscreteDomain<?>) domains.get(v)).asCollection()) {
+            int k = 0;
+            for (Object value : values) {
                 BitSet support = supportByValue.get(value);
+                supports[k++] = support;
                 if (support != null) union.or(support);
             }
+            domainOf[position] = dom;
+            supportOf[position++] = supports;
             if (live == null) live = union; else live.and(union);
             if (live.isEmpty()) return Optional.empty();
         }
 
         Map<Variable<?>, Domain<?>> updated = new HashMap<>();
+        position = 0;
         for (Variable<?> v : getVariables()) {
-            Map<Object, BitSet> supportByValue = index.get(v);
-            DiscreteDomain<?> dom = (DiscreteDomain<?>) domains.get(v);
+            DiscreteDomain<?> dom = domainOf[position];
+            BitSet[] supports = supportOf[position++];
             List<Object> unsupported = new ArrayList<>();
+            int k = 0;
             for (Object value : dom.asCollection()) {
-                BitSet support = supportByValue.get(value);
+                BitSet support = supports[k++];
                 if (support == null || !support.intersects(live)) unsupported.add(value);
             }
             if (!unsupported.isEmpty()) {
