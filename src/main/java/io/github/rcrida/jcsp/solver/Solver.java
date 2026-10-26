@@ -342,14 +342,14 @@ public interface Solver {
             @Override
             public BoundSolver createSolver(@NonNull ConstraintSatisfactionProblem csp,
                                             @NonNull SolverConfig config) {
-                return satisfactionSolver(RedundantConstraints.withRedundantConstraints(csp), config);
+                return satisfactionSolver(RedundantConstraints.withRedundantConstraints(csp, config.getCancellation()), config);
             }
 
             @Override
             public BoundSolver createSolver(@NonNull ConstraintSatisfactionProblem csp,
                                             @NonNull ToDoubleFunction<Assignment> objective,
                                             @NonNull SolverConfig config) {
-                return optimizationSolver(RedundantConstraints.withRedundantConstraints(csp), objective, config);
+                return optimizationSolver(RedundantConstraints.withRedundantConstraints(csp, config.getCancellation()), objective, config);
             }
 
             private BoundSolver satisfactionSolver(ConstraintSatisfactionProblem csp, SolverConfig config) {

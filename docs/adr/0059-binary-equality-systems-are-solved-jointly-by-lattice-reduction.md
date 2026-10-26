@@ -1,6 +1,6 @@
 # 0059. Systems of binary linear equalities are solved jointly, by lattice reduction
 
-**Status**: Proposed
+**Status**: Accepted
 
 ## Context
 
@@ -113,19 +113,40 @@ passes its property test.
 
 ## Consequences
 
-If it works as prototyped, m=4 systems are decided at the root in tens of milliseconds and m=5 in
-under half a second, replacing a search whose time ranges from seconds to over a minute depending on
-the seed. m=6 needs 0.3B–1.4B nodes and falls back to ordinary search after paying at most the
-budget, so the cost of a recognised group that cannot be decided is bounded at about a second per
-solve.
+Through the solver, `MarketSplit-01` and every generated m=4 and m=5 instance tried (planted and
+classic, 10 of them) is decided at the root in 0.12–0.4s including JVM start, with 0 search nodes, and
+the infeasible ones report `UNSATISFIABLE`. m=6 needs 0.3B–1.4B nodes, exceeds the budget, and falls
+back to ordinary search after paying about a second (`UNKNOWN` at 20s on the two tried), so the cost
+of a recognised group that cannot be decided is bounded at about a second per solve.
 
-Obligations: a property test of `BinaryEqualitySystem` against brute force (`2^n`, `n ≤ 20`) for
-both feasible and infeasible systems and for the whole solution set; unit tests for `IntegerLattice`
-(the reduced rows satisfy the size-reduction and Lovász conditions and span the same lattice); a
-bundled-corpus sweep with `Xcsp3CompetitionRunner` showing no change in outcomes or node counts where
-the pattern does not match; and a decision on whether `MarketSplit-01` and a generated m=4/m=5 pair
-join the end-to-end examples.
+Two things differ from the prototype. The enumeration starts from the part of the target outside the
+span of the kernel, which the prototype ignored, so it prunes harder (m=6 classic-2: 10.4s against
+15.4s). And `BinaryEqualitySystem` checks the reduced basis before trusting it: an exact rank, the
+count of rows with a zero tail, one row carrying the middle entry, and the particular solution and
+every kernel row verified against the equations exactly. Anything unexpected is `INCONCLUSIVE`. A
+middle entry that is a whole multiple above one of the weight is proof of no integer solution.
+
+Bundled corpus (`Xcsp3CompetitionRunner`, 60s, default seed), against the commit before:
+
+| | before | after |
+|---|---|---|
+| solved | 83 of 85 | 84 of 85 |
+| optimum found / feasible without proof | 23 / 8 | 23 / 8 |
+| status flips | | `MarketSplit-01` only, `UNKNOWN` → `SATISFIABLE` in 0.14s |
+
+The two instances that looked slower (`MagicSquare-6-sum` 0.20s → 0.88s, `Domino-300-300`
+1.17s → 1.86s) have unchanged constraint counts and node counts (51; 303 against 304), so no group was
+recognised and the difference is noise.
+
+`BinaryEqualitySystem` is checked against a `2^n` brute force on 400 seeded random systems (1–4
+equations, up to 16 variables, negative coefficients, duplicated rows, planted solutions) for the
+status and the whole solution set, and against an independent meet-in-the-middle count on five of the
+generated instances. Completeness of a refutation still rests on the double-precision pruning margin;
+m=6 refutations were not cross-checked.
+
+`MarketSplit-01` and an infeasible generated m=4 instance are end-to-end cases in
+`LatticeSystemsTest`; the generated m=5 instances are not kept in the repository.
 
 Out of scope here: general bounded integer domains (a box inside a ball, with exact verification),
-inequality rows through slack variables, objectives, `Boolean` variables, and a time-aware budget for
-m ≥ 6. The status stays Proposed until the property test and the corpus sweep have run.
+inequality rows through slack variables, objectives, `Boolean` variables and
+`LinearBooleanBoundConstraint`, and a time-aware budget for m ≥ 6.
