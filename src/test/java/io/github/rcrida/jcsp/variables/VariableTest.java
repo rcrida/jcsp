@@ -37,6 +37,45 @@ public class VariableTest {
     }
 
     @Test
+    void forkContinuesNumberingAndCountsTheParentsNamesAsIssued() {
+        var parent = new Variable.Factory();
+        parent.create("a");
+        parent.create("b");
+        var fork = parent.fork();
+        assertThat(fork.create("c").getIndex()).isEqualTo(2);
+        assertThatThrownBy(() -> fork.create("a")).isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> fork.create("c")).isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    void forksOfOneFactoryAreIndependentOfEachOtherAndOfTheirParent() {
+        var parent = new Variable.Factory();
+        parent.create("a");
+        var first = parent.fork();
+        var second = parent.fork();
+        assertThat(first.create("x").getIndex()).isEqualTo(1);
+        assertThat(second.create("x").getIndex()).isEqualTo(1);
+        assertThat(parent.create("x").getIndex()).isEqualTo(1);
+    }
+
+    @Test
+    void forkOfAForkSeesEveryAncestorsNames() {
+        var root = new Variable.Factory();
+        root.create("a");
+        var middle = root.fork();
+        middle.create("b");
+        var leaf = middle.fork();
+        assertThatThrownBy(() -> leaf.create("a")).isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> leaf.create("b")).isInstanceOf(IllegalArgumentException.class);
+        assertThat(leaf.create("c").getIndex()).isEqualTo(2);
+    }
+
+    @Test
+    void sharedInstanceCannotBeForked() {
+        assertThatThrownBy(Variable.Factory.INSTANCE::fork).isInstanceOf(AssertionError.class);
+    }
+
+    @Test
     void sharedInstanceAcceptsARepeatedName() {
         var name = UUID.randomUUID().toString();
         assertThat(Variable.Factory.INSTANCE.create(name)).isEqualTo(Variable.Factory.INSTANCE.create(name));

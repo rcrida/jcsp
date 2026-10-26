@@ -899,4 +899,29 @@ public class ConstraintSatisfactionProblemTest {
         assertThatThrownBy(() -> builder.createVariable("a", BooleanDomain.INSTANCE))
                 .isInstanceOf(IllegalArgumentException.class);
     }
+
+    @Test
+    void toBuilderContinuesTheParentsIndexSpaceAndNames() {
+        val parentBuilder = ConstraintSatisfactionProblem.builder();
+        parentBuilder.createVariable("a", BooleanDomain.INSTANCE);
+        parentBuilder.createVariable("b", BooleanDomain.INSTANCE);
+        val parent = parentBuilder.build();
+
+        val childBuilder = parent.toBuilder();
+        assertThat(childBuilder.createVariable("c", BooleanDomain.INSTANCE).getIndex()).isEqualTo(2);
+        assertThatThrownBy(() -> childBuilder.createVariable("a", BooleanDomain.INSTANCE))
+                .isInstanceOf(IllegalArgumentException.class);
+        assertThat(childBuilder.build().getNumVariables()).isEqualTo(3);
+    }
+
+    @Test
+    void narrowingKeepsTheFactorySoALaterToBuilderStillContinues() {
+        val builder = ConstraintSatisfactionProblem.builder();
+        val a = builder.createVariable("a", IntRangeDomain.of(1, 3));
+        val narrowed = builder.build()
+                .withDomain(a, IntRangeDomain.of(1, 2))
+                .withDomains(Map.of(a, IntRangeDomain.of(1, 1)))
+                .withNogoods(Set.of());
+        assertThat(narrowed.toBuilder().createVariable("b", BooleanDomain.INSTANCE).getIndex()).isEqualTo(1);
+    }
 }

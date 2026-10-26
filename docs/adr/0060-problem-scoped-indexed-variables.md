@@ -52,8 +52,11 @@ claim is that array lookup beats hashing a name, not that any particular instanc
 (see the corpus-sweep protocol used by ADR-0024 and ADR-0058).
 
 Scaffolding landed first: `Variable.getIndex()` exists, and `Variable.Factory` is stateful: a
-`new Factory()` numbers its variables from 0 and rejects a name it has already issued. Nothing reads
-the index yet. `Variable.Factory.INSTANCE` remains the shared factory until the builder migration
+`new Factory()` numbers its variables from 0 and rejects a name it has already issued. Each builder
+owns a factory, a built problem keeps it, and `toBuilder()` hands the new builder `fork()` of it: a
+factory that numbers on from the parent's next index and treats the parent's names as issued by
+following a parent link, so neither is copied. Forks of one parent are independent of each other.
+Nothing reads the index yet. `Variable.Factory.INSTANCE` remains the shared factory until the builder migration
 retires it; it numbers uniquely but not densely and accepts repeated names, because the existing
 tests reuse names across problems.
 

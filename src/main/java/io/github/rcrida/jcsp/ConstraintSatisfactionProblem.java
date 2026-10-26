@@ -213,6 +213,10 @@ public class ConstraintSatisfactionProblem {
     // value just means "unknown, fall back to a full scan of nogoods" -- so it's excluded from
     // equals/hashCode/toString exactly like the other derived caches here.
     @EqualsAndHashCode.Exclude @ToString.Exclude @Nullable Map<Variable<?>, Set<NogoodConstraint>> nogoodsByVariable;
+    // The factory that issued this problem's variables, which toBuilder() forks so a derived problem's
+    // new variables extend this index space. Excluded: it says where variables came from, not what the
+    // problem is.
+    @Getter(AccessLevel.NONE) @EqualsAndHashCode.Exclude @ToString.Exclude Variable.Factory variableFactory;
     // Excluded: purely a derived cache of constraintGraph's constraints + nogoods (see
     // mergedWithNogoods), already covered transitively by constraintGraph and nogoods above.
     @Getter(AccessLevel.NONE) @EqualsAndHashCode.Exclude @ToString.Exclude Set<Constraint> allConstraints;
@@ -255,9 +259,11 @@ public class ConstraintSatisfactionProblem {
      * @param nogoods learned nogoods folded into {@link #getConstraints()} but excluded from the constraint graph
      * @param nogoodMergeCache pre-existing merge cache to reuse (see the field javadoc), or {@code null} for a fresh one
      * @param nogoodsByVariable live index from the originating {@link NogoodStore} (see the field javadoc), or {@code null} if unknown
+     * @param variableFactory the factory that issued the variables (see the field javadoc)
      */
     @Builder
-    ConstraintSatisfactionProblem(@Singular("variableDomainEntry") Map<Variable<?>, Domain<?>> variableDomains, @Singular Set<Constraint> constraints, @Nullable ConstraintGraph constraintGraph, @Nullable Set<NogoodConstraint> nogoods, @Nullable AtomicReference<NogoodMergeCache> nogoodMergeCache, @Nullable Map<Variable<?>, Set<NogoodConstraint>> nogoodsByVariable) {
+    ConstraintSatisfactionProblem(@Singular("variableDomainEntry") Map<Variable<?>, Domain<?>> variableDomains, @Singular Set<Constraint> constraints, @Nullable ConstraintGraph constraintGraph, @Nullable Set<NogoodConstraint> nogoods, @Nullable AtomicReference<NogoodMergeCache> nogoodMergeCache, @Nullable Map<Variable<?>, Set<NogoodConstraint>> nogoodsByVariable, Variable.Factory variableFactory) {
+        this.variableFactory = variableFactory;
         this.variableDomains = DomainMap.of(variableDomains);
         if (constraintGraph != null
                 && (constraintGraph.getConstraints() == constraints || constraintGraph.getConstraints().equals(constraints))) {
@@ -307,6 +313,7 @@ public class ConstraintSatisfactionProblem {
      */
     public ConstraintSatisfactionProblemBuilder toBuilder() {
         return builder()
+                .variableFactory(variableFactory.fork())
                 .variableDomains(variableDomains)
                 .constraints(constraintGraph.getConstraints())
                 .constraintGraph(constraintGraph)
@@ -353,7 +360,7 @@ public class ConstraintSatisfactionProblem {
     public ConstraintSatisfactionProblem withNogoods(@NonNull Set<NogoodConstraint> newNogoods,
             @Nullable Map<Variable<?>, Set<NogoodConstraint>> index) {
         if (newNogoods == this.nogoods) return this;
-        return new ConstraintSatisfactionProblem(variableDomains, constraintGraph.getConstraints(), constraintGraph, newNogoods, nogoodMergeCache, index);
+        return new ConstraintSatisfactionProblem(variableDomains, constraintGraph.getConstraints(), constraintGraph, newNogoods, nogoodMergeCache, index, variableFactory);
     }
 
     /**
@@ -374,13 +381,13 @@ public class ConstraintSatisfactionProblem {
      * iteration order needs to stay exactly what it was declared as.
      */
     public ConstraintSatisfactionProblem withDomain(@NonNull Variable<?> variable, @NonNull Domain<?> domain) {
-        return new ConstraintSatisfactionProblem(variableDomains.with(variable, domain), constraintGraph.getConstraints(), constraintGraph, nogoods, nogoodMergeCache, nogoodsByVariable);
+        return new ConstraintSatisfactionProblem(variableDomains.with(variable, domain), constraintGraph.getConstraints(), constraintGraph, nogoods, nogoodMergeCache, nogoodsByVariable, variableFactory);
     }
 
     /** As {@link #withDomain}, applying every entry of {@code updates} in one pass; returns {@code this} unchanged if {@code updates} is empty. */
     public ConstraintSatisfactionProblem withDomains(@NonNull Map<Variable<?>, Domain<?>> updates) {
         if (updates.isEmpty()) return this;
-        return new ConstraintSatisfactionProblem(variableDomains.withAll(updates), constraintGraph.getConstraints(), constraintGraph, nogoods, nogoodMergeCache, nogoodsByVariable);
+        return new ConstraintSatisfactionProblem(variableDomains.withAll(updates), constraintGraph.getConstraints(), constraintGraph, nogoods, nogoodMergeCache, nogoodsByVariable, variableFactory);
     }
 
     /**
@@ -872,7 +879,8 @@ public class ConstraintSatisfactionProblem {
     }
 
     public static class ConstraintSatisfactionProblemBuilder {
-        private final Variable.Factory variableFactory = new Variable.Factory();
+        // Lombok's generated variableFactory(...) setter replaces this, and build() hands it to the problem.
+        private Variable.Factory variableFactory = new Variable.Factory();
         private int atLeastNChainCount = 0;
 
         /**
