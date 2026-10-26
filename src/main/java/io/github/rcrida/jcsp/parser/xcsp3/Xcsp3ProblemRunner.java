@@ -18,10 +18,12 @@ import java.io.IOException;
 import java.io.PrintStream;
 import java.nio.file.Path;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -210,10 +212,11 @@ public final class Xcsp3ProblemRunner {
      */
     private static void printSolution(Xcsp3Instance instance, Assignment solution, PrintStream out) {
         List<String> names = instance.declaredVariableNames().stream().toList();
-        Variable.Factory factory = Variable.Factory.INSTANCE;
+        Map<String, Variable<?>> variablesByName = instance.csp().getVariableDomains().keySet().stream()
+                .collect(Collectors.toMap(Variable::getName, Function.identity()));
         String list = String.join(" ", names);
         String values = names.stream()
-                .map(name -> String.valueOf(solution.getValue(factory.<Object>create(name)).orElseThrow()))
+                .map(name -> String.valueOf(solution.getValue(variablesByName.get(name)).orElseThrow()))
                 .collect(Collectors.joining(" "));
         out.println("v <instantiation><list> " + list + " </list><values> " + values + " </values></instantiation>");
     }

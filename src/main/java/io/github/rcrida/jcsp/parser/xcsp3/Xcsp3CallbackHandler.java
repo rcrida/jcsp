@@ -416,8 +416,7 @@ final class Xcsp3CallbackHandler implements XCallbacks2 {
 
     private Variable<Boolean> booleanIndicatorForName(String name) {
         return booleanIndicators.computeIfAbsent(name, n -> {
-            Variable<Boolean> boolVar = Variable.Factory.INSTANCE.create(n + "$bool");
-            builder.variableDomain(boolVar, BooleanDomain.INSTANCE);
+            Variable<Boolean> boolVar = builder.createVariable(n + "$bool", BooleanDomain.INSTANCE);
             builder.reifyConstraint(boolVar, UnaryComparatorConstraint.of(variablesByName.get(n), Operator.EQ, 1));
             return boolVar;
         });
@@ -433,8 +432,7 @@ final class Xcsp3CallbackHandler implements XCallbacks2 {
      * hard-reify" idiom and nothing more -- narrower than exposing {@link #builder} itself.
      */
     Variable<Boolean> newReifiedIndicator(String name, Constraint reifiedAgainst) {
-        Variable<Boolean> indicator = Variable.Factory.INSTANCE.create(name);
-        builder.variableDomain(indicator, BooleanDomain.INSTANCE);
+        Variable<Boolean> indicator = builder.createVariable(name, BooleanDomain.INSTANCE);
         builder.reifyConstraint(indicator, reifiedAgainst);
         return indicator;
     }
@@ -463,11 +461,10 @@ final class Xcsp3CallbackHandler implements XCallbacks2 {
      *  callers build one, and {@link #declaredDomains} needs it enumerable for {@link
      *  TabulationRecognizer}; an {@code instanceof} here would be a permanently-true test. */
     private void registerVariable(XVarInteger x, DiscreteDomain<Integer> domain, int min, int max) {
-        Variable<Integer> variable = Variable.Factory.INSTANCE.create(x.id());
+        Variable<Integer> variable = builder.createVariable(x.id(), domain);
         variablesByName.put(x.id(), variable);
         boundsByName.put(x.id(), new int[]{min, max});
         declaredDomains.put(variable, domain);
-        builder.variableDomain(variable, domain);
     }
 
     /**
@@ -515,9 +512,8 @@ final class Xcsp3CallbackHandler implements XCallbacks2 {
      */
     @Override
     public void buildVarSymbolic(XVarSymbolic x, String[] values) {
-        Variable<String> variable = Variable.Factory.INSTANCE.create(x.id());
+        Variable<String> variable = builder.createVariable(x.id(), DiscreteDomain.of(values));
         symbolicVariablesByName.put(x.id(), variable);
-        builder.variableDomain(variable, DiscreteDomain.of(values));
     }
 
     private Variable<Integer> variableFor(IVar v) {
@@ -550,8 +546,7 @@ final class Xcsp3CallbackHandler implements XCallbacks2 {
         String shiftedName = original.id() + "$shift" + offset;
         return shiftedVariables.computeIfAbsent(shiftedName, name -> {
             int[] bounds = boundsByName.get(original.id());
-            Variable<Integer> shifted = Variable.Factory.INSTANCE.create(name);
-            builder.variableDomain(shifted, IntRangeDomain.of(bounds[0] + offset, bounds[1] + offset));
+            Variable<Integer> shifted = builder.createVariable(name, IntRangeDomain.of(bounds[0] + offset, bounds[1] + offset));
             builder.offsetConstraint(base, offset, Operator.EQ, shifted);
             return shifted;
         });
@@ -573,8 +568,7 @@ final class Xcsp3CallbackHandler implements XCallbacks2 {
      */
     private Variable<Integer> constantVariable(int value) {
         return constantVariables.computeIfAbsent(value, v -> {
-            Variable<Integer> constant = Variable.Factory.INSTANCE.create("$const" + v);
-            builder.variableDomain(constant, IntRangeDomain.of(v, v));
+            Variable<Integer> constant = builder.createVariable("$const" + v, IntRangeDomain.of(v, v));
             boundsByName.put(constant.getName(), new int[]{v, v});
             return constant;
         });
@@ -610,8 +604,7 @@ final class Xcsp3CallbackHandler implements XCallbacks2 {
             int[] aBounds = boundsByName.get(a.getName());
             int[] bBounds = boundsByName.get(b.getName());
             int maxDiff = Math.max(Math.abs(aBounds[1] - bBounds[0]), Math.abs(aBounds[0] - bBounds[1]));
-            Variable<Integer> aux = Variable.Factory.INSTANCE.create(name);
-            builder.variableDomain(aux, IntRangeDomain.of(0, maxDiff));
+            Variable<Integer> aux = builder.createVariable(name, IntRangeDomain.of(0, maxDiff));
             builder.constraint(AbsoluteDifferenceVariableConstraint.of(a, b, Operator.EQ, aux));
             return aux;
         });
@@ -647,10 +640,8 @@ final class Xcsp3CallbackHandler implements XCallbacks2 {
             int[] bounds = boundsByName.get(dividend.getName());
             int quotientLow = bounds[0] / divisor;
             int quotientHigh = bounds[1] / divisor;
-            Variable<Integer> quotient = Variable.Factory.INSTANCE.create(name + "$q");
-            Variable<Integer> remainder = Variable.Factory.INSTANCE.create(name + "$r");
-            builder.variableDomain(quotient, IntRangeDomain.of(quotientLow, quotientHigh));
-            builder.variableDomain(remainder, IntRangeDomain.of(0, divisor - 1));
+            Variable<Integer> quotient = builder.createVariable(name + "$q", IntRangeDomain.of(quotientLow, quotientHigh));
+            Variable<Integer> remainder = builder.createVariable(name + "$r", IntRangeDomain.of(0, divisor - 1));
             builder.constraint(LinearVariableConstraint.of(
                     Map.of(quotient, divisor, remainder, 1), Operator.EQ, dividend));
             boundsByName.put(quotient.getName(), new int[]{quotientLow, quotientHigh});
@@ -683,8 +674,7 @@ final class Xcsp3CallbackHandler implements XCallbacks2 {
         String key = operand.getName() + "$neg";
         return negAuxiliaries.computeIfAbsent(key, name -> {
             int[] bounds = boundsByName.get(operand.getName());
-            Variable<Integer> aux = Variable.Factory.INSTANCE.create(name);
-            builder.variableDomain(aux, IntRangeDomain.of(-bounds[1], -bounds[0]));
+            Variable<Integer> aux = builder.createVariable(name, IntRangeDomain.of(-bounds[1], -bounds[0]));
             builder.constraint(LinearVariableConstraint.of(Map.of(operand, -1), Operator.EQ, aux));
             boundsByName.put(aux.getName(), new int[]{-bounds[1], -bounds[0]});
             return aux;
@@ -711,8 +701,7 @@ final class Xcsp3CallbackHandler implements XCallbacks2 {
             int[] rightBounds = boundsByName.get(right.getName());
             int lo = leftBounds[0] - rightBounds[1];
             int hi = leftBounds[1] - rightBounds[0];
-            Variable<Integer> aux = Variable.Factory.INSTANCE.create(name);
-            builder.variableDomain(aux, IntRangeDomain.of(lo, hi));
+            Variable<Integer> aux = builder.createVariable(name, IntRangeDomain.of(lo, hi));
             builder.constraint(LinearVariableConstraint.of(Map.of(left, 1, right, -1), Operator.EQ, aux));
             boundsByName.put(aux.getName(), new int[]{lo, hi});
             return aux;
@@ -810,8 +799,7 @@ final class Xcsp3CallbackHandler implements XCallbacks2 {
                 lo += Math.min(a, b);
                 hi += Math.max(a, b);
             }
-            Variable<Integer> aux = Variable.Factory.INSTANCE.create("$add$" + name);
-            builder.variableDomain(aux, IntRangeDomain.of(lo, hi));
+            Variable<Integer> aux = builder.createVariable("$add$" + name, IntRangeDomain.of(lo, hi));
             builder.constraint(LinearVariableConstraint.of(coefficients, Operator.EQ, aux));
             boundsByName.put(aux.getName(), new int[]{lo, hi});
             return aux;
@@ -1421,8 +1409,7 @@ final class Xcsp3CallbackHandler implements XCallbacks2 {
         int p3 = boundsA[1] * boundsB[0], p4 = boundsA[1] * boundsB[1];
         int lo = Math.min(Math.min(p1, p2), Math.min(p3, p4));
         int hi = Math.max(Math.max(p1, p2), Math.max(p3, p4));
-        Variable<Integer> product = Variable.Factory.INSTANCE.create(id + "$product" + index);
-        builder.variableDomain(product, IntRangeDomain.of(lo, hi));
+        Variable<Integer> product = builder.createVariable(id + "$product" + index, IntRangeDomain.of(lo, hi));
         Constraint productConstraint = isBooleanBounds(boundsA) && isBooleanBounds(boundsB)
                 ? MinVariableConstraint.of(Set.of(varA, varB), Operator.EQ, product)
                 : ProductVariableConstraint.of(Set.of(varA, varB), Operator.EQ, product);
@@ -1615,8 +1602,7 @@ final class Xcsp3CallbackHandler implements XCallbacks2 {
             addOrReify(NotAllEqualConstraint.of(vars), id);
             return;
         }
-        Variable<Integer> count = Variable.Factory.INSTANCE.create(id + "$nvalues");
-        builder.variableDomain(count, IntRangeDomain.of(1, vars.size()));
+        Variable<Integer> count = builder.createVariable(id + "$nvalues", IntRangeDomain.of(1, vars.size()));
         builder.nValueConstraint(vars, count);
         if (condition instanceof ConditionVal val) {
             addOrReify(UnaryComparatorConstraint.of(count, mapOperator(val.operator), (int) val.k), id);
@@ -2304,8 +2290,7 @@ final class Xcsp3CallbackHandler implements XCallbacks2 {
         }
         int maxLo = Arrays.stream(list).mapToInt(v -> boundsByName.get(v.id())[0]).max().orElseThrow();
         int maxHi = Arrays.stream(list).mapToInt(v -> boundsByName.get(v.id())[1]).max().orElseThrow();
-        Variable<Integer> max = Variable.Factory.INSTANCE.create("$max");
-        builder.variableDomain(max, IntRangeDomain.of(maxLo, maxHi));
+        Variable<Integer> max = builder.createVariable("$max", IntRangeDomain.of(maxLo, maxHi));
         builder.maxConstraint(toVariableSet(list), Operator.EQ, max);
         return LinearObjective.builder().coefficient(max, maximizing ? -1.0 : 1.0).build();
     }

@@ -98,9 +98,10 @@ public class PigeonholeConstraint extends NaryConstraint implements Propagatable
         List<List<Variable<?>>> pigeonVariables = new ArrayList<>();
         List<Variable<Integer>> choices = new ArrayList<>();
         Map<Variable<?>, Integer> indexOf = new HashMap<>();
+        Variable.Factory choiceFactory = new Variable.Factory();
         for (int i = 0; i < pigeons.size(); i++) {
             pigeonVariables.add(List.copyOf(pigeons.get(i)));
-            Variable<Integer> choice = Variable.Factory.INSTANCE.create("pigeon" + i);
+            Variable<Integer> choice = choiceFactory.create("pigeon" + i);
             choices.add(choice);
             indexOf.put(choice, i);
         }
