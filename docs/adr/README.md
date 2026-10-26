@@ -116,3 +116,8 @@ section instead.
 | [0052](0052-assign-propagation-forced-variables-in-one-step.md) | Assign variables propagation has already forced to one value in a single step, instead of a search node each | Accepted |
 | [0053](0053-a-decomposed-refutation-is-final.md) | A decomposed refutation is final, and the decomposition declines as soon as it is too wide | Accepted |
 | [0054](0054-restart-schedule-is-a-choice-between-diversifying-and-refuting.md) | The restart schedule trades diversification against refutation, so the default stays Luby and the alternative is opt-in | Accepted |
+| [0055](0055-parity-tables-are-reasoned-about-jointly-as-a-gf2-system.md) | Parity tables are reasoned about jointly, as a linear system over GF(2) | Accepted |
+| [0056](0056-pigeonholes-are-counted-as-an-all-different-over-hole-choices.md) | Pigeonholes are counted as an all-different over hole choices | Accepted |
+| [0057](0057-restart-nogoods-adaptively-kept-by-the-hits-they-score.md) | A restart remembers the branches it refuted, and the search keeps doing so only while that pays | Accepted |
+| [0058](0058-narrow-numeric-domains-without-rehashing.md) | Narrow numeric domains without rehashing | Accepted |
+| [0059](0059-binary-equality-systems-are-solved-jointly-by-lattice-reduction.md) | Systems of binary linear equalities are solved jointly, by lattice reduction | Proposed |
