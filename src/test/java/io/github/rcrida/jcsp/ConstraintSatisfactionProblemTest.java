@@ -889,4 +889,14 @@ public class ConstraintSatisfactionProblemTest {
                 .build();
         assertThat(csp.getUnsplittableVariables()).containsExactlyInAnyOrder(b, x, y);
     }
+
+    @Test
+    void builderNumbersItsVariablesFromZeroAndRejectsARepeatedName() {
+        val builder = ConstraintSatisfactionProblem.builder();
+        assertThat(builder.createVariable("a", BooleanDomain.INSTANCE).getIndex()).isEqualTo(0);
+        assertThat(builder.createVariable("b", BooleanDomain.INSTANCE).getIndex()).isEqualTo(1);
+        assertThat(ConstraintSatisfactionProblem.builder().createVariable("a", BooleanDomain.INSTANCE).getIndex()).isEqualTo(0);
+        assertThatThrownBy(() -> builder.createVariable("a", BooleanDomain.INSTANCE))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
 }

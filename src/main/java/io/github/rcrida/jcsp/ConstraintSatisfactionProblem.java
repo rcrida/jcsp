@@ -872,7 +872,7 @@ public class ConstraintSatisfactionProblem {
     }
 
     public static class ConstraintSatisfactionProblemBuilder {
-        private final Variable.Factory variableFactory = Variable.Factory.INSTANCE;
+        private final Variable.Factory variableFactory = new Variable.Factory();
         private int atLeastNChainCount = 0;
 
         /**
@@ -893,7 +893,11 @@ public class ConstraintSatisfactionProblem {
             return this;
         }
 
-        public <T> Variable<T> createVariable(String name, Domain<T> domain) {
+        /**
+         * Issues a variable named {@code name} from this builder's own {@link Variable.Factory} and
+         * registers {@code domain} for it. A name this builder has already issued is rejected.
+         */
+        public <T> Variable<T> createVariable(@NonNull String name, @NonNull Domain<T> domain) {
             final var variable = variableFactory.<T>create(name);
             variableDomain(variable, domain);
             return variable;

@@ -108,7 +108,6 @@ public class TreeDecomposerImpl implements TreeDecomposer {
                 return Optional.empty();
             }
             val cliqueVariable = treeBuilder.<Assignment>createVariable(cliqueVariableDomains.keySet().toString(), cliqueDomain.get());
-            treeBuilder.variableDomain(cliqueVariable, cliqueDomain.get());
             cliqueVariables.add(cliqueVariable);
         }
         val consistencyConstraints = new HashSet<AssignmentVariableConsistencyConstraint>();
