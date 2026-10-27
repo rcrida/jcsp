@@ -26,7 +26,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 public class ReificationTest {
     enum Colour { RED, GREEN, BLUE }
 
-    static final Variable.Factory F = Variable.Factory.INSTANCE;
+    static final Variable.Factory F = new Variable.Factory();
     static final Variable<Colour> A = F.create("a");
     static final Variable<Colour> B = F.create("b");
     static final Variable<Colour> C = F.create("c");

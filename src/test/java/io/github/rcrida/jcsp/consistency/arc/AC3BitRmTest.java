@@ -34,6 +34,8 @@ import static io.github.rcrida.jcsp.solver.examples.AustraliaMapColouringTest.WA
  * reuse/invalidation within a single {@link AC3BitRm#applyQueue} call.
  */
 public class AC3BitRmTest {
+    private final Variable.Factory variableFactory = new Variable.Factory();
+
     @Test
     void toString_isReadable() {
         assertThat(AC3BitRm.INSTANCE).hasToString("AC3bit+rm");
@@ -49,8 +51,8 @@ public class AC3BitRmTest {
                 BinaryTuple.of(3, 9)
         );
         val builder = ConstraintSatisfactionProblem.builder();
-        Variable<Object> left = Variable.Factory.INSTANCE.create("left");
-        Variable<Object> right = Variable.Factory.INSTANCE.create("right");
+        Variable<Object> left = variableFactory.create("left");
+        Variable<Object> right = variableFactory.create("right");
         builder.variableDomainEntry(left, domain);
         builder.variableDomainEntry(right, domain);
         builder.constraint(BinaryTuplesConstraint.of(left, right, Set.copyOf(tuples)));
@@ -137,8 +139,8 @@ public class AC3BitRmTest {
     void intervalDomain_fromNotDiscrete_fallsBackToAC3NaiveRevise() {
         // Both IntervalDomain: no ValueIndex is built for either endpoint, so buildBitIndex records
         // a null support entry and revise() falls straight through to AC3's own naive scan.
-        Variable<Double> x = Variable.Factory.INSTANCE.create("x_bitrm_a");
-        Variable<Double> y = Variable.Factory.INSTANCE.create("y_bitrm_a");
+        Variable<Double> x = variableFactory.create("x_bitrm_a");
+        Variable<Double> y = variableFactory.create("y_bitrm_a");
         var csp = ConstraintSatisfactionProblem.builder()
                 .variableDomain(x, IntervalDomain.of(0.0, 10.0))
                 .variableDomain(y, IntervalDomain.of(0.0, 10.0))
@@ -154,8 +156,8 @@ public class AC3BitRmTest {
     void intervalDomain_toNotDiscrete_fallsBackToAC3NaiveRevise() {
         // Mixed: discrete Double from-variable, IntervalDomain to-variable -- again no support
         // entry for either arc direction, so both fall back to AC3's own naive scan.
-        Variable<Double> d = Variable.Factory.INSTANCE.create("d_bitrm_b");
-        Variable<Double> c = Variable.Factory.INSTANCE.create("c_bitrm_b");
+        Variable<Double> d = variableFactory.create("d_bitrm_b");
+        Variable<Double> c = variableFactory.create("c_bitrm_b");
         var discreteDoubleDomain = DiscreteDomain.of(2.0, 5.0);
         var csp = ConstraintSatisfactionProblem.builder()
                 .variableDomain(d, discreteDoubleDomain)
@@ -184,8 +186,8 @@ public class AC3BitRmTest {
         val domain = IntRangeDomain.of(0, 10);
         val tuples = List.of(BinaryTuple.of(0, 11));
         val builder = ConstraintSatisfactionProblem.builder();
-        Variable<Object> left = Variable.Factory.INSTANCE.create("left_ec_bitrm");
-        Variable<Object> right = Variable.Factory.INSTANCE.create("right_ec_bitrm");
+        Variable<Object> left = variableFactory.create("left_ec_bitrm");
+        Variable<Object> right = variableFactory.create("right_ec_bitrm");
         builder.variableDomainEntry(left, domain);
         builder.variableDomainEntry(right, domain);
         builder.constraint(BinaryTuplesConstraint.of(left, right, Set.copyOf(tuples)));
@@ -209,8 +211,8 @@ public class AC3BitRmTest {
         val domain = IntRangeDomain.of(0, 10);
         val tuples = List.of(BinaryTuple.of(0, 11));
         val builder = ConstraintSatisfactionProblem.builder();
-        Variable<Object> left = Variable.Factory.INSTANCE.create("left_bitrm");
-        Variable<Object> right = Variable.Factory.INSTANCE.create("right_bitrm");
+        Variable<Object> left = variableFactory.create("left_bitrm");
+        Variable<Object> right = variableFactory.create("right_bitrm");
         builder.variableDomainEntry(left, domain);
         builder.variableDomainEntry(right, domain);
         builder.constraint(BinaryTuplesConstraint.of(left, right, Set.copyOf(tuples)));
@@ -258,7 +260,7 @@ public class AC3BitRmTest {
     void applySeeded_hintNamingAnArclessVariableRevisesNothing() {
         val problem = comparatorProblem();
         Variable<?> y = variableNamed(problem, "seed_y");
-        Variable<Integer> unconstrained = Variable.Factory.INSTANCE.create("seed_unconstrained");
+        Variable<Integer> unconstrained = variableFactory.create("seed_unconstrained");
         val result = AC3BitRm.INSTANCE.apply(problem, Set.of(unconstrained)).orElseThrow();
         assertThat(result.getVariableDomains().get(y)).isEqualTo(IntRangeDomain.of(0, 5));
     }
@@ -274,13 +276,13 @@ public class AC3BitRmTest {
         assertThat(AC3BitRm.INSTANCE.applyWithReason(problem, Set.of(NT)).isInfeasible()).isTrue();
         // NT is not a neighbour of itself, so a hint naming only an unrelated variable leaves the
         // wipeout undetected by this pass -- the deferral seedQueue's Javadoc describes.
-        Variable<Integer> unrelated = Variable.Factory.INSTANCE.create("seed_unrelated");
+        Variable<Integer> unrelated = variableFactory.create("seed_unrelated");
         assertThat(AC3BitRm.INSTANCE.applyWithReason(problem, Set.of(unrelated)).isInfeasible()).isFalse();
     }
 
-    private static ConstraintSatisfactionProblem comparatorProblem() {
-        Variable<Integer> x = Variable.Factory.INSTANCE.create("seed_x");
-        Variable<Integer> y = Variable.Factory.INSTANCE.create("seed_y");
+    private ConstraintSatisfactionProblem comparatorProblem() {
+        Variable<Integer> x = variableFactory.create("seed_x");
+        Variable<Integer> y = variableFactory.create("seed_y");
         return ConstraintSatisfactionProblem.builder()
                 .variableDomain(x, IntRangeDomain.of(0, 2))
                 .variableDomain(y, IntRangeDomain.of(0, 5))
@@ -301,8 +303,8 @@ public class AC3BitRmTest {
         // separately, not necessarily the same support value for both -- so x=3 is only prunable
         // here because y's domain is narrow enough that the x<=y constraint alone has no support for
         // it (y's max is 2), not because the two constraints are reasoned about jointly.
-        Variable<Integer> x = Variable.Factory.INSTANCE.create("x_two_bitrm");
-        Variable<Integer> y = Variable.Factory.INSTANCE.create("y_two_bitrm");
+        Variable<Integer> x = variableFactory.create("x_two_bitrm");
+        Variable<Integer> y = variableFactory.create("y_two_bitrm");
         val csp = ConstraintSatisfactionProblem.builder()
                 .variableDomain(x, IntRangeDomain.of(1, 3))
                 .variableDomain(y, IntRangeDomain.of(1, 2))
@@ -326,9 +328,9 @@ public class AC3BitRmTest {
         // constraint checked independently (see twoConstraintsOnSameArc_bothEnforced above), plain
         // arc consistency here only prunes x=3/y=3 (X<=Y has no support once Y<=Z caps Y at 2), not
         // the full x=1/y=2 a joint/search-level deduction would reach.
-        Variable<Integer> x = Variable.Factory.INSTANCE.create("x_cyclic_bitrm");
-        Variable<Integer> y = Variable.Factory.INSTANCE.create("y_cyclic_bitrm");
-        Variable<Integer> z = Variable.Factory.INSTANCE.create("z_cyclic_bitrm");
+        Variable<Integer> x = variableFactory.create("x_cyclic_bitrm");
+        Variable<Integer> y = variableFactory.create("y_cyclic_bitrm");
+        Variable<Integer> z = variableFactory.create("z_cyclic_bitrm");
         val csp = ConstraintSatisfactionProblem.builder()
                 .variableDomain(x, IntRangeDomain.of(1, 3))
                 .variableDomain(y, IntRangeDomain.of(1, 3))
@@ -351,9 +353,9 @@ public class AC3BitRmTest {
         // applyQueueWithReason's own "narrowed, not wiped" branch specifically (applyQueue's parallel
         // branch is already covered elsewhere, e.g. cyclicGraph_... above, but applyQueueWithReason
         // is a separate traversal).
-        Variable<Integer> a = Variable.Factory.INSTANCE.create("a_requeue_bitrm");
-        Variable<Integer> b = Variable.Factory.INSTANCE.create("b_requeue_bitrm");
-        Variable<Integer> c = Variable.Factory.INSTANCE.create("c_requeue_bitrm");
+        Variable<Integer> a = variableFactory.create("a_requeue_bitrm");
+        Variable<Integer> b = variableFactory.create("b_requeue_bitrm");
+        Variable<Integer> c = variableFactory.create("c_requeue_bitrm");
         val problem = ConstraintSatisfactionProblem.builder()
                 .variableDomain(a, IntRangeDomain.of(1, 3))
                 .variableDomain(b, IntRangeDomain.of(1, 3))
@@ -375,8 +377,8 @@ public class AC3BitRmTest {
         // residue-miss-then-found path every other test above exercises. x != y never wipes out
         // (every value has some support), so the first call is guaranteed to populate a residue for
         // every from-index without ever deleting anything.
-        Variable<Integer> x = Variable.Factory.INSTANCE.create("x_residuehit_bitrm");
-        Variable<Integer> y = Variable.Factory.INSTANCE.create("y_residuehit_bitrm");
+        Variable<Integer> x = variableFactory.create("x_residuehit_bitrm");
+        Variable<Integer> y = variableFactory.create("y_residuehit_bitrm");
         val csp = ConstraintSatisfactionProblem.builder()
                 .variableDomain(x, IntRangeDomain.of(1, 5))
                 .variableDomain(y, IntRangeDomain.of(1, 5))
@@ -398,8 +400,8 @@ public class AC3BitRmTest {
         // could pre-populate x's residue via that reverse pass' own multidirectional write, in
         // whichever order the queue happens to process arcs in -- reaching this exact scan only
         // when x's residue is still unset).
-        Variable<Integer> x = Variable.Factory.INSTANCE.create("x_scan_bitrm");
-        Variable<Integer> y = Variable.Factory.INSTANCE.create("y_scan_bitrm");
+        Variable<Integer> x = variableFactory.create("x_scan_bitrm");
+        Variable<Integer> y = variableFactory.create("y_scan_bitrm");
         val csp = ConstraintSatisfactionProblem.builder()
                 .variableDomain(x, IntRangeDomain.of(1, 3))
                 .variableDomain(y, IntRangeDomain.of(1, 3))

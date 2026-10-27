@@ -16,7 +16,7 @@ import java.util.stream.Collectors;
 import static org.assertj.core.api.Assertions.assertThat;
 
 public class PartitionConstraintTest {
-    static final Variable.Factory F = Variable.Factory.INSTANCE;
+    static final Variable.Factory F = new Variable.Factory();
     static final Variable<Set<Integer>> P1 = F.create("p1_partition");
     static final Variable<Set<Integer>> P2 = F.create("p2_partition");
     static final Variable<Set<Integer>> P3 = F.create("p3_partition");

@@ -19,7 +19,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 public class NaryStarredTuplesConstraintTest {
-    static final Variable.Factory F = Variable.Factory.INSTANCE;
+    final Variable.Factory F = new Variable.Factory();
 
     Variable<Integer> x = F.create("x_starred");
     Variable<Integer> y = F.create("y_starred");

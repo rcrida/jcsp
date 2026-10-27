@@ -40,7 +40,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  * model via {@link Assignment#isSolution}, confirming the transcription is faithful.
  */
 public class Prob001CarSequencingTest {
-    static final Variable.Factory F = Variable.Factory.INSTANCE;
+    static final Variable.Factory F = new Variable.Factory();
     static final int NUM_CARS = 10;
     static final int NUM_OPTIONS = 5;
     static final int NUM_CLASSES = 6;

@@ -25,7 +25,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  */
 class FullPropagationInferenceTest {
 
-    static final Variable.Factory F = Variable.Factory.INSTANCE;
+    final Variable.Factory F = new Variable.Factory();
 
     @Test
     void applyWithReason_macWipesSingletonNeighbour_citesBothValuesDirectly() {

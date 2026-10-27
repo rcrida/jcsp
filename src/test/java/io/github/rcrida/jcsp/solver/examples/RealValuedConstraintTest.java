@@ -28,7 +28,7 @@ import static org.assertj.core.api.Assertions.within;
  * purely by SumBoundConstraint/LinearBoundConstraint bounds propagation — no backtracking search needed.
  */
 public class RealValuedConstraintTest {
-    static final Variable.Factory F = Variable.Factory.INSTANCE;
+    static final Variable.Factory F = new Variable.Factory();
     static final Variable<Double> RENT = F.create("rent");
     static final Variable<Double> FOOD = F.create("food");
     static final Variable<Double> TRANSPORT = F.create("transport");

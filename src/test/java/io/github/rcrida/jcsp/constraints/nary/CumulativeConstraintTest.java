@@ -19,7 +19,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.api.Assertions.within;
 
 public class CumulativeConstraintTest {
-    static final Variable.Factory F = Variable.Factory.INSTANCE;
+    final Variable.Factory F = new Variable.Factory();
 
     Variable<Integer> s1 = F.create("s1");
     Variable<Integer> s2 = F.create("s2");

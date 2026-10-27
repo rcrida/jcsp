@@ -89,7 +89,7 @@ public class AtLeastNConstraintTest {
 
     // --- propagate() ---
 
-    static final Variable.Factory F = Variable.Factory.INSTANCE;
+    final Variable.Factory F = new Variable.Factory();
 
     @Test
     void propagate_maxCountEqualsN_forcesPossiblyTrueToTrue() {

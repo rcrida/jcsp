@@ -22,6 +22,8 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 @ExtendWith(MockitoExtension.class)
 public class BinPackingConstraintTest {
+    private final Variable.Factory variableFactory = new Variable.Factory();
+
     @Mock Variable<Integer> v1;
     @Mock Variable<Integer> v2;
     @Mock Variable<Integer> v3;
@@ -171,11 +173,11 @@ public class BinPackingConstraintTest {
         // 4 items of weight 3, 3 bins of capacity 6 (holds at most 2 items each) -> minimum
         // possible distinct bins is ceil(4/2)=2, and 2 bins can hold exactly 4 items (2+2), so
         // 2 is achievable and optimal.
-        Variable<Integer> x1 = Variable.Factory.INSTANCE.create("x1");
-        Variable<Integer> x2 = Variable.Factory.INSTANCE.create("x2");
-        Variable<Integer> x3 = Variable.Factory.INSTANCE.create("x3");
-        Variable<Integer> x4 = Variable.Factory.INSTANCE.create("x4");
-        Variable<Integer> count = Variable.Factory.INSTANCE.create("count");
+        Variable<Integer> x1 = variableFactory.create("x1");
+        Variable<Integer> x2 = variableFactory.create("x2");
+        Variable<Integer> x3 = variableFactory.create("x3");
+        Variable<Integer> x4 = variableFactory.create("x4");
+        Variable<Integer> count = variableFactory.create("count");
         List<Variable<Integer>> items = List.of(x1, x2, x3, x4);
 
         var csp = ConstraintSatisfactionProblem.builder()

@@ -15,7 +15,7 @@ import java.util.Set;
 import static org.assertj.core.api.Assertions.assertThat;
 
 class LocalSearchSupportTest {
-    static final Variable.Factory F = Variable.Factory.INSTANCE;
+    final Variable.Factory F = new Variable.Factory();
 
     @Test
     void conflictConstraints_includesExactlyOneAlongsideItsIncompleteDecomposition() {

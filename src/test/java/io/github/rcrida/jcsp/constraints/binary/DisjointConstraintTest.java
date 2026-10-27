@@ -15,7 +15,7 @@ import java.util.Set;
 import static org.assertj.core.api.Assertions.assertThat;
 
 public class DisjointConstraintTest {
-    static final Variable.Factory F = Variable.Factory.INSTANCE;
+    static final Variable.Factory F = new Variable.Factory();
     static final Variable<Set<Integer>> L = F.create("l_disjoint");
     static final Variable<Set<Integer>> R = F.create("r_disjoint");
 

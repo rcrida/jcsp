@@ -18,7 +18,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 public class LexConstraintTest {
-    static final Variable.Factory F = Variable.Factory.INSTANCE;
+    final Variable.Factory F = new Variable.Factory();
 
     Variable<Integer> x1 = F.create("x1");
     Variable<Integer> x2 = F.create("x2");
@@ -237,8 +237,8 @@ public class LexConstraintTest {
 
     // --- propagate() with IntervalDomain ---
 
-    static final Variable<Double> a1 = Variable.Factory.INSTANCE.create("a1");
-    static final Variable<Double> b1 = Variable.Factory.INSTANCE.create("b1");
+    final Variable<Double> a1 = F.create("a1");
+    final Variable<Double> b1 = F.create("b1");
 
     @Test
     void propagate_interval_leq_clipsLesserMax() {
@@ -274,8 +274,8 @@ public class LexConstraintTest {
         assertThat(c.propagate(Map.of(a1, IntervalDomain.of(5.0, 10.0), b1, IntervalDomain.of(0.0, 3.0)))).isEmpty();
     }
 
-    static final Variable<Double> a2 = Variable.Factory.INSTANCE.create("a2");
-    static final Variable<Double> b2 = Variable.Factory.INSTANCE.create("b2");
+    final Variable<Double> a2 = F.create("a2");
+    final Variable<Double> b2 = F.create("b2");
 
     @Test
     void propagate_interval_forcedEqual_skipsToNextPosition() {

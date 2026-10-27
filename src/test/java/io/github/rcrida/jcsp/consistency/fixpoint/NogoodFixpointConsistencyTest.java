@@ -14,7 +14,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 class NogoodFixpointConsistencyTest {
 
-    static final Variable.Factory F = Variable.Factory.INSTANCE;
+    static final Variable.Factory F = new Variable.Factory();
     static final Variable<Integer> X = F.create("nfc-x");
     static final Variable<Integer> Y = F.create("nfc-y");
     static final Variable<Integer> Z = F.create("nfc-z");

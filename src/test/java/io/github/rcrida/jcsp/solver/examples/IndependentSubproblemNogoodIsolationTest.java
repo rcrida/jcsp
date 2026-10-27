@@ -27,10 +27,10 @@ import static org.assertj.core.api.Assertions.assertThat;
  * small orders.
  */
 public class IndependentSubproblemNogoodIsolationTest {
-    static final Variable.Factory F = Variable.Factory.INSTANCE;
+    final Variable.Factory F = new Variable.Factory();
 
     @SuppressWarnings({"unchecked", "rawtypes"})
-    static ConstraintSatisfactionProblem buildRuler(String prefix, int order, int maxLength) {
+    ConstraintSatisfactionProblem buildRuler(String prefix, int order, int maxLength) {
         List<Variable<Integer>> marks = IntStream.range(0, order)
                 .mapToObj(i -> F.<Integer>create(prefix + "_m" + i))
                 .toList();
@@ -59,7 +59,7 @@ public class IndependentSubproblemNogoodIsolationTest {
     }
 
     @SuppressWarnings({"unchecked", "rawtypes"})
-    static ConstraintSatisfactionProblem buildIndependentCopies(int copies, int order, int maxLength) {
+    ConstraintSatisfactionProblem buildIndependentCopies(int copies, int order, int maxLength) {
         var builder = ConstraintSatisfactionProblem.builder();
         for (int k = 0; k < copies; k++) {
             var sub = buildRuler("c" + k, order, maxLength);

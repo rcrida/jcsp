@@ -18,7 +18,7 @@ import java.util.Set;
 import static org.assertj.core.api.Assertions.assertThat;
 
 public class NaryElementConstraintTest {
-    static final Variable.Factory F = Variable.Factory.INSTANCE;
+    static final Variable.Factory F = new Variable.Factory();
     static final Variable<Integer> INDEX = F.create("index");
     static final Variable<String> RESULT = F.create("result");
     static final Variable<String> A = F.create("a");

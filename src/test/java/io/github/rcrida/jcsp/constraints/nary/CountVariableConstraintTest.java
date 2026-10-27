@@ -14,7 +14,7 @@ import java.util.Set;
 import static org.assertj.core.api.Assertions.assertThat;
 
 public class CountVariableConstraintTest {
-    static final Variable.Factory F = Variable.Factory.INSTANCE;
+    static final Variable.Factory F = new Variable.Factory();
     static final Variable<Integer> V1 = F.create("v1_cv");
     static final Variable<Integer> V2 = F.create("v2_cv");
     static final Variable<Integer> V3 = F.create("v3_cv");

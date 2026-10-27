@@ -32,7 +32,7 @@ public class MealPlanningTest {
     static final Set<Food> PRODUCE    = Set.of(Food.VEGETABLES, Food.FRUITS);
     static final Set<Food> NON_PRODUCE = Set.of(Food.PROTEIN, Food.CARBS, Food.FAT);
 
-    static final Variable.Factory F = Variable.Factory.INSTANCE;
+    static final Variable.Factory F = new Variable.Factory();
     static final Variable<Food> BREAKFAST        = F.create("breakfast");
     static final Variable<Food> MORNING_SNACK    = F.create("morning_snack");
     static final Variable<Food> LUNCH            = F.create("lunch");

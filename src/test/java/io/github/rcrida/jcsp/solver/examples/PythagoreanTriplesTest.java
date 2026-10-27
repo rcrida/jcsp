@@ -27,8 +27,6 @@ import static org.assertj.core.api.Assertions.assertThat;
  */
 public class PythagoreanTriplesTest {
 
-    private static final Variable.Factory F = Variable.Factory.INSTANCE;
-
     /**
      * Builds and solves a CSP that finds all (b, c) forming a Pythagorean triple
      * with the given leg {@code a}: a ≤ b < c, where b ≤ bMax and c ≤ cMax.
@@ -36,19 +34,16 @@ public class PythagoreanTriplesTest {
      * Uses auxiliary variables diff = c−b and sumVar = c+b so that
      * productConstraint({diff, sumVar}, EQ, a*a) encodes (c−b)(c+b) = a².
      */
-    private static List<int[]> findTriples(int a, int bMax, int cMax) {
-        Variable<Integer> b    = F.create("b");
-        Variable<Integer> c    = F.create("c");
-        Variable<Integer> diff = F.create("diff");   // c − b
-        Variable<Integer> sumV = F.create("sumV");   // c + b
+    private List<int[]> findTriples(int a, int bMax, int cMax) {
+        var builder = ConstraintSatisfactionProblem.builder();
+        Variable<Integer> b    = builder.createVariable("b", IntRangeDomain.of(a, bMax));
+        Variable<Integer> c    = builder.createVariable("c", IntRangeDomain.of(a + 1, cMax));
+        Variable<Integer> diff = builder.createVariable("diff", IntRangeDomain.of(1, cMax - a));   // c − b
+        Variable<Integer> sumV = builder.createVariable("sumV", IntRangeDomain.of(2 * a + 1, bMax + cMax));   // c + b
 
         int aSquared = a * a;
 
-        var csp = ConstraintSatisfactionProblem.builder()
-                .variableDomain(b,    IntRangeDomain.of(a, bMax))
-                .variableDomain(c,    IntRangeDomain.of(a + 1, cMax))
-                .variableDomain(diff, IntRangeDomain.of(1, cMax - a))
-                .variableDomain(sumV, IntRangeDomain.of(2 * a + 1, bMax + cMax))
+        var csp = builder
                 // diff = c − b
                 .linearConstraint(Map.of(c, 1, b, -1), Operator.EQ, diff)
                 // sumV = c + b

@@ -16,10 +16,12 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class OverlayAssignmentTest {
-    private static final Variable.Factory F = Variable.Factory.INSTANCE;
+    private final Variable.Factory F = new Variable.Factory();
     private final Variable<Integer> a = F.create("a");
     private final Variable<Integer> b = F.create("b");
     private final Variable<Integer> c = F.create("c");
+    /** A variable no assignment holds. */
+    private final Variable<Integer> missing = F.create("missing");
 
     /** Two distinct variables that always hash alike, to reach a layer whose hash matches but whose variable does not. */
     private record Colliding(String name) implements Variable<Integer> {
@@ -54,9 +56,9 @@ class OverlayAssignmentTest {
         assertThat(chain.getValueOrNull(a)).isEqualTo(1);
         assertThat(chain.getValueOrNull(b)).isEqualTo(2);
         assertThat(chain.getValueOrNull(c)).isEqualTo(3);
-        assertThat(chain.getValueOrNull(F.create("missing"))).isNull();
+        assertThat(chain.getValueOrNull(missing)).isNull();
         assertThat(chain.isAssigned(b)).isTrue();
-        assertThat(chain.isAssigned(F.create("missing"))).isFalse();
+        assertThat(chain.isAssigned(missing)).isFalse();
         assertThat(chain.getValue(c)).hasValue(3);
     }
 
@@ -111,7 +113,7 @@ class OverlayAssignmentTest {
 
         assertThat(variables).hasSize(3).containsExactlyInAnyOrder(a, b, c);
         assertThat(variables.contains(b)).isTrue();
-        assertThat(variables.contains(F.create("missing"))).isFalse();
+        assertThat(variables.contains(missing)).isFalse();
         assertThat(variables.contains("not a variable")).isFalse();
         assertThat(new HashSet<>(variables)).isEqualTo(Set.of(a, b, c));
     }

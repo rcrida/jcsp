@@ -16,7 +16,7 @@ import java.util.Set;
 import static org.assertj.core.api.Assertions.assertThat;
 
 public class WalkSATSolverTest {
-    static final Variable.Factory F = Variable.Factory.INSTANCE;
+    final Variable.Factory F = new Variable.Factory();
 
     static WalkSATSolver solver() {
         return WalkSATSolver.of(20, 500, RandomAssignmentFactory.INSTANCE);

@@ -64,8 +64,7 @@ public class WindokuTest {
         VARIABLES = new Variable[9][9];
         for (int r = 0; r < 9; r++) {
             for (int c = 0; c < 9; c++) {
-                VARIABLES[r][c] = Variable.Factory.INSTANCE.create("r" + r + "c" + c);
-                builder.variableDomain(VARIABLES[r][c], DOMAIN);
+                VARIABLES[r][c] = builder.createVariable("r" + r + "c" + c, DOMAIN);
             }
         }
         for (int r = 0; r < 9; r++) {

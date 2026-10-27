@@ -12,7 +12,7 @@ import java.util.Set;
 import static org.assertj.core.api.Assertions.assertThat;
 
 public class IndependentSubproblemLocalSolverTest {
-    static final Variable.Factory F = Variable.Factory.INSTANCE;
+    static final Variable.Factory F = new Variable.Factory();
     static final Variable<Integer> V1 = F.create("V1");
     static final Variable<Integer> V2 = F.create("V2");
     static final Variable<Integer> V3 = F.create("V3");

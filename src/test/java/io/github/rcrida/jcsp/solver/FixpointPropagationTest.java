@@ -18,7 +18,9 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 public class FixpointPropagationTest {
-    static final Variable.Factory F = Variable.Factory.INSTANCE;
+    final Variable.Factory F = new Variable.Factory();
+    /** What the spy propagator tries to add to the dirty set it is handed. */
+    final Variable<Integer> intruder = F.create("intruder");
 
     @Test
     void changedVariables_isUnmodifiable() {
@@ -52,7 +54,7 @@ public class FixpointPropagationTest {
                     seen.add("fullScan");
                 } else {
                     try {
-                        changedSinceLastRun.add(F.create("intruder"));
+                        changedSinceLastRun.add(intruder);
                         seen.add("MUTABLE");
                     } catch (UnsupportedOperationException expected) {
                         seen.add("unmodifiable");
@@ -291,8 +293,8 @@ public class FixpointPropagationTest {
         // propagator converges internally; one that does not must be woken by its own narrowing.
         // NogoodFixpointConsistency is the only such propagator, so this branch is reachable only
         // when nogoods are in play -- which stopped being the default when nogood learning did.
-        Variable<Integer> x = Variable.Factory.INSTANCE.create("wlx");
-        Variable<Integer> y = Variable.Factory.INSTANCE.create("wly");
+        Variable<Integer> x = F.create("wlx");
+        Variable<Integer> y = F.create("wly");
         ConstraintSatisfactionProblem csp = ConstraintSatisfactionProblem.builder()
                 .variableDomain(x, IntRangeDomain.of(1, 2))
                 .variableDomain(y, IntRangeDomain.of(1, 2))

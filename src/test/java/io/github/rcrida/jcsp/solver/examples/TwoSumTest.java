@@ -25,7 +25,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  */
 public class TwoSumTest {
     static final List<Integer> ARRAY = List.of(2, 7, 11, 15);
-    static final Variable.Factory F = Variable.Factory.INSTANCE;
+    static final Variable.Factory F = new Variable.Factory();
 
     static final Variable<Integer> I  = F.create("i");
     static final Variable<Integer> J  = F.create("j");

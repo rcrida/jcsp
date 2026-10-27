@@ -34,7 +34,7 @@ import io.github.rcrida.jcsp.solver.LimitExceededException;
 
 class DomWdegLubySearchTest {
 
-    private static final Variable.Factory VF = Variable.Factory.INSTANCE;
+    private final Variable.Factory VF = new Variable.Factory();
 
     // ── Luby sequence ───────────────────────────────────────────────────────
 
@@ -693,13 +693,12 @@ class DomWdegLubySearchTest {
 
     // ── Limits ────────────────────────────────────────────────────────────────
 
-    private static ConstraintSatisfactionProblem fourQueensCsp() {
+    private ConstraintSatisfactionProblem fourQueensCsp() {
         int n = 4;
+        var builder = ConstraintSatisfactionProblem.builder();
         @SuppressWarnings("unchecked")
         Variable<Integer>[] queens = new Variable[n];
-        for (int i = 0; i < n; i++) queens[i] = VF.create("q" + i);
-        var builder = ConstraintSatisfactionProblem.builder();
-        for (Variable<Integer> q : queens) builder.variableDomain(q, IntRangeDomain.of(1, n));
+        for (int i = 0; i < n; i++) queens[i] = builder.createVariable("q" + i, IntRangeDomain.of(1, n));
         for (int i = 0; i < n; i++) {
             for (int j = i + 1; j < n; j++) {
                 final int diff = j - i;

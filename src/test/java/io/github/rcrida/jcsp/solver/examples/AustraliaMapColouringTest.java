@@ -27,7 +27,7 @@ public class AustraliaMapColouringTest {
     }
 
     public static Domain<Colour> DOMAIN = EnumDomain.allOf(Colour.class);
-    static Variable.Factory VARIABLE_FACTORY = Variable.Factory.INSTANCE;
+    static Variable.Factory VARIABLE_FACTORY = new Variable.Factory();
     public static Variable<Colour> WA = VARIABLE_FACTORY.create("WA");
     public static Variable<Colour> NT = VARIABLE_FACTORY.create("NT");
     public static Variable<Colour> Q = VARIABLE_FACTORY.create("Q");

@@ -4,41 +4,41 @@ import io.github.rcrida.jcsp.ConstraintSatisfactionProblem;
 import io.github.rcrida.jcsp.domains.BooleanDomain;
 import io.github.rcrida.jcsp.solver.Solver;
 import io.github.rcrida.jcsp.variables.Variable;
+import io.github.rcrida.jcsp.variables.VariablesByName;
 import lombok.val;
 import org.junit.jupiter.api.Test;
 
+import java.util.LinkedHashSet;
 import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
 public class AtLeastNConstraintWithCountingTest {
-    static final Variable.Factory F = Variable.Factory.INSTANCE;
-    static final Variable<Boolean> V1 = F.create("v1");
-    static final Variable<Boolean> V2 = F.create("v2");
-    static final Variable<Boolean> V3 = F.create("v3");
-    static final Variable<Boolean> V4 = F.create("v4");
+    /** Four booleans named {@code v1..v4}, issued by {@code builder}. */
+    static Set<Variable<Boolean>> fourBooleans(ConstraintSatisfactionProblem.ConstraintSatisfactionProblemBuilder builder) {
+        Set<Variable<Boolean>> variables = new LinkedHashSet<>();
+        for (int i = 1; i <= 4; i++) variables.add(builder.createVariable("v" + i, BooleanDomain.INSTANCE));
+        return variables;
+    }
+
+    /** The four booleans {@code csp} was built over, as distinct from any auxiliary variable it also holds. */
+    static Set<Variable<Boolean>> fourBooleans(ConstraintSatisfactionProblem csp) {
+        Set<Variable<Boolean>> variables = new LinkedHashSet<>();
+        for (int i = 1; i <= 4; i++) variables.add(VariablesByName.in(csp, "v" + i));
+        return variables;
+    }
 
     static ConstraintSatisfactionProblem csp(int n) {
-        return ConstraintSatisfactionProblem.builder()
-                .variableDomain(V1, BooleanDomain.INSTANCE)
-                .variableDomain(V2, BooleanDomain.INSTANCE)
-                .variableDomain(V3, BooleanDomain.INSTANCE)
-                .variableDomain(V4, BooleanDomain.INSTANCE)
-                .atLeastNConstraintWithCounting(Set.of(V1, V2, V3, V4), n)
-                .build();
+        val builder = ConstraintSatisfactionProblem.builder();
+        return builder.atLeastNConstraintWithCounting(fourBooleans(builder), n).build();
     }
 
     @Test
     void solutionCountMatchesAtLeastNConstraint() {
         // Compare solution counts for each n against the plain atLeastNConstraint
         for (int n = 0; n <= 4; n++) {
-            val plain = ConstraintSatisfactionProblem.builder()
-                    .variableDomain(V1, BooleanDomain.INSTANCE)
-                    .variableDomain(V2, BooleanDomain.INSTANCE)
-                    .variableDomain(V3, BooleanDomain.INSTANCE)
-                    .variableDomain(V4, BooleanDomain.INSTANCE)
-                    .atLeastNConstraint(Set.of(V1, V2, V3, V4), n)
-                    .build();
+            val plainBuilder = ConstraintSatisfactionProblem.builder();
+            val plain = plainBuilder.atLeastNConstraint(fourBooleans(plainBuilder), n).build();
 
             val cspN = csp(n);
             long countingCount = Solver.Factory.INSTANCE.createSolver(cspN).getSolutions().count();
@@ -52,9 +52,11 @@ public class AtLeastNConstraintWithCountingTest {
 
     @Test
     void atLeast2_onlySolutionsWithTwoOrMoreTrue() {
-        val solutions = Solver.Factory.INSTANCE.createSolver(csp(2)).getSolutions().toList();
+        val csp = csp(2);
+        val inputs = fourBooleans(csp);
+        val solutions = Solver.Factory.INSTANCE.createSolver(csp).getSolutions().toList();
         assertThat(solutions).allSatisfy(sol -> {
-            long trueCount = Set.of(V1, V2, V3, V4).stream()
+            long trueCount = inputs.stream()
                     .filter(v -> sol.getValue(v).orElse(false))
                     .count();
             assertThat(trueCount).isGreaterThanOrEqualTo(2);
@@ -63,11 +65,11 @@ public class AtLeastNConstraintWithCountingTest {
 
     @Test
     void atLeast4_onlyAllTrueSolution() {
-        val solutions = Solver.Factory.INSTANCE.createSolver(csp(4)).getSolutions().toList();
+        val csp = csp(4);
+        val solutions = Solver.Factory.INSTANCE.createSolver(csp).getSolutions().toList();
         assertThat(solutions).hasSize(1);
-        assertThat(solutions.get(0).getValue(V1)).hasValue(true);
-        assertThat(solutions.get(0).getValue(V2)).hasValue(true);
-        assertThat(solutions.get(0).getValue(V3)).hasValue(true);
-        assertThat(solutions.get(0).getValue(V4)).hasValue(true);
+        for (Variable<Boolean> input : fourBooleans(csp)) {
+            assertThat(solutions.get(0).getValue(input)).hasValue(true);
+        }
     }
 }

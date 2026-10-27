@@ -17,7 +17,7 @@ import java.util.Map;
 import static org.assertj.core.api.Assertions.assertThat;
 
 public class DivisionConstraintTest {
-    static final Variable.Factory F = Variable.Factory.INSTANCE;
+    static final Variable.Factory F = new Variable.Factory();
     static final Variable<Double> X = F.create("x_div");
     static final Variable<Double> Y = F.create("y_div");
 
@@ -316,8 +316,8 @@ public class DivisionConstraintTest {
         // 6" unconditionally, which would wrongly forbid left=6 even in a branch where right could
         // still be, say, 4 (6/4=1.5<=2 is feasible). The fixed reason cites right's own current
         // value set too, so a solution using right=4 correctly escapes it.
-        Variable<Integer> left = Variable.Factory.INSTANCE.create("x_div_gap_reason");
-        Variable<Integer> right = Variable.Factory.INSTANCE.create("y_div_gap_reason");
+        Variable<Integer> left = F.create("x_div_gap_reason");
+        Variable<Integer> right = F.create("y_div_gap_reason");
         var domains = Map.<Variable<?>, Domain<?>>of(
                 left, IntRangeDomain.of(6, 6),
                 right, DiscreteDomain.of(1, 2));

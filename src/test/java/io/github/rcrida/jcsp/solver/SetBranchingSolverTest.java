@@ -26,7 +26,7 @@ import java.util.stream.Stream;
 import static org.assertj.core.api.Assertions.assertThat;
 
 public class SetBranchingSolverTest {
-    static final Variable.Factory F = Variable.Factory.INSTANCE;
+    final Variable.Factory F = new Variable.Factory();
 
     /** Extracts singleton values from all domains — used as the terminal inner solver in tests. */
     static final Solver SINGLETON_EXTRACTOR = csp ->

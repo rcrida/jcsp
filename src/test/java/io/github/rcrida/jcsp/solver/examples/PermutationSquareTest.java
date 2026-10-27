@@ -27,7 +27,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  * </ul>
  */
 public class PermutationSquareTest {
-    static final Variable.Factory F = Variable.Factory.INSTANCE;
+    static final Variable.Factory F = new Variable.Factory();
 
     static final Variable<Integer> P1 = F.create("p1");
     static final Variable<Integer> P2 = F.create("p2");

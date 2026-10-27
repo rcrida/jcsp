@@ -16,7 +16,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 public class InverseConstraintTest {
-    static final Variable.Factory F = Variable.Factory.INSTANCE;
+    static final Variable.Factory F = new Variable.Factory();
 
     // f = [f0, f1, f2], invf = [g0, g1, g2], values in {1, 2, 3}
     static final Variable<Integer> f0 = F.create("f0");

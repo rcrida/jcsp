@@ -21,7 +21,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  */
 class ProductPropagationTest {
 
-    private static final Variable.Factory F = Variable.Factory.INSTANCE;
+    private final Variable.Factory F = new Variable.Factory();
 
     // --- range -------------------------------------------------------------------------------
 

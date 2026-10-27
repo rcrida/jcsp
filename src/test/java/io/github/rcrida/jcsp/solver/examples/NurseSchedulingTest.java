@@ -36,7 +36,7 @@ public class NurseSchedulingTest {
 
     enum Shift { D, N, R }
 
-    static final Variable.Factory F = Variable.Factory.INSTANCE;
+    static final Variable.Factory F = new Variable.Factory();
     static final int DAYS = 5;
 
     static final List<Variable<Shift>> SCHEDULE = IntStream.range(0, DAYS)

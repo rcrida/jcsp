@@ -17,7 +17,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 public class DiffnConstraintTest {
-    static final Variable.Factory F = Variable.Factory.INSTANCE;
+    final Variable.Factory F = new Variable.Factory();
 
     private static Map<Variable<?>, Domain<?>> domains(Object... pairs) {
         var map = new java.util.HashMap<Variable<?>, Domain<?>>();

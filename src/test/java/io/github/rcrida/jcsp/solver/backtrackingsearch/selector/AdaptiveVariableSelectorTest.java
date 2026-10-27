@@ -18,7 +18,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  */
 class AdaptiveVariableSelectorTest {
 
-    private static final Variable.Factory F = Variable.Factory.INSTANCE;
+    private final Variable.Factory F = new Variable.Factory();
 
     /** Ranks by nothing at all -- it always answers with the first unassigned variable. */
     private static final AdaptiveVariableSelector RANKING_ONLY =

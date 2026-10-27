@@ -12,7 +12,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 public class IndependentSubproblemSolverTest {
-    static Variable.Factory FACTORY = Variable.Factory.INSTANCE;
+    static Variable.Factory FACTORY = new Variable.Factory();
     static Variable<Integer> V1 = FACTORY.create("V1");
     static Variable<Integer> V2 = FACTORY.create("V2");
     static Variable<Integer> V3 = FACTORY.create("V3");

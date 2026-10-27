@@ -40,7 +40,7 @@ import static io.github.rcrida.jcsp.solver.examples.AustraliaMapColouringTest.DO
 
 @ExtendWith(MockitoExtension.class)
 public class ConstraintSatisfactionProblemTest {
-    static final Variable.Factory VARIABLE_FACTORY = Variable.Factory.INSTANCE;
+    final Variable.Factory VARIABLE_FACTORY = new Variable.Factory();
     @Mock
     Domain<Integer> domain;
 

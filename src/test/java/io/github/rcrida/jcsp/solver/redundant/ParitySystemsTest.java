@@ -27,9 +27,9 @@ import java.util.stream.Collectors;
 import static org.assertj.core.api.Assertions.assertThat;
 
 class ParitySystemsTest {
-    private static final Variable.Factory F = Variable.Factory.INSTANCE;
+    private final Variable.Factory F = new Variable.Factory();
 
-    private static List<Variable<Integer>> bits(String prefix, int count) {
+    private List<Variable<Integer>> bits(String prefix, int count) {
         List<Variable<Integer>> variables = new ArrayList<>();
         for (int i = 0; i < count; i++) variables.add(F.create(prefix + i));
         return variables;

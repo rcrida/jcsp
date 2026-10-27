@@ -17,7 +17,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  * is exercised through {@link BranchAndBoundSolver}, which is its only caller.
  */
 public class ObjectiveCutTest {
-    static final Variable.Factory F = Variable.Factory.INSTANCE;
+    static final Variable.Factory F = new Variable.Factory();
     static final Variable<Integer> X = F.create("cutX");
     static final Variable<Integer> Y = F.create("cutY");
 

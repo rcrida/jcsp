@@ -16,7 +16,7 @@ import java.util.Set;
 import static org.assertj.core.api.Assertions.assertThat;
 
 class AbsoluteDifferenceVariableConstraintTest {
-    static final Variable.Factory F = Variable.Factory.INSTANCE;
+    static final Variable.Factory F = new Variable.Factory();
     static final Variable<Double> L = F.create("l_adv");
     static final Variable<Double> R = F.create("r_adv");
     static final Variable<Double> T = F.create("t_adv");

@@ -18,7 +18,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 public class SumVariableConstraintTest {
-    static final Variable.Factory F = Variable.Factory.INSTANCE;
+    final Variable.Factory F = new Variable.Factory();
 
     Variable<Integer> v1 = F.create("v1");
     Variable<Integer> v2 = F.create("v2");
@@ -157,7 +157,7 @@ public class SumVariableConstraintTest {
 
     @Test
     void sum_byte() {
-        Variable<Byte> a = F.create("a"), b = F.create("b"), target = F.create("t");
+        Variable<Byte> a = F.create("a"), b = F.create("b"), target = F.create("target");
         var c = SumVariableConstraint.of(Set.of(a, b), Operator.EQ, target);
         assertThat(c.isSatisfiedBy(Assignment.of(Map.of(a, (byte) 1, b, (byte) 2, target, (byte) 3)))).isTrue();
         assertThat(c.isSatisfiedBy(Assignment.of(Map.of(a, (byte) 2, b, (byte) 2, target, (byte) 3)))).isFalse();
@@ -165,7 +165,7 @@ public class SumVariableConstraintTest {
 
     @Test
     void sum_short() {
-        Variable<Short> a = F.create("a"), b = F.create("b"), target = F.create("t");
+        Variable<Short> a = F.create("a"), b = F.create("b"), target = F.create("target");
         var c = SumVariableConstraint.of(Set.of(a, b), Operator.EQ, target);
         assertThat(c.isSatisfiedBy(Assignment.of(Map.of(a, (short) 10, b, (short) 20, target, (short) 30)))).isTrue();
         assertThat(c.isSatisfiedBy(Assignment.of(Map.of(a, (short) 10, b, (short) 10, target, (short) 30)))).isFalse();
@@ -173,7 +173,7 @@ public class SumVariableConstraintTest {
 
     @Test
     void sum_long() {
-        Variable<Long> a = F.create("a"), b = F.create("b"), target = F.create("t");
+        Variable<Long> a = F.create("a"), b = F.create("b"), target = F.create("target");
         var c = SumVariableConstraint.of(Set.of(a, b), Operator.EQ, target);
         assertThat(c.isSatisfiedBy(Assignment.of(Map.of(a, 1L, b, 2L, target, 3L)))).isTrue();
         assertThat(c.isSatisfiedBy(Assignment.of(Map.of(a, 2L, b, 2L, target, 3L)))).isFalse();
@@ -181,7 +181,7 @@ public class SumVariableConstraintTest {
 
     @Test
     void sum_float() {
-        Variable<Float> a = F.create("a"), b = F.create("b"), target = F.create("t");
+        Variable<Float> a = F.create("a"), b = F.create("b"), target = F.create("target");
         var c = SumVariableConstraint.of(Set.of(a, b), Operator.EQ, target);
         assertThat(c.isSatisfiedBy(Assignment.of(Map.of(a, 1.5f, b, 1.5f, target, 3.0f)))).isTrue();
         assertThat(c.isSatisfiedBy(Assignment.of(Map.of(a, 1.0f, b, 1.0f, target, 3.0f)))).isFalse();
@@ -189,7 +189,7 @@ public class SumVariableConstraintTest {
 
     @Test
     void sum_double() {
-        Variable<Double> a = F.create("a"), b = F.create("b"), target = F.create("t");
+        Variable<Double> a = F.create("a"), b = F.create("b"), target = F.create("target");
         var c = SumVariableConstraint.of(Set.of(a, b), Operator.EQ, target);
         assertThat(c.isSatisfiedBy(Assignment.of(Map.of(a, 1.5, b, 1.5, target, 3.0)))).isTrue();
         assertThat(c.isSatisfiedBy(Assignment.of(Map.of(a, 1.0, b, 1.0, target, 3.0)))).isFalse();
@@ -197,7 +197,7 @@ public class SumVariableConstraintTest {
 
     @Test
     void sum_unsupportedTargetType() {
-        Variable<Number> a = F.create("a"), b = F.create("b"), target = F.create("t");
+        Variable<Number> a = F.create("a"), b = F.create("b"), target = F.create("target");
         var c = SumVariableConstraint.<Number>builder()
                 .variables(Set.of(a, b, target))
                 .summedVariables(Set.of(a, b))

@@ -19,7 +19,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  * which orders domain values according to the Least Constraining Value heuristic.
  */
 class LeastConstrainingValueOrdererTest {
-    static Variable.Factory FACTORY = Variable.Factory.INSTANCE;
+    Variable.Factory FACTORY = new Variable.Factory();
     static Domain<Integer> DOMAIN = DiscreteDomain.of(1, 2, 3);
 
     @Test

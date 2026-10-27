@@ -21,7 +21,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 public class CryptarithmeticTest {
     static Domain<Integer> DIGIT_DOMAIN = IntRangeDomain.of(0, 9);
     static Domain<Integer> CARRY_DOMAIN = IntRangeDomain.of(0, 1);
-    static Variable.Factory VARIABLE_FACTORY = Variable.Factory.INSTANCE;
+    static Variable.Factory VARIABLE_FACTORY = new Variable.Factory();
     static Variable<Integer> t = VARIABLE_FACTORY.create("T");
     static Variable<Integer> w = VARIABLE_FACTORY.create("W");
     static Variable<Integer> o = VARIABLE_FACTORY.create("O");

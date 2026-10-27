@@ -25,13 +25,13 @@ import java.util.stream.Collectors;
 import static org.assertj.core.api.Assertions.assertThat;
 
 class PigeonholesTest {
-    private static final Variable.Factory F = Variable.Factory.INSTANCE;
+    private final Variable.Factory F = new Variable.Factory();
 
     private static Set<Variable<?>> set(Variable<?>... variables) {
         return new LinkedHashSet<>(List.of(variables));
     }
 
-    private static Variable<Integer> bit(String name) {
+    private Variable<Integer> bit(String name) {
         return F.create(name);
     }
 
@@ -43,7 +43,7 @@ class PigeonholesTest {
     }
 
     /** {@code pigeons} rows of {@code holes} cells: each row a clause, each column pairwise at most one. */
-    private static List<List<Variable<Integer>>> cells(int pigeons, int holes) {
+    private List<List<Variable<Integer>>> cells(int pigeons, int holes) {
         List<List<Variable<Integer>>> grid = new ArrayList<>();
         for (int p = 0; p < pigeons; p++) {
             List<Variable<Integer>> row = new ArrayList<>();

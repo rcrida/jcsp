@@ -30,7 +30,7 @@ class Xcsp3ProblemRunnerTest {
     @TempDir
     Path tempDir;
 
-    private static final Variable.Factory F = Variable.Factory.INSTANCE;
+    private final Variable.Factory F = new Variable.Factory();
 
     private static PrintStream printStreamInto(ByteArrayOutputStream buffer) {
         return new PrintStream(buffer, true, StandardCharsets.UTF_8);

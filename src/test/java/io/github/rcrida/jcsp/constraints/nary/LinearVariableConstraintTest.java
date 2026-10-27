@@ -18,7 +18,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 public class LinearVariableConstraintTest {
-    static final Variable.Factory F = Variable.Factory.INSTANCE;
+    final Variable.Factory F = new Variable.Factory();
 
     Variable<Integer> v1 = F.create("v1");
     Variable<Integer> v2 = F.create("v2");
@@ -156,7 +156,7 @@ public class LinearVariableConstraintTest {
 
     @Test
     void weightedSum_byte() {
-        Variable<Byte> a = F.create("a"), b = F.create("b"), target = F.create("t");
+        Variable<Byte> a = F.create("a"), b = F.create("b"), target = F.create("target");
         var c = LinearVariableConstraint.of(Map.of(a, (byte) 2, b, (byte) 3), Operator.EQ, target);
         assertThat(c.isSatisfiedBy(Assignment.of(Map.of(a, (byte) 2, b, (byte) 1, target, (byte) 7)))).isTrue();
         assertThat(c.isSatisfiedBy(Assignment.of(Map.of(a, (byte) 2, b, (byte) 1, target, (byte) 8)))).isFalse();
@@ -164,7 +164,7 @@ public class LinearVariableConstraintTest {
 
     @Test
     void weightedSum_short() {
-        Variable<Short> a = F.create("a"), b = F.create("b"), target = F.create("t");
+        Variable<Short> a = F.create("a"), b = F.create("b"), target = F.create("target");
         var c = LinearVariableConstraint.of(Map.of(a, (short) 2, b, (short) 3), Operator.EQ, target);
         assertThat(c.isSatisfiedBy(Assignment.of(Map.of(a, (short) 2, b, (short) 1, target, (short) 7)))).isTrue();
         assertThat(c.isSatisfiedBy(Assignment.of(Map.of(a, (short) 2, b, (short) 1, target, (short) 8)))).isFalse();
@@ -172,7 +172,7 @@ public class LinearVariableConstraintTest {
 
     @Test
     void weightedSum_long() {
-        Variable<Long> a = F.create("a"), b = F.create("b"), target = F.create("t");
+        Variable<Long> a = F.create("a"), b = F.create("b"), target = F.create("target");
         var c = LinearVariableConstraint.of(Map.of(a, 2L, b, 3L), Operator.EQ, target);
         assertThat(c.isSatisfiedBy(Assignment.of(Map.of(a, 2L, b, 1L, target, 7L)))).isTrue();
         assertThat(c.isSatisfiedBy(Assignment.of(Map.of(a, 2L, b, 1L, target, 8L)))).isFalse();
@@ -180,7 +180,7 @@ public class LinearVariableConstraintTest {
 
     @Test
     void weightedSum_float() {
-        Variable<Float> a = F.create("a"), b = F.create("b"), target = F.create("t");
+        Variable<Float> a = F.create("a"), b = F.create("b"), target = F.create("target");
         var c = LinearVariableConstraint.of(Map.of(a, 2.0f, b, 3.0f), Operator.EQ, target);
         assertThat(c.isSatisfiedBy(Assignment.of(Map.of(a, 2.0f, b, 1.0f, target, 7.0f)))).isTrue();
         assertThat(c.isSatisfiedBy(Assignment.of(Map.of(a, 2.0f, b, 1.0f, target, 8.0f)))).isFalse();
@@ -188,7 +188,7 @@ public class LinearVariableConstraintTest {
 
     @Test
     void weightedSum_double() {
-        Variable<Double> a = F.create("a"), b = F.create("b"), target = F.create("t");
+        Variable<Double> a = F.create("a"), b = F.create("b"), target = F.create("target");
         var c = LinearVariableConstraint.of(Map.of(a, 2.0, b, 3.0), Operator.EQ, target);
         assertThat(c.isSatisfiedBy(Assignment.of(Map.of(a, 2.0, b, 1.0, target, 7.0)))).isTrue();
         assertThat(c.isSatisfiedBy(Assignment.of(Map.of(a, 2.0, b, 1.0, target, 8.0)))).isFalse();
@@ -196,7 +196,7 @@ public class LinearVariableConstraintTest {
 
     @Test
     void weightedSum_unsupportedTargetType() {
-        Variable<Number> a = F.create("a"), b = F.create("b"), target = F.create("t");
+        Variable<Number> a = F.create("a"), b = F.create("b"), target = F.create("target");
         var c = LinearVariableConstraint.<Number>builder()
                 .variables(Set.of(a, b, target))
                 .coefficients(Map.<Variable<Number>, Number>of(a, 2, b, 3))

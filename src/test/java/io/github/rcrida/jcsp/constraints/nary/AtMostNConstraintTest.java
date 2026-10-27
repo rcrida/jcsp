@@ -79,7 +79,7 @@ public class AtMostNConstraintTest {
 
     // --- propagate() ---
 
-    static final Variable.Factory F = Variable.Factory.INSTANCE;
+    final Variable.Factory F = new Variable.Factory();
     static final Domain<Boolean> BOTH  = BooleanDomain.INSTANCE;
     static final Domain<Boolean> TRUE  = BooleanDomain.INSTANCE.toBuilder().delete(Boolean.FALSE).build();
     static final Domain<Boolean> FALSE = BooleanDomain.INSTANCE.toBuilder().delete(Boolean.TRUE).build();

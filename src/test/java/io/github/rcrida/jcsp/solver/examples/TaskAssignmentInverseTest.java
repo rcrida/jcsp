@@ -36,7 +36,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  * </pre>
  */
 public class TaskAssignmentInverseTest {
-    static final Variable.Factory F = Variable.Factory.INSTANCE;
+    static final Variable.Factory F = new Variable.Factory();
     static final int N = 4;
 
     // task[i] = task number (1..N) assigned to engineer i+1

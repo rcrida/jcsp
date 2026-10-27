@@ -77,7 +77,7 @@ public class AllDiffConstraintTest {
 
     // --- propagate() (Régin's GAC) ---
 
-    static final Variable.Factory F = Variable.Factory.INSTANCE;
+    final Variable.Factory F = new Variable.Factory();
 
     @Test
     void propagate_noAllDiffConstraints_returnsUnchanged() {

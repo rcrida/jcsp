@@ -94,7 +94,7 @@ import static org.assertj.core.api.Assertions.offset;
  * doesn't change this: they're redundant/symmetry-breaking, not new correctness constraints.
  */
 public class Prob038SteelMillSlabDesignTest {
-    static final Variable.Factory F = Variable.Factory.INSTANCE;
+    static final Variable.Factory F = new Variable.Factory();
     static final int NUM_ORDERS = 6;
     static final int NUM_SLABS = NUM_ORDERS; // worst case: one order per slab, matching the reference model
     static final int CAPACITY = 10;

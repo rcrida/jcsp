@@ -31,7 +31,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  * timetabling propagator active in the solver chain.
  */
 public class SprintSchedulingTest {
-    static final Variable.Factory F = Variable.Factory.INSTANCE;
+    static final Variable.Factory F = new Variable.Factory();
     static final Variable<Integer> DEV1   = F.create("dev1");
     static final Variable<Integer> DEV2   = F.create("dev2");
     static final Variable<Integer> REVIEW = F.create("review");

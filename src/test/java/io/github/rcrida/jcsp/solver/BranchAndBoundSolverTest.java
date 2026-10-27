@@ -33,7 +33,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 public class BranchAndBoundSolverTest {
-    static final Variable.Factory F = Variable.Factory.INSTANCE;
+    static final Variable.Factory F = new Variable.Factory();
 
     static final Variable<Integer> X = F.create("x");
     static final Variable<Integer> Y = F.create("y");
@@ -536,7 +536,7 @@ public class BranchAndBoundSolverTest {
         List<Variable<Integer>> bits = new java.util.ArrayList<>();
         var builder = ConstraintSatisfactionProblem.builder();
         for (int i = 0; i < 10; i++) {
-            Variable<Integer> bit = Variable.Factory.INSTANCE.create("gateBit" + i);
+            Variable<Integer> bit = F.create("gateBit" + i);
             bits.add(bit);
             builder.variableDomain(bit, IntRangeDomain.of(0, 1));
         }

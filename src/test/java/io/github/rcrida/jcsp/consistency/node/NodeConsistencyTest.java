@@ -15,6 +15,8 @@ import java.util.List;
 import static org.assertj.core.api.Assertions.assertThat;
 
 public class NodeConsistencyTest {
+    private final Variable.Factory variableFactory = new Variable.Factory();
+
     enum Colour {
         RED, GREEN, BLUE
     }
@@ -111,7 +113,7 @@ public class NodeConsistencyTest {
     void intervalDomain_skippedByNodeConsistency() {
         // UnaryComparatorConstraint on an IntervalDomain variable: NodeConsistency skips it
         // (leaves it to FixpointConsistency); the domain should be unchanged.
-        Variable<Double> x = Variable.Factory.INSTANCE.create("x_nc");
+        Variable<Double> x = variableFactory.create("x_nc");
         var csp = ConstraintSatisfactionProblem.builder()
                 .variableDomain(x, IntervalDomain.of(0.0, 10.0))
                 .comparatorConstraint(x, Operator.GEQ, 3.0)

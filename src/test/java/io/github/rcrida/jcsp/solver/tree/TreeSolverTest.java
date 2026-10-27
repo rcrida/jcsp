@@ -34,6 +34,8 @@ import static io.github.rcrida.jcsp.solver.examples.AustraliaMapColouringTest.V;
 import static io.github.rcrida.jcsp.solver.examples.AustraliaMapColouringTest.WA;
 
 public class TreeSolverTest {
+    private final Variable.Factory variableFactory = new Variable.Factory();
+
 
     public static Domain DOMAIN = new EnumDomain(EnumSet.of(RED, GREEN));
     public static Domain DOMAIN_RED_ONLY = new EnumDomain(EnumSet.of(RED));
@@ -66,7 +68,7 @@ public class TreeSolverTest {
         var builder = ConstraintSatisfactionProblem.builder();
         List<Variable<Integer>> path = new ArrayList<>();
         for (int i = 0; i < 3_000; i++) {
-            Variable<Integer> variable = Variable.Factory.INSTANCE.create("path" + i);
+            Variable<Integer> variable = variableFactory.create("path" + i);
             path.add(variable);
             builder.variableDomain(variable, IntRangeDomain.of(0, 1));
         }
@@ -141,7 +143,7 @@ public class TreeSolverTest {
     @Test
     void getSolutions_intervalDomainRoot() {
         // Exercises the non-DiscreteDomain branch in getSolutions: rootDomain.singleValue().stream()
-        Variable<Double> x = Variable.Factory.INSTANCE.create("x_ts");
+        Variable<Double> x = variableFactory.create("x_ts");
         var csp = ConstraintSatisfactionProblem.builder()
                 .variableDomain(x, IntervalDomain.of(5.0, 5.0))
                 .build();
@@ -158,7 +160,7 @@ public class TreeSolverTest {
         // UnaryConstraint is masked by NodeConsistency pruning the domain before this solver ever
         // runs, but a PredicateConstraint referencing only the root isn't a UnaryConstraint, so
         // NodeConsistency leaves its domain untouched and this solver must check it itself.
-        Variable<Integer> x = Variable.Factory.INSTANCE.create("x_single");
+        Variable<Integer> x = variableFactory.create("x_single");
         var csp = ConstraintSatisfactionProblem.builder()
                 .variableDomain(x, IntRangeDomain.of(0, 3))
                 .predicateConstraint(Set.of(x), a -> a.getValue(x).orElseThrow() == 2)

@@ -19,7 +19,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class ConstraintGraphTest {
 
-    private static final Variable.Factory VF = Variable.Factory.INSTANCE;
+    private static final Variable.Factory VF = new Variable.Factory();
 
     private static ConstraintSatisfactionProblem randomProblem(Random rng, int id) {
         int n = 2 + rng.nextInt(11);

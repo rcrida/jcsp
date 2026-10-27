@@ -18,7 +18,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 @ExtendWith(MockitoExtension.class)
 public class AssignmentVariableConsistencyConstraintTest {
-    static final Variable.Factory VARIABLE_FACTORY = Variable.Factory.INSTANCE;
+    static final Variable.Factory VARIABLE_FACTORY = new Variable.Factory();
     static final Variable<Assignment> V1 = VARIABLE_FACTORY.create("V1");
     static final Variable<Assignment> V2 = VARIABLE_FACTORY.create("V2");
     static final Variable<Assignment> V3 = VARIABLE_FACTORY.create("V3");

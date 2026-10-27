@@ -16,7 +16,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 public class RegularConstraintTest {
-    static final Variable.Factory F = Variable.Factory.INSTANCE;
+    final Variable.Factory F = new Variable.Factory();
 
     // 3-state DFA over {0,1} accepting sequences with no two consecutive 1s.
     // 0 = last-saw-0 (start), 1 = last-saw-1, 2 = saw-11 (dead). Accepting: {0, 1}.

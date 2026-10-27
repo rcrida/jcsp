@@ -43,7 +43,7 @@ import static org.assertj.core.api.Assertions.offset;
  * per store" greedy assignment would give, which is the whole point of the test.
  */
 public class Prob034WarehouseLocationTest {
-    static final Variable.Factory F = Variable.Factory.INSTANCE;
+    static final Variable.Factory F = new Variable.Factory();
     static final int NUM_STORES = 5;
     static final int NUM_WAREHOUSES = 3;
     static final int FIXED_COST = 8;

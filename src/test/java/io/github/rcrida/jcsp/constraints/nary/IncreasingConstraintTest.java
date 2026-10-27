@@ -25,6 +25,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 @ExtendWith(MockitoExtension.class)
 public class IncreasingConstraintTest {
+    private final Variable.Factory variableFactory = new Variable.Factory();
+
     @Mock Variable<Integer> v1;
     @Mock Variable<Integer> v2;
     @Mock Variable<Integer> v3;
@@ -94,9 +96,9 @@ public class IncreasingConstraintTest {
     void solver_nonDecreasingSequences() {
         // Count non-decreasing (v1 <= v2 <= v3) sequences over domain {1, 2, 3}.
         // Equivalent to combinations with repetition: C(3+3-1, 3) = C(5,3) = 10.
-        Variable<Integer> x1 = Variable.Factory.INSTANCE.create("x1");
-        Variable<Integer> x2 = Variable.Factory.INSTANCE.create("x2");
-        Variable<Integer> x3 = Variable.Factory.INSTANCE.create("x3");
+        Variable<Integer> x1 = variableFactory.create("x1");
+        Variable<Integer> x2 = variableFactory.create("x2");
+        Variable<Integer> x3 = variableFactory.create("x3");
         var domain = IntRangeDomain.of(1, 3);
         var csp = ConstraintSatisfactionProblem.builder()
                 .variableDomain(x1, domain).variableDomain(x2, domain).variableDomain(x3, domain)
@@ -147,8 +149,8 @@ public class IncreasingConstraintTest {
     void propagate_bounded_narrowsOneSide_andLeavesOtherUnchanged() {
         // L=[0,10], R=[3,8], L<=R: L narrows to [0,8] (real IntervalDomain#withBounds narrowing);
         // R is already within [3,8] so narrow() returns Optional.empty() for it (no update).
-        Variable<Double> l = Variable.Factory.INSTANCE.create("l");
-        Variable<Double> r = Variable.Factory.INSTANCE.create("r");
+        Variable<Double> l = variableFactory.create("l");
+        Variable<Double> r = variableFactory.create("r");
         var chain = IncreasingConstraint.of(List.of(l, r));
         var result = chain.propagate(Map.of(l, IntervalDomain.of(0.0, 10.0), r, IntervalDomain.of(3.0, 8.0))).orElseThrow();
         assertThat(((IntervalDomain) result.get(l)).getMax()).isEqualTo(8.0);
@@ -160,8 +162,8 @@ public class IncreasingConstraintTest {
         // L=[2,3], R=[0,10], L<=R: R's min is raised to 2 (L's min); R's max (10) is already the
         // widest allowed since nothing later in the chain constrains it further — exercises the
         // branch where a BoundedDomain's *lower* bound (not just upper) is what gets clipped.
-        Variable<Double> l = Variable.Factory.INSTANCE.create("l2");
-        Variable<Double> r = Variable.Factory.INSTANCE.create("r2");
+        Variable<Double> l = variableFactory.create("l2");
+        Variable<Double> r = variableFactory.create("r2");
         var chain = IncreasingConstraint.of(List.of(l, r));
         var result = chain.propagate(Map.of(l, IntervalDomain.of(2.0, 3.0), r, IntervalDomain.of(0.0, 10.0))).orElseThrow();
         assertThat(((IntervalDomain) result.get(r)).getMin()).isEqualTo(2.0);
@@ -173,9 +175,9 @@ public class IncreasingConstraintTest {
     void propagate_nonNumericComparableChain_stillPropagates() {
         // String chain: propagation is Comparable-based, not Number-restricted, so this narrows
         // just like a numeric chain would — "m" is deleted from v1 since it exceeds v2/v3's max.
-        Variable<String> s1 = Variable.Factory.INSTANCE.create("s1");
-        Variable<String> s2 = Variable.Factory.INSTANCE.create("s2");
-        Variable<String> s3 = Variable.Factory.INSTANCE.create("s3");
+        Variable<String> s1 = variableFactory.create("s1");
+        Variable<String> s2 = variableFactory.create("s2");
+        Variable<String> s3 = variableFactory.create("s3");
         var chain = IncreasingConstraint.of(List.of(s1, s2, s3));
         Domain<String> d1 = DiscreteDomain.of("a", "b", "m");
         Domain<String> d2 = DiscreteDomain.of("c", "d");
@@ -193,9 +195,9 @@ public class IncreasingConstraintTest {
         // endpoints themselves, so a single narrow() call deletes more than one value and deletes
         // from both directions -- unlike propagate_nonNumericComparableChain_stillPropagates above,
         // which only ever exercises a single above-max deletion.
-        Variable<String> s1 = Variable.Factory.INSTANCE.create("s1b");
-        Variable<String> s2 = Variable.Factory.INSTANCE.create("s2b");
-        Variable<String> s3 = Variable.Factory.INSTANCE.create("s3b");
+        Variable<String> s1 = variableFactory.create("s1b");
+        Variable<String> s2 = variableFactory.create("s2b");
+        Variable<String> s3 = variableFactory.create("s3b");
         var chain = IncreasingConstraint.of(List.of(s1, s2, s3));
         Domain<String> d1 = DiscreteDomain.of("c");
         Domain<String> d2 = DiscreteDomain.of("a", "b", "c", "d", "e", "z");

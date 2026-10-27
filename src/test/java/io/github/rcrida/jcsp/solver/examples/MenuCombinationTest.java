@@ -37,7 +37,7 @@ public class MenuCombinationTest {
     enum Main     { PASTA, STEAK, FISH }
     enum Dessert  { TIRAMISU, SORBET, CAKE }
 
-    static final Variable.Factory F = Variable.Factory.INSTANCE;
+    static final Variable.Factory F = new Variable.Factory();
     static final Variable<Starter> STARTER = F.create("starter");
     static final Variable<Main>    MAIN    = F.create("main");
     static final Variable<Dessert> DESSERT = F.create("dessert");

@@ -17,7 +17,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class PigeonholeConstraintTest {
-    private static final Variable.Factory F = Variable.Factory.INSTANCE;
+    private final Variable.Factory F = new Variable.Factory();
     private final Variable<Integer> a = F.create("a");
     private final Variable<Integer> b = F.create("b");
     private final Variable<Integer> c = F.create("c");

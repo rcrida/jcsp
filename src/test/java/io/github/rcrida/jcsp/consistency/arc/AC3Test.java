@@ -29,6 +29,8 @@ import static io.github.rcrida.jcsp.solver.examples.AustraliaMapColouringTest.NT
 import static io.github.rcrida.jcsp.solver.examples.AustraliaMapColouringTest.WA;
 
 public class AC3Test {
+    private final Variable.Factory variableFactory = new Variable.Factory();
+
     @Test
     void toString_isReadable() {
         assertThat(AC3.INSTANCE).hasToString("AC3");
@@ -44,8 +46,8 @@ public class AC3Test {
                 BinaryTuple.of(3, 9)
         );
         val builder = ConstraintSatisfactionProblem.builder();
-        Variable<Object> left = Variable.Factory.INSTANCE.create("left");
-        Variable<Object> right = Variable.Factory.INSTANCE.create("right");
+        Variable<Object> left = variableFactory.create("left");
+        Variable<Object> right = variableFactory.create("right");
         builder.variableDomainEntry(left, domain);
         builder.variableDomainEntry(right, domain);
         builder.constraint(BinaryTuplesConstraint.of(left, right, Set.copyOf(tuples)));
@@ -170,8 +172,8 @@ public class AC3Test {
     @Test
     void intervalDomain_fromNotDiscrete_skippedByAC3() {
         // Both IntervalDomain: AC3 skips the arc at the first instanceof check (from is not discrete).
-        Variable<Double> x = Variable.Factory.INSTANCE.create("x_ac3a");
-        Variable<Double> y = Variable.Factory.INSTANCE.create("y_ac3a");
+        Variable<Double> x = variableFactory.create("x_ac3a");
+        Variable<Double> y = variableFactory.create("y_ac3a");
         var csp = ConstraintSatisfactionProblem.builder()
                 .variableDomain(x, IntervalDomain.of(0.0, 10.0))
                 .variableDomain(y, IntervalDomain.of(0.0, 10.0))
@@ -187,8 +189,8 @@ public class AC3Test {
     void intervalDomain_toNotDiscrete_skippedByAC3() {
         // Mixed: discrete Double from-variable, IntervalDomain to-variable.
         // AC3 passes the first instanceof check (from IS discrete) but skips at the second (to is not).
-        Variable<Double> d = Variable.Factory.INSTANCE.create("d_ac3b");
-        Variable<Double> c = Variable.Factory.INSTANCE.create("c_ac3b");
+        Variable<Double> d = variableFactory.create("d_ac3b");
+        Variable<Double> c = variableFactory.create("c_ac3b");
         var discreteDoubleDomain = DiscreteDomain.of(2.0, 5.0);
         var csp = ConstraintSatisfactionProblem.builder()
                 .variableDomain(d, discreteDoubleDomain)
@@ -226,8 +228,8 @@ public class AC3Test {
         val domain = IntRangeDomain.of(0, 10);
         val tuples = List.of(BinaryTuple.of(0, 11));
         val builder = ConstraintSatisfactionProblem.builder();
-        Variable<Object> left = Variable.Factory.INSTANCE.create("left_ec");
-        Variable<Object> right = Variable.Factory.INSTANCE.create("right_ec");
+        Variable<Object> left = variableFactory.create("left_ec");
+        Variable<Object> right = variableFactory.create("right_ec");
         builder.variableDomainEntry(left, domain);
         builder.variableDomainEntry(right, domain);
         builder.constraint(BinaryTuplesConstraint.of(left, right, Set.copyOf(tuples)));
@@ -266,9 +268,9 @@ public class AC3Test {
         // applyQueueWithReason's own "narrowed, not wiped" branch directly. applyQueue's parallel
         // branch is already covered elsewhere (e.g. applyYEqualsX2), but applyQueueWithReason is a
         // separate traversal with its own copy of this logic.
-        Variable<Integer> a = Variable.Factory.INSTANCE.create("a_requeue");
-        Variable<Integer> b = Variable.Factory.INSTANCE.create("b_requeue");
-        Variable<Integer> c = Variable.Factory.INSTANCE.create("c_requeue");
+        Variable<Integer> a = variableFactory.create("a_requeue");
+        Variable<Integer> b = variableFactory.create("b_requeue");
+        Variable<Integer> c = variableFactory.create("c_requeue");
         val problem = ConstraintSatisfactionProblem.builder()
                 .variableDomain(a, IntRangeDomain.of(1, 3))
                 .variableDomain(b, IntRangeDomain.of(1, 3))
@@ -289,8 +291,8 @@ public class AC3Test {
                 BinaryTuple.of(0, 11)
         );
         val builder = ConstraintSatisfactionProblem.builder();
-        Variable<Object> left = Variable.Factory.INSTANCE.create("left");
-        Variable<Object> right = Variable.Factory.INSTANCE.create("right");
+        Variable<Object> left = variableFactory.create("left");
+        Variable<Object> right = variableFactory.create("right");
         builder.variableDomainEntry(left, domain);
         builder.variableDomainEntry(right, domain);
         builder.constraint(BinaryTuplesConstraint.of(left, right, Set.copyOf(tuples)));
@@ -306,8 +308,8 @@ public class AC3Test {
      */
     @Test
     void apply_revisesNothing_returnsTheSameProblemInstance() {
-        Variable<Integer> x = Variable.Factory.INSTANCE.create("same_ref_x");
-        Variable<Integer> y = Variable.Factory.INSTANCE.create("same_ref_y");
+        Variable<Integer> x = variableFactory.create("same_ref_x");
+        Variable<Integer> y = variableFactory.create("same_ref_y");
         val problem = ConstraintSatisfactionProblem.builder()
                 .variableDomain(x, IntRangeDomain.of(0, 3))
                 .variableDomain(y, IntRangeDomain.of(0, 3))
@@ -321,8 +323,8 @@ public class AC3Test {
 
     @Test
     void apply_revisesSomething_returnsANarrowedCopy() {
-        Variable<Integer> x = Variable.Factory.INSTANCE.create("narrowed_x");
-        Variable<Integer> y = Variable.Factory.INSTANCE.create("narrowed_y");
+        Variable<Integer> x = variableFactory.create("narrowed_x");
+        Variable<Integer> y = variableFactory.create("narrowed_y");
         val problem = ConstraintSatisfactionProblem.builder()
                 .variableDomain(x, IntRangeDomain.of(0, 5))
                 .variableDomain(y, IntRangeDomain.of(0, 2))

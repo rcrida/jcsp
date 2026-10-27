@@ -65,7 +65,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  * #getSolutions_findsExactlyEveryValidSchedule()} enumerating and validating every one.
  */
 public class Prob010SocialGolfersTest {
-    static final Variable.Factory F = Variable.Factory.INSTANCE;
+    static final Variable.Factory F = new Variable.Factory();
     static final int N_GROUPS = 2;
     static final int N_PER_GROUP = 2;
     static final int N_ROUNDS = 3;

@@ -19,7 +19,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.within;
 
 public class BisectionConditioningSolverTest {
-    static final Variable.Factory F = Variable.Factory.INSTANCE;
+    final Variable.Factory F = new Variable.Factory();
 
     /** Extracts singleton values from all domains — used as the terminal inner solver in tests. */
     static final Solver SINGLETON_EXTRACTOR = csp ->

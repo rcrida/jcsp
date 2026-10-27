@@ -309,7 +309,7 @@ public class AC3BitRmBenchmark {
 
     /** Same construction as {@code NogoodPropagationBenchmark#randomBinaryCsp} -- see its own Javadoc. */
     private static ConstraintSatisfactionProblem randomBinaryCsp(int n, int domainSize, double tightness, long seed) {
-        Variable.Factory f = Variable.Factory.INSTANCE;
+        Variable.Factory f = new Variable.Factory();
         List<Variable<Integer>> vars = new ArrayList<>();
         for (int i = 0; i < n; i++) vars.add(f.create("rv" + i));
 
@@ -342,7 +342,7 @@ public class AC3BitRmBenchmark {
      * into the cheap-check scenario it's meant to be distinct from.
      */
     private static ConstraintSatisfactionProblem randomBinaryCspExpensiveCheck(int n, int domainSize, double tightness, long seed) {
-        Variable.Factory f = Variable.Factory.INSTANCE;
+        Variable.Factory f = new Variable.Factory();
         List<Variable<Integer>> vars = new ArrayList<>();
         for (int i = 0; i < n; i++) vars.add(f.create("ev" + i));
 

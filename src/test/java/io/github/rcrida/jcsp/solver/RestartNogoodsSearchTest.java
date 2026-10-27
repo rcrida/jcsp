@@ -18,10 +18,10 @@ import java.util.concurrent.atomic.AtomicInteger;
 import static org.assertj.core.api.Assertions.assertThat;
 
 class RestartNogoodsSearchTest {
-    private static final Variable.Factory VF = Variable.Factory.INSTANCE;
+    private final Variable.Factory VF = new Variable.Factory();
 
     /** {@code count} variables pairwise different over {@code values} values. */
-    private static ConstraintSatisfactionProblem allDifferent(int count, int values) {
+    private ConstraintSatisfactionProblem allDifferent(int count, int values) {
         List<Variable<Integer>> vars = new ArrayList<>();
         var builder = ConstraintSatisfactionProblem.builder();
         for (int i = 0; i < count; i++) {
@@ -157,7 +157,7 @@ class RestartNogoodsSearchTest {
         }
     }
 
-    private static ConstraintSatisfactionProblem randomProblem(Random random, int trial) {
+    private ConstraintSatisfactionProblem randomProblem(Random random, int trial) {
         int count = 6;
         List<Variable<Integer>> vars = new ArrayList<>();
         var builder = ConstraintSatisfactionProblem.builder();

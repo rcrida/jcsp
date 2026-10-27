@@ -15,7 +15,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class ValueConjunctionConstraintTest {
-    static final Variable.Factory F = Variable.Factory.INSTANCE;
+    final Variable.Factory F = new Variable.Factory();
 
     static Map<Variable<Integer>, Integer> literals(Variable<Integer> a, int ta, Variable<Integer> b, int tb) {
         Map<Variable<Integer>, Integer> literals = new LinkedHashMap<>();

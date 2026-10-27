@@ -18,7 +18,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 public class SumBoundConstraintTest {
-    static final Variable.Factory F = Variable.Factory.INSTANCE;
+    final Variable.Factory F = new Variable.Factory();
 
     Variable<Integer> v1 = F.create("v1");
     Variable<Integer> v2 = F.create("v2");
@@ -144,7 +144,6 @@ public class SumBoundConstraintTest {
         // v1∈{1..9}, v2∈{1..9}, v3∈{1..9}, sum = 15
         // new_max(v1) = 15 - min(v2) - min(v3) = 15 - 1 - 1 = 13 → capped at 9 (no change)
         // After assigning v2=8, v3=6: new_max(v1) = 15-8-6 = 1, new_min(v1) = 15-8-6 = 1 → v1 = {1}
-        Variable<Integer> v3 = F.create("v3");
         var c = SumBoundConstraint.of(Set.of(v1, v2, v3), Operator.EQ, 15);
         var domains = Map.<Variable<?>, io.github.rcrida.jcsp.domains.Domain<?>>of(
                 v1, IntRangeDomain.of(1, 9),

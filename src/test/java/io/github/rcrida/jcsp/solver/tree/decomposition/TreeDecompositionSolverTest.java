@@ -33,7 +33,7 @@ import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
 public class TreeDecompositionSolverTest {
-    static final Variable.Factory F = Variable.Factory.INSTANCE;
+    static final Variable.Factory F = new Variable.Factory();
 
     // Original problem: 5 variables, domain 1-10 → search space = 10^5 = 100,000
     // With targetTreewidth=7: maxDomainSize = min(10^7, 1_000_000) = 1,000,000

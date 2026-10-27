@@ -15,7 +15,7 @@ import java.util.Set;
 import static org.assertj.core.api.Assertions.assertThat;
 
 public class MaxConstraintTest {
-    static final Variable.Factory F = Variable.Factory.INSTANCE;
+    static final Variable.Factory F = new Variable.Factory();
     static final Variable<Double> X = F.create("x_max");
     static final Variable<Double> Y = F.create("y_max");
     static final Variable<Double> Z = F.create("z_max");

@@ -27,18 +27,19 @@ import java.util.stream.Collectors;
 import static org.assertj.core.api.Assertions.assertThat;
 
 class LatticeSystemsTest {
+    private final Variable.Factory variableFactory = new Variable.Factory();
 
-    private static List<Variable<Integer>> bits(int count) {
+    /** {@code count} 0/1 variables named {@code x0..}, issued by {@code builder}. */
+    private static List<Variable<Integer>> bits(ConstraintSatisfactionProblem.ConstraintSatisfactionProblemBuilder builder, int count) {
         List<Variable<Integer>> variables = new ArrayList<>();
-        for (int i = 0; i < count; i++) variables.add(Variable.Factory.INSTANCE.create("x" + i));
+        for (int i = 0; i < count; i++) variables.add(builder.createVariable("x" + i, IntRangeDomain.of(0, 1)));
         return variables;
     }
 
     /** One {@code Σ a[i][j]·x_j = d[i]} constraint per row, over {@code a[0].length} bits. */
-    private static ConstraintSatisfactionProblem system(long[][] a, long[] d) {
-        List<Variable<Integer>> v = bits(a[0].length);
+    private ConstraintSatisfactionProblem system(long[][] a, long[] d) {
         ConstraintSatisfactionProblem.ConstraintSatisfactionProblemBuilder builder = ConstraintSatisfactionProblem.builder();
-        v.forEach(variable -> builder.variableDomain(variable, IntRangeDomain.of(0, 1)));
+        List<Variable<Integer>> v = bits(builder, a[0].length);
         for (int i = 0; i < a.length; i++) {
             Map<Variable<Integer>, Integer> coefficients = new HashMap<>();
             for (int j = 0; j < v.size(); j++) coefficients.put(v.get(j), (int) a[i][j]);
@@ -143,9 +144,8 @@ class LatticeSystemsTest {
 
     @Test
     void sumConstraints_areEquationsToo() {
-        List<Variable<Integer>> v = bits(4);
         ConstraintSatisfactionProblem.ConstraintSatisfactionProblemBuilder builder = ConstraintSatisfactionProblem.builder();
-        v.forEach(variable -> builder.variableDomain(variable, IntRangeDomain.of(0, 1)));
+        List<Variable<Integer>> v = bits(builder, 4);
         builder.sumConstraint(Set.of(v.get(0), v.get(1), v.get(2)), Operator.EQ, 1);
         builder.sumConstraint(Set.of(v.get(2), v.get(3)), Operator.EQ, 1);
 
@@ -190,9 +190,8 @@ class LatticeSystemsTest {
 
     @Test
     void inequalities_areNotEquations() {
-        List<Variable<Integer>> v = bits(3);
         ConstraintSatisfactionProblem.ConstraintSatisfactionProblemBuilder builder = ConstraintSatisfactionProblem.builder();
-        v.forEach(variable -> builder.variableDomain(variable, IntRangeDomain.of(0, 1)));
+        List<Variable<Integer>> v = bits(builder, 3);
         builder.linearConstraint(Map.of(v.get(0), 1, v.get(1), 2), Operator.LEQ, 2);
         builder.linearConstraint(Map.of(v.get(1), 1, v.get(2), 2), Operator.EQ, 2);
 
@@ -201,11 +200,11 @@ class LatticeSystemsTest {
 
     @Test
     void anEquationOverAVariableWithMoreThanTwoValues_isNotUsed() {
-        List<Variable<Integer>> v = bits(3);
         ConstraintSatisfactionProblem.ConstraintSatisfactionProblemBuilder builder = ConstraintSatisfactionProblem.builder();
-        builder.variableDomain(v.get(0), IntRangeDomain.of(0, 2));
-        builder.variableDomain(v.get(1), IntRangeDomain.of(0, 1));
-        builder.variableDomain(v.get(2), IntRangeDomain.of(0, 1));
+        List<Variable<Integer>> v = List.of(
+                builder.createVariable("x0", IntRangeDomain.of(0, 2)),
+                builder.createVariable("x1", IntRangeDomain.of(0, 1)),
+                builder.createVariable("x2", IntRangeDomain.of(0, 1)));
         builder.linearConstraint(Map.of(v.get(0), 1, v.get(1), 1), Operator.EQ, 1);
         builder.linearConstraint(Map.of(v.get(1), 1, v.get(2), 1), Operator.EQ, 1);
 
@@ -219,8 +218,8 @@ class LatticeSystemsTest {
 
     @Test
     void aDoubleValuedEquation_isNotUsed() {
-        Variable<Double> a = Variable.Factory.INSTANCE.create("a");
-        Variable<Double> b = Variable.Factory.INSTANCE.create("b");
+        Variable<Double> a = variableFactory.create("a");
+        Variable<Double> b = variableFactory.create("b");
         ConstraintSatisfactionProblem csp = ConstraintSatisfactionProblem.builder()
                 .variableDomain(a, NumericDiscreteDomain.of(0.0, 1.0))
                 .variableDomain(b, NumericDiscreteDomain.of(0.0, 1.0))
@@ -234,12 +233,12 @@ class LatticeSystemsTest {
     /** Integral, but not {@code Integer}: the domain's values are not the ints 0 and 1 that the system is solved over. */
     @Test
     void equationsOverOtherIntegralTypes_areNotUsed() {
-        Variable<Long> la = Variable.Factory.INSTANCE.create("la");
-        Variable<Long> lb = Variable.Factory.INSTANCE.create("lb");
-        Variable<Short> sa = Variable.Factory.INSTANCE.create("sa");
-        Variable<Short> sb = Variable.Factory.INSTANCE.create("sb");
-        Variable<Byte> ba = Variable.Factory.INSTANCE.create("ba");
-        Variable<Byte> bb = Variable.Factory.INSTANCE.create("bb");
+        Variable<Long> la = variableFactory.create("la");
+        Variable<Long> lb = variableFactory.create("lb");
+        Variable<Short> sa = variableFactory.create("sa");
+        Variable<Short> sb = variableFactory.create("sb");
+        Variable<Byte> ba = variableFactory.create("ba");
+        Variable<Byte> bb = variableFactory.create("bb");
         ConstraintSatisfactionProblem csp = ConstraintSatisfactionProblem.builder()
                 .variableDomain(la, NumericDiscreteDomain.of(0L, 1L))
                 .variableDomain(lb, NumericDiscreteDomain.of(0L, 1L))
@@ -262,8 +261,8 @@ class LatticeSystemsTest {
     @Test
     @SuppressWarnings({"unchecked", "rawtypes"})
     void aNonIntegralCoefficient_isNotUsed() {
-        Variable<Number> a = Variable.Factory.INSTANCE.create("a");
-        Variable<Number> b = Variable.Factory.INSTANCE.create("b");
+        Variable<Number> a = variableFactory.create("a");
+        Variable<Number> b = variableFactory.create("b");
         ConstraintSatisfactionProblem.ConstraintSatisfactionProblemBuilder builder = ConstraintSatisfactionProblem.builder();
         builder.variableDomain((Variable) a, (Domain) IntRangeDomain.of(0, 1));
         builder.variableDomain((Variable) b, (Domain) IntRangeDomain.of(0, 1));

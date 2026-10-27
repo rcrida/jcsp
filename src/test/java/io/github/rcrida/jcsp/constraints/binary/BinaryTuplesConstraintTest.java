@@ -26,7 +26,7 @@ public class BinaryTuplesConstraintTest {
             BinaryTuple.of(3, 9)
     );
     static final DiscreteDomain DOMAIN = IntRangeDomain.of(0, 10);
-    static final Variable.Factory VARIABLE_FACTORY = Variable.Factory.INSTANCE;
+    final Variable.Factory VARIABLE_FACTORY = new Variable.Factory();
 
     Variable<Object> left = VARIABLE_FACTORY.create("left");
     Variable<Object> right = VARIABLE_FACTORY.create("right");

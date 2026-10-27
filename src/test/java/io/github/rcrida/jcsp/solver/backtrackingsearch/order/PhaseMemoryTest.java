@@ -10,7 +10,7 @@ import java.util.Map;
 import static org.assertj.core.api.Assertions.assertThat;
 
 class PhaseMemoryTest {
-    private static final Variable.Factory F = Variable.Factory.INSTANCE;
+    private final Variable.Factory F = new Variable.Factory();
     private final Variable<Integer> x = F.create("phase_x");
     private final Variable<Integer> y = F.create("phase_y");
 

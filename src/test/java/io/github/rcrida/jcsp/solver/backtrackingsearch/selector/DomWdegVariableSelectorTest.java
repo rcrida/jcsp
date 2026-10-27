@@ -22,10 +22,12 @@ import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 class DomWdegVariableSelectorTest {
+    private final Variable.Factory variableFactory = new Variable.Factory();
 
-    private final Variable<Integer> v1 = Variable.Factory.INSTANCE.create("v1");
-    private final Variable<Integer> v2 = Variable.Factory.INSTANCE.create("v2");
-    private final Variable<Integer> v3 = Variable.Factory.INSTANCE.create("v3");
+
+    private final Variable<Integer> v1 = variableFactory.create("v1");
+    private final Variable<Integer> v2 = variableFactory.create("v2");
+    private final Variable<Integer> v3 = variableFactory.create("v3");
 
     /** Declares variables in call order, which is the order {@code select} breaks ties in. */
     private static final class Problem {

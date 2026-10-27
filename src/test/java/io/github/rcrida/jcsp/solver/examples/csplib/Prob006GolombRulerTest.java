@@ -30,7 +30,6 @@ import static org.assertj.core.api.Assertions.assertThat;
  * with marks bounded by 10.
  */
 public class Prob006GolombRulerTest {
-    static final Variable.Factory F = Variable.Factory.INSTANCE;
     static final int N = 5;
     static final int OPTIMAL_LENGTH = 11;
 
@@ -38,11 +37,9 @@ public class Prob006GolombRulerTest {
 
     /** Order and ruler length are both parameters, so larger instances can be built (e.g. for benchmarking). */
     static RulerProblem buildRuler(int n, int maxLength) {
-        List<Variable<Integer>> marks = new ArrayList<>();
-        for (int i = 0; i < n; i++) marks.add(F.create("m" + i));
-
         var builder = ConstraintSatisfactionProblem.builder();
-        marks.forEach(m -> builder.variableDomain(m, IntRangeDomain.of(0, maxLength)));
+        List<Variable<Integer>> marks = new ArrayList<>();
+        for (int i = 0; i < n; i++) marks.add(builder.createVariable("m" + i, IntRangeDomain.of(0, maxLength)));
         builder.equalsConstraint(marks.get(0), 0);
         for (int i = 0; i < n - 1; i++) {
             builder.comparatorConstraint(marks.get(i), Operator.LT, marks.get(i + 1));
@@ -53,8 +50,7 @@ public class Prob006GolombRulerTest {
         Variable<Integer> lastGap = null;
         for (int i = 0; i < n; i++) {
             for (int j = i + 1; j < n; j++) {
-                Variable<Integer> d = F.create("d" + i + j);
-                builder.variableDomain(d, IntRangeDomain.of(1, maxLength));
+                Variable<Integer> d = builder.createVariable("d" + i + j, IntRangeDomain.of(1, maxLength));
                 // d = marks[j] - marks[i]
                 builder.linearConstraint(Map.of(marks.get(j), 1, marks.get(i), -1), Operator.EQ, d);
                 diffs.add(d);

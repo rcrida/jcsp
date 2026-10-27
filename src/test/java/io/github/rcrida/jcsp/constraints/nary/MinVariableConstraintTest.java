@@ -17,7 +17,7 @@ import java.util.Set;
 import static org.assertj.core.api.Assertions.assertThat;
 
 public class MinVariableConstraintTest {
-    static final Variable.Factory F = Variable.Factory.INSTANCE;
+    static final Variable.Factory F = new Variable.Factory();
     static final Variable<Double> X = F.create("x_mnv");
     static final Variable<Double> Y = F.create("y_mnv");
     static final Variable<Double> T = F.create("t_mnv");

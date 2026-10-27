@@ -20,6 +20,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 @ExtendWith(MockitoExtension.class)
 public class NValueConstraintTest {
+    private final Variable.Factory variableFactory = new Variable.Factory();
+
     @Mock Variable<Integer> v1;
     @Mock Variable<Integer> v2;
     @Mock Variable<Integer> v3;
@@ -306,10 +308,10 @@ public class NValueConstraintTest {
     void solver_exactlyTwoDistinctValuesAmongThreeBinaryVariables() {
         // 3 vars over {1,2}, no other constraints, count fixed to 2 -> every assignment except
         // all-1 and all-3 satisfies (2^3 - 2 = 6 solutions)
-        Variable<Integer> x1 = Variable.Factory.INSTANCE.create("x1");
-        Variable<Integer> x2 = Variable.Factory.INSTANCE.create("x2");
-        Variable<Integer> x3 = Variable.Factory.INSTANCE.create("x3");
-        Variable<Integer> n = Variable.Factory.INSTANCE.create("n");
+        Variable<Integer> x1 = variableFactory.create("x1");
+        Variable<Integer> x2 = variableFactory.create("x2");
+        Variable<Integer> x3 = variableFactory.create("x3");
+        Variable<Integer> n = variableFactory.create("n");
         var domain = IntRangeDomain.of(1, 2);
         var csp = ConstraintSatisfactionProblem.builder()
                 .variableDomain(x1, domain).variableDomain(x2, domain).variableDomain(x3, domain)

@@ -25,7 +25,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  * disjointConstraint} through the same local-search chain.
  */
 public class SetDomainLocalSearchTest {
-    static final Variable.Factory F = Variable.Factory.INSTANCE;
+    static final Variable.Factory F = new Variable.Factory();
     static final Set<String> POOL = Set.of("a", "b", "c", "d", "e", "f", "g", "h");
 
     static final Variable<Set<String>> TEAM_A = F.create("teamA");

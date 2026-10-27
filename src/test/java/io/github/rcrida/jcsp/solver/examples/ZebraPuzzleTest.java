@@ -36,7 +36,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  */
 public class ZebraPuzzleTest {
     static final Domain<Integer> HOUSES = IntRangeDomain.of(1, 5);
-    static final Variable.Factory F = Variable.Factory.INSTANCE;
+    static final Variable.Factory F = new Variable.Factory();
 
     // Nationalities
     static final Variable<Integer> BRIT      = F.create("BRIT");

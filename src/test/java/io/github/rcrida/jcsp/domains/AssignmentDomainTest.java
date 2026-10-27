@@ -13,7 +13,7 @@ import java.util.Map;
 import static org.assertj.core.api.Assertions.assertThat;
 
 public class AssignmentDomainTest {
-    static final Variable.Factory VARIABLE_FACTORY = Variable.Factory.INSTANCE;
+    final Variable.Factory VARIABLE_FACTORY = new Variable.Factory();
     Variable<Integer> variable1 = VARIABLE_FACTORY.create("V1");
     Variable<String> variable2 = VARIABLE_FACTORY.create("V2");
     Variable<Boolean> variable3 = VARIABLE_FACTORY.create("V3");

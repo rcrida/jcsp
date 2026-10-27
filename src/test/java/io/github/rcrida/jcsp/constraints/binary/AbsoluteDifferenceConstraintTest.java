@@ -17,7 +17,7 @@ import java.util.Set;
 import static org.assertj.core.api.Assertions.assertThat;
 
 public class AbsoluteDifferenceConstraintTest {
-    static final Variable.Factory F = Variable.Factory.INSTANCE;
+    static final Variable.Factory F = new Variable.Factory();
     static final Variable<Double> L = F.create("l_abs");
     static final Variable<Double> R = F.create("r_abs");
 
@@ -303,8 +303,8 @@ public class AbsoluteDifferenceConstraintTest {
         // unconditionally, which would wrongly forbid left=8 even in a branch where right could
         // still be, say, 6 (|8-6|=2<=3 is feasible). The fixed reason cites right's own current
         // value set too, so a solution using right=6 correctly escapes it.
-        Variable<Integer> left = Variable.Factory.INSTANCE.create("l_abs_gap_reason");
-        Variable<Integer> right = Variable.Factory.INSTANCE.create("r_abs_gap_reason");
+        Variable<Integer> left = F.create("l_abs_gap_reason");
+        Variable<Integer> right = F.create("r_abs_gap_reason");
         var domains = Map.<Variable<?>, Domain<?>>of(
                 left, IntRangeDomain.of(8, 8),
                 right, DiscreteDomain.of(0, 1));

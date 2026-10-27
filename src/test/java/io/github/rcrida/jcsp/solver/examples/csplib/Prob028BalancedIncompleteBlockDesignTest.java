@@ -54,7 +54,6 @@ import static org.assertj.core.api.Assertions.assertThat;
  * class's own Javadoc and {@code LexConstraintTest} for the fix.
  */
 public class Prob028BalancedIncompleteBlockDesignTest {
-    static final Variable.Factory F = Variable.Factory.INSTANCE;
     static final int V = 7;
     static final int B = 7;
     static final int R = 3;
@@ -95,8 +94,7 @@ public class Prob028BalancedIncompleteBlockDesignTest {
             for (int i2 = i1 + 1; i2 < V; i2++) {
                 Variable<Boolean>[] both = new Variable[B];
                 for (int j = 0; j < B; j++) {
-                    both[j] = F.create("y" + i1 + "_" + i2 + "_" + j);
-                    builder.variableDomain(both[j], BooleanDomain.INSTANCE);
+                    both[j] = builder.createVariable("y" + i1 + "_" + i2 + "_" + j, BooleanDomain.INSTANCE);
                     builder.reifyConstraint(both[j], BinaryLogicConstraint.of(m[i1][j], LogicOperator.AND, m[i2][j]));
                 }
                 builder.countConstraint(Set.copyOf(List.of(both)), true, Operator.EQ, LAMBDA);

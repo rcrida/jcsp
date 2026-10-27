@@ -33,7 +33,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  * Optimal selection: {x2, x4} with weight 10 and value 12.
  */
 public class Prob133KnapsackTest {
-    static final Variable.Factory F = Variable.Factory.INSTANCE;
+    static final Variable.Factory F = new Variable.Factory();
     static final Variable<Integer> X1 = F.create("x1");
     static final Variable<Integer> X2 = F.create("x2");
     static final Variable<Integer> X3 = F.create("x3");

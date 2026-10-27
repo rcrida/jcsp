@@ -21,7 +21,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 public class DistinctVectorsConstraintTest {
-    static final Variable.Factory F = Variable.Factory.INSTANCE;
+    final Variable.Factory F = new Variable.Factory();
 
     Variable<Integer> a0 = F.create("a0");
     Variable<Integer> a1 = F.create("a1");
@@ -297,7 +297,7 @@ public class DistinctVectorsConstraintTest {
                 List<Variable<Integer>> vector = new ArrayList<>();
                 List<List<Integer>> vectorDoms = new ArrayList<>();
                 for (int p = 0; p < m; p++) {
-                    Variable<Integer> var = Variable.Factory.INSTANCE.create("t" + trial + "_v" + v + "_p" + p);
+                    Variable<Integer> var = F.create("t" + trial + "_v" + v + "_p" + p);
                     vector.add(var);
                     Set<Integer> dom = new HashSet<>();
                     while (dom.isEmpty()) {

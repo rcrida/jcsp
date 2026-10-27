@@ -15,7 +15,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class ValueDisjunctionConstraintTest {
-    static final Variable.Factory F = Variable.Factory.INSTANCE;
+    final Variable.Factory F = new Variable.Factory();
 
     static final DiscreteDomain<Integer> ZERO_ONE = IntRangeDomain.of(0, 1);
     static final Domain<Integer> ZERO_ONLY = ZERO_ONE.toBuilder().delete(1).build();

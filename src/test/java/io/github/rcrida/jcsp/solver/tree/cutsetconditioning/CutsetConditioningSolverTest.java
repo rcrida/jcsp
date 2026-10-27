@@ -37,7 +37,10 @@ import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
 public class CutsetConditioningSolverTest {
-    static final Variable.Factory VARIABLE_FACTORY = Variable.Factory.INSTANCE;
+    // Issues the fixture variables below, which a static problem is built over; each test that needs
+    // variables of its own takes them from testVariables instead, so they share no index space.
+    static final Variable.Factory VARIABLE_FACTORY = new Variable.Factory();
+    final Variable.Factory testVariables = new Variable.Factory();
     static final Domain DOMAIN = IntRangeDomain.of(1, 9);
     static final Domain CONSTRAINED_DOMAIN = IntRangeDomain.of(2, 9);
     static final Assignment ASSIGNMENT = Assignment.empty();
@@ -88,9 +91,9 @@ public class CutsetConditioningSolverTest {
 
     @Test
     void getSolutions_noComplexityImprovement() {
-        Variable<Integer> a = VARIABLE_FACTORY.create("A");
-        Variable<Integer> b = VARIABLE_FACTORY.create("B");
-        Variable<Integer> c = VARIABLE_FACTORY.create("C");
+        Variable<Integer> a = testVariables.create("A");
+        Variable<Integer> b = testVariables.create("B");
+        Variable<Integer> c = testVariables.create("C");
         val csp = ConstraintSatisfactionProblem.builder()
                 .variableDomain(a, DOMAIN)
                 .variableDomain(b, DOMAIN)
@@ -113,7 +116,7 @@ public class CutsetConditioningSolverTest {
         // would already fail the pre-existing relative complexity check regardless of cutset size,
         // so this alone wouldn't prove the new cap is doing anything without the cap in place).
         List<Variable<Integer>> vars = new ArrayList<>();
-        for (int i = 0; i < 10; i++) vars.add(VARIABLE_FACTORY.create("V" + i));
+        for (int i = 0; i < 10; i++) vars.add(testVariables.create("V" + i));
         Domain tenValues = IntRangeDomain.of(0, 9);
         var builder = ConstraintSatisfactionProblem.builder();
         for (Variable<Integer> v : vars) builder = builder.variableDomain(v, tenValues);
@@ -165,10 +168,10 @@ public class CutsetConditioningSolverTest {
 
     @Test
     void getSolutions_noTreeAtAll() {
-        Variable<Integer> a = VARIABLE_FACTORY.create("A");
-        Variable<Integer> b = VARIABLE_FACTORY.create("B");
-        Variable<Integer> c = VARIABLE_FACTORY.create("C");
-        Variable<Integer> d = VARIABLE_FACTORY.create("D");
+        Variable<Integer> a = testVariables.create("A");
+        Variable<Integer> b = testVariables.create("B");
+        Variable<Integer> c = testVariables.create("C");
+        Variable<Integer> d = testVariables.create("D");
         val csp = ConstraintSatisfactionProblem.builder()
                 .variableDomain(a, DOMAIN)
                 .variableDomain(b, DOMAIN)
@@ -285,10 +288,10 @@ public class CutsetConditioningSolverTest {
 
     @Test
     void getSolution_noTreeAtAll() {
-        Variable<Integer> a = VARIABLE_FACTORY.create("A");
-        Variable<Integer> b = VARIABLE_FACTORY.create("B");
-        Variable<Integer> c = VARIABLE_FACTORY.create("C");
-        Variable<Integer> d = VARIABLE_FACTORY.create("D");
+        Variable<Integer> a = testVariables.create("A");
+        Variable<Integer> b = testVariables.create("B");
+        Variable<Integer> c = testVariables.create("C");
+        Variable<Integer> d = testVariables.create("D");
         val csp = ConstraintSatisfactionProblem.builder()
                 .variableDomain(a, DOMAIN)
                 .variableDomain(b, DOMAIN)

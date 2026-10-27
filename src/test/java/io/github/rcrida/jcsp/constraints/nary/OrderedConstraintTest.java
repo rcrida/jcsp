@@ -23,6 +23,8 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 @ExtendWith(MockitoExtension.class)
 class OrderedConstraintTest {
+    private final Variable.Factory variableFactory = new Variable.Factory();
+
     @Mock Variable<Integer> v1;
     @Mock Variable<Integer> v2;
     @Mock Variable<Integer> v3;
@@ -110,9 +112,9 @@ class OrderedConstraintTest {
     @Test
     void solver_strictlyIncreasingSequences() {
         // Count strictly increasing (v1 < v2 < v3) sequences over domain {1,2,3,4}: C(4,3) = 4.
-        Variable<Integer> x1 = Variable.Factory.INSTANCE.create("x1");
-        Variable<Integer> x2 = Variable.Factory.INSTANCE.create("x2");
-        Variable<Integer> x3 = Variable.Factory.INSTANCE.create("x3");
+        Variable<Integer> x1 = variableFactory.create("x1");
+        Variable<Integer> x2 = variableFactory.create("x2");
+        Variable<Integer> x3 = variableFactory.create("x3");
         var domain = IntRangeDomain.of(1, 4);
         var csp = ConstraintSatisfactionProblem.builder()
                 .variableDomain(x1, domain).variableDomain(x2, domain).variableDomain(x3, domain)

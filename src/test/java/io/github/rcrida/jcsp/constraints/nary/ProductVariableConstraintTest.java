@@ -18,7 +18,7 @@ import java.util.Set;
 import static org.assertj.core.api.Assertions.assertThat;
 
 class ProductVariableConstraintTest {
-    static final Variable.Factory F = Variable.Factory.INSTANCE;
+    static final Variable.Factory F = new Variable.Factory();
     static final Variable<Double> X = F.create("x_prodv");
     static final Variable<Double> Y = F.create("y_prodv");
     static final Variable<Double> T = F.create("t_prodv");

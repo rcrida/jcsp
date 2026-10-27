@@ -33,7 +33,7 @@ import static org.assertj.core.api.Assertions.within;
  * integer variables (e.g. {@code ANZ2: 0.9*STM1 + ANM1 - STM2 = 0}).
  */
 public class FlugplTest {
-    static final Variable.Factory F = Variable.Factory.INSTANCE;
+    final Variable.Factory F = new Variable.Factory();
 
     /** MPS default upper bound (no explicit UP entry means [0, +infinity)); large but finite. */
     static final double UNBOUNDED = 1_000_000.0;

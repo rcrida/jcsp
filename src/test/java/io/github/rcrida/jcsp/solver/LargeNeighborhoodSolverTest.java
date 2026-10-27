@@ -14,7 +14,7 @@ import java.util.Set;
 import static org.assertj.core.api.Assertions.assertThat;
 
 public class LargeNeighborhoodSolverTest {
-    static final Variable.Factory F = Variable.Factory.INSTANCE;
+    final Variable.Factory F = new Variable.Factory();
 
     static LargeNeighborhoodSolver solver() {
         return LargeNeighborhoodSolver.of(10, 50, RandomAssignmentFactory.INSTANCE);

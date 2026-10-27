@@ -93,7 +93,7 @@ public class CountConstraintTest {
 
     // --- propagate() ---
 
-    static final Variable.Factory F = Variable.Factory.INSTANCE;
+    static final Variable.Factory F = new Variable.Factory();
     static final Variable<Color> a = F.create("a");
     static final Variable<Color> b = F.create("b");
     static final Variable<Color> c = F.create("c");
@@ -305,7 +305,7 @@ public class CountConstraintTest {
     void solver_countConstraint_correctSolutionCount() {
         // 4 variables over {RED, GREEN, BLUE}, exactly 2 must be RED.
         // Solutions: C(4,2) positions for RED × 2^2 choices for remaining = 6 × 4 = 24.
-        Variable.Factory F = Variable.Factory.INSTANCE;
+        Variable.Factory F = new Variable.Factory();
         Variable<Color> x1 = F.create("x1");
         Variable<Color> x2 = F.create("x2");
         Variable<Color> x3 = F.create("x3");

@@ -18,7 +18,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 public class AmongConstraintTest {
     enum Color { RED, GREEN, BLUE }
 
-    static final Variable.Factory F = Variable.Factory.INSTANCE;
+    static final Variable.Factory F = new Variable.Factory();
     static final Variable<Color> v1 = F.create("v1");
     static final Variable<Color> v2 = F.create("v2");
     static final Variable<Color> v3 = F.create("v3");

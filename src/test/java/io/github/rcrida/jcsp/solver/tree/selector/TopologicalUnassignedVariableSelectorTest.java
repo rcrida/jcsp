@@ -19,7 +19,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 public class TopologicalUnassignedVariableSelectorTest {
-    static final Variable.Factory FACTORY = Variable.Factory.INSTANCE;
+    static final Variable.Factory FACTORY = new Variable.Factory();
     static final Domain<Integer> DOMAIN = DiscreteDomain.of(1, 2, 3);
     static final Variable<Integer> A = FACTORY.create("A");
     static final Variable<Integer> B = FACTORY.create("B");

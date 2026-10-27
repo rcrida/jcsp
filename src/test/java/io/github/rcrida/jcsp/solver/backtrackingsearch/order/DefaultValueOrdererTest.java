@@ -13,7 +13,7 @@ import java.util.List;
 import static org.assertj.core.api.Assertions.assertThat;
 
 public class DefaultValueOrdererTest {
-    static Variable.Factory FACTORY = Variable.Factory.INSTANCE;
+    static Variable.Factory FACTORY = new Variable.Factory();
     static Domain DOMAIN = DiscreteDomain.of(1, 2, 3);
     static Variable A = FACTORY.create("A");
     static Variable B = FACTORY.create("B");

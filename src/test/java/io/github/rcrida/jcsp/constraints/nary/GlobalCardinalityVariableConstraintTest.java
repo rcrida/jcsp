@@ -20,6 +20,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 @ExtendWith(MockitoExtension.class)
 class GlobalCardinalityVariableConstraintTest {
+    private final Variable.Factory variableFactory = new Variable.Factory();
+
     enum Color { RED, GREEN, BLUE }
 
     @Mock Variable<Color> v1;
@@ -93,14 +95,14 @@ class GlobalCardinalityVariableConstraintTest {
         // "how many zeros exist") independently narrows the same variable to {4}. Both passes are
         // individually non-empty, but {3} and {4} share no value -- the intersection must be
         // detected as empty, not silently resolved by one pass overwriting the other.
-        Variable<Integer> x0 = Variable.Factory.INSTANCE.create("gccv-mseq-x0");
-        Variable<Integer> x1 = Variable.Factory.INSTANCE.create("gccv-mseq-x1");
-        Variable<Integer> x2 = Variable.Factory.INSTANCE.create("gccv-mseq-x2");
-        Variable<Integer> x3 = Variable.Factory.INSTANCE.create("gccv-mseq-x3");
-        Variable<Integer> x4 = Variable.Factory.INSTANCE.create("gccv-mseq-x4");
-        Variable<Integer> x5 = Variable.Factory.INSTANCE.create("gccv-mseq-x5");
-        Variable<Integer> x6 = Variable.Factory.INSTANCE.create("gccv-mseq-x6");
-        Variable<Integer> x7 = Variable.Factory.INSTANCE.create("gccv-mseq-x7");
+        Variable<Integer> x0 = variableFactory.create("gccv-mseq-x0");
+        Variable<Integer> x1 = variableFactory.create("gccv-mseq-x1");
+        Variable<Integer> x2 = variableFactory.create("gccv-mseq-x2");
+        Variable<Integer> x3 = variableFactory.create("gccv-mseq-x3");
+        Variable<Integer> x4 = variableFactory.create("gccv-mseq-x4");
+        Variable<Integer> x5 = variableFactory.create("gccv-mseq-x5");
+        Variable<Integer> x6 = variableFactory.create("gccv-mseq-x6");
+        Variable<Integer> x7 = variableFactory.create("gccv-mseq-x7");
         Set<Variable<Integer>> xs = Set.of(x0, x1, x2, x3, x4, x5, x6, x7);
         Map<Integer, Variable<Integer>> targets = Map.of(0, x0, 1, x1, 2, x2, 3, x3, 4, x4, 5, x5, 6, x6, 7, x7);
         var c = GlobalCardinalityVariableConstraint.of(xs, targets);
@@ -235,9 +237,9 @@ class GlobalCardinalityVariableConstraintTest {
         // (definite/possible bound) separately narrows x1-as-target to [2,2] (definiteCount=2 from
         // x2/x3, maxCount=3 since x1 itself is "possible"). Neither subsumes the other -- {0,2} and
         // {2} must be intersected down to {2}, not one overwriting the other.
-        Variable<Integer> x1 = Variable.Factory.INSTANCE.create("gccv-x1");
-        Variable<Integer> x2 = Variable.Factory.INSTANCE.create("gccv-x2");
-        Variable<Integer> x3 = Variable.Factory.INSTANCE.create("gccv-x3");
+        Variable<Integer> x1 = variableFactory.create("gccv-x1");
+        Variable<Integer> x2 = variableFactory.create("gccv-x2");
+        Variable<Integer> x3 = variableFactory.create("gccv-x3");
         var c = GlobalCardinalityVariableConstraint.of(Set.of(x1, x2, x3), Map.of(1, x1));
         var domains = Map.<Variable<?>, Domain<?>>of(
                 x1, IntRangeDomain.of(0, 2), x2, IntRangeDomain.of(1, 1), x3, IntRangeDomain.of(1, 1));
@@ -252,10 +254,10 @@ class GlobalCardinalityVariableConstraintTest {
         // countedVariables are literally the same variables -- the case propagate()'s two passes
         // (flow-based GAC on countedVariables, definite/possible narrowing on targets) must merge
         // via intersection for, not overwrite.
-        Variable<Integer> x0 = Variable.Factory.INSTANCE.create("x0");
-        Variable<Integer> x1 = Variable.Factory.INSTANCE.create("x1");
-        Variable<Integer> x2 = Variable.Factory.INSTANCE.create("x2");
-        Variable<Integer> x3 = Variable.Factory.INSTANCE.create("x3");
+        Variable<Integer> x0 = variableFactory.create("x0");
+        Variable<Integer> x1 = variableFactory.create("x1");
+        Variable<Integer> x2 = variableFactory.create("x2");
+        Variable<Integer> x3 = variableFactory.create("x3");
         Set<Variable<Integer>> xs = Set.of(x0, x1, x2, x3);
         Map<Integer, Variable<Integer>> targets = Map.of(0, x0, 1, x1, 2, x2, 3, x3);
 

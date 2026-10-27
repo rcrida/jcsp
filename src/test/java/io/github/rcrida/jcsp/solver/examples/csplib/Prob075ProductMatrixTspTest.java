@@ -30,7 +30,7 @@ import static org.assertj.core.api.Assertions.offset;
  * rather than a derived formula.
  */
 public class Prob075ProductMatrixTspTest {
-    static final Variable.Factory F = Variable.Factory.INSTANCE;
+    static final Variable.Factory F = new Variable.Factory();
     static final int N = 6;
 
     static final int[] C = {2, 5, 1, 7, 3, 4};

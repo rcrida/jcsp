@@ -13,7 +13,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 class MACTest {
 
-    private static final Variable.Factory F = Variable.Factory.INSTANCE;
+    private final Variable.Factory F = new Variable.Factory();
 
     private final Variable<Integer> x = F.create("macx");
     private final Variable<Integer> y = F.create("macy");

@@ -19,7 +19,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  * L-shaped region admits exactly 3 tilings — giving 12 solutions in total.
  */
 public class RectanglePackingTest {
-    static final Variable.Factory F = Variable.Factory.INSTANCE;
+    static final Variable.Factory F = new Variable.Factory();
 
     // A: 2 wide, 2 tall  →  x ∈ [0,1], y ∈ [0,1]
     static final Variable<Integer> AX = F.create("ax");

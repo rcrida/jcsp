@@ -28,7 +28,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  * NogoodFixpointConsistency#INSTANCE} only when nogood learning is enabled.
  */
 public class FixpointPropagationFactoryTest {
-    static final Variable.Factory F = Variable.Factory.INSTANCE;
+    final Variable.Factory F = new Variable.Factory();
 
     @Test
     void forProblem_includesOnlyThePropagatorForThePresentConstraintType() {

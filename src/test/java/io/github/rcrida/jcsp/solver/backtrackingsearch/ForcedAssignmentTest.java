@@ -14,7 +14,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 class ForcedAssignmentTest {
 
-    private static final Variable.Factory VF = Variable.Factory.INSTANCE;
+    private final Variable.Factory VF = new Variable.Factory();
 
     @Test
     void returnsTheSameAssignmentWhenNothingIsForced() {

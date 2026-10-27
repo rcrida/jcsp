@@ -30,6 +30,8 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  * {@code ConditionVal} nor {@code ConditionVar}.
  */
 class Xcsp3CallbackHandlerTest {
+    private final Variable.Factory variableFactory = new Variable.Factory();
+
 
     /** Neither {@code ConditionVal} nor {@code ConditionVar} -- not producible by real XCSP3 parsing. */
     private static final Condition NEITHER_VAL_NOR_VAR = new Condition() {
@@ -38,14 +40,14 @@ class Xcsp3CallbackHandlerTest {
     };
 
     @Test void applySumCondition_unrecognisedConditionShape_throws() {
-        Variable<Integer> x = Variable.Factory.INSTANCE.create("x");
+        Variable<Integer> x = variableFactory.create("x");
         Xcsp3CallbackHandler handler = new Xcsp3CallbackHandler();
         assertThatThrownBy(() -> handler.applySumCondition(Set.of(x), NEITHER_VAL_NOR_VAR, "c0"))
                 .isInstanceOf(UnsupportedXcsp3ConstraintException.class);
     }
 
     @Test void applyLinearCondition_unrecognisedConditionShape_throws() {
-        Variable<Integer> x = Variable.Factory.INSTANCE.create("x");
+        Variable<Integer> x = variableFactory.create("x");
         Xcsp3CallbackHandler handler = new Xcsp3CallbackHandler();
         assertThatThrownBy(() -> handler.applyLinearCondition(Map.of(x, 2), NEITHER_VAL_NOR_VAR, "c0"))
                 .isInstanceOf(UnsupportedXcsp3ConstraintException.class);
@@ -64,14 +66,14 @@ class Xcsp3CallbackHandlerTest {
     }
 
     @Test void applyMinimumCondition_unrecognisedConditionShape_throws() {
-        Variable<Integer> x = Variable.Factory.INSTANCE.create("x");
+        Variable<Integer> x = variableFactory.create("x");
         Xcsp3CallbackHandler handler = new Xcsp3CallbackHandler();
         assertThatThrownBy(() -> handler.applyMinimumCondition(Set.of(x), NEITHER_VAL_NOR_VAR, "c0"))
                 .isInstanceOf(UnsupportedXcsp3ConstraintException.class);
     }
 
     @Test void applyMaximumCondition_unrecognisedConditionShape_throws() {
-        Variable<Integer> x = Variable.Factory.INSTANCE.create("x");
+        Variable<Integer> x = variableFactory.create("x");
         Xcsp3CallbackHandler handler = new Xcsp3CallbackHandler();
         assertThatThrownBy(() -> handler.applyMaximumCondition(Set.of(x), NEITHER_VAL_NOR_VAR, "c0"))
                 .isInstanceOf(UnsupportedXcsp3ConstraintException.class);
@@ -282,7 +284,7 @@ class Xcsp3CallbackHandlerTest {
      * logic directly against plain {@link Optional} values instead.
      */
     @Test void combineVariablePlusConstant_variablePresentConstantAbsent_declines() {
-        Variable<Integer> v = Variable.Factory.INSTANCE.create("combine_v");
+        Variable<Integer> v = variableFactory.create("combine_v");
         assertThat(Xcsp3CallbackHandler.combineVariablePlusConstant(Optional.of(v), Optional.empty())).isEmpty();
     }
 

@@ -284,17 +284,17 @@ public class AssignmentTest {
 
     @Test
     void testToStringSortsByVariableName() {
-        val a = Variable.Factory.INSTANCE.<Integer>create("a");
-        val b = Variable.Factory.INSTANCE.<Integer>create("b");
-        val c = Variable.Factory.INSTANCE.<Integer>create("c");
+        val a = variables.<Integer>create("a");
+        val b = variables.<Integer>create("b");
+        val c = variables.<Integer>create("c");
         val assignment = Assignment.builder().value(c, 3).value(a, 1).value(b, 2).build();
         assertThat(assignment).asString().isEqualTo("{a=1, b=2, c=3}");
     }
 
     @Test
     void builderHandlesZeroOneAndManyEntries() {
-        val a = Variable.Factory.INSTANCE.<Integer>create("a");
-        val b = Variable.Factory.INSTANCE.<Integer>create("b");
+        val a = variables.<Integer>create("a");
+        val b = variables.<Integer>create("b");
         assertThat(Assignment.builder().build().size()).isZero();
         assertThat(Assignment.builder().value(a, 1).build()).isEqualTo(Assignment.of(Map.of(a, 1)));
         val many = Assignment.builder().value(a, 1).values(Map.of(a, 5, b, 2)).build();
@@ -303,9 +303,9 @@ public class AssignmentTest {
 
     @Test
     void accessorsReadEntriesWithoutExposingTheMap() {
-        val a = Variable.Factory.INSTANCE.<Integer>create("a");
-        val b = Variable.Factory.INSTANCE.<Integer>create("b");
-        val c = Variable.Factory.INSTANCE.<Integer>create("c");
+        val a = variables.<Integer>create("a");
+        val b = variables.<Integer>create("b");
+        val c = variables.<Integer>create("c");
         val assignment = Assignment.builder().value(a, 1).value(b, 2).build();
 
         assertThat(assignment.size()).isEqualTo(2);
@@ -323,8 +323,8 @@ public class AssignmentTest {
 
     @Test
     void entriesAreReadOnly() {
-        val a = Variable.Factory.INSTANCE.<Integer>create("a");
-        val b = Variable.Factory.INSTANCE.<Integer>create("b");
+        val a = variables.<Integer>create("a");
+        val b = variables.<Integer>create("b");
         val assignment = Assignment.builder().value(a, 1).value(b, 2).build();
 
         assertThat(assignment.entries()).extracting(Map.Entry::getKey).containsExactlyInAnyOrder(a, b);
@@ -335,8 +335,8 @@ public class AssignmentTest {
 
     @Test
     void equalsAnyValuationWithTheSameEntries() {
-        val a = Variable.Factory.INSTANCE.<Integer>create("a");
-        val b = Variable.Factory.INSTANCE.<Integer>create("b");
+        val a = variables.<Integer>create("a");
+        val b = variables.<Integer>create("b");
         val assignment = Assignment.builder().value(a, 1).value(b, 2).build();
 
         assertThat(assignment).isEqualTo(new EntriesOnly(Map.of(a, 1, b, 2)));
@@ -374,9 +374,9 @@ public class AssignmentTest {
 
     @Test
     void builderIsReusableAfterBuild() {
-        val a = Variable.Factory.INSTANCE.<Integer>create("a");
-        val b = Variable.Factory.INSTANCE.<Integer>create("b");
-        val c = Variable.Factory.INSTANCE.<Integer>create("c");
+        val a = variables.<Integer>create("a");
+        val b = variables.<Integer>create("b");
+        val c = variables.<Integer>create("c");
         val builder = Assignment.builder().value(a, 1).value(b, 2);
         val first = builder.build();
         builder.value(c, 3);

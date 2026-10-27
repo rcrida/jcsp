@@ -65,7 +65,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  * #getSolutions_findsExactlyEveryLabeledSystem()} enumerating and validating every one.
  */
 public class Prob044SteinerTripleSystemTest {
-    static final Variable.Factory F = Variable.Factory.INSTANCE;
+    static final Variable.Factory F = new Variable.Factory();
     static final int N = 7;
     static final int EXPECTED_SOLUTION_COUNT = 30;
 

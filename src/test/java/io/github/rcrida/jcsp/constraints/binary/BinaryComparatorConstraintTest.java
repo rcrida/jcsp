@@ -21,7 +21,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 public class BinaryComparatorConstraintTest {
-    static final Variable.Factory F = Variable.Factory.INSTANCE;
+    static final Variable.Factory F = new Variable.Factory();
     static final Variable<Integer> LEFT  = F.create("left");
     static final Variable<Integer> RIGHT = F.create("right");
 
@@ -90,8 +90,8 @@ public class BinaryComparatorConstraintTest {
     }
 
     // propagate() tests for IntervalDomain
-    static final Variable<Double> L = Variable.Factory.INSTANCE.create("l");
-    static final Variable<Double> R = Variable.Factory.INSTANCE.create("r");
+    static final Variable<Double> L = F.create("l");
+    static final Variable<Double> R = F.create("r");
 
     static Map<Variable<?>, Domain<?>> domains(double lLo, double lHi, double rLo, double rHi) {
         return Map.of(L, IntervalDomain.of(lLo, lHi), R, IntervalDomain.of(rLo, rHi));

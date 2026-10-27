@@ -15,7 +15,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 class InferenceTest {
 
-    private static final Variable.Factory VF = Variable.Factory.INSTANCE;
+    private final Variable.Factory VF = new Variable.Factory();
 
     /** A minimal Inference that only implements {@code apply}, relying on the interface's default
      * {@code applyWithReason} entirely -- exercises that default directly, since every production

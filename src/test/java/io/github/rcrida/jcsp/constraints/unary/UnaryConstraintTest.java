@@ -11,7 +11,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 @ExtendWith(MockitoExtension.class)
 public class UnaryConstraintTest {
-    static final Variable.Factory VARIABLE_FACTORY = Variable.Factory.INSTANCE;
+    final Variable.Factory VARIABLE_FACTORY = new Variable.Factory();
 
     Variable variable = VARIABLE_FACTORY.create("variable");
 

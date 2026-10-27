@@ -24,7 +24,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 public class BinaryOffsetConstraintTest {
-    static final Variable.Factory VARIABLE_FACTORY = Variable.Factory.INSTANCE;
+    static final Variable.Factory VARIABLE_FACTORY = new Variable.Factory();
     static final Variable<Number> LEFT = VARIABLE_FACTORY.create("left");
     static final Variable<Number> RIGHT = VARIABLE_FACTORY.create("right");
 
@@ -117,8 +117,8 @@ public class BinaryOffsetConstraintTest {
     }
 
     // propagate() tests for IntervalDomain — offset=3.0, L+3 op R
-    static final Variable<Double> L = Variable.Factory.INSTANCE.create("l_off");
-    static final Variable<Double> R = Variable.Factory.INSTANCE.create("r_off");
+    static final Variable<Double> L = VARIABLE_FACTORY.create("l_off");
+    static final Variable<Double> R = VARIABLE_FACTORY.create("r_off");
     static final double O = 3.0;
 
     static Map<Variable<?>, Domain<?>> domains(double lLo, double lHi, double rLo, double rHi) {
@@ -193,7 +193,7 @@ public class BinaryOffsetConstraintTest {
 
     @Test void propagate_bothDiscrete_narrowsRightMin() {
         // il=[0,5], ir=[0,10], il+3<=ir: il.max=min(5,10-3)=7->5 unchanged; ir.min=max(0,0+3)=3 (prunes 0,1,2)
-        Variable<Integer> il = Variable.Factory.INSTANCE.create("il_off"), ir = Variable.Factory.INSTANCE.create("ir_off");
+        Variable<Integer> il = VARIABLE_FACTORY.create("il_off"), ir = VARIABLE_FACTORY.create("ir_off");
         var result = BinaryOffsetConstraint.of(il, 3, Operator.LEQ, ir)
                 .propagate(Map.of(il, IntRangeDomain.of(0, 5), ir, IntRangeDomain.of(0, 10))).orElseThrow();
         assertThat(result.containsKey(il)).isFalse();
@@ -202,7 +202,7 @@ public class BinaryOffsetConstraintTest {
 
     @Test void propagate_bothDiscrete_infeasible() {
         // il=[5,10], ir=[0,3], il+3<=ir: il.max=min(10,3-3)=0 < il.min=5 -> infeasible
-        Variable<Integer> il = Variable.Factory.INSTANCE.create("il_off2"), ir = Variable.Factory.INSTANCE.create("ir_off2");
+        Variable<Integer> il = VARIABLE_FACTORY.create("il_off2"), ir = VARIABLE_FACTORY.create("ir_off2");
         var result = BinaryOffsetConstraint.of(il, 3, Operator.LEQ, ir)
                 .propagate(Map.of(il, IntRangeDomain.of(5, 10), ir, IntRangeDomain.of(0, 3)));
         assertThat(result).isEmpty();
@@ -212,7 +212,7 @@ public class BinaryOffsetConstraintTest {
         // l={0,10} (gap domain), r={4,5}, l+0==r: l narrows to [max(0,4),min(10,5)]=[4,5], a
         // non-empty numeric range, but neither 0 nor 10 lies in it -> narrowing empties l even
         // though the fast newLMin<=newLMax check alone would not have caught this
-        Variable<Integer> l = Variable.Factory.INSTANCE.create("l_off_gap"), r = Variable.Factory.INSTANCE.create("r_off_gap");
+        Variable<Integer> l = VARIABLE_FACTORY.create("l_off_gap"), r = VARIABLE_FACTORY.create("r_off_gap");
         var lDomain = NumericDiscreteDomain.of(0, 10);
         var rDomain = NumericDiscreteDomain.of(4, 5);
         var result = BinaryOffsetConstraint.of(l, 0, Operator.EQ, r).propagate(Map.of(l, lDomain, r, rDomain));
@@ -222,7 +222,7 @@ public class BinaryOffsetConstraintTest {
     @Test void propagate_bothDiscrete_narrowingEmptiesGappedRightDomain_infeasible() {
         // l={4,5}, r={0,10} (gap domain), l+0==r: l is unchanged (already within [4,5]), but r
         // narrows to [4,5] and neither 0 nor 10 lies in it -> narrowing empties r this time
-        Variable<Integer> l = Variable.Factory.INSTANCE.create("l_off_gap2"), r = Variable.Factory.INSTANCE.create("r_off_gap2");
+        Variable<Integer> l = VARIABLE_FACTORY.create("l_off_gap2"), r = VARIABLE_FACTORY.create("r_off_gap2");
         var lDomain = NumericDiscreteDomain.of(4, 5);
         var rDomain = NumericDiscreteDomain.of(0, 10);
         var result = BinaryOffsetConstraint.of(l, 0, Operator.EQ, r).propagate(Map.of(l, lDomain, r, rDomain));
@@ -294,8 +294,8 @@ public class BinaryOffsetConstraintTest {
         // would wrongly forbid left=25 even in a branch where right could still be, say, 30 (25<=30
         // is feasible). The fixed reason cites right's own current value set too, so a solution
         // using right=30 correctly escapes it.
-        Variable<Integer> left = Variable.Factory.INSTANCE.create("l_off_gap_reason");
-        Variable<Integer> right = Variable.Factory.INSTANCE.create("r_off_gap_reason");
+        Variable<Integer> left = VARIABLE_FACTORY.create("l_off_gap_reason");
+        Variable<Integer> right = VARIABLE_FACTORY.create("r_off_gap_reason");
         var domains = Map.<Variable<?>, Domain<?>>of(
                 left, IntRangeDomain.of(25, 25),
                 right, DiscreteDomain.of(10, 20));

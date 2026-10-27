@@ -14,7 +14,7 @@ import java.util.stream.IntStream;
 import static org.assertj.core.api.Assertions.assertThat;
 
 public class RandomAssignmentFactoryTest {
-    static final Variable.Factory F = Variable.Factory.INSTANCE;
+    final Variable.Factory F = new Variable.Factory();
 
     @Test
     void getAssignment_discreteDomain_isCompleteAndWithinDomain() {

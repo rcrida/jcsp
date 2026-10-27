@@ -20,7 +20,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class DomainMapTest {
 
-    private static final Variable.Factory VF = Variable.Factory.INSTANCE;
+    private static final Variable.Factory VF = new Variable.Factory();
 
     private static Domain<?> domain(int upper) {
         return IntRangeDomain.of(0, upper);

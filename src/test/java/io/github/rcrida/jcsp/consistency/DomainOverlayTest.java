@@ -12,7 +12,7 @@ import java.util.Map;
 import static org.assertj.core.api.Assertions.assertThat;
 
 class DomainOverlayTest {
-    static final Variable.Factory F = Variable.Factory.INSTANCE;
+    final Variable.Factory F = new Variable.Factory();
 
     private static Map<Variable<?>, Domain<?>> base(Variable<?> a, Domain<?> da, Variable<?> b, Domain<?> db) {
         Map<Variable<?>, Domain<?>> map = new LinkedHashMap<>();

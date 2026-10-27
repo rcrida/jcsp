@@ -9,7 +9,7 @@ import org.junit.jupiter.api.Test;
 import static org.assertj.core.api.Assertions.assertThat;
 
 public class MinimumDegreeVariableSelectorTest {
-    static final Variable.Factory F = Variable.Factory.INSTANCE;
+    static final Variable.Factory F = new Variable.Factory();
     static final Variable<Integer> LOW  = F.create("LOW");   // 1 neighbour
     static final Variable<Integer> MID  = F.create("MID");   // 2 neighbours
     static final Variable<Integer> HIGH = F.create("HIGH");  // 3 neighbours

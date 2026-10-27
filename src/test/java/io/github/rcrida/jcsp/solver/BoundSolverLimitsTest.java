@@ -4,6 +4,7 @@ import io.github.rcrida.jcsp.ConstraintSatisfactionProblem;
 import io.github.rcrida.jcsp.assignments.SolverLimits;
 import io.github.rcrida.jcsp.domains.IntRangeDomain;
 import io.github.rcrida.jcsp.variables.Variable;
+import io.github.rcrida.jcsp.variables.VariablesByName;
 import org.junit.jupiter.api.Test;
 
 import java.time.Duration;
@@ -12,8 +13,6 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class BoundSolverLimitsTest {
-
-    private static final Variable.Factory VF = Variable.Factory.INSTANCE;
 
     /**
      * 8-queens: minimum constraint-graph degree = 7 == targetTreewidth, so TreeDecompositionSolver
@@ -26,10 +25,9 @@ class BoundSolverLimitsTest {
     @SuppressWarnings("unchecked")
     static ConstraintSatisfactionProblem satisfiable() {
         int n = 8;
-        Variable<Integer>[] queens = new Variable[n];
-        for (int i = 0; i < n; i++) queens[i] = VF.create("q" + i);
         var builder = ConstraintSatisfactionProblem.builder();
-        for (Variable<Integer> q : queens) builder.variableDomain(q, IntRangeDomain.of(1, n));
+        Variable<Integer>[] queens = new Variable[n];
+        for (int i = 0; i < n; i++) queens[i] = builder.createVariable("q" + i, IntRangeDomain.of(1, n));
         for (int i = 0; i < n; i++) {
             for (int j = i + 1; j < n; j++) {
                 final int diff = j - i;
@@ -42,13 +40,10 @@ class BoundSolverLimitsTest {
     }
 
     static ConstraintSatisfactionProblem unsatisfiable() {
-        Variable<Integer> x = VF.create("x");
-        Variable<Integer> y = VF.create("y");
-        return ConstraintSatisfactionProblem.builder()
-                .variableDomain(x, IntRangeDomain.of(1, 1))
-                .variableDomain(y, IntRangeDomain.of(1, 1))
-                .notEqualsConstraint(x, y)
-                .build();
+        var builder = ConstraintSatisfactionProblem.builder();
+        Variable<Integer> x = builder.createVariable("x", IntRangeDomain.of(1, 1));
+        Variable<Integer> y = builder.createVariable("y", IntRangeDomain.of(1, 1));
+        return builder.notEqualsConstraint(x, y).build();
     }
 
     @Test
@@ -98,8 +93,10 @@ class BoundSolverLimitsTest {
     }
 
     /** {@code x} in 1..3 with nothing to satisfy, so a solve of it is well inside any budget. */
-    private static ConstraintSatisfactionProblem trivialOptimization(Variable<Integer> x) {
-        return ConstraintSatisfactionProblem.builder().variableDomain(x, IntRangeDomain.of(1, 3)).build();
+    private static ConstraintSatisfactionProblem trivialOptimization(String name) {
+        var builder = ConstraintSatisfactionProblem.builder();
+        builder.createVariable(name, IntRangeDomain.of(1, 3));
+        return builder.build();
     }
 
     @Test
@@ -107,10 +104,11 @@ class BoundSolverLimitsTest {
         // The flag answers "did this solve run out of budget", so a solve that completes well inside
         // its budget must report false even on a SolverLimits an earlier solve exhausted. The
         // satisfaction chain always reset it; the optimization chain used to reset neither entry point.
-        Variable<Integer> x = VF.create("resetX");
+        ConstraintSatisfactionProblem csp = trivialOptimization("resetX");
+        Variable<Integer> x = VariablesByName.in(csp, "resetX");
         SolverLimits limits = SolverLimits.ofNodes(1000);
         limits.markLimitReached();
-        BoundSolver solver = Solver.Factory.INSTANCE.createSolver(trivialOptimization(x),
+        BoundSolver solver = Solver.Factory.INSTANCE.createSolver(csp,
                 a -> a.getValue(x).map(v -> (double) (int) v).orElse(0.0),
                 SolverConfig.builder().limits(limits).build());
 
@@ -120,10 +118,11 @@ class BoundSolverLimitsTest {
 
     @Test
     void optimizationGetSolutionsDoesNotInheritAnEarlierSolvesLimitVerdict() {
-        Variable<Integer> x = VF.create("resetStreamX");
+        ConstraintSatisfactionProblem csp = trivialOptimization("resetStreamX");
+        Variable<Integer> x = VariablesByName.in(csp, "resetStreamX");
         SolverLimits limits = SolverLimits.ofNodes(1000);
         limits.markLimitReached();
-        BoundSolver solver = Solver.Factory.INSTANCE.createSolver(trivialOptimization(x),
+        BoundSolver solver = Solver.Factory.INSTANCE.createSolver(csp,
                 a -> a.getValue(x).map(v -> (double) (int) v).orElse(0.0),
                 SolverConfig.builder().limits(limits).build());
 

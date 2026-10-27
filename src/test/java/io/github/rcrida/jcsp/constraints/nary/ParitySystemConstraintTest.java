@@ -20,7 +20,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class ParitySystemConstraintTest {
-    private static final Variable.Factory F = Variable.Factory.INSTANCE;
+    private final Variable.Factory F = new Variable.Factory();
     private final Variable<Integer> x = F.create("x");
     private final Variable<Integer> y = F.create("y");
     private final Variable<Integer> z = F.create("z");

@@ -14,16 +14,16 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class NogoodStoreTest {
 
-    private static final Variable.Factory VF = Variable.Factory.INSTANCE;
-    private static final Variable<Integer> X = VF.create("x");
-    private static final Variable<Integer> Y = VF.create("y");
-    private static final Variable<Integer> Z = VF.create("z");
+    private final Variable.Factory VF = new Variable.Factory();
+    private final Variable<Integer> X = VF.create("x");
+    private final Variable<Integer> Y = VF.create("y");
+    private final Variable<Integer> Z = VF.create("z");
 
-    private static NogoodConstraint nogood(Map<Variable<?>, Object> forbidden) {
+    private NogoodConstraint nogood(Map<Variable<?>, Object> forbidden) {
         return GroundNogoodConstraint.of(forbidden);
     }
 
-    private static ConstraintSatisfactionProblem csp() {
+    private ConstraintSatisfactionProblem csp() {
         return ConstraintSatisfactionProblem.builder()
                 .variableDomain(X, IntRangeDomain.of(1, 3))
                 .variableDomain(Y, IntRangeDomain.of(1, 3))
@@ -31,7 +31,7 @@ class NogoodStoreTest {
                 .build();
     }
 
-    private static ConstraintSatisfactionProblem cspWithVariableCount(int count) {
+    private ConstraintSatisfactionProblem cspWithVariableCount(int count) {
         var builder = ConstraintSatisfactionProblem.builder();
         for (int i = 0; i < count; i++) {
             builder.variableDomain(VF.create("v" + i), IntRangeDomain.of(1, 3));

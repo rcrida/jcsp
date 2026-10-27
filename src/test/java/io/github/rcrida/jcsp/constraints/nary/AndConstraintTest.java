@@ -25,7 +25,7 @@ import java.util.Set;
 import static org.assertj.core.api.Assertions.assertThat;
 
 public class AndConstraintTest {
-    static final Variable.Factory F = Variable.Factory.INSTANCE;
+    static final Variable.Factory F = new Variable.Factory();
     static final Variable<Integer> A = F.create("a");
     static final Variable<Integer> C = F.create("c");
     static final Variable<Double> X = F.create("x");

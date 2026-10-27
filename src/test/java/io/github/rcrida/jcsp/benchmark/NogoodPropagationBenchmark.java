@@ -379,7 +379,7 @@ public final class NogoodPropagationBenchmark {
 
     /** Same construction as {@code Prob006GolombRulerTest}, parameterized so different orders can be compared. */
     private static ConstraintSatisfactionProblem golombRuler(int n, int maxLength) {
-        Variable.Factory f = Variable.Factory.INSTANCE;
+        Variable.Factory f = new Variable.Factory();
         List<Variable<Integer>> marks = new ArrayList<>();
         for (int i = 0; i < n; i++) marks.add(f.create("m" + i));
 
@@ -422,7 +422,7 @@ public final class NogoodPropagationBenchmark {
      * the dirty-index optimization was actually designed for.
      */
     private static ConstraintSatisfactionProblem randomBinaryCsp(int n, int domainSize, double tightness, long seed) {
-        Variable.Factory f = Variable.Factory.INSTANCE;
+        Variable.Factory f = new Variable.Factory();
         List<Variable<Integer>> vars = new ArrayList<>();
         for (int i = 0; i < n; i++) vars.add(f.create("rv" + i));
 
@@ -462,7 +462,7 @@ public final class NogoodPropagationBenchmark {
             }
         }
 
-        Variable.Factory f = Variable.Factory.INSTANCE;
+        Variable.Factory f = new Variable.Factory();
         @SuppressWarnings("unchecked")
         Variable<Integer>[][] cells = new Variable[n][n];
         var builder = ConstraintSatisfactionProblem.builder();
@@ -558,7 +558,7 @@ public final class NogoodPropagationBenchmark {
      */
     private static ConstraintSatisfactionProblem pigeonhole(int n) {
         int holes = n - 1;
-        Variable.Factory f = Variable.Factory.INSTANCE;
+        Variable.Factory f = new Variable.Factory();
         @SuppressWarnings("unchecked")
         Variable<Boolean>[][] inHole = new Variable[n][holes];
         var builder = ConstraintSatisfactionProblem.builder();

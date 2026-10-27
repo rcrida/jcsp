@@ -32,7 +32,7 @@ class SubCircuitConstraintTest {
 
     @BeforeEach
     void setUp() {
-        var factory = Variable.Factory.INSTANCE;
+        var factory = new Variable.Factory();
         s0 = factory.create("s0");
         s1 = factory.create("s1");
         s2 = factory.create("s2");
@@ -222,7 +222,7 @@ class SubCircuitConstraintTest {
         // 1 -> 2 -> 3 -> 4 -> 2 -- whose walk from node 1 never returns to its start.
         //
         // It is genuinely infeasible: two nodes sharing a successor is not a permutation.
-        var factory = Variable.Factory.INSTANCE;
+        var factory = new Variable.Factory();
         Variable<Integer> t0 = factory.create("t0");
         Variable<Integer> t1 = factory.create("t1");
         Variable<Integer> t2 = factory.create("t2");
@@ -256,7 +256,7 @@ class SubCircuitConstraintTest {
         // Five nodes, so the duplicate-successor pass leaves slack rather than collapsing everything
         // into a two-circuit conflict first. 1→3→1 is closed; node 2 cannot take its own value 2, so
         // it can neither join the settled circuit nor sit out.
-        var factory = Variable.Factory.INSTANCE;
+        var factory = new Variable.Factory();
         Variable<Integer> t0 = factory.create("t0");
         Variable<Integer> t1 = factory.create("t1");
         Variable<Integer> t2 = factory.create("t2");

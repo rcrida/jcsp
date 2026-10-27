@@ -8,7 +8,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 public class ArcTest {
-    static final Variable.Factory VARIABLE_FACTORY = Variable.Factory.INSTANCE;
+    final Variable.Factory VARIABLE_FACTORY = new Variable.Factory();
 
     Variable from = VARIABLE_FACTORY.create("from");
     Variable to = VARIABLE_FACTORY.create("to");

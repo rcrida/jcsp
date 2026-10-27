@@ -15,7 +15,7 @@ import java.util.Map;
 import static org.assertj.core.api.Assertions.assertThat;
 
 public class BinaryElementConstraintTest {
-    static final Variable.Factory F = Variable.Factory.INSTANCE;
+    static final Variable.Factory F = new Variable.Factory();
     static final Variable<Integer> INDEX = F.create("index");
     static final Variable<String> RESULT = F.create("result");
     static final List<String> ARRAY = List.of("alpha", "beta", "gamma");

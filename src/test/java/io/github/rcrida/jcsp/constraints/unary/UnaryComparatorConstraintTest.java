@@ -12,7 +12,7 @@ import java.util.Map;
 import static org.assertj.core.api.Assertions.assertThat;
 
 public class UnaryComparatorConstraintTest {
-    static final Variable.Factory F = Variable.Factory.INSTANCE;
+    static final Variable.Factory F = new Variable.Factory();
     static final Variable<Integer> X = F.create("x");
 
     static Assignment a(int x) {
@@ -43,7 +43,7 @@ public class UnaryComparatorConstraintTest {
     }
 
     // propagate() tests for IntervalDomain
-    static final Variable<Double> DX = Variable.Factory.INSTANCE.create("dx");
+    static final Variable<Double> DX = F.create("dx");
 
     static Map<Variable<?>, Domain<?>> domains(double lo, double hi) {
         return Map.of(DX, IntervalDomain.of(lo, hi));

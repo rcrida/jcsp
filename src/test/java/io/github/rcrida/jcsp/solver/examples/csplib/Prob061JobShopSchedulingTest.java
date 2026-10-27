@@ -43,7 +43,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  * requires every variable to be assigned.
  */
 public class Prob061JobShopSchedulingTest {
-    static final Variable.Factory F = Variable.Factory.INSTANCE;
+    static final Variable.Factory F = new Variable.Factory();
 
     static final int DUR_11 = 3; // job1, machine A
     static final int DUR_12 = 2; // job1, machine B

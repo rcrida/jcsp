@@ -15,7 +15,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 public class BinaryEqualsConstraintTest {
-    static final Variable.Factory VARIABLE_FACTORY = Variable.Factory.INSTANCE;
+    final Variable.Factory VARIABLE_FACTORY = new Variable.Factory();
 
     Variable<Integer> left = VARIABLE_FACTORY.create("left");
     Variable<Integer> right = VARIABLE_FACTORY.create("right");

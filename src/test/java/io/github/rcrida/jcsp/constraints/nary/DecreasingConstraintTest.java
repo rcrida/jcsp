@@ -25,6 +25,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 @ExtendWith(MockitoExtension.class)
 public class DecreasingConstraintTest {
+    private final Variable.Factory variableFactory = new Variable.Factory();
+
     @Mock Variable<Integer> v1;
     @Mock Variable<Integer> v2;
     @Mock Variable<Integer> v3;
@@ -94,9 +96,9 @@ public class DecreasingConstraintTest {
     void solver_nonIncreasingSequences() {
         // Count non-increasing (x1 >= x2 >= x3) sequences over domain {1, 2, 3}.
         // Symmetric to increasing: C(5,3) = 10.
-        Variable<Integer> x1 = Variable.Factory.INSTANCE.create("x1");
-        Variable<Integer> x2 = Variable.Factory.INSTANCE.create("x2");
-        Variable<Integer> x3 = Variable.Factory.INSTANCE.create("x3");
+        Variable<Integer> x1 = variableFactory.create("x1");
+        Variable<Integer> x2 = variableFactory.create("x2");
+        Variable<Integer> x3 = variableFactory.create("x3");
         var domain = IntRangeDomain.of(1, 3);
         var csp = ConstraintSatisfactionProblem.builder()
                 .variableDomain(x1, domain).variableDomain(x2, domain).variableDomain(x3, domain)
@@ -148,8 +150,8 @@ public class DecreasingConstraintTest {
         // v1=[0,3], v2=[5,10], v1>=v2 required: the running bounds alone (not a gapped-domain
         // narrowing) already show min(5) > max(3) — caught by propagate()'s own newMin>newMax
         // check before ever calling narrow().
-        Variable<Integer> l = Variable.Factory.INSTANCE.create("cl");
-        Variable<Integer> r = Variable.Factory.INSTANCE.create("cr");
+        Variable<Integer> l = variableFactory.create("cl");
+        Variable<Integer> r = variableFactory.create("cr");
         var chain = DecreasingConstraint.of(List.of(l, r));
         var result = chain.propagate(Map.of(l, IntRangeDomain.of(0, 3), r, IntRangeDomain.of(5, 10)));
         assertThat(result).isEmpty();
@@ -159,8 +161,8 @@ public class DecreasingConstraintTest {
     void propagate_bounded_narrowsOneSide_andLeavesOtherUnchanged() {
         // L=[3,8], R=[0,10], L>=R: R narrows to [0,8] (real IntervalDomain#withBounds narrowing);
         // L is already within [3,8] so narrow() returns Optional.empty() for it (no update).
-        Variable<Double> l = Variable.Factory.INSTANCE.create("l");
-        Variable<Double> r = Variable.Factory.INSTANCE.create("r");
+        Variable<Double> l = variableFactory.create("l");
+        Variable<Double> r = variableFactory.create("r");
         var chain = DecreasingConstraint.of(List.of(l, r));
         var result = chain.propagate(Map.of(l, IntervalDomain.of(3.0, 8.0), r, IntervalDomain.of(0.0, 10.0))).orElseThrow();
         assertThat(((IntervalDomain) result.get(r)).getMax()).isEqualTo(8.0);
@@ -172,9 +174,9 @@ public class DecreasingConstraintTest {
         // String chain: propagation is Comparable-based, not Number-restricted. s1>=s2>=s3, so
         // s3 (the smallest) plays the role of IncreasingConstraintTest's v1: "m" is deleted from
         // it since it exceeds s2/s1's max.
-        Variable<String> s1 = Variable.Factory.INSTANCE.create("s1");
-        Variable<String> s2 = Variable.Factory.INSTANCE.create("s2");
-        Variable<String> s3 = Variable.Factory.INSTANCE.create("s3");
+        Variable<String> s1 = variableFactory.create("s1");
+        Variable<String> s2 = variableFactory.create("s2");
+        Variable<String> s3 = variableFactory.create("s3");
         var chain = DecreasingConstraint.of(List.of(s1, s2, s3));
         Domain<String> d1 = DiscreteDomain.of("e", "z");
         Domain<String> d2 = DiscreteDomain.of("c", "d");

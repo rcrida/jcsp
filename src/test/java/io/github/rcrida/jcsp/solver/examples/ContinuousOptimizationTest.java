@@ -26,7 +26,7 @@ import static org.assertj.core.api.Assertions.within;
  * {@code getSolution(csp, objective)} converges to x≈2.
  */
 public class ContinuousOptimizationTest {
-    static final Variable.Factory F = Variable.Factory.INSTANCE;
+    final Variable.Factory F = new Variable.Factory();
 
     @Test
     void minimizeObjective_findsOptimum() {

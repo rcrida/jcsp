@@ -19,7 +19,7 @@ import java.util.concurrent.atomic.LongAdder;
 import static org.assertj.core.api.Assertions.assertThat;
 
 class LocalSolverConfigTest {
-    private static final Variable.Factory VF = Variable.Factory.INSTANCE;
+    private final Variable.Factory VF = new Variable.Factory();
 
     @Test
     void listener_defaultsToNone() {

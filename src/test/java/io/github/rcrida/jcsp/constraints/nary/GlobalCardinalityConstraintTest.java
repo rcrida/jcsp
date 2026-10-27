@@ -24,6 +24,8 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 @ExtendWith(MockitoExtension.class)
 public class GlobalCardinalityConstraintTest {
+    private final Variable.Factory variableFactory = new Variable.Factory();
+
     enum Color { RED, GREEN, BLUE }
 
     @Mock Variable<Color> v1;
@@ -310,10 +312,10 @@ public class GlobalCardinalityConstraintTest {
     void solver_exactDistribution() {
         // 4 vars over {RED, GREEN, BLUE}: exactly 2 RED, 1 GREEN, 1 BLUE.
         // Solutions: C(4,2) × C(2,1) × 1 = 6 × 2 = 12.
-        Variable<Color> x1 = Variable.Factory.INSTANCE.create("x1");
-        Variable<Color> x2 = Variable.Factory.INSTANCE.create("x2");
-        Variable<Color> x3 = Variable.Factory.INSTANCE.create("x3");
-        Variable<Color> x4 = Variable.Factory.INSTANCE.create("x4");
+        Variable<Color> x1 = variableFactory.create("x1");
+        Variable<Color> x2 = variableFactory.create("x2");
+        Variable<Color> x3 = variableFactory.create("x3");
+        Variable<Color> x4 = variableFactory.create("x4");
         var domain = EnumDomain.allOf(Color.class);
         var csp = ConstraintSatisfactionProblem.builder()
                 .variableDomain(x1, domain).variableDomain(x2, domain)
@@ -344,7 +346,7 @@ public class GlobalCardinalityConstraintTest {
         for (int trial = 0; trial < 300; trial++) {
             int n = 2 + random.nextInt(3); // 2..4 variables
             List<Variable<Color>> vars = new ArrayList<>();
-            for (int i = 0; i < n; i++) vars.add(Variable.Factory.INSTANCE.create("x" + trial + "_" + i));
+            for (int i = 0; i < n; i++) vars.add(variableFactory.create("x" + trial + "_" + i));
 
             List<List<Color>> domLists = new ArrayList<>();
             Map<Variable<?>, Domain<?>> domains = new HashMap<>();
@@ -444,8 +446,8 @@ public class GlobalCardinalityConstraintTest {
 
     @Test
     void cspBuilder_globalCardinalityRangeConstraint_method() {
-        Variable<Color> x1 = Variable.Factory.INSTANCE.create("gx1");
-        Variable<Color> x2 = Variable.Factory.INSTANCE.create("gx2");
+        Variable<Color> x1 = variableFactory.create("gx1");
+        Variable<Color> x2 = variableFactory.create("gx2");
         var csp = ConstraintSatisfactionProblem.builder()
                 .variableDomain(x1, EnumDomain.of(Color.RED, Color.GREEN))
                 .variableDomain(x2, EnumDomain.of(Color.RED, Color.GREEN))
@@ -492,9 +494,9 @@ public class GlobalCardinalityConstraintTest {
     void propagateRange_forcesLastVariableToMeetMinimum() {
         // RED range [2,2] over {v1,v2,v3}; v1,v2 domains exclude RED, so v3 (the only one that
         // still can be RED) must be forced to RED to reach the minimum.
-        Variable<Color> w1 = Variable.Factory.INSTANCE.create("rw1");
-        Variable<Color> w2 = Variable.Factory.INSTANCE.create("rw2");
-        Variable<Color> w3 = Variable.Factory.INSTANCE.create("rw3");
+        Variable<Color> w1 = variableFactory.create("rw1");
+        Variable<Color> w2 = variableFactory.create("rw2");
+        Variable<Color> w3 = variableFactory.create("rw3");
         var c = GlobalCardinalityConstraint.ofRange(Set.of(w1, w2, w3), Map.of(
                 Color.RED, new GlobalCardinalityConstraint.OccurrenceRange(2, 2)));
         Map<Variable<?>, Domain<?>> domains = Map.of(
@@ -512,8 +514,8 @@ public class GlobalCardinalityConstraintTest {
     @Test
     void propagateRange_infeasibleWhenMaximumUnreachable() {
         // GREEN range [0,0] (forbidden) but v1's domain is GREEN-only -- infeasible.
-        Variable<Color> w1 = Variable.Factory.INSTANCE.create("iw1");
-        Variable<Color> w2 = Variable.Factory.INSTANCE.create("iw2");
+        Variable<Color> w1 = variableFactory.create("iw1");
+        Variable<Color> w2 = variableFactory.create("iw2");
         var c = GlobalCardinalityConstraint.ofRange(Set.of(w1, w2), Map.of(
                 Color.GREEN, new GlobalCardinalityConstraint.OccurrenceRange(0, 0)));
         Map<Variable<?>, Domain<?>> domains = Map.of(
@@ -540,7 +542,7 @@ public class GlobalCardinalityConstraintTest {
         for (int trial = 0; trial < 300; trial++) {
             int n = 2 + random.nextInt(3); // 2..4 variables
             List<Variable<Color>> vars = new ArrayList<>();
-            for (int i = 0; i < n; i++) vars.add(Variable.Factory.INSTANCE.create("rx" + trial + "_" + i));
+            for (int i = 0; i < n; i++) vars.add(variableFactory.create("rx" + trial + "_" + i));
 
             List<List<Color>> domLists = new ArrayList<>();
             Map<Variable<?>, Domain<?>> domains = new HashMap<>();

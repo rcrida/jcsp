@@ -20,7 +20,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  * to singletons, the forced assignment is returned without invoking the inner solver chain.
  */
 public class SolverDecoratorTest {
-    static final Variable.Factory F = Variable.Factory.INSTANCE;
+    final Variable.Factory F = new Variable.Factory();
 
     /** Concrete subclass that uses the default {@code preprocess} passthrough. */
     @SuperBuilder
