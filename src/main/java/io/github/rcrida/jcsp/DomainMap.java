@@ -9,7 +9,6 @@ import java.util.AbstractMap;
 import java.util.AbstractSet;
 import java.util.Arrays;
 import java.util.Collection;
-import java.util.HashMap;
 import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -18,76 +17,111 @@ import java.util.Set;
 import java.util.function.BiConsumer;
 
 /**
- * A problem's variables and their current domains: an immutable {@link Map} that iterates in the
- * order the variables were declared, held as an array of domains over a {@link Positions} naming
- * where each variable sits.
+ * A problem's variables and their current domains: an immutable {@link Map} that iterates in
+ * {@link Variable#getIndex()} order, which is the order their {@link Variable.Factory} issued them.
+ * Each variable's domain sits at its own index in an array of domains, beside an array of the
+ * variables themselves, so a lookup is an array read rather than a hash.
  * <p>
  * Narrowing a domain is the most frequent thing a search does, and each narrowing makes a new map.
  * Copying a {@link LinkedHashMap} of 28,000 entries allocates and rehashes every one of them, about
  * 190 microseconds and 1.4MB that the search's stack then keeps alive per level; cloning an array of
- * the same 28,000 references takes about 2.5 microseconds and 220KB. The {@link Positions} are
- * shared by every map derived from this one, so only the array is copied. Lookups and iteration are
- * faster than the {@link LinkedHashMap}'s.
+ * the same 28,000 references takes about 2.5 microseconds and 220KB. The array of variables is
+ * shared by every map derived from this one, so only the array of domains is copied. Lookups and
+ * iteration are faster than the {@link LinkedHashMap}'s.
  * <p>
- * Never modified after construction, and the array never leaves this class.
+ * Every variable must have been issued by a factory, and no two may share an index, which is what
+ * mixing variables from two problems' factories would do. A variable is found only if it is exactly
+ * one of the map's own, so one from another factory whose index happens to be in range is absent. The
+ * arrays are as long as the highest index plus one, so a problem over a sparse subset of a larger
+ * index space has gaps.
+ * <p>
+ * Never modified after construction, and the arrays never leave this class.
  */
 final class DomainMap extends AbstractMap<Variable<?>, Domain<?>> {
 
-    /** The variables in declaration order, and the index of each in that order. Never modified. */
-    private record Positions(Variable<?>[] variables, Map<Variable<?>, Integer> indexOf) {
-    }
-
-    private final Positions positions;
+    /** Indexed by {@link Variable#getIndex()}, null where this map has no such variable. Shared, never modified. */
+    private final Variable<?>[] variables;
+    /** Indexed like {@link #variables}. */
     private final Domain<?>[] domains;
+    private final int size;
 
-    private DomainMap(Positions positions, Domain<?>[] domains) {
-        this.positions = positions;
+    private DomainMap(Variable<?>[] variables, Domain<?>[] domains, int size) {
+        this.variables = variables;
         this.domains = domains;
+        this.size = size;
     }
 
-    /** {@code source}'s entries, in its iteration order; {@code source} itself if it is already one of these. */
+    /** {@code source}'s entries; {@code source} itself if it is already one of these. */
     static DomainMap of(@NonNull Map<Variable<?>, Domain<?>> source) {
         if (source instanceof DomainMap domainMap) {
             return domainMap;
         }
-        Variable<?>[] variables = new Variable<?>[source.size()];
-        Domain<?>[] domains = new Domain<?>[source.size()];
-        Map<Variable<?>, Integer> indexOf = HashMap.newHashMap(source.size());
-        int index = 0;
+        int highest = -1;
+        for (Variable<?> variable : source.keySet()) {
+            if (variable.getIndex() < 0) {
+                throw new IllegalArgumentException("Variable was not issued by a Variable.Factory: " + variable);
+            }
+            highest = Math.max(highest, variable.getIndex());
+        }
+        Variable<?>[] variables = new Variable<?>[highest + 1];
+        Domain<?>[] domains = new Domain<?>[highest + 1];
         for (Map.Entry<Variable<?>, Domain<?>> entry : source.entrySet()) {
+            int index = entry.getKey().getIndex();
+            if (variables[index] != null) {
+                throw new IllegalArgumentException("Variables " + variables[index] + " and " + entry.getKey()
+                        + " share index " + index + ": issued by different factories");
+            }
             variables[index] = entry.getKey();
             domains[index] = entry.getValue();
-            indexOf.put(entry.getKey(), index);
+        }
+        return new DomainMap(variables, domains, source.size());
+    }
+
+    /** The index of {@code key} if it is exactly one of this map's variables, otherwise -1. */
+    private int indexOf(Object key) {
+        if (key instanceof Variable<?> variable) {
+            int index = variable.getIndex();
+            if (index >= 0 && index < variables.length && variables[index] == key) {
+                return index;
+            }
+        }
+        return -1;
+    }
+
+    /** The first index at or after {@code from} that holds a variable, or the array's length if none does. */
+    private int nextPresent(int from) {
+        int index = from;
+        while (index < variables.length && variables[index] == null) {
             index++;
         }
-        return new DomainMap(new Positions(variables, indexOf), domains);
+        return index;
     }
 
     /**
      * This map with {@code variable}'s domain replaced by {@code domain}. A variable not already here
-     * is added after the others, as {@link LinkedHashMap#put} would.
+     * is added, taking its place by index.
      */
     DomainMap with(@NonNull Variable<?> variable, @NonNull Domain<?> domain) {
-        Integer index = positions.indexOf().get(variable);
-        if (index == null) {
+        int index = indexOf(variable);
+        if (index < 0) {
             return withNewVariables(Map.of(variable, domain));
         }
         Domain<?>[] replaced = domains.clone();
         replaced[index] = domain;
-        return new DomainMap(positions, replaced);
+        return new DomainMap(variables, replaced, size);
     }
 
     /** As {@link #with}, for every entry of {@code updates} in one pass. */
     DomainMap withAll(@NonNull Map<Variable<?>, Domain<?>> updates) {
         Domain<?>[] replaced = domains.clone();
         for (Map.Entry<Variable<?>, Domain<?>> update : updates.entrySet()) {
-            Integer index = positions.indexOf().get(update.getKey());
-            if (index == null) {
+            int index = indexOf(update.getKey());
+            if (index < 0) {
                 return withNewVariables(updates);
             }
             replaced[index] = update.getValue();
         }
-        return new DomainMap(positions, replaced);
+        return new DomainMap(variables, replaced, size);
     }
 
     /** The rare case of an update naming a variable this map does not have: a map built afresh. */
@@ -99,18 +133,18 @@ final class DomainMap extends AbstractMap<Variable<?>, Domain<?>> {
 
     @Override
     public int size() {
-        return domains.length;
+        return size;
     }
 
     @Override
     public boolean containsKey(Object key) {
-        return positions.indexOf().containsKey(key);
+        return indexOf(key) >= 0;
     }
 
     @Override
     public Domain<?> get(Object key) {
-        Integer index = positions.indexOf().get(key);
-        return index == null ? null : domains[index];
+        int index = indexOf(key);
+        return index < 0 ? null : domains[index];
     }
 
     @Override
@@ -121,14 +155,14 @@ final class DomainMap extends AbstractMap<Variable<?>, Domain<?>> {
                 return new Cursor<>() {
                     @Override
                     Variable<?> at(int index) {
-                        return positions.variables()[index];
+                        return variables[index];
                     }
                 };
             }
 
             @Override
             public int size() {
-                return domains.length;
+                return size;
             }
 
             @Override
@@ -153,7 +187,7 @@ final class DomainMap extends AbstractMap<Variable<?>, Domain<?>> {
 
             @Override
             public int size() {
-                return domains.length;
+                return size;
             }
         };
     }
@@ -166,29 +200,29 @@ final class DomainMap extends AbstractMap<Variable<?>, Domain<?>> {
                 return new Cursor<>() {
                     @Override
                     Entry<Variable<?>, Domain<?>> at(int index) {
-                        return new SimpleImmutableEntry<>(positions.variables()[index], domains[index]);
+                        return new SimpleImmutableEntry<>(variables[index], domains[index]);
                     }
                 };
             }
 
             @Override
             public int size() {
-                return domains.length;
+                return size;
             }
         };
     }
 
     @Override
     public void forEach(BiConsumer<? super Variable<?>, ? super Domain<?>> action) {
-        for (int index = 0; index < domains.length; index++) {
-            action.accept(positions.variables()[index], domains[index]);
+        for (int index = nextPresent(0); index < variables.length; index = nextPresent(index + 1)) {
+            action.accept(variables[index], domains[index]);
         }
     }
 
-    /** Equal to any map with the same entries; two of these over the same positions compare their arrays. */
+    /** Equal to any map with the same entries; two of these over the same variables compare their arrays. */
     @Override
     public boolean equals(Object other) {
-        if (other instanceof DomainMap that && that.positions == positions) {
+        if (other instanceof DomainMap that && that.variables == variables) {
             return Arrays.equals(domains, that.domains);
         }
         return super.equals(other);
@@ -198,29 +232,31 @@ final class DomainMap extends AbstractMap<Variable<?>, Domain<?>> {
     @Override
     public int hashCode() {
         int hash = 0;
-        for (int index = 0; index < domains.length; index++) {
-            hash += positions.variables()[index].hashCode() ^ domains[index].hashCode();
+        for (int index = nextPresent(0); index < variables.length; index = nextPresent(index + 1)) {
+            hash += variables[index].hashCode() ^ domains[index].hashCode();
         }
         return hash;
     }
 
-    /** Walks the array front to back, producing {@link #at} of each index. Read-only. */
+    /** Walks the arrays front to back over the indices that hold a variable, producing {@link #at} of each. Read-only. */
     private abstract class Cursor<T> implements Iterator<T> {
-        private int next;
+        private int next = nextPresent(0);
 
         abstract T at(int index);
 
         @Override
         public boolean hasNext() {
-            return next < domains.length;
+            return next < variables.length;
         }
 
         @Override
         public T next() {
-            if (next >= domains.length) {
+            if (next >= variables.length) {
                 throw new NoSuchElementException();
             }
-            return at(next++);
+            T result = at(next);
+            next = nextPresent(next + 1);
+            return result;
         }
     }
 }

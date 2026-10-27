@@ -54,15 +54,12 @@ Traditional Java constraint satisfaction problem (CSP) solvers were designed ove
 ## Usage
 
 ```java
-Variable.Factory F = Variable.Factory.INSTANCE;
-Variable<Integer> v1 = F.create("v1");
-Variable<Integer> v2 = F.create("v2");
-Variable<Integer> v3 = F.create("v3");
+ConstraintSatisfactionProblemBuilder builder = ConstraintSatisfactionProblem.builder();
+Variable<Integer> v1 = builder.createVariable("v1", IntRangeDomain.of(1, 3));
+Variable<Integer> v2 = builder.createVariable("v2", IntRangeDomain.of(1, 3));
+Variable<Integer> v3 = builder.createVariable("v3", IntRangeDomain.of(1, 3));
 
-ConstraintSatisfactionProblem csp = ConstraintSatisfactionProblem.builder()
-    .variableDomain(v1, IntRangeDomain.of(1, 3))
-    .variableDomain(v2, IntRangeDomain.of(1, 3))
-    .variableDomain(v3, IntRangeDomain.of(1, 3))
+ConstraintSatisfactionProblem csp = builder
     .allDiffConstraint(Set.of(v1, v2, v3))
     .build();
 

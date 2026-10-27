@@ -60,6 +60,25 @@ Nothing reads the index yet. `Variable.Factory.INSTANCE` remains the shared fact
 retires it; it numbers uniquely but not densely and accepts repeated names, because the existing
 tests reuse names across problems.
 
+`DomainMap` was converted first, to two arrays indexed by `getIndex()` with no hash map: the
+variables, so a lookup can check it was handed exactly one of the map's own, and the domains. It
+iterates in index order, which is declaration order for builder-issued variables, and builds with
+an `IllegalArgumentException` for a variable with no index or two sharing one. Interleaved A/B
+against the commit before it, seed 12345, 5 pairs each:
+
+| Instance | Result |
+|---|---|
+| `driverlogw-09`, satisfaction, 650 variables | 2.49s → 2.44s, identical 18,634 nodes |
+| `Taillard-os-04-04-0`, optimality proof | 3.42s → 3.33s, identical 41,158 nodes |
+| `Vrp-A-n32-k5`, optimization, 33 components | 66.2k → 73.0k nodes in 10s, up in 5 of 5 pairs |
+| `Vrp-P-n16-k8`, optimization, 17 components | 241k → 265k nodes in 10s, up in 5 of 5 pairs |
+| 400 independent 10-queens, indices interleaved | 1061ms → 1075ms, within noise |
+
+The sparse-subproblem worry is only partly tested. The Vrp instances decompose but run on the
+optimization chain, whose node loop works on the whole problem, and the synthetic case does little
+search per component, so a component needing heavy search is the case still unmeasured. The
+alternative if it regresses is to reindex a subproblem densely at the decomposition boundary.
+
 Obligations: every test that builds variables through `Variable.Factory` migrates to the builder;
 `equals`/`hashCode` of `Assignment`, constraints and `ConstraintSatisfactionProblem` are revisited
 once identity replaces name equality.

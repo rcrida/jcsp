@@ -6,12 +6,14 @@ import io.github.rcrida.jcsp.variables.Variable;
 import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.NoSuchElementException;
 import java.util.Random;
+import java.util.TreeMap;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -32,12 +34,19 @@ class DomainMapTest {
         return variables;
     }
 
+    /** {@code entries} as a map that iterates in variable index order, which is how a {@link DomainMap} does. */
+    private static Map<Variable<?>, Domain<?>> byIndex(Map<Variable<?>, Domain<?>> entries) {
+        Map<Variable<?>, Domain<?>> sorted = new TreeMap<>(Comparator.<Variable<?>>comparingInt(Variable::getIndex));
+        sorted.putAll(entries);
+        return sorted;
+    }
+
     private static Map<Variable<?>, Domain<?>> declared(List<Variable<?>> variables, Random rng) {
         Map<Variable<?>, Domain<?>> declared = new LinkedHashMap<>();
         for (Variable<?> variable : variables) {
             declared.put(variable, domain(1 + rng.nextInt(9)));
         }
-        return declared;
+        return byIndex(declared);
     }
 
     private static void assertSameAs(Map<Variable<?>, Domain<?>> oracle, DomainMap actual, List<Variable<?>> probes) {
@@ -72,12 +81,12 @@ class DomainMapTest {
             assertSameAs(oracle, actual, probes);
 
             for (int step = 0; step < 12; step++) {
-                // Mostly existing variables, sometimes a new one: LinkedHashMap#put appends it.
+                // Mostly existing variables, sometimes a new one: it takes its place by index.
                 Variable<?> target = !probes.isEmpty() && rng.nextInt(5) > 0 && !known.isEmpty()
                         ? known.get(rng.nextInt(known.size())) : strangers.get(rng.nextInt(strangers.size()));
                 if (rng.nextBoolean()) {
                     Domain<?> narrowed = domain(rng.nextInt(9));
-                    oracle = new LinkedHashMap<>(oracle);
+                    oracle = byIndex(oracle);
                     oracle.put(target, narrowed);
                     actual = actual.with(target, narrowed);
                 } else {
@@ -86,7 +95,7 @@ class DomainMapTest {
                         updates.put(rng.nextInt(4) == 0 ? strangers.get(rng.nextInt(strangers.size()))
                                 : known.isEmpty() ? strangers.get(0) : known.get(rng.nextInt(known.size())), domain(rng.nextInt(9)));
                     }
-                    oracle = new LinkedHashMap<>(oracle);
+                    oracle = byIndex(oracle);
                     oracle.putAll(updates);
                     actual = actual.withAll(updates);
                 }
@@ -106,6 +115,57 @@ class DomainMapTest {
         assertThat(original.get(a)).isEqualTo(domain(5));
         assertThat(derived.get(a)).isEqualTo(domain(1));
         assertThat(derived.get(b)).isSameAs(original.get(b));
+    }
+
+    @Test
+    void aVariableNoFactoryIssuedIsRejected() {
+        Variable<Integer> unindexed = () -> "unindexed";
+
+        assertThatThrownBy(() -> DomainMap.of(Map.of(unindexed, domain(1))))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("not issued by a Variable.Factory");
+    }
+
+    @Test
+    void variablesFromDifferentFactoriesSharingAnIndexAreRejected() {
+        Variable<Integer> first = new Variable.Factory().create("first");
+        Variable<Integer> second = new Variable.Factory().create("second");
+
+        assertThatThrownBy(() -> DomainMap.of(new LinkedHashMap<>(Map.of(first, domain(1), second, domain(1)))))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("share index 0");
+    }
+
+    @Test
+    void aVariableIsFoundOnlyIfItIsExactlyOneOfTheMapsOwn() {
+        Variable.Factory factory = new Variable.Factory();
+        Variable<Integer> own = factory.create("own");
+        Variable<Integer> beyondTheEnd = factory.create("beyond");
+        Variable<Integer> foreign = new Variable.Factory().create("foreign");
+        DomainMap map = DomainMap.of(Map.of(own, domain(1)));
+
+        assertThat(map.get(own)).isEqualTo(domain(1));
+        Variable<Integer> unindexed = () -> "unindexed";
+
+        assertThat(map.containsKey(foreign)).isFalse();
+        assertThat(map.containsKey(beyondTheEnd)).isFalse();
+        assertThat(map.containsKey(unindexed)).isFalse();
+    }
+
+    @Test
+    void aMapOverASparseSetOfIndicesSkipsTheGaps() {
+        Variable.Factory factory = new Variable.Factory();
+        Variable<Integer> first = factory.create("first");
+        factory.create("skipped");
+        Variable<Integer> third = factory.create("third");
+        DomainMap map = DomainMap.of(new LinkedHashMap<>(Map.of(third, domain(3), first, domain(1))));
+        List<Variable<?>> seen = new ArrayList<>();
+        map.forEach((variable, domain) -> seen.add(variable));
+
+        assertThat(map).hasSize(2);
+        assertThat(List.copyOf(map.keySet())).containsExactly(first, third);
+        assertThat(seen).containsExactly(first, third);
+        assertThat(map.hashCode()).isEqualTo(Map.of(first, domain(1), third, domain(3)).hashCode());
     }
 
     @Test

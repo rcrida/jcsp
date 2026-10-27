@@ -24,12 +24,11 @@ import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
 public class AssignmentTest {
-    @Mock
-    Variable<Object> variable;
+    private final Variable.Factory variables = new Variable.Factory();
+    Variable<Object> variable = variables.create("variable");
     @Mock
     Object value;
-    @Mock
-    Variable<Object> anotherVariable;
+    Variable<Object> anotherVariable = variables.create("anotherVariable");
     @Mock
     Object anotherValue;
     @Mock

@@ -25,6 +25,15 @@ public class TreeDecomposerImplTest {
     static final Variable<Integer> V5 = VARIABLE_FACTORY.create("V5");
     TreeDecomposerImpl treeDecomposer;
 
+    /** The decomposition's own variable called {@code name}: a variable is found by identity, not by recreating its name. */
+    @SuppressWarnings("unchecked")
+    private static Variable<Assignment> treeVariable(ConstraintSatisfactionProblem tree, String name) {
+        return (Variable<Assignment>) tree.getVariableDomains().keySet().stream()
+                .filter(variable -> variable.getName().equals(name))
+                .findFirst()
+                .orElseThrow();
+    }
+
     @BeforeEach
     void setUp() {
         treeDecomposer = new TreeDecomposerImpl(ArbitraryVariableSelector.Factory.INSTANCE, Cancellation.NEVER);
@@ -52,10 +61,10 @@ public class TreeDecomposerImplTest {
         val treeDecomposition = treeDecomposer.decompose(csp, 1024).get();
         // Minimum degree eliminates V0 and V5 first (both degree 2), producing the same
         // optimal width-2 decomposition as arbitrary on this symmetric graph
-        Variable<Assignment> treeVariable1 = VARIABLE_FACTORY.create("[V0, V1, V2]");
-        Variable<Assignment> treeVariable2 = VARIABLE_FACTORY.create("[V1, V2, V3]");
-        Variable<Assignment> treeVariable3 = VARIABLE_FACTORY.create("[V2, V3, V4]");
-        Variable<Assignment> treeVariable4 = VARIABLE_FACTORY.create("[V3, V4, V5]");
+        Variable<Assignment> treeVariable1 = treeVariable(treeDecomposition, "[V0, V1, V2]");
+        Variable<Assignment> treeVariable2 = treeVariable(treeDecomposition, "[V1, V2, V3]");
+        Variable<Assignment> treeVariable3 = treeVariable(treeDecomposition, "[V2, V3, V4]");
+        Variable<Assignment> treeVariable4 = treeVariable(treeDecomposition, "[V3, V4, V5]");
         assertThat(treeDecomposition.getVariableDomains()).containsOnlyKeys(treeVariable1, treeVariable2, treeVariable3, treeVariable4);
     }
 
@@ -78,10 +87,10 @@ public class TreeDecomposerImplTest {
                 .notEqualsConstraint(V4, V5)
                 .build();
         val treeDecomposition = treeDecomposer.decompose(csp, 1024).get();
-        Variable<Assignment> treeVariable1 = VARIABLE_FACTORY.create("[V0, V1, V2]");
-        Variable<Assignment> treeVariable2 = VARIABLE_FACTORY.create("[V1, V2, V3]");
-        Variable<Assignment> treeVariable3 = VARIABLE_FACTORY.create("[V2, V3, V4]");
-        Variable<Assignment> treeVariable4 = VARIABLE_FACTORY.create("[V3, V4, V5]");
+        Variable<Assignment> treeVariable1 = treeVariable(treeDecomposition, "[V0, V1, V2]");
+        Variable<Assignment> treeVariable2 = treeVariable(treeDecomposition, "[V1, V2, V3]");
+        Variable<Assignment> treeVariable3 = treeVariable(treeDecomposition, "[V2, V3, V4]");
+        Variable<Assignment> treeVariable4 = treeVariable(treeDecomposition, "[V3, V4, V5]");
         assertThat(treeDecomposition.getVariableDomains()).containsOnlyKeys(treeVariable1, treeVariable2, treeVariable3, treeVariable4);
         assertThat(treeDecomposition.getConstraints()).containsOnly(
                 // One constraint per tree edge, carrying the whole separator

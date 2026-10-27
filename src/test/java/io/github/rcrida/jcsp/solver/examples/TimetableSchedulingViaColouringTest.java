@@ -10,11 +10,11 @@ import org.junit.jupiter.api.Test;
 
 import java.util.Collections;
 import java.util.EnumMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.function.BiPredicate;
-import java.util.function.Function;
 import java.util.stream.Collectors;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -58,9 +58,12 @@ public class TimetableSchedulingViaColouringTest {
         @Override public String toString() { return slot + "/" + teacher; }
     }
 
-    record GroupSubject(Group group, Subject subject) implements Variable {
-        @Override public String getName() { return toString(); }
+    record GroupSubject(Group group, Subject subject) {
         @Override public String toString() { return group + "/" + subject; }
+    }
+
+    /** The problem, and which (group, subject) each of its variables stands for. */
+    record Timetable(ConstraintSatisfactionProblem csp, Map<Variable<?>, GroupSubject> keyOf) {
     }
 
     static final Map<Subject, Set<Teacher>> ELIGIBLE_TEACHERS = Map.of(
@@ -111,12 +114,14 @@ public class TimetableSchedulingViaColouringTest {
         return builder.build();
     }
 
-    static ConstraintSatisfactionProblem timetable() {
+    @SuppressWarnings("unchecked")
+    static Timetable timetable() {
         val builder = ConstraintSatisfactionProblem.builder();
 
-        // Register each (group, subject) variable with its domain
+        // Issue each (group, subject) variable with its domain
+        val variableOf = new LinkedHashMap<GroupSubject, Variable<Object>>();
         VARIABLES.forEach(groupSubject ->
-                builder.variableDomain(groupSubject, domainFor(groupSubject.subject())));
+                variableOf.put(groupSubject, builder.createVariable(groupSubject.toString(), domainFor(groupSubject.subject()))));
 
         // Within-group: all subjects in the same group must be in different slots
         CURRICULUM.forEach((group, subjects) -> {
@@ -124,7 +129,7 @@ public class TimetableSchedulingViaColouringTest {
                     .filter(gs -> gs.group().equals(group))
                     .collect(Collectors.toMap(
                             GroupSubject::subject,
-                            Function.identity()));
+                            variableOf::get));
             for (int i = 0; i < subjects.size(); i++)
                 for (int j = i + 1; j < subjects.size(); j++) {
                     builder.biPredicateConstraint(
@@ -144,38 +149,41 @@ public class TimetableSchedulingViaColouringTest {
                     val teachers1 = ELIGIBLE_TEACHERS.get(v1.subject());
                     val teachers2 = ELIGIBLE_TEACHERS.get(v2.subject());
                     if (!Collections.disjoint(teachers1, teachers2))
-                        builder.biPredicateConstraint(v1, v2, NO_TEACHER_CLASH);
+                        builder.biPredicateConstraint(variableOf.get(v1), variableOf.get(v2), NO_TEACHER_CLASH);
                 }
             }
         }
 
-        return builder.build();
+        val keyOf = new LinkedHashMap<Variable<?>, GroupSubject>();
+        variableOf.forEach((groupSubject, variable) -> keyOf.put(variable, groupSubject));
+        return new Timetable(builder.build(), keyOf);
     }
 
     @Test
     void findSchedule() {
-        val csp = timetable();
+        val timetable = timetable();
+        val csp = timetable.csp();
         val solution = Solver.Factory.INSTANCE.createSolver(csp).getSolution();
         assertThat(solution).hasValueSatisfying(assignment -> {
             assertThat(assignment.isSolution(csp)).isTrue();
             System.out.println("Statistics: " + assignment.getStatistics());
-            printTimetable(assignment);
+            printTimetable(assignment, timetable.keyOf());
         });
     }
 
     @Test
     void allSchedules() {
-        val csp = timetable();
+        val csp = timetable().csp();
         val solutions = Solver.Factory.INSTANCE.createSolver(csp).getSolutions().toList();
         System.out.println("Total valid schedules: " + solutions.size());
         assertThat(solutions).hasSize(2880);
     }
 
-    static void printTimetable(Assignment assignment) {
+    static void printTimetable(Assignment assignment, Map<Variable<?>, GroupSubject> keyOf) {
         val lookup = new java.util.HashMap<TimeSlot, java.util.Map<Group, String>>();
         for (TimeSlot ts : TimeSlot.values()) lookup.put(ts, new java.util.HashMap<>());
         assignment.forEach((variable, value) -> {
-            val gs = (GroupSubject) variable;
+            val gs = keyOf.get(variable);
             val cs = (ClassSchedule) value;
             lookup.get(cs.slot()).put(gs.group(), gs.subject() + " (" + cs.teacher() + ")");
         });
