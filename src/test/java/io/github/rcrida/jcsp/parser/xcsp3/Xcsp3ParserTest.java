@@ -32,6 +32,7 @@ import io.github.rcrida.jcsp.constraints.unary.UnaryInSetConstraint;
 import io.github.rcrida.jcsp.constraints.unary.UnaryPredicateConstraint;
 import io.github.rcrida.jcsp.solver.Solver;
 import io.github.rcrida.jcsp.variables.Variable;
+import io.github.rcrida.jcsp.variables.VariablesByName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -76,11 +77,11 @@ class Xcsp3ParserTest {
     }
 
     private static int digitOf(Assignment assignment, String name) {
-        return assignment.getValue(Variable.Factory.INSTANCE.<Integer>create(name)).orElseThrow();
+        return assignment.getValue(VariablesByName.<Integer>in(assignment, name)).orElseThrow();
     }
 
     private static String stringOf(Assignment assignment, String name) {
-        return assignment.getValue(Variable.Factory.INSTANCE.<String>create(name)).orElseThrow();
+        return assignment.getValue(VariablesByName.<String>in(assignment, name)).orElseThrow();
     }
 
     // ---- variable domains -------------------------------------------------------------------------
@@ -2221,10 +2222,10 @@ class Xcsp3ParserTest {
         Set<Assignment> sols = solutions(instance.csp());
         for (Assignment a : sols) {
             // x[i] (1-based value, i 0-based) == j <-> y[j] (0-based value, j 0-based) == i
-            int x0 = a.getValue(Variable.Factory.INSTANCE.<Integer>create("x[0]")).orElseThrow();
-            int x1 = a.getValue(Variable.Factory.INSTANCE.<Integer>create("x[1]")).orElseThrow();
-            int y0 = a.getValue(Variable.Factory.INSTANCE.<Integer>create("y[0]")).orElseThrow();
-            int y1 = a.getValue(Variable.Factory.INSTANCE.<Integer>create("y[1]")).orElseThrow();
+            int x0 = digitOf(a, "x[0]");
+            int x1 = digitOf(a, "x[1]");
+            int y0 = digitOf(a, "y[0]");
+            int y1 = digitOf(a, "y[1]");
             int[] x = {x0, x1};
             int[] y = {y0, y1};
             for (int i = 0; i < 2; i++) {
@@ -2249,10 +2250,10 @@ class Xcsp3ParserTest {
                 "<channel reifiedBy=\"b\"><list> x[] </list><list> y[] </list></channel>");
         Set<Assignment> sols = solutions(instance.csp());
         for (Assignment a : sols) {
-            int x0 = a.getValue(Variable.Factory.INSTANCE.<Integer>create("x[0]")).orElseThrow();
-            int x1 = a.getValue(Variable.Factory.INSTANCE.<Integer>create("x[1]")).orElseThrow();
-            int y0 = a.getValue(Variable.Factory.INSTANCE.<Integer>create("y[0]")).orElseThrow();
-            int y1 = a.getValue(Variable.Factory.INSTANCE.<Integer>create("y[1]")).orElseThrow();
+            int x0 = digitOf(a, "x[0]");
+            int x1 = digitOf(a, "x[1]");
+            int y0 = digitOf(a, "y[0]");
+            int y1 = digitOf(a, "y[1]");
             boolean channelled = (x0 == 0 && y0 == 0 && x1 == 1 && y1 == 1) || (x0 == 1 && y1 == 0 && x1 == 0 && y0 == 1);
             assertThat(digitOf(a, "b") == 1).as("x=[%d,%d], y=[%d,%d]", x0, x1, y0, y1).isEqualTo(channelled);
         }
@@ -2884,7 +2885,7 @@ class Xcsp3ParserTest {
         Xcsp3Instance instance = parseXml(
                 "<var id=\"x\"> 0..1 </var>",
                 "<intension> not(x) </intension>");
-        assertThat(solutions(instance.csp())).containsExactly(Assignment.of(Map.of(Variable.Factory.INSTANCE.create("x"), 0)));
+        assertThat(solutions(instance.csp())).containsExactly(Assignment.of(Map.of(VariablesByName.in(instance.csp(), "x"), 0)));
     }
 
     @Test void intensionAnd() throws IOException {

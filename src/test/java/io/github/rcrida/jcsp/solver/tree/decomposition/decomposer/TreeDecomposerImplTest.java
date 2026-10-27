@@ -12,10 +12,18 @@ import io.github.rcrida.jcsp.variables.Variable;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.Map;
+import java.util.Set;
+import java.util.stream.Collectors;
+
 import static org.assertj.core.api.Assertions.assertThat;
 
 public class TreeDecomposerImplTest {
-    static final Variable.Factory VARIABLE_FACTORY = Variable.Factory.INSTANCE;
+    // Its own factory, so V0..V5 are indices 0..5 and the decomposer, which names a tree variable after
+    // its clique's set of variables, lists them in the same order whatever else has run before.
+    static final Variable.Factory VARIABLE_FACTORY = new Variable.Factory();
     static Domain<Integer> DOMAIN = IntRangeDomain.of(1, 3);
     static final Variable<Integer> V0 = VARIABLE_FACTORY.create("V0");
     static final Variable<Integer> V1 = VARIABLE_FACTORY.create("V1");
@@ -25,13 +33,50 @@ public class TreeDecomposerImplTest {
     static final Variable<Integer> V5 = VARIABLE_FACTORY.create("V5");
     TreeDecomposerImpl treeDecomposer;
 
-    /** The decomposition's own variable called {@code name}: a variable is found by identity, not by recreating its name. */
-    @SuppressWarnings("unchecked")
-    private static Variable<Assignment> treeVariable(ConstraintSatisfactionProblem tree, String name) {
-        return (Variable<Assignment>) tree.getVariableDomains().keySet().stream()
-                .filter(variable -> variable.getName().equals(name))
-                .findFirst()
-                .orElseThrow();
+    private static final Set<Set<String>> GRAPH_EDGES = Set.of(
+            Set.of("V0", "V1"), Set.of("V0", "V2"), Set.of("V1", "V2"), Set.of("V1", "V3"),
+            Set.of("V2", "V4"), Set.of("V3", "V4"), Set.of("V3", "V5"), Set.of("V4", "V5"));
+
+    /**
+     * Which of several equally good decompositions the variable selector settles on is a tie-break, so
+     * this asserts what any of them must be rather than one answer: every clique has three of the six
+     * variables, every variable and every edge of the graph lies in some clique, and the cliques are
+     * joined into a tree by one constraint per edge whose separator is exactly the two cliques' overlap.
+     */
+    private static void assertWidthTwoTreeDecomposition(ConstraintSatisfactionProblem tree) {
+        // A tree variable is named after its clique's variables: "[V1, V3, V4]"
+        Map<Variable<?>, Set<String>> cliques = new HashMap<>();
+        tree.getVariableDomains().keySet().forEach(treeVariable ->
+                cliques.put(treeVariable, Set.of(treeVariable.getName().replaceAll("[\\[\\]]", "").split(", "))));
+
+        assertThat(cliques.values()).allSatisfy(clique -> assertThat(clique).hasSize(3));
+        assertThat(cliques.values().stream().flatMap(Set::stream).collect(Collectors.toSet()))
+                .containsExactlyInAnyOrder("V0", "V1", "V2", "V3", "V4", "V5");
+        for (Set<String> edge : GRAPH_EDGES) {
+            assertThat(cliques.values()).anySatisfy(clique -> assertThat(clique).containsAll(edge));
+        }
+
+        assertThat(tree.getConstraints()).hasSize(cliques.size() - 1).allSatisfy(constraint -> {
+            val joint = (AssignmentVariableConsistencyConstraint) constraint;
+            Set<String> overlap = new HashSet<>(cliques.get(joint.getLeft()));
+            overlap.retainAll(cliques.get(joint.getRight()));
+            assertThat(joint.cliqueVariables.stream().map(Variable::getName)).containsExactlyInAnyOrderElementsOf(overlap);
+        });
+
+        // n cliques joined by n - 1 constraints are a tree only if they are also connected
+        Set<Variable<?>> reached = new HashSet<>(Set.of(cliques.keySet().iterator().next()));
+        for (boolean grew = true; grew; ) {
+            grew = false;
+            for (val constraint : tree.getConstraints()) {
+                val joint = (AssignmentVariableConsistencyConstraint) constraint;
+                if (reached.contains(joint.getLeft()) != reached.contains(joint.getRight())) {
+                    reached.add(joint.getLeft());
+                    reached.add(joint.getRight());
+                    grew = true;
+                }
+            }
+        }
+        assertThat(reached).isEqualTo(cliques.keySet());
     }
 
     @BeforeEach
@@ -59,13 +104,7 @@ public class TreeDecomposerImplTest {
                 .notEqualsConstraint(V4, V5)
                 .build();
         val treeDecomposition = treeDecomposer.decompose(csp, 1024).get();
-        // Minimum degree eliminates V0 and V5 first (both degree 2), producing the same
-        // optimal width-2 decomposition as arbitrary on this symmetric graph
-        Variable<Assignment> treeVariable1 = treeVariable(treeDecomposition, "[V0, V1, V2]");
-        Variable<Assignment> treeVariable2 = treeVariable(treeDecomposition, "[V1, V2, V3]");
-        Variable<Assignment> treeVariable3 = treeVariable(treeDecomposition, "[V2, V3, V4]");
-        Variable<Assignment> treeVariable4 = treeVariable(treeDecomposition, "[V3, V4, V5]");
-        assertThat(treeDecomposition.getVariableDomains()).containsOnlyKeys(treeVariable1, treeVariable2, treeVariable3, treeVariable4);
+        assertWidthTwoTreeDecomposition(treeDecomposition);
     }
 
     @Test
@@ -87,17 +126,7 @@ public class TreeDecomposerImplTest {
                 .notEqualsConstraint(V4, V5)
                 .build();
         val treeDecomposition = treeDecomposer.decompose(csp, 1024).get();
-        Variable<Assignment> treeVariable1 = treeVariable(treeDecomposition, "[V0, V1, V2]");
-        Variable<Assignment> treeVariable2 = treeVariable(treeDecomposition, "[V1, V2, V3]");
-        Variable<Assignment> treeVariable3 = treeVariable(treeDecomposition, "[V2, V3, V4]");
-        Variable<Assignment> treeVariable4 = treeVariable(treeDecomposition, "[V3, V4, V5]");
-        assertThat(treeDecomposition.getVariableDomains()).containsOnlyKeys(treeVariable1, treeVariable2, treeVariable3, treeVariable4);
-        assertThat(treeDecomposition.getConstraints()).containsOnly(
-                // One constraint per tree edge, carrying the whole separator
-                AssignmentVariableConsistencyConstraint.builder().left(treeVariable1).right(treeVariable2).cliqueVariable(V1).cliqueVariable(V2).build(),
-                AssignmentVariableConsistencyConstraint.builder().left(treeVariable2).right(treeVariable3).cliqueVariable(V2).cliqueVariable(V3).build(),
-                AssignmentVariableConsistencyConstraint.builder().left(treeVariable3).right(treeVariable4).cliqueVariable(V3).cliqueVariable(V4).build()
-        );
+        assertWidthTwoTreeDecomposition(treeDecomposition);
     }
 
     @Test

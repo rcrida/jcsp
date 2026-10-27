@@ -15,6 +15,7 @@ import org.jspecify.annotations.NonNull;
 import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashSet;
@@ -107,7 +108,11 @@ public class TreeDecomposerImpl implements TreeDecomposer {
                 log.debug("Abandoning tree decomposition: cancelled while enumerating a clique domain");
                 return Optional.empty();
             }
-            val cliqueVariable = treeBuilder.<Assignment>createVariable(cliqueVariableDomains.keySet().toString(), cliqueDomain.get());
+            val cliqueName = cliqueVariableDomains.keySet().stream()
+                    .sorted(Comparator.comparing(Variable::getName))
+                    .toList()
+                    .toString();
+            val cliqueVariable = treeBuilder.<Assignment>createVariable(cliqueName, cliqueDomain.get());
             cliqueVariables.add(cliqueVariable);
         }
         val consistencyConstraints = new HashSet<AssignmentVariableConsistencyConstraint>();

@@ -79,6 +79,13 @@ optimization chain, whose node loop works on the whole problem, and the syntheti
 search per component, so a component needing heavy search is the case still unmeasured. The
 alternative if it regresses is to reindex a subproblem densely at the decomposition boundary.
 
+`Variable.Impl` then became identity-equal. Its hash code is the index, not the identity hash, so a
+hash set or map of variables iterates in the same order on every run; the identity hash would have
+made that order, and with it the decomposer's tree-variable names, differ per JVM. The index has to
+be spread across the 32-bit range first (multiplied by an odd constant): `Valuations#hash` sums a
+variable's hash with its value's, and with bare indices `Steiner3-08`'s 80,640 six-tuples collapsed
+into a few hash codes again, so parsing took 28 seconds to honour a 5 second limit instead of 7.
+
 Obligations: every test that builds variables through `Variable.Factory` migrates to the builder;
 `equals`/`hashCode` of `Assignment`, constraints and `ConstraintSatisfactionProblem` are revisited
 once identity replaces name equality.

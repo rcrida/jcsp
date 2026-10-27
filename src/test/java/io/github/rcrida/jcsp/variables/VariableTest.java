@@ -76,19 +76,36 @@ public class VariableTest {
     }
 
     @Test
-    void sharedInstanceAcceptsARepeatedName() {
+    void sharedInstanceAcceptsARepeatedNameAsADistinctVariable() {
         var name = UUID.randomUUID().toString();
-        assertThat(Variable.Factory.INSTANCE.create(name)).isEqualTo(Variable.Factory.INSTANCE.create(name));
+        assertThat(Variable.Factory.INSTANCE.create(name)).isNotEqualTo(Variable.Factory.INSTANCE.create(name));
     }
 
     @Test
-    void indexDoesNotAffectEquality() {
+    void aVariableIsEqualOnlyToItself() {
         var first = new Variable.Factory().create("x");
-        var second = new Variable.Factory();
-        second.create("pad");
-        var other = second.create("x");
-        assertThat(other.getIndex()).isNotEqualTo(first.getIndex());
-        assertThat(other).isEqualTo(first).hasSameHashCodeAs(first);
+        var other = new Variable.Factory().create("x");
+        assertThat(other.getName()).isEqualTo(first.getName());
+        assertThat(other.getIndex()).isEqualTo(first.getIndex());
+        assertThat(other).isNotEqualTo(first);
+        assertThat(first).isEqualTo(first);
+    }
+
+    @Test
+    void aVariableHashesFromItsIndexAloneSoHashOrderIsTheSameOnEveryRun() {
+        var factory = new Variable.Factory();
+        var a = factory.create("a");
+        var b = factory.create("b");
+        assertThat(new Variable.Factory().create("anything").hashCode()).isEqualTo(a.hashCode());
+        assertThat(b.hashCode()).isNotEqualTo(a.hashCode());
+    }
+
+    @Test
+    void hashCodesOfNeighbouringIndicesAreFarApartNotConsecutive() {
+        var factory = new Variable.Factory();
+        var a = factory.create("a");
+        var b = factory.create("b");
+        assertThat(Math.abs((long) b.hashCode() - a.hashCode())).isGreaterThan(1L << 20);
     }
 
     @Test

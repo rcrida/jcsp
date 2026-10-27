@@ -1,7 +1,7 @@
 package io.github.rcrida.jcsp.variables;
 
-import lombok.EqualsAndHashCode;
-import lombok.Value;
+import lombok.Getter;
+import lombok.RequiredArgsConstructor;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 
@@ -28,10 +28,25 @@ public interface Variable<T> {
         return UNINDEXED;
     }
 
-    @Value
-    class Impl<T> implements Variable<T> {
-        @NonNull String name;
-        @EqualsAndHashCode.Exclude int index;
+    /**
+     * Equal only to itself: a variable is identified by being the one its factory issued, so two
+     * issued with the same name are different variables. It hashes to its index spread across the
+     * whole 32-bit range, which agrees with that and, unlike the identity hash, is the same on every
+     * run, so the iteration order of a hash set or map of variables does not change from one run to
+     * the next. The spreading matters: {@code Valuations#hash} sums a variable's hash code with its
+     * value's across entries, and bare small indices collapse that sum into a few distinct values.
+     * Multiplying by an odd constant is a bijection, so two indices never share a hash code.
+     */
+    @Getter
+    @RequiredArgsConstructor
+    final class Impl<T> implements Variable<T> {
+        private final @NonNull String name;
+        private final int index;
+
+        @Override
+        public int hashCode() {
+            return index * 0x9E3779B1;
+        }
 
         @Override
         public String toString() {

@@ -5,6 +5,7 @@ import io.github.rcrida.jcsp.parser.xcsp3.Xcsp3Instance;
 import io.github.rcrida.jcsp.parser.xcsp3.Xcsp3Parser;
 import io.github.rcrida.jcsp.solver.Solver;
 import io.github.rcrida.jcsp.variables.Variable;
+import io.github.rcrida.jcsp.variables.VariablesByName;
 import org.junit.jupiter.api.Test;
 
 import java.io.IOException;
@@ -51,7 +52,7 @@ class Xcsp3InstanceTest {
     }
 
     private static int digitOf(Assignment assignment, String name) {
-        Variable<Integer> variable = Variable.Factory.INSTANCE.create(name);
+        Variable<Integer> variable = VariablesByName.in(assignment, name);
         return assignment.getValue(variable).orElseThrow();
     }
 
