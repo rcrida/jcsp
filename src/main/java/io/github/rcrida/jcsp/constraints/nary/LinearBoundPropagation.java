@@ -4,9 +4,12 @@ import io.github.rcrida.jcsp.constraints.NumericBounds;
 import io.github.rcrida.jcsp.constraints.Operator;
 import io.github.rcrida.jcsp.domains.DiscreteDomain;
 import io.github.rcrida.jcsp.domains.Domain;
+import io.github.rcrida.jcsp.domains.NumericDomain;
 import io.github.rcrida.jcsp.variables.Variable;
 
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Comparator;
 import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.List;
@@ -30,6 +33,8 @@ import java.util.Set;
  */
 final class LinearBoundPropagation {
     private static final Set<Operator> BOUNDS_OPERATORS = EnumSet.of(Operator.EQ, Operator.LEQ, Operator.GEQ);
+    /** Orders numbers as {@code int}s, as the bounds derivation below reads them. */
+    private static final Comparator<Number> BY_INT_VALUE = Comparator.comparingInt(Number::intValue);
 
     private LinearBoundPropagation() {}
 
@@ -101,12 +106,16 @@ final class LinearBoundPropagation {
         int n = vars.size();
         int[] minContribs = new int[n];
         int[] maxContribs = new int[n];
+        int[] domMins = new int[n];
+        int[] domMaxs = new int[n];
 
         for (int i = 0; i < n; i++) {
             @SuppressWarnings("unchecked")
             DiscreteDomain<N> dom = (DiscreteDomain<N>) domains.get(vars.get(i));
-            int domMin = dom.stream().mapToInt(Number::intValue).min().orElseThrow();
-            int domMax = dom.stream().mapToInt(Number::intValue).max().orElseThrow();
+            int domMin = intMin(dom);
+            int domMax = intMax(dom);
+            domMins[i] = domMin;
+            domMaxs[i] = domMax;
             minContribs[i] = coeffs[i] >= 0 ? coeffs[i] * domMin : coeffs[i] * domMax;
             maxContribs[i] = coeffs[i] >= 0 ? coeffs[i] * domMax : coeffs[i] * domMin;
         }
@@ -135,19 +144,19 @@ final class LinearBoundPropagation {
                 newMax = (operator != Operator.LEQ) ? Math.floorDiv(bound - restMax, coeffs[i]) : Integer.MAX_VALUE;
             }
 
-            DiscreteDomain.Builder<N> builder = null;
+            // Nothing lies outside the new bounds if they already contain the domain's own, which is most
+            // calls; skipping the scan below then saves boxing the whole domain into a list for no change.
+            if (newMin <= domMins[i] && newMax >= domMaxs[i]) continue;
+
+            // Past that guard the domain's own min or max is outside the new bounds, so at least one value goes.
+            DiscreteDomain.Builder<N> builder = dom.toBuilder();
             for (N val : dom.toList()) {
                 int v = val.intValue();
-                if (v < newMin || v > newMax) {
-                    if (builder == null) builder = dom.toBuilder();
-                    builder.delete(val);
-                }
+                if (v < newMin || v > newMax) builder.delete(val);
             }
-            if (builder != null) {
-                DiscreteDomain<N> pruned = builder.build();
-                if (pruned.isEmpty()) return Optional.empty();
-                updated.put(vars.get(i), pruned);
-            }
+            DiscreteDomain<N> pruned = builder.build();
+            if (pruned.isEmpty()) return Optional.empty();
+            updated.put(vars.get(i), pruned);
         }
 
         if (operator == Operator.EQ && SubsetSumCoveragePropagation.eligible(totalMin, totalMax)) {
@@ -158,6 +167,24 @@ final class LinearBoundPropagation {
         }
 
         return Optional.of(updated);
+    }
+
+    /**
+     * {@code dom}'s smallest value as an {@code int}: the bound a {@link NumericDomain} already holds,
+     * else one pass over its values. Streaming them costs a pipeline per call, which on a propagator run
+     * this often was a third of the time on a linear-heavy problem.
+     */
+    private static <N extends Number> int intMin(DiscreteDomain<N> dom) {
+        return dom instanceof NumericDomain<N> numeric
+                ? numeric.getMin().intValue()
+                : Collections.min(dom.asCollection(), BY_INT_VALUE).intValue();
+    }
+
+    /** As {@link #intMin}, for the largest value. */
+    private static <N extends Number> int intMax(DiscreteDomain<N> dom) {
+        return dom instanceof NumericDomain<N> numeric
+                ? numeric.getMax().intValue()
+                : Collections.max(dom.asCollection(), BY_INT_VALUE).intValue();
     }
 
     @SuppressWarnings("unchecked")
