@@ -313,7 +313,7 @@ public class ConstraintSatisfactionProblem {
      */
     public ConstraintSatisfactionProblemBuilder toBuilder() {
         return builder()
-                .variableFactory(variableFactory.fork())
+                .variableFactory(variableDomains.continuing(variableFactory).fork())
                 .variableDomains(variableDomains)
                 .constraints(constraintGraph.getConstraints())
                 .constraintGraph(constraintGraph)
@@ -788,7 +788,7 @@ public class ConstraintSatisfactionProblem {
                         .forEach(neighbour -> addUnassignedVariable(queue, neighbour, unassignedVariables));
             }
             componentConstraints.forEach(c -> componentVariables.addAll(c.getVariables()));
-            val subCsp = ConstraintSatisfactionProblem.builder();
+            val subCsp = ConstraintSatisfactionProblem.builder().variableFactory(variableDomains.continuing(variableFactory).fork());
             componentVariables.forEach(v -> subCsp.variableDomainEntry(v, getDomain(v)));
             subCsp.constraints(componentConstraints);
             subproblems.add(subCsp.build());

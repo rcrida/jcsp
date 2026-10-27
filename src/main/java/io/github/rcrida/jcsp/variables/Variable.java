@@ -28,6 +28,11 @@ public interface Variable<T> {
         return UNINDEXED;
     }
 
+    /** The {@link Factory} that issued this variable, or {@code null} for a variable no factory issued. */
+    default @Nullable Factory getFactory() {
+        return null;
+    }
+
     /**
      * Equal only to itself: a variable is identified by being the one its factory issued, so two
      * issued with the same name are different variables. It hashes to its index spread across the
@@ -42,6 +47,7 @@ public interface Variable<T> {
     final class Impl<T> implements Variable<T> {
         private final @NonNull String name;
         private final int index;
+        private final @NonNull Factory factory;
 
         @Override
         public int hashCode() {
@@ -56,13 +62,16 @@ public interface Variable<T> {
 
     /**
      * Issues variables, numbering them from 0 in creation order, and rejects a name it has already
-     * issued so that a name identifies one variable. {@link #INSTANCE} is shared by the whole JVM, so
-     * it numbers uniquely but not densely per problem and accepts repeated names.
+     * issued so that a name identifies one variable. Each variable remembers the factory that issued
+     * it, which is how a problem can tell that the variables it is given belong together.
+     * <p>
+     * A {@link #fork} carries on from the factory it was made from, so variables from either are
+     * numbered from one index space. A factory's <em>lineage</em> is itself and the factories it was
+     * forked from; two forks of one factory are on different branches, and their variables may share
+     * an index.
      */
     final class Factory {
-        public static final Factory INSTANCE = new Factory(null, null, 0);
-
-        private final @Nullable Set<String> issuedNames;
+        private final Set<String> issuedNames;
         private final @Nullable Factory parent;
         private final AtomicInteger next;
 
@@ -70,7 +79,7 @@ public interface Variable<T> {
             this(ConcurrentHashMap.newKeySet(), null, 0);
         }
 
-        private Factory(@Nullable Set<String> issuedNames, @Nullable Factory parent, int next) {
+        private Factory(Set<String> issuedNames, @Nullable Factory parent, int next) {
             this.issuedNames = issuedNames;
             this.parent = parent;
             this.next = new AtomicInteger(next);
@@ -83,18 +92,25 @@ public interface Variable<T> {
          * indices and names.
          */
         public Factory fork() {
-            assert issuedNames != null : "the shared INSTANCE is not a problem's factory";
             return new Factory(ConcurrentHashMap.newKeySet(), this, next.get());
         }
 
-        public <T> Variable<T> create(String name) {
-            if (issuedNames != null) {
-                if (hasIssued(name)) {
-                    throw new IllegalArgumentException("Variable name already issued: " + name);
+        /** Whether this is {@code other}, or a fork of it however many forks deep. */
+        public boolean isSameOrForkOf(Factory other) {
+            for (Factory factory = this; factory != null; factory = factory.parent) {
+                if (factory == other) {
+                    return true;
                 }
-                issuedNames.add(name);
             }
-            return new Impl<>(name, next.getAndIncrement());
+            return false;
+        }
+
+        public <T> Variable<T> create(String name) {
+            if (hasIssued(name)) {
+                throw new IllegalArgumentException("Variable name already issued: " + name);
+            }
+            issuedNames.add(name);
+            return new Impl<>(name, next.getAndIncrement(), this);
         }
 
         private boolean hasIssued(String name) {

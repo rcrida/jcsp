@@ -915,6 +915,51 @@ public class ConstraintSatisfactionProblemTest {
     }
 
     @Test
+    void aSubproblemContinuesTheParentsIndexSpaceAndNames() {
+        val builder = ConstraintSatisfactionProblem.builder();
+        builder.createVariable("a", BooleanDomain.INSTANCE);
+        builder.createVariable("b", BooleanDomain.INSTANCE);
+        val subproblems = builder.build().decomposeSubproblems().orElseThrow();
+
+        assertThat(subproblems).hasSize(2);
+        for (val subproblem : subproblems) {
+            val childBuilder = subproblem.toBuilder();
+            assertThat(childBuilder.createVariable("c", BooleanDomain.INSTANCE).getIndex()).isEqualTo(2);
+            assertThatThrownBy(() -> childBuilder.createVariable("a", BooleanDomain.INSTANCE))
+                    .isInstanceOf(IllegalArgumentException.class);
+        }
+    }
+
+    @Test
+    void aProblemBuiltFromVariablesMadeElsewhereContinuesTheirNumbering() {
+        val elsewhere = new Variable.Factory();
+        Variable<Boolean> a = elsewhere.create("a");
+        Variable<Boolean> b = elsewhere.create("b");
+        val problem = ConstraintSatisfactionProblem.builder()
+                .variableDomain(a, BooleanDomain.INSTANCE)
+                .variableDomain(b, BooleanDomain.INSTANCE)
+                .build();
+
+        val childBuilder = problem.toBuilder();
+        assertThat(childBuilder.createVariable("c", BooleanDomain.INSTANCE).getIndex()).isEqualTo(2);
+        assertThatThrownBy(() -> childBuilder.createVariable("a", BooleanDomain.INSTANCE))
+                .isInstanceOf(IllegalArgumentException.class);
+        assertThat(childBuilder.build().getNumVariables()).isEqualTo(3);
+    }
+
+    @Test
+    void aVariableMadeElsewhereCannotJoinOneTheBuilderIssued() {
+        val builder = ConstraintSatisfactionProblem.builder();
+        builder.createVariable("own", BooleanDomain.INSTANCE);
+        Variable<Boolean> elsewhere = new Variable.Factory().create("elsewhere");
+        builder.variableDomain(elsewhere, BooleanDomain.INSTANCE);
+
+        assertThatThrownBy(builder::build)
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("do not share one lineage");
+    }
+
+    @Test
     void narrowingKeepsTheFactorySoALaterToBuilderStillContinues() {
         val builder = ConstraintSatisfactionProblem.builder();
         val a = builder.createVariable("a", IntRangeDomain.of(1, 3));

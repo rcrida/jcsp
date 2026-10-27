@@ -3,12 +3,15 @@ package io.github.rcrida.jcsp;
 import io.github.rcrida.jcsp.domains.Domain;
 import io.github.rcrida.jcsp.variables.Variable;
 import org.jspecify.annotations.NonNull;
+import org.jspecify.annotations.Nullable;
 
 import java.util.AbstractCollection;
 import java.util.AbstractMap;
 import java.util.AbstractSet;
 import java.util.Arrays;
 import java.util.Collection;
+import java.util.Collections;
+import java.util.IdentityHashMap;
 import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -29,11 +32,14 @@ import java.util.function.BiConsumer;
  * shared by every map derived from this one, so only the array of domains is copied. Lookups and
  * iteration are faster than the {@link LinkedHashMap}'s.
  * <p>
- * Every variable must have been issued by a factory, and no two may share an index, which is what
- * mixing variables from two problems' factories would do. A variable is found only if it is exactly
- * one of the map's own, so one from another factory whose index happens to be in range is absent. The
- * arrays are as long as the highest index plus one, so a problem over a sparse subset of a larger
- * index space has gaps.
+ * Every variable must have been issued by a {@link Variable.Factory}, and the factories must lie on
+ * one lineage: there is a {@link #leaf} factory, the most-derived of them, and every other is the
+ * factory it was forked from or one of that one's own ancestors. A variable from a different branch
+ * of the family, or from an unrelated factory, is therefore rejected whatever its index. No two
+ * variables may share an index, which only an ancestor that went on issuing after it was forked can
+ * still cause. A variable is found only if it is exactly one of the map's own, so one from another
+ * factory whose index happens to be in range is absent. The arrays are as long as the highest index
+ * plus one, so a problem over a sparse subset of a larger index space has gaps.
  * <p>
  * Never modified after construction, and the arrays never leave this class.
  */
@@ -44,22 +50,43 @@ final class DomainMap extends AbstractMap<Variable<?>, Domain<?>> {
     /** Indexed like {@link #variables}. */
     private final Domain<?>[] domains;
     private final int size;
+    /** The most-derived factory that issued any of the variables, or null for no variables. */
+    private final Variable.@Nullable Factory leaf;
 
-    private DomainMap(Variable<?>[] variables, Domain<?>[] domains, int size) {
+    private DomainMap(Variable<?>[] variables, Domain<?>[] domains, int size, Variable.@Nullable Factory leaf) {
         this.variables = variables;
         this.domains = domains;
         this.size = size;
+        this.leaf = leaf;
     }
 
-    /** {@code source}'s entries; {@code source} itself if it is already one of these. */
+    /**
+     * {@code source}'s entries; {@code source} itself if it is already one of these.
+     *
+     * @throws IllegalArgumentException if a variable was not issued by a factory, if two were issued by
+     *         factories that are not on one lineage, or if two share an index
+     */
     static DomainMap of(@NonNull Map<Variable<?>, Domain<?>> source) {
         if (source instanceof DomainMap domainMap) {
             return domainMap;
         }
         int highest = -1;
+        Variable<?> leafVariable = null;
+        Variable.Factory leaf = null;
+        Set<Variable.Factory> checked = Collections.newSetFromMap(new IdentityHashMap<>());
         for (Variable<?> variable : source.keySet()) {
-            if (variable.getIndex() < 0) {
+            Variable.Factory factory = variable.getFactory();
+            if (factory == null) {
                 throw new IllegalArgumentException("Variable was not issued by a Variable.Factory: " + variable);
+            }
+            if (checked.add(factory)) {
+                if (leaf == null || factory.isSameOrForkOf(leaf)) {
+                    leaf = factory;
+                    leafVariable = variable;
+                } else if (!leaf.isSameOrForkOf(factory)) {
+                    throw new IllegalArgumentException("Variables " + leafVariable + " and " + variable
+                            + " were issued by factories that do not share one lineage");
+                }
             }
             highest = Math.max(highest, variable.getIndex());
         }
@@ -74,7 +101,16 @@ final class DomainMap extends AbstractMap<Variable<?>, Domain<?>> {
             variables[index] = entry.getKey();
             domains[index] = entry.getValue();
         }
-        return new DomainMap(variables, domains, source.size());
+        return new DomainMap(variables, domains, source.size(), leaf);
+    }
+
+    /**
+     * The factory a problem over these variables should issue further variables from: {@code own} if it
+     * is the {@link #leaf} or a fork of it, and otherwise the leaf, so a problem built from variables
+     * made elsewhere continues their numbering rather than a fresh factory's.
+     */
+    Variable.Factory continuing(Variable.@NonNull Factory own) {
+        return leaf == null || own.isSameOrForkOf(leaf) ? own : leaf;
     }
 
     /** The index of {@code key} if it is exactly one of this map's variables, otherwise -1. */
@@ -108,7 +144,7 @@ final class DomainMap extends AbstractMap<Variable<?>, Domain<?>> {
         }
         Domain<?>[] replaced = domains.clone();
         replaced[index] = domain;
-        return new DomainMap(variables, replaced, size);
+        return new DomainMap(variables, replaced, size, leaf);
     }
 
     /** As {@link #with}, for every entry of {@code updates} in one pass. */
@@ -121,7 +157,7 @@ final class DomainMap extends AbstractMap<Variable<?>, Domain<?>> {
             }
             replaced[index] = update.getValue();
         }
-        return new DomainMap(variables, replaced, size);
+        return new DomainMap(variables, replaced, size, leaf);
     }
 
     /** The rare case of an update naming a variable this map does not have: a map built afresh. */

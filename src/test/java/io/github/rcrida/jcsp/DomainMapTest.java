@@ -127,13 +127,74 @@ class DomainMapTest {
     }
 
     @Test
-    void variablesFromDifferentFactoriesSharingAnIndexAreRejected() {
+    void variablesFromUnrelatedFactoriesAreRejected() {
         Variable<Integer> first = new Variable.Factory().create("first");
         Variable<Integer> second = new Variable.Factory().create("second");
 
         assertThatThrownBy(() -> DomainMap.of(new LinkedHashMap<>(Map.of(first, domain(1), second, domain(1)))))
                 .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("share index 0");
+                .hasMessageContaining("do not share one lineage");
+    }
+
+    @Test
+    void variablesFromDifferentBranchesOfOneFamilyAreRejectedWhateverTheirIndices() {
+        Variable.Factory parent = new Variable.Factory();
+        parent.create("shared");
+        Variable<Integer> left = parent.fork().create("left");
+        Variable.Factory right = parent.fork();
+        right.create("padding");
+        Variable<Integer> beyond = right.create("beyond");
+
+        // left is index 1 and beyond is index 2, so nothing collides: only the branches differ
+        assertThat(left.getIndex()).isNotEqualTo(beyond.getIndex());
+        assertThatThrownBy(() -> DomainMap.of(new LinkedHashMap<>(Map.of(left, domain(1), beyond, domain(1)))))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("do not share one lineage");
+    }
+
+    @Test
+    void anAncestorThatKeptIssuingAfterItWasForkedCanStillCollideWithItsFork() {
+        Variable.Factory parent = new Variable.Factory();
+        parent.create("a");
+        Variable<Integer> fromFork = parent.fork().create("fromFork");
+        Variable<Integer> fromParent = parent.create("fromParent");
+
+        // both are on one lineage, so only the index check can tell them apart
+        assertThatThrownBy(() -> DomainMap.of(new LinkedHashMap<>(Map.of(fromFork, domain(1), fromParent, domain(1)))))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("share index 1");
+    }
+
+    @Test
+    void variablesFromAFactoryAndItsForkAreOneLineageInEitherOrder() {
+        Variable.Factory parent = new Variable.Factory();
+        Variable<Integer> fromParent = parent.create("fromParent");
+        Variable<Integer> fromFork = parent.fork().create("fromFork");
+
+        DomainMap forkSecond = DomainMap.of(new LinkedHashMap<>(Map.of(fromParent, domain(1), fromFork, domain(2))));
+        DomainMap forkFirst = DomainMap.of(new LinkedHashMap<>(Map.of(fromFork, domain(2), fromParent, domain(1))));
+
+        assertThat(forkSecond).hasSize(2);
+        assertThat(forkSecond.get(fromFork)).isEqualTo(domain(2));
+        assertThat(forkFirst.get(fromParent)).isEqualTo(domain(1));
+    }
+
+    @Test
+    void continuingKeepsAFactoryThatIsTheLeafOrAForkOfItAndOtherwiseAdoptsTheLeaf() {
+        Variable.Factory parent = new Variable.Factory();
+        parent.create("a");
+        Variable.Factory leaf = parent.fork();
+        Variable<Integer> fromLeaf = leaf.create("b");
+        DomainMap map = DomainMap.of(new LinkedHashMap<>(Map.of(fromLeaf, domain(1))));
+
+        assertThat(map.continuing(leaf)).isSameAs(leaf);
+        Variable.Factory forkOfLeaf = leaf.fork();
+        assertThat(map.continuing(forkOfLeaf)).isSameAs(forkOfLeaf);
+        assertThat(map.continuing(parent)).isSameAs(leaf);
+        assertThat(map.continuing(parent.fork())).isSameAs(leaf);
+        Variable.Factory unrelated = new Variable.Factory();
+        assertThat(map.continuing(unrelated)).isSameAs(leaf);
+        assertThat(DomainMap.of(new LinkedHashMap<>()).continuing(unrelated)).isSameAs(unrelated);
     }
 
     @Test

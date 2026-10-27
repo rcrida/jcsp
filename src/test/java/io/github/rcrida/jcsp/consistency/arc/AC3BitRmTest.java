@@ -412,4 +412,28 @@ public class AC3BitRmTest {
         val bitRmResult = AC3BitRm.INSTANCE.revise(narrowed, Arc.of(x, y)).get();
         assertThat(bitRmResult.getVariableDomains()).isEqualTo(ac3Result.getVariableDomains());
     }
+
+    @Test
+    void staleResidue_isReplacedByAnotherLiveSupport() {
+        // x != y over {1, 2, 3}. Revising (x, y) on the full problem records, per x value, a residue
+        // pointing at the first support in y's declared order: x=2 and x=3 both at y=1. Narrowing y
+        // to {2, 3} then leaves those two residues non-negative but dead, so the next revision must
+        // look past them and find y=3 and y=2 -- the residue-present-but-not-live branch, reached by
+        // construction rather than by whichever order a queue happens to revise arcs in. The two
+        // revisions share one constraint graph, and so one set of residues, because withDomain
+        // reuses it.
+        Variable<Integer> x = variableFactory.create("x_stale_bitrm");
+        Variable<Integer> y = variableFactory.create("y_stale_bitrm");
+        val csp = ConstraintSatisfactionProblem.builder()
+                .variableDomain(x, IntRangeDomain.of(1, 3))
+                .variableDomain(y, IntRangeDomain.of(1, 3))
+                .notEqualsConstraint(x, y)
+                .build();
+        AC3BitRm.INSTANCE.revise(csp, Arc.of(x, y));
+
+        val narrowed = csp.withDomain(y, DiscreteDomain.of(2, 3));
+        val ac3Result = AC3.INSTANCE.revise(narrowed, Arc.of(x, y)).get();
+        val bitRmResult = AC3BitRm.INSTANCE.revise(narrowed, Arc.of(x, y)).get();
+        assertThat(bitRmResult.getVariableDomains()).isEqualTo(ac3Result.getVariableDomains());
+    }
 }

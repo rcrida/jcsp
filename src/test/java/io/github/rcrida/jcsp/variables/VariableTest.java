@@ -13,7 +13,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 public class VariableTest {
     @Test
     void factory() {
-        var variableFactory = Variable.Factory.INSTANCE;
+        var variableFactory = new Variable.Factory();
         var name = UUID.randomUUID().toString();
         Variable variable = variableFactory.create(name);
         assertThat(variable.getName()).isEqualTo(name);
@@ -71,14 +71,36 @@ public class VariableTest {
     }
 
     @Test
-    void sharedInstanceCannotBeForked() {
-        assertThatThrownBy(Variable.Factory.INSTANCE::fork).isInstanceOf(AssertionError.class);
+    void aVariableRemembersTheFactoryThatIssuedIt() {
+        var factory = new Variable.Factory();
+        var fork = factory.fork();
+
+        assertThat(factory.create("a").getFactory()).isSameAs(factory);
+        assertThat(fork.create("b").getFactory()).isSameAs(fork);
     }
 
     @Test
-    void sharedInstanceAcceptsARepeatedNameAsADistinctVariable() {
-        var name = UUID.randomUUID().toString();
-        assertThat(Variable.Factory.INSTANCE.create(name)).isNotEqualTo(Variable.Factory.INSTANCE.create(name));
+    void aFactoryIsOnItsOwnLineageAndOnThatOfEveryFactoryItWasForkedFrom() {
+        var root = new Variable.Factory();
+        var middle = root.fork();
+        var leaf = middle.fork();
+
+        assertThat(root.isSameOrForkOf(root)).isTrue();
+        assertThat(leaf.isSameOrForkOf(leaf)).isTrue();
+        assertThat(leaf.isSameOrForkOf(middle)).isTrue();
+        assertThat(leaf.isSameOrForkOf(root)).isTrue();
+        assertThat(root.isSameOrForkOf(leaf)).isFalse();
+    }
+
+    @Test
+    void forksOfOneFactoryAndUnrelatedFactoriesAreOnDifferentLineages() {
+        var parent = new Variable.Factory();
+        var left = parent.fork();
+        var right = parent.fork();
+
+        assertThat(left.isSameOrForkOf(right)).isFalse();
+        assertThat(right.isSameOrForkOf(left)).isFalse();
+        assertThat(new Variable.Factory().isSameOrForkOf(parent)).isFalse();
     }
 
     @Test

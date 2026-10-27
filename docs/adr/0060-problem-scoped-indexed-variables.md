@@ -1,6 +1,6 @@
 # 0060. Variables are issued by their problem and carry a dense index
 
-**Status**: Proposed
+**Status**: Accepted
 
 ## Context
 
@@ -17,16 +17,19 @@ variables cannot be open to implementation.
 
 ## Decision
 
-Proposed; not yet implemented beyond the scaffolding noted under Consequences.
-
-- A problem's variables are issued by the problem's own builder: `csp.variable(name, domain)`
-  replaces `createVariable` and `variableDomain`, and the 1-d and 2-d array helpers move with it.
-  A variable therefore never exists without a domain, and a duplicate name in one builder is
-  rejected.
-- A variable carries `getIndex()`, its position in the order the builder issued it, dense from 0.
-  Per-variable state in the solver becomes an array over that index rather than a hash table.
-- Comparison is by identity within the problem that issued it. A variable handed to a builder that
-  did not issue it is rejected at the builder boundary with an `assert`.
+- A problem's variables are issued by the problem's own builder: `createVariable(name, domain)`
+  issues a variable and registers its domain in one step, and the 1-d and 2-d array helpers go
+  through it. A duplicate name in one builder is rejected.
+- A variable carries `getIndex()`, its position in the order its factory issued it, dense from 0,
+  and `getFactory()`, the factory that issued it. Per-variable state in the solver becomes an array
+  over that index rather than a hash table.
+- Comparison is by identity. A problem accepts variables only if their factories lie on one
+  lineage: the most-derived of them is the problem's *leaf*, and every other is the factory it was
+  forked from or one of that one's ancestors. A variable from another builder, from a different
+  branch of the same family, or one a builder issued mixed with ones made elsewhere is rejected with
+  an `IllegalArgumentException` when the problem is built, whatever its index. A problem built
+  entirely from variables made by some other factory continues that leaf's numbering when it is
+  next built on, rather than restarting.
 - A derived problem (`withVariableSubset`, `decomposeSubproblems`, tree-decomposition cliques)
   keeps its parent's index space, so its arrays are sized to the parent and are sparse. Reindexing
   per subproblem would need a remapping at every boundary and would cancel the saving.
@@ -37,9 +40,9 @@ Proposed; not yet implemented beyond the scaffolding noted under Consequences.
 
 ## Rejected alternatives
 
-- **A global counter on `Variable.Factory.INSTANCE`.** Indices stay unique but are not dense per
-  problem, so an array sized by index grows with every variable the JVM has ever made. Fine as a
-  transitional state while nothing reads the index; useless as the end state.
+- **A global counter on a shared `Variable.Factory.INSTANCE`.** Indices stay unique but are not
+  dense per problem, so an array sized by index grows with every variable the JVM has ever made.
+  It served as a transitional state while tests were migrated, and was then deleted.
 - **Reindexing each subproblem densely.** Smaller arrays, but every boundary between a problem and
   its subproblems then translates variables, and `Assignment` crosses those boundaries constantly.
 - **Keeping `Variable` open and adding `index()` for implementors to supply.** Pushes the
@@ -51,14 +54,14 @@ To be measured before the migration is committed to beyond `Assignment` and `Dom
 claim is that array lookup beats hashing a name, not that any particular instance gets faster
 (see the corpus-sweep protocol used by ADR-0024 and ADR-0058).
 
-Scaffolding landed first: `Variable.getIndex()` exists, and `Variable.Factory` is stateful: a
-`new Factory()` numbers its variables from 0 and rejects a name it has already issued. Each builder
-owns a factory, a built problem keeps it, and `toBuilder()` hands the new builder `fork()` of it: a
-factory that numbers on from the parent's next index and treats the parent's names as issued by
-following a parent link, so neither is copied. Forks of one parent are independent of each other.
-Nothing reads the index yet. `Variable.Factory.INSTANCE` remains the shared factory until the builder migration
-retires it; it numbers uniquely but not densely and accepts repeated names, because the existing
-tests reuse names across problems.
+`Variable.Factory` is stateful: a `new Factory()` numbers its variables from 0 and rejects a name it
+has already issued. Each builder owns a factory, a built problem keeps it, and `toBuilder()` and
+`decomposeSubproblems` hand the new builder a `fork()` of it: a factory that numbers on from the
+parent's next index and treats the parent's names as issued by following a parent link, so neither
+is copied. Forks of one parent are on different branches and independent of each other. The index
+check is what remains for a parent that kept issuing after it was forked, since it and its fork are
+then on one lineage and can still share an index. `Variable.Factory.INSTANCE` is gone: every test
+class now issues its variables from a factory of its own.
 
 `DomainMap` was converted first, to two arrays indexed by `getIndex()` with no hash map: the
 variables, so a lookup can check it was handed exactly one of the map's own, and the domains. It
