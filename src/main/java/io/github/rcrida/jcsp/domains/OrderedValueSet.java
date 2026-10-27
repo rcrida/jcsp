@@ -39,8 +39,12 @@ import java.util.Spliterators;
  */
 final class OrderedValueSet<T> extends AbstractSet<T> {
 
-    /** Up to this many elements, {@link #contains} scans the array rather than building {@link #membership}. */
-    private static final int SCAN_LIMIT = 8;
+    /**
+     * Up to this many elements, {@link #contains} scans the array rather than building {@link #membership}.
+     * Package-visible so {@link NumericDiscreteDomain.NumericDiscreteDomainBuilder} can switch from scanning
+     * its recorded deletions to hashing them at the same point.
+     */
+    static final int SCAN_LIMIT = 8;
 
     private final @NonNull Object[] elements;
     /** Handed in by {@link #handingOver}; otherwise built by the first {@link #contains} that needs it. */

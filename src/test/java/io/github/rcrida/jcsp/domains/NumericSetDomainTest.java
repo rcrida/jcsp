@@ -2,9 +2,11 @@ package io.github.rcrida.jcsp.domains;
 
 import org.junit.jupiter.api.Test;
 
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.NoSuchElementException;
 import java.util.Set;
+import java.util.stream.IntStream;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -85,6 +87,40 @@ class NumericSetDomainTest {
 
         assertThat(narrowed).isInstanceOf(NumericEmptyDomain.class);
         assertThat(narrowed.isEmpty()).isTrue();
+    }
+
+    @Test
+    void toBuilder_deletingMoreValuesThanTheScanLimit_removesExactlyThoseValues() {
+        // Past OrderedValueSet.SCAN_LIMIT the recorded deletions are hashed rather than scanned; the
+        // result must not depend on which. Includes a repeated deletion, one of the bounds, and a
+        // value the domain never held.
+        NumericSetDomain<Integer> domain = new NumericSetDomain<>(
+                new LinkedHashSet<>(IntStream.rangeClosed(1, 30).boxed().toList()));
+        NumericDiscreteDomain.NumericDiscreteDomainBuilder<Integer> builder =
+                (NumericDiscreteDomain.NumericDiscreteDomainBuilder<Integer>) domain.toBuilder();
+        for (int deleted : new int[]{30, 2, 4, 6, 8, 10, 12, 14, 16, 2, 99}) {
+            builder.delete(deleted);
+        }
+
+        NumericDiscreteDomain<Integer> narrowed = builder.build();
+
+        assertThat(narrowed.toList()).containsExactly(1, 3, 5, 7, 9, 11, 13, 15, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29);
+        assertThat(narrowed.getMax()).isEqualTo(29);
+    }
+
+    @Test
+    void toBuilder_deletingMoreValuesThanTheScanLimitThenAddingOne_keepsTheSurvivorsAndTheNewValue() {
+        NumericSetDomain<Integer> domain = new NumericSetDomain<>(
+                new LinkedHashSet<>(IntStream.rangeClosed(1, 20).boxed().toList()));
+        NumericDiscreteDomain.NumericDiscreteDomainBuilder<Integer> builder =
+                (NumericDiscreteDomain.NumericDiscreteDomainBuilder<Integer>) domain.toBuilder();
+        for (int deleted = 1; deleted <= 12; deleted++) {
+            builder.delete(deleted);
+        }
+
+        NumericDiscreteDomain<Integer> rebuilt = builder.value(100).build();
+
+        assertThat(rebuilt.toList()).containsExactly(13, 14, 15, 16, 17, 18, 19, 20, 100);
     }
 
     @Test

@@ -7,6 +7,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
@@ -112,11 +113,23 @@ public interface NumericDiscreteDomain<N extends Number> extends NumericDomain<N
         @SuppressWarnings("unchecked")
         private void materialize() {
             mutableValues = LinkedHashSet.newLinkedHashSet(source.size());
+            Collection<Object> deleted = deletions();
             for (Object value : source.elements()) {
-                if (removed == null || !removed.contains(value)) mutableValues.add((N) value);
+                if (!deleted.contains(value)) mutableValues.add((N) value);
             }
             source = null;
             removed = null;
+        }
+
+        /**
+         * The recorded deletions as something to test each value against: the list itself while it is
+         * short enough to scan, and a hash set once scanning it for every value costs more than hashing
+         * them once, which a domain narrowed by many values at a time (a scheduling domain losing a
+         * window of start times) makes it. Empty if nothing was deleted.
+         */
+        private Collection<Object> deletions() {
+            if (removed == null) return List.of();
+            return removed.size() <= OrderedValueSet.SCAN_LIMIT ? removed : new HashSet<>(removed);
         }
 
         /**
@@ -153,8 +166,8 @@ public interface NumericDiscreteDomain<N extends Number> extends NumericDomain<N
         }
 
         /**
-         * Filters {@link #source}'s array by {@link #removed}, in one pass with one equality test
-         * per recorded deletion per value, and collapses as {@link #build} does.
+         * Filters {@link #source}'s array by {@link #deletions}, in one pass, and collapses as {@link
+         * #build} does.
          */
         @SuppressWarnings("unchecked")
         private NumericDiscreteDomain<N> buildNarrowed() {
@@ -162,9 +175,10 @@ public interface NumericDiscreteDomain<N extends Number> extends NumericDomain<N
             if (removed == null) return unchanged(from);
             Object[] elements = from.elements();
             Object[] kept = new Object[elements.length];
+            Collection<Object> deleted = deletions();
             int count = 0;
             for (Object element : elements) {
-                if (!removed.contains(element)) kept[count++] = element;
+                if (!deleted.contains(element)) kept[count++] = element;
             }
             if (count == elements.length) return unchanged(from);
             if (count == 0) return NumericEmptyDomain.instance();

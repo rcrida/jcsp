@@ -69,3 +69,10 @@ narrowing is the array filter and the allocation of the result.
 A narrowed domain's first `contains` over more than 8 values now pays the index build. Nothing in
 the measured runs made that cost visible, but a workload that narrows a domain and then queries it
 once would pay for the index and use it only once.
+
+The recorded deletions are tested against each surviving value, so a long list made `build` cost
+values times deletions: on `Taillard-os-04-04-0`, where a scheduling domain loses a window of start
+times at once, `ArrayList.indexOf` with `Integer.equals` was 34% of the profile's samples. Past
+`OrderedValueSet.SCAN_LIMIT` deletions the list is now hashed into a set once, and below it the short
+list is still scanned, so the common one-or-two-deletion narrowing hashes nothing. That run went from
+3.26s to 2.97s with identical node counts.
