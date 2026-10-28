@@ -391,7 +391,7 @@ public class FixpointPropagation {
             @Nullable Set<Variable<?>> initialSeed, @NonNull SolverListener listener,
             @NonNull Statistics statistics, @NonNull Cancellation cancellation) {
         log.debug("applyFixpoint");
-        checkCancelled(csp, statistics, cancellation);
+        checkCancelled(statistics, cancellation);
         var worklist = new Worklist(propagators, coverageFor(csp), initialSeed);
         return isObserved(log.isDebugEnabled(), listener)
                 ? applyObserved(csp.withDomains(initialUpdates), worklist, listener, statistics, cancellation)
@@ -418,7 +418,7 @@ public class FixpointPropagation {
             Statistics statistics, Cancellation cancellation) {
         var current = csp;
         for (int i = worklist.next(); i >= 0; i = worklist.next()) {
-            checkCancelled(current, statistics, cancellation);
+            checkCancelled(statistics, cancellation);
             var propagator = propagators.get(i);
             var beforePropagator = current;
             var after = propagator.apply(current, worklist.takeDirty(i));
@@ -444,7 +444,7 @@ public class FixpointPropagation {
         var view = DomainOverlay.of(csp.getVariableDomains(), updates);
         for (int i = worklist.next(); i >= 0; i = worklist.next()) {
             if (cancellation.isCancelled()) {
-                throw cancelled(csp.withDomains(updates), statistics);
+                throw new SolverCancelledException(statistics);
             }
             var changed = propagators.get(i).narrow(csp, view, updates, worklist.takeDirty(i));
             if (changed.isEmpty()) return Optional.empty();
@@ -455,16 +455,10 @@ public class FixpointPropagation {
         return Optional.of(csp.withDomains(updates));
     }
 
-    private static void checkCancelled(ConstraintSatisfactionProblem csp, Statistics statistics,
-                                        Cancellation cancellation) {
+    private static void checkCancelled(Statistics statistics, Cancellation cancellation) {
         if (cancellation.isCancelled()) {
-            throw cancelled(csp, statistics);
+            throw new SolverCancelledException(statistics);
         }
-    }
-
-    private static SolverCancelledException cancelled(ConstraintSatisfactionProblem csp, Statistics statistics) {
-        statistics.updateCurrentSearchSpace(csp.getSearchSpace());
-        return new SolverCancelledException(statistics);
     }
 
     /**
@@ -700,11 +694,11 @@ public class FixpointPropagation {
             @NonNull ConstraintSatisfactionProblem csp, @Nullable Set<Variable<?>> initialSeed,
             @NonNull SolverListener listener, @NonNull Statistics statistics, @NonNull Cancellation cancellation) {
         log.debug("applyFixpointWithReason");
-        checkCancelled(csp, statistics, cancellation);
+        checkCancelled(statistics, cancellation);
         var current = csp;
         var worklist = new Worklist(propagators, coverageFor(csp), initialSeed);
         for (int i = worklist.next(); i >= 0; i = worklist.next()) {
-            checkCancelled(current, statistics, cancellation);
+            checkCancelled(statistics, cancellation);
             var propagator = propagators.get(i);
             var beforePropagator = current;
             ConsistencyResult after = propagator.applyWithReason(current, worklist.takeDirty(i));

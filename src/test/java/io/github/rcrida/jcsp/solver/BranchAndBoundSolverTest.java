@@ -1162,7 +1162,6 @@ public class BranchAndBoundSolverTest {
         var statistics = new io.github.rcrida.jcsp.assignments.Statistics();
         var cancellation = new Cancellation();
         IncumbentSeeder probing = (csp, objective) -> {
-            statistics.updateCurrentSearchSpace(java.math.BigInteger.valueOf(999));
             statistics.updateRemainingSearchSpace(java.math.BigInteger.valueOf(999));
             cancellation.cancel();
             return Optional.of(suboptimal());
@@ -1179,9 +1178,6 @@ public class BranchAndBoundSolverTest {
 
         assertThat(solver.getSolutions(CSP).toList()).containsExactly(suboptimal());
 
-        assertThat(statistics.getCurrentSearchSpace())
-                .as("the cancelled search's own root, not the seeder's 999")
-                .contains(CSP.getSearchSpace());
         assertThat(statistics.getRemainingSearchSpace())
                 .as("this search's remaining estimate, not the seeder's 999")
                 .isPresent()

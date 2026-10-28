@@ -126,7 +126,7 @@ class Xcsp3ProblemRunnerTest {
         assertThat(lines.get(0)).isEqualTo("c search-space-before: 2");
         assertThat(lines.get(1)).isEqualTo("s UNSATISFIABLE");
         assertThat(lines.get(2)).startsWith("c stats: Statistics(");
-        assertThat(lines).hasSize(3); // never cancelled -- no c search-space-after: line at all
+        assertThat(lines).hasSize(3); // never cancelled -- nothing after the stats line
     }
 
     @Test void satisfaction_cancelledBeforeSearchCompletes_reportsUnknown() {
@@ -163,9 +163,9 @@ class Xcsp3ProblemRunnerTest {
         assertThat(lines.get(1)).isEqualTo("s UNKNOWN");
         assertThat(lines.get(2)).startsWith("c stats: Statistics(");
         // Asserted by content rather than index: a cancelled solve reports the stable
-        // post-preprocessing figure and the deprecated node sample, plus, when search actually
-        // began, the unexplored-fraction estimate.
-        assertThat(lines).contains("c search-space-at-root: 256", "c search-space-after: 256");
+        // post-preprocessing figure, plus, when search actually began, the unexplored-fraction
+        // estimate.
+        assertThat(lines).contains("c search-space-at-root: 256");
     }
 
     // ---- optimization chain -------------------------------------------------------------------------------------
@@ -204,7 +204,7 @@ class Xcsp3ProblemRunnerTest {
         assertThat(lines.get(0)).isEqualTo("c search-space-before: 2");
         assertThat(lines.get(1)).isEqualTo("s UNSATISFIABLE");
         assertThat(lines.get(2)).startsWith("c stats: Statistics(");
-        assertThat(lines).hasSize(3); // never cancelled -- no c search-space-after: line at all
+        assertThat(lines).hasSize(3); // never cancelled -- nothing after the stats line
     }
 
     @Test void optimization_cancelledBeforeAnySolutionFound_reportsUnknown() {
@@ -224,7 +224,6 @@ class Xcsp3ProblemRunnerTest {
         assertThat(lines.get(0)).isEqualTo("c search-space-before: 3");
         assertThat(lines.get(1)).isEqualTo("s UNKNOWN");
         assertThat(lines.get(2)).startsWith("c stats: Statistics(");
-        assertThat(lines.get(3)).isEqualTo("c search-space-after: 3");
     }
 
     @Test void optimization_cancelledAfterFirstIncumbent_reportsSatisfiableNotProvenOptimal() {

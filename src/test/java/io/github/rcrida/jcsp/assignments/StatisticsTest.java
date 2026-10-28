@@ -16,26 +16,13 @@ public class StatisticsTest {
     }
 
     @Test
-    void initialCurrentSearchSpaceIsEmpty() {
-        val statistics = new Statistics();
-        assertThat(statistics.getCurrentSearchSpace()).isEmpty();
-    }
-
-    @Test
-    void updateCurrentSearchSpace() {
-        val statistics = new Statistics();
-        statistics.updateCurrentSearchSpace(BigInteger.valueOf(42));
-        assertThat(statistics.getCurrentSearchSpace()).contains(BigInteger.valueOf(42));
-    }
-
-    @Test
-    void updateCurrentSearchSpace_firstCallWinsLaterCallsAreNoOps() {
+    void updateRemainingSearchSpace_firstCallWinsLaterCallsAreNoOps() {
         // Deliberate first-write-wins semantics, not overwrite -- see the method's own Javadoc for
         // why (repeated re-detection of the same cancellation as a lazy stream unwinds).
         val statistics = new Statistics();
-        statistics.updateCurrentSearchSpace(BigInteger.valueOf(7));
-        statistics.updateCurrentSearchSpace(BigInteger.valueOf(100));
-        assertThat(statistics.getCurrentSearchSpace()).contains(BigInteger.valueOf(7));
+        statistics.updateRemainingSearchSpace(BigInteger.valueOf(7));
+        statistics.updateRemainingSearchSpace(BigInteger.valueOf(100));
+        assertThat(statistics.getRemainingSearchSpace()).contains(BigInteger.valueOf(7));
     }
 
     @Test
@@ -67,14 +54,11 @@ public class StatisticsTest {
         // snapshots of a search these figures are not documented to describe.
         val statistics = new Statistics();
         statistics.updateRootSearchSpace(BigInteger.valueOf(500));
-        statistics.updateCurrentSearchSpace(BigInteger.valueOf(7));
         statistics.updateRemainingSearchSpace(BigInteger.valueOf(30));
 
         statistics.clearSearchSpaceSnapshots();
-        statistics.updateCurrentSearchSpace(BigInteger.valueOf(100));
         statistics.updateRemainingSearchSpace(BigInteger.valueOf(1));
 
-        assertThat(statistics.getCurrentSearchSpace()).contains(BigInteger.valueOf(100));
         assertThat(statistics.getRemainingSearchSpace()).contains(BigInteger.valueOf(1));
         assertThat(statistics.getRootSearchSpace()).contains(BigInteger.valueOf(500));
     }
@@ -142,7 +126,6 @@ public class StatisticsTest {
         b.incrementConstraintChecks();
         b.incrementConstraintChecks();
         b.addRestarts(2);
-        b.updateCurrentSearchSpace(BigInteger.valueOf(99));
         a.add(b);
         assertThat(a.getNodesExplored()).isEqualTo(1);
         assertThat(a.getConstraintChecks()).isEqualTo(2);
@@ -151,15 +134,5 @@ public class StatisticsTest {
         assertThat(a.getSteps()).isEqualTo(1);
         assertThat(a.getNogoodsLearned()).isEqualTo(1);
         assertThat(a.getNogoodRejections()).isEqualTo(1);
-        assertThat(a.getCurrentSearchSpace()).contains(BigInteger.valueOf(99));
-    }
-
-    @Test
-    void add_otherHasNoCurrentSearchSpace_leavesExistingValueUnchanged() {
-        val a = new Statistics();
-        a.updateCurrentSearchSpace(BigInteger.valueOf(5));
-        val b = new Statistics();
-        a.add(b);
-        assertThat(a.getCurrentSearchSpace()).contains(BigInteger.valueOf(5));
     }
 }

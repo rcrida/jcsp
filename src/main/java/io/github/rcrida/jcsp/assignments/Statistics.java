@@ -55,24 +55,6 @@ import java.util.concurrent.atomic.AtomicReference;
  *       {@link #backtracks} exactly like any other constraint's rejection, per {@link
  *       io.github.rcrida.jcsp.assignments.NogoodStore}'s own design), only how much of that total
  *       is attributable to CDCL specifically.</li>
- *   <li>{@link #currentSearchSpace} — unlike every field above, a single overwritten slot, not an
- *       accumulator: {@link io.github.rcrida.jcsp.ConstraintSatisfactionProblem#getSearchSpace()}
- *       of whatever live, propagation-narrowed problem search was working on at the exact point a
- *       {@link io.github.rcrida.jcsp.solver.Cancellation} was detected (node/time limit or an
- *       external stop signal) and search actually stopped because of it. {@code null} until that
- *       happens — a completed solve (found a solution, proved UNSAT, or genuinely exhausted the
- *       search) never touches it, since {@link io.github.rcrida.jcsp.ConstraintSatisfactionProblem#getSearchSpace()}
- *       on the original, undecomposed problem already answers "how big was this problem" for that
- *       case. Lets a caller see how much smaller the search space had actually become by the time
- *       an incomplete solve gave up, as opposed to the always-unchanged size the original
- *       (immutable) problem itself reports. Excluded from {@code toString()} ({@code
- *       @ToString.Exclude}) since {@code Xcsp3ProblemRunner} (and any other caller) already has
- *       its own dedicated, clearer place to report it (a separate {@code c search-space-after:}
- *       line) rather than folding a potentially very large number into the same line as the other
- *       seven counters. <b>Deprecated since 3.1.0, for removal in 4.0.0</b>: it samples the one
- *       node search happened to occupy when the clock stopped, which is not a measure of remaining
- *       work — three runs of one build on {@code Steiner3-08} reported 216, 746,496 and 10,077,696.
- *       The two fields below replace it.</li>
  *   <li>{@link #rootSearchSpace} — the whole problem's search space once the chain's one-time
  *       preprocessing fixpoint converged, recorded before any search node is explored, so it is
  *       stable across runs of the same instance and answers "how much did propagation shrink this
@@ -100,7 +82,6 @@ public class Statistics {
     @Getter(AccessLevel.NONE) AtomicLong steps = new AtomicLong();
     @Getter(AccessLevel.NONE) AtomicLong nogoodsLearned = new AtomicLong();
     @Getter(AccessLevel.NONE) AtomicLong nogoodRejections = new AtomicLong();
-    @Getter(AccessLevel.NONE) @ToString.Exclude AtomicReference<BigInteger> currentSearchSpace = new AtomicReference<>();
     @Getter(AccessLevel.NONE) @ToString.Exclude AtomicReference<BigInteger> rootSearchSpace = new AtomicReference<>();
     @Getter(AccessLevel.NONE) @ToString.Exclude AtomicReference<BigInteger> remainingSearchSpace = new AtomicReference<>();
 
@@ -161,63 +142,13 @@ public class Statistics {
     }
 
     /**
-     * {@link Optional#empty()} until {@link #updateCurrentSearchSpace} is called at least once —
-     * see that method's own Javadoc, and {@link #currentSearchSpace}'s class-level bullet, for when
-     * that happens. A hand-written accessor (the field itself suppresses {@code @Value}'s usual
-     * generated getter via {@code @Getter(AccessLevel.NONE)}) rather than exposing the backing
-     * {@link AtomicReference} directly the way every other field's generated getter does — this one
-     * field is nullable-by-design rather than always-meaningful, so {@link Optional} is the honest
-     * shape for callers.
-     *
-     * @deprecated this samples one arbitrary search node rather than measuring remaining work, so
-     *             two runs of one instance can differ by many orders of magnitude — measured on
-     *             {@code Steiner3-08}, three runs of the same build reported 216, 746,496 and
-     *             10,077,696. Use {@link #getRootSearchSpace} for a figure that is stable across
-     *             runs, or {@link #getRemainingSearchSpace} for unexplored work. Scheduled for
-     *             removal in 4.0.0.
-     */
-    @Deprecated(since = "3.1.0", forRemoval = true)
-    public Optional<BigInteger> getCurrentSearchSpace() {
-        return Optional.ofNullable(currentSearchSpace.get());
-    }
-
-    /**
-     * Sets {@link #currentSearchSpace} to {@code searchSpace} the <em>first</em> time this is
-     * called for a given {@link Statistics} instance — every later call is a no-op, unlike every
-     * other mutator on this class (all otherwise additive). This is deliberate, not just an
-     * optimization: several cancellation-detection sites ({@link
-     * io.github.rcrida.jcsp.solver.BranchAndBoundSolver#getSolutions}, {@link
-     * io.github.rcrida.jcsp.solver.DomWdegLubySearch#getSolutions}, {@link
-     * io.github.rcrida.jcsp.solver.SetBranchingSolver}) signal cancellation by returning an empty
-     * result from a {@code Stream} filter/step rather than throwing, which lets the enclosing lazy
-     * stream keep pulling and re-checking every remaining sibling candidate at every ancestor level
-     * as the recursion unwinds — since {@link io.github.rcrida.jcsp.solver.Cancellation} is a
-     * sticky, one-way flag, each of those re-checks would also call this method again, and unwinding
-     * proceeds from deep (narrow, meaningful) states back toward shallow (wide, close to the
-     * original) ones. A plain overwrite would let the last, shallowest, least useful re-detection
-     * clobber the true state at the actual moment of cancellation; first-write-wins keeps that first,
-     * deepest snapshot instead. Implemented via {@link AtomicReference#compareAndSet}, which also
-     * makes this correctly thread-safe for the case where {@link
-     * io.github.rcrida.jcsp.solver.IndependentSubproblemSolver} runs multiple subproblems
-     * concurrently sharing one {@link Statistics} instance and more than one independently detects
-     * cancellation.
-     *
-     * @deprecated paired with {@link #getCurrentSearchSpace}; see that method for why the figure
-     *             misleads and what to read instead. Scheduled for removal in 4.0.0.
-     */
-    @Deprecated(since = "3.1.0", forRemoval = true)
-    public void updateCurrentSearchSpace(BigInteger searchSpace) {
-        currentSearchSpace.compareAndSet(null, searchSpace);
-    }
-
-    /**
      * Search space of the whole problem once the chain's one-time preprocessing fixpoint has
      * converged, before any search node is explored — {@link Optional#empty()} if preprocessing
      * never completed (it proved infeasibility, or was cancelled).
      * <p>
-     * Unlike {@link #getCurrentSearchSpace}, this does not depend on where a solve happened to be
-     * interrupted, so it is stable across runs of the same instance and is the honest answer to
-     * "how much did propagation shrink this problem".
+     * It does not depend on where a solve happened to be interrupted, so it is stable across runs
+     * of the same instance and is the honest answer to "how much did propagation shrink this
+     * problem".
      */
     public Optional<BigInteger> getRootSearchSpace() {
         return Optional.ofNullable(rootSearchSpace.get());
@@ -243,17 +174,24 @@ public class Statistics {
         return Optional.ofNullable(remainingSearchSpace.get());
     }
 
-    /** Records {@link #getRemainingSearchSpace}; first write wins, matching
-     *  {@link #updateCurrentSearchSpace}'s deepest-snapshot rule. */
+    /**
+     * Records {@link #getRemainingSearchSpace}; first write wins. Cancellation is signalled by an
+     * empty {@code Stream} step rather than an exception, so the enclosing lazy stream keeps
+     * re-checking every remaining sibling as the recursion unwinds, and each re-check would record
+     * again, from deep (narrow, meaningful) states back toward shallow ones: a plain overwrite would
+     * let the last, least useful one clobber the state at the moment of cancellation. Compare-and-set
+     * keeps the first, deepest snapshot, and is thread-safe for {@link
+     * io.github.rcrida.jcsp.solver.IndependentSubproblemSolver} subproblems sharing one instance.
+     */
     public void updateRemainingSearchSpace(BigInteger searchSpace) {
         remainingSearchSpace.compareAndSet(null, searchSpace);
     }
 
     /**
-     * Clears {@link #getCurrentSearchSpace} and {@link #getRemainingSearchSpace}, so that the next
-     * write wins rather than being discarded.
+     * Clears {@link #getRemainingSearchSpace}, so that the next write wins rather than being
+     * discarded.
      * <p>
-     * For a solve with an earlier phase that records snapshots of a search these figures are not
+     * For a solve with an earlier phase that records snapshots of a search this figure is not
      * documented to describe: {@link io.github.rcrida.jcsp.solver.BranchAndBoundSolver}'s incumbent
      * seeder runs its own feasibility searches against this same instance, and under first-write-wins
      * a cancelled probe's subtree would stand in for the branch-and-bound search's own. Deliberately
@@ -261,7 +199,6 @@ public class Statistics {
      * size and the same figure whatever phase recorded it.
      */
     public void clearSearchSpaceSnapshots() {
-        currentSearchSpace.set(null);
         remainingSearchSpace.set(null);
     }
 
@@ -273,10 +210,5 @@ public class Statistics {
         steps.addAndGet(other.steps.get());
         nogoodsLearned.addAndGet(other.nogoodsLearned.get());
         nogoodRejections.addAndGet(other.nogoodRejections.get());
-        // Not additive like the seven counters above -- summing two search-space sizes is
-        // meaningless. Last-known-non-null-wins instead.
-        if (other.currentSearchSpace.get() != null) {
-            currentSearchSpace.set(other.currentSearchSpace.get());
-        }
     }
 }

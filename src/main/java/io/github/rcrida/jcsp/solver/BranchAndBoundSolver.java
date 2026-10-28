@@ -692,7 +692,6 @@ public class BranchAndBoundSolver implements Solver {
                     if (limits.checkStop(cancellation, next.getStatistics().getNodesExplored(), deadline)
                             != SolverLimits.StopReason.NONE) {
                         if (cancellation.isCancelled()) {
-                            statistics.updateCurrentSearchSpace(csp.getSearchSpace());
                             statistics.getRootSearchSpace().ifPresent(
                                     root -> statistics.updateRemainingSearchSpace(progress.remainingOf(root)));
                         }

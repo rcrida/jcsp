@@ -93,3 +93,14 @@ flat 100%, while `ChessboardColoration-07-07` leaves 95.490647% after 10s.
 
 This obligates any future terminal solver to record `rootSearchSpace` on entry if it wants
 `remainingSearchSpace` to be populated, since the estimate is meaningless without a root to scale.
+
+## Addendum: removed in 4.0.0
+
+`getCurrentSearchSpace` and `updateCurrentSearchSpace` were deleted as scheduled, together with
+the field, its merge in `Statistics#add`, the seven call sites and the runner's
+`c search-space-after:` line. `Statistics#updateRemainingSearchSpace` now carries the
+first-write-wins rationale that lived on the removed updater, since the unwinding hazard applies to
+it unchanged. Removing the call sites also let `FixpointPropagation` stop building a problem just
+to measure it on cancellation, and let `CutsetConditioningSolver#getSolution` replace its three
+identical cancellation checks with one: its stated reason for branching per path was that each had
+a different search space to snapshot.

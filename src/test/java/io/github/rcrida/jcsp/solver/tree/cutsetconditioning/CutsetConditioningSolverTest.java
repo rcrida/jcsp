@@ -342,11 +342,7 @@ public class CutsetConditioningSolverTest {
     }
 
     @Test
-    void getSolution_cancelledDuringCutsetBatches_snapshotsTreeSearchSpaceNotFullProblem() {
-        // CUTSET_CONDITIONING_PROBLEM: T1-T4 (domain size 9) form the tree, C is the cutset --
-        // full problem search space is 9^5 = 59049, but the tree alone is 9^4 = 6561. Cancellation
-        // is detected inside solveByCutsetBatches's own loop, which now snapshots decomposition.tree
-        // directly rather than leaving getSolution to fall back to the wider, undecomposed csp.
+    void getSolution_cancelledDuringCutsetBatches_throwsCancelled() {
         val cutset = ConstraintSatisfactionProblem.builder()
                 .variableDomain(C, DOMAIN)
                 .build();
@@ -360,14 +356,12 @@ public class CutsetConditioningSolverTest {
                 .inner(cycleCutsetSolver).treeSolver(treeSolver).cancellation(cancellation).statistics(statistics).build();
         assertThatThrownBy(() -> cancellable.getSolution(CUTSET_CONDITIONING_PROBLEM))
                 .isInstanceOf(SolverCancelledException.class);
-        assertThat(statistics.getCurrentSearchSpace()).contains(BigInteger.valueOf(6561));
     }
 
     @Test
-    void getSolution_cutsetAssignmentsExhaustedWithoutCancellation_doesNotSnapshotSearchSpace() {
+    void getSolution_cutsetAssignmentsExhaustedWithoutCancellation_isUnsat() {
         // The cutset enumeration genuinely runs out of assignments (none extend to a full
-        // solution) without cancellation ever firing -- solveByCutsetBatches's loop ends via
-        // exhaustion, not cancellation, so it must not touch currentSearchSpace.
+        // solution) without cancellation ever firing, which is a proof of unsatisfiability.
         val cutset = ConstraintSatisfactionProblem.builder()
                 .variableDomain(C, DOMAIN)
                 .build();
@@ -377,14 +371,12 @@ public class CutsetConditioningSolverTest {
         val cancellable = CutsetConditioningSolver.builder()
                 .inner(cycleCutsetSolver).treeSolver(treeSolver).statistics(statistics).build();
         assertThat(cancellable.getSolution(CUTSET_CONDITIONING_PROBLEM)).isEmpty();
-        assertThat(statistics.getCurrentSearchSpace()).isEmpty();
     }
 
     @Test
-    void getSolution_noDecompositionFoundGenuineUnsatWithoutCancellation_doesNotSnapshotSearchSpace() {
+    void getSolution_noDecompositionFoundGenuineUnsatWithoutCancellation_isUnsat() {
         // Same fixture as getSolution_noTreeAtAll, but genuinely UNSAT (no cancellation ever
-        // fires) -- getInner().getSolution(csp) returns empty on its own merits, so this branch
-        // must not touch currentSearchSpace either.
+        // fires) -- getInner().getSolution(csp) returns empty on its own merits.
         Variable<Integer> a = VARIABLE_FACTORY.create("A_unsat");
         Variable<Integer> b = VARIABLE_FACTORY.create("B_unsat");
         Variable<Integer> c = VARIABLE_FACTORY.create("C_unsat");
@@ -408,15 +400,13 @@ public class CutsetConditioningSolverTest {
         val cancellable = CutsetConditioningSolver.builder()
                 .inner(cycleCutsetSolver).treeSolver(treeSolver).statistics(statistics).build();
         assertThat(cancellable.getSolution(csp)).isEmpty();
-        assertThat(statistics.getCurrentSearchSpace()).isEmpty();
     }
 
     @Test
-    void getSolution_noDecompositionFoundAndCancelled_snapshotsFullUndecomposedCsp() {
+    void getSolution_noDecompositionFoundAndCancelled_throwsCancelled() {
         // Same fixture as getSolution_noTreeAtAll: the PredicateConstraint over {a,b,c} makes all
         // of a,b,c unsplittable, and decomposeCsp finds nothing -- getInner().getSolution(csp) is
-        // the only search that ran, so this branch's fallback snapshot is the full csp itself
-        // (there's no narrower Decomposition available here, unlike the cutset-batches path).
+        // the only search that ran.
         Variable<Integer> a = VARIABLE_FACTORY.create("A_ndc");
         Variable<Integer> b = VARIABLE_FACTORY.create("B_ndc");
         Variable<Integer> c = VARIABLE_FACTORY.create("C_ndc");
@@ -442,7 +432,6 @@ public class CutsetConditioningSolverTest {
         val cancellable = CutsetConditioningSolver.builder()
                 .inner(cycleCutsetSolver).treeSolver(treeSolver).cancellation(cancellation).statistics(statistics).build();
         assertThatThrownBy(() -> cancellable.getSolution(csp)).isInstanceOf(SolverCancelledException.class);
-        assertThat(statistics.getCurrentSearchSpace()).contains(csp.getSearchSpace());
     }
 
     @Test

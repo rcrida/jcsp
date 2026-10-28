@@ -293,9 +293,6 @@ public class DomWdegLubySearch implements Solver {
                     Assignment next = current.withValue((Variable<Object>) variable, value);
                     if (limits.checkStop(cancellation, next.getStatistics().getNodesExplored(), deadline)
                             != SolverLimits.StopReason.NONE) {
-                        if (cancellation.isCancelled()) {
-                            statistics.updateCurrentSearchSpace(csp.getSearchSpace());
-                        }
                         return Stream.empty();
                     }
                     ConstraintSatisfactionProblem cspWithNogoods = nogoodStore.apply(csp);
@@ -424,7 +421,6 @@ public class DomWdegLubySearch implements Solver {
             Assignment next = frame.current.withValue((Variable<Object>) frame.variable, value);
             switch (limits.checkStop(cancellation, next.getStatistics().getNodesExplored(), deadline)) {
                 case CANCELLED -> {
-                    statistics.updateCurrentSearchSpace(frame.csp.getSearchSpace());
                     statistics.getRootSearchSpace()
                             .ifPresent(root -> statistics.updateRemainingSearchSpace(progress.remainingOf(root)));
                     throw new SolverCancelledException(statistics);

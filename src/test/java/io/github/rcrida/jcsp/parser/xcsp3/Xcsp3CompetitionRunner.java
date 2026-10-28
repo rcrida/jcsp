@@ -394,10 +394,7 @@ public final class Xcsp3CompetitionRunner {
      * it's displayed as-is in the table's own labeled Statistics column. Used for {@link
      * Xcsp3ProblemRunner#solve}'s {@code c search-space-before:}, {@code c search-space-at-root:}
      * and {@code c search-space-remaining:} lines, each destined for its own already-labeled table
-     * column. Deliberately not {@code c search-space-after:}, which is deprecated for removal in
-     * 4.0.0 — it samples one arbitrary search node rather than measuring remaining work, so it is
-     * useless for the before/after comparisons this table exists to support (see
-     * {@code docs/adr/0033-search-space-metrics-that-mean-something.md}).
+     * column (see {@code docs/adr/0033-search-space-metrics-that-mean-something.md}).
      */
     private static String cLine(String output, String prefix) {
         return output.lines()

@@ -88,15 +88,12 @@ public final class Xcsp3ProblemRunner {
      * the original, undecomposed {@code instance.csp()} -- the declared size, unaffected by however
      * much search progresses. {@code c search-space-at-root:} and {@code c search-space-remaining:}
      * are {@link Statistics#getRootSearchSpace()} and {@link Statistics#getRemainingSearchSpace()},
-     * each printed only when present. {@code c search-space-after:} is the deprecated {@link
-     * Statistics#getCurrentSearchSpace()}, likewise printed only when present -- i.e. only when a
-     * {@link Cancellation}/timeout stopped search before it completed. {@code stats} is printed as
-     * its own {@code c} line. {@code c}-prefixed lines are the standard SAT/CP competition
-     * convention for extra, parser-ignorable information alongside the {@code s}/{@code o}/{@code
-     * v} status lines, so this doesn't change this class's own output contract. {@code
-     * Xcsp3CompetitionRunner} (test sources) parses these lines back out of a captured
-     * child-process transcript rather than re-parsing the instance itself, tolerating {@code
-     * search-space-after}'s absence.
+     * each printed only when present. {@code stats} is printed as its own {@code c} line. {@code
+     * c}-prefixed lines are the standard SAT/CP competition convention for extra, parser-ignorable
+     * information alongside the {@code s}/{@code o}/{@code v} status lines, so this doesn't change
+     * this class's own output contract. {@code Xcsp3CompetitionRunner} (test sources) parses these
+     * lines back out of a captured child-process transcript rather than re-parsing the instance
+     * itself.
      */
     static void solve(Xcsp3Instance instance, Cancellation cancellation, SolverListener listener, PrintStream out) {
         solve(instance, cancellation, listener, null, out);
@@ -114,7 +111,6 @@ public final class Xcsp3ProblemRunner {
         out.println("c stats: " + stats);
         stats.getRootSearchSpace().ifPresent(space -> out.println("c search-space-at-root: " + space));
         stats.getRemainingSearchSpace().ifPresent(space -> out.println("c search-space-remaining: " + space));
-        stats.getCurrentSearchSpace().ifPresent(searchSpace -> out.println("c search-space-after: " + searchSpace));
     }
 
     private static SolverConfig configFor(
