@@ -1214,6 +1214,20 @@ public class BranchAndBoundSolverTest {
     }
 
     @Test
+    void aSearchThatFindsNoImprovingSolution_stillRecordsTheDeepestPathItReached() {
+        // Starting from the optimum, this search can only prove there is no better solution. The
+        // satisfaction search replays the deepest path between its restarts; with nothing recorded
+        // here, every run starts from the value orderer alone.
+        val optimum = seededSolver(seeds(suboptimal())).getSolutions(CSP).toList().getLast();
+        val memory = new PhaseMemory();
+
+        val improving = seededSolver(seeds(optimum), memory).getSolutions(CSP).toList();
+
+        assertThat(improving).containsExactly(optimum);
+        assertThat(memory.bestDepth()).isEqualTo(CSP.getVariableDomains().size());
+    }
+
+    @Test
     void seededIncumbent_leadsTheStreamAndEveryLaterElementImprovesOnIt() {
         val improving = seededSolver(seeds(suboptimal())).getSolutions(CSP).toList();
 

@@ -122,3 +122,4 @@ section instead.
 | [0058](0058-narrow-numeric-domains-without-rehashing.md) | Narrow numeric domains without rehashing | Accepted |
 | [0059](0059-binary-equality-systems-are-solved-jointly-by-lattice-reduction.md) | Systems of binary linear equalities are solved jointly, by lattice reduction | Accepted |
 | [0060](0060-problem-scoped-indexed-variables.md) | Variables are issued by their problem and carry a dense index | Accepted |
+| [0061](0061-branch-and-bound-remembers-its-deepest-path.md) | Branch-and-bound remembers its deepest path until it has a solution of its own | Accepted |

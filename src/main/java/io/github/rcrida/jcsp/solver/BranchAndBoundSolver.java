@@ -183,6 +183,11 @@ public class BranchAndBoundSolver implements Solver {
 
     /**
      * Values from the current incumbent, tried first when branching -- solution-guided search.
+     * Until this search finds an improving solution, it holds the deepest path reached instead,
+     * which is what {@link DomWdegLubySearch} replays between its restarts: without it every run
+     * starts from the value orderer alone, and a refutation that the satisfaction search finishes in
+     * seconds is not finished at all. The first improving solution overwrites it ({@link
+     * PhaseMemory#recordSolution}), after which depth can no longer displace it.
      * <p>
      * Branch-and-bound keeps descending after an improvement rather than restarting, and rebuilds
      * each subsequent path from {@link #domainValuesOrderer} alone, which knows nothing about the
@@ -715,6 +720,8 @@ public class BranchAndBoundSolver implements Solver {
                                 inferOrExplain(nogoodStore.apply(csp), variable, next, boundVariables, selector);
                         if (propagated.isEmpty()) {
                             run.fail();
+                        } else {
+                            phaseMemory.recordIfDeepest(next);
                         }
                         child = propagated
                                 .map(inferred -> search(inferred, next, incumbent, deadline, childWeight, progress,
