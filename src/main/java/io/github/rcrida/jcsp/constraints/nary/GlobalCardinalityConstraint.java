@@ -17,6 +17,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
 
 /**
@@ -122,18 +123,34 @@ public class GlobalCardinalityConstraint<T> extends UniformNaryConstraint<T> imp
      * GlobalCardinalityVariableConstraint}, whose only difference is where {@code lo}/{@code hi}
      * come from (a variable's current bounds, re-read fresh each call, rather than this fixed map).
      */
-    @SuppressWarnings("unchecked")
     private GlobalCardinalityPropagation.FlowResult<T> computeFlow(@NonNull Map<Variable<?>, Domain<?>> domains) {
-        List<T> trackedValues = new ArrayList<>(cardinalityRanges.keySet());
-        int[] lo = new int[trackedValues.size()];
-        int[] hi = new int[trackedValues.size()];
-        for (int k = 0; k < trackedValues.size(); k++) {
-            OccurrenceRange range = cardinalityRanges.get(trackedValues.get(k));
-            lo[k] = range.min();
-            hi[k] = range.max();
+        Network<T> network = network();
+        return GlobalCardinalityPropagation.computeFlow(network.shape(), network.lo(), network.hi(), domains);
+    }
+
+    /** The domain-independent part of {@link #computeFlow}, which depends only on this constraint. */
+    private record Network<T>(GlobalCardinalityPropagation.Shape<T> shape, int[] lo, int[] hi) {}
+
+    /** Built on first use and kept: neither the variables nor the ranges ever change. */
+    @EqualsAndHashCode.Exclude private final AtomicReference<Network<T>> network = new AtomicReference<>();
+
+    @SuppressWarnings("unchecked")
+    private Network<T> network() {
+        Network<T> built = network.get();
+        if (built == null) {
+            List<T> trackedValues = new ArrayList<>(cardinalityRanges.keySet());
+            int[] lo = new int[trackedValues.size()];
+            int[] hi = new int[trackedValues.size()];
+            for (int k = 0; k < trackedValues.size(); k++) {
+                OccurrenceRange range = cardinalityRanges.get(trackedValues.get(k));
+                lo[k] = range.min();
+                hi[k] = range.max();
+            }
+            built = new Network<>(GlobalCardinalityPropagation.Shape.of(
+                    (Set<Variable<T>>) (Set<?>) getVariables(), trackedValues), lo, hi);
+            network.set(built);
         }
-        return GlobalCardinalityPropagation.computeFlow(
-                (Set<Variable<T>>) (Set<?>) getVariables(), trackedValues, lo, hi, domains);
+        return built;
     }
 
     /**

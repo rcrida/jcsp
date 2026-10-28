@@ -41,12 +41,26 @@ final class GlobalCardinalityPropagation {
         int bipartiteNodeCount() { return untrackedNode() + 1; }
     }
 
+    /**
+     * The part of a network that is a property of the constraint rather than of the domains it is
+     * propagated over: which variables are counted, which values are tracked and where each sits.
+     * Built once per constraint and handed to every {@link #computeFlow}, which would otherwise
+     * rebuild it, value index and all, on every call.
+     */
+    record Shape<T>(List<Variable<T>> vars, List<T> trackedValues, Map<T, Integer> trackedIndex) {
+        static <T> Shape<T> of(Set<Variable<T>> variables, List<T> trackedValues) {
+            Map<T, Integer> trackedIndex = new HashMap<>();
+            for (int k = 0; k < trackedValues.size(); k++) trackedIndex.put(trackedValues.get(k), k);
+            return new Shape<>(List.copyOf(variables), List.copyOf(trackedValues), trackedIndex);
+        }
+    }
+
     @SuppressWarnings("unchecked")
-    private static <T> FlowNetwork<T> buildNetwork(Set<Variable<T>> variables, List<T> trackedValues,
-                                                     int[] lo, int[] hi, Map<Variable<?>, Domain<?>> domains) {
-        List<Variable<T>> vars = new ArrayList<>(variables);
-        Map<T, Integer> trackedIndex = new HashMap<>();
-        for (int k = 0; k < trackedValues.size(); k++) trackedIndex.put(trackedValues.get(k), k);
+    private static <T> FlowNetwork<T> buildNetwork(Shape<T> shape, int[] lo, int[] hi,
+                                                     Map<Variable<?>, Domain<?>> domains) {
+        List<Variable<T>> vars = shape.vars();
+        List<T> trackedValues = shape.trackedValues();
+        Map<T, Integer> trackedIndex = shape.trackedIndex();
         int n = vars.size();
         int untrackedNode = n + trackedValues.size();
 
@@ -55,7 +69,7 @@ final class GlobalCardinalityPropagation {
             DiscreteDomain<T> dom = (DiscreteDomain<T>) domains.get(v);
             List<Integer> adj = new ArrayList<>();
             boolean sawUntracked = false;
-            for (T val : dom.toList()) {
+            for (T val : dom.asCollection()) {
                 Integer idx = trackedIndex.get(val);
                 if (idx != null) adj.add(n + idx);
                 else sawUntracked = true;
@@ -248,9 +262,8 @@ final class GlobalCardinalityPropagation {
      * (skipped when {@code lo_v == hi_v}, the exact-count case, where it would be zero-capacity
      * anyway).
      */
-    static <T> FlowResult<T> computeFlow(Set<Variable<T>> variables, List<T> trackedValues,
-                                          int[] lo, int[] hi, Map<Variable<?>, Domain<?>> domains) {
-        FlowNetwork<T> network = buildNetwork(variables, trackedValues, lo, hi, domains);
+    static <T> FlowResult<T> computeFlow(Shape<T> shape, int[] lo, int[] hi, Map<Variable<?>, Domain<?>> domains) {
+        FlowNetwork<T> network = buildNetwork(shape, lo, hi, domains);
         int n = network.vars().size();
         int t = network.trackedValues().size();
         int untrackedNode = network.untrackedNode();

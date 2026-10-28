@@ -19,6 +19,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
 
 /**
@@ -83,8 +84,17 @@ public class GlobalCardinalityVariableConstraint<T> extends NaryConstraint imple
         return true;
     }
 
-    private List<T> trackedValues() {
-        return new ArrayList<>(targets.keySet());
+    /** Built on first use and kept: neither the counted variables nor the tracked values ever change. */
+    @EqualsAndHashCode.Exclude private final AtomicReference<GlobalCardinalityPropagation.Shape<T>> shape =
+            new AtomicReference<>();
+
+    private GlobalCardinalityPropagation.Shape<T> shape() {
+        GlobalCardinalityPropagation.Shape<T> built = shape.get();
+        if (built == null) {
+            built = GlobalCardinalityPropagation.Shape.of(countedVariables, new ArrayList<>(targets.keySet()));
+            shape.set(built);
+        }
+        return built;
     }
 
     /**
@@ -92,8 +102,8 @@ public class GlobalCardinalityVariableConstraint<T> extends NaryConstraint imple
      * variable's current bounds in {@code domains} -- the one thing that differs from {@link
      * GlobalCardinalityConstraint#computeFlow}, which reads a fixed range instead.
      */
-    private GlobalCardinalityPropagation.FlowResult<T> computeFlow(
-            @NonNull Map<Variable<?>, Domain<?>> domains, List<T> trackedValues) {
+    private GlobalCardinalityPropagation.FlowResult<T> computeFlow(@NonNull Map<Variable<?>, Domain<?>> domains) {
+        List<T> trackedValues = shape().trackedValues();
         int[] lo = new int[trackedValues.size()];
         int[] hi = new int[trackedValues.size()];
         for (int k = 0; k < trackedValues.size(); k++) {
@@ -101,7 +111,7 @@ public class GlobalCardinalityVariableConstraint<T> extends NaryConstraint imple
             lo[k] = (int) Math.round(NumericBounds.min(targetDomain));
             hi[k] = (int) Math.round(NumericBounds.max(targetDomain));
         }
-        return GlobalCardinalityPropagation.computeFlow(countedVariables, trackedValues, lo, hi, domains);
+        return GlobalCardinalityPropagation.computeFlow(shape(), lo, hi, domains);
     }
 
     /**
@@ -152,8 +162,8 @@ public class GlobalCardinalityVariableConstraint<T> extends NaryConstraint imple
      */
     @Override
     public Optional<Map<Variable<?>, Domain<?>>> propagate(@NonNull Map<Variable<?>, Domain<?>> domains) {
-        List<T> trackedValues = trackedValues();
-        GlobalCardinalityPropagation.FlowResult<T> result = computeFlow(domains, trackedValues);
+        List<T> trackedValues = shape().trackedValues();
+        GlobalCardinalityPropagation.FlowResult<T> result = computeFlow(domains);
         if (!result.feasible()) return Optional.empty();
 
         Map<Variable<?>, Domain<?>> updates = new HashMap<>(
@@ -206,8 +216,7 @@ public class GlobalCardinalityVariableConstraint<T> extends NaryConstraint imple
      */
     @Override
     public Optional<NogoodConstraint> explainInfeasible(@NonNull Map<Variable<?>, Domain<?>> domains) {
-        List<T> trackedValues = trackedValues();
-        return GlobalCardinalityPropagation.findViolatingSubset(computeFlow(domains, trackedValues)).flatMap(zVars -> {
+        return GlobalCardinalityPropagation.findViolatingSubset(computeFlow(domains)).flatMap(zVars -> {
             List<Variable<?>> cited = new ArrayList<>(zVars);
             cited.addAll(targets.values());
             Map<Variable<?>, Object> ground = Propagatable.allSingletonReason(cited, domains);
