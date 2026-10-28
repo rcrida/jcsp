@@ -56,8 +56,8 @@ public class NaryConflictTuplesConstraint extends NaryConstraint implements Prop
 
     /**
      * Lazily-built, immutable inverted index from {@link #conflicts}: {@code
-     * conflictIndex.get(v).get(val)} is a {@link BitSet} over conflict positions, with bit {@code j}
-     * set iff the {@code j}-th conflict assigns {@code v = val}. The exact counterpart of {@link
+     * byValue[k].get(val)} is a {@link BitSet} over conflict positions, with bit {@code j}
+     * set iff the {@code j}-th conflict assigns {@code variables[k] = val}. The exact counterpart of {@link
      * NaryTuplesConstraint}'s own support index -- identical structure, identical build, identical
      * lifecycle (computed once per constraint instance from the immutable {@link #conflicts} field,
      * read-only thereafter, so it is safe to share across concurrently-executing search threads with
@@ -67,27 +67,39 @@ public class NaryConflictTuplesConstraint extends NaryConstraint implements Prop
      * current-tuple list, and docs/adr/0021 for the decision.
      */
     @EqualsAndHashCode.Exclude
-    private final AtomicReference<Map<Variable<?>, Map<Object, BitSet>>> conflictIndex = new AtomicReference<>();
+    private final AtomicReference<ConflictIndex> conflictIndex = new AtomicReference<>();
 
-    private Map<Variable<?>, Map<Object, BitSet>> conflictIndex() {
-        Map<Variable<?>, Map<Object, BitSet>> existing = conflictIndex.get();
+    /**
+     * The inverted index above, with the constraint's variables fixed in an array and {@code byValue}
+     * aligned to it, so a propagation walks arrays instead of the constraint's own variable and conflict
+     * sets: Lombok's {@code @Singular} wraps both in {@code Collections.unmodifiableSet}, and iterating the
+     * variables and asking the conflicts for their size through those wrappers was a fifth of this
+     * method's time.
+     */
+    private record ConflictIndex(Variable<?>[] variables, Map<Object, BitSet>[] byValue, int conflictCount) {
+    }
+
+    private ConflictIndex conflictIndex() {
+        ConflictIndex existing = conflictIndex.get();
         if (existing != null) return existing;
         conflictIndex.compareAndSet(null, buildConflictIndex());
         return conflictIndex.get();
     }
 
-    private Map<Variable<?>, Map<Object, BitSet>> buildConflictIndex() {
-        Map<Variable<?>, Map<Object, BitSet>> index = new LinkedHashMap<>();
-        for (Variable<?> v : getVariables()) index.put(v, new LinkedHashMap<>());
+    @SuppressWarnings("unchecked")
+    private ConflictIndex buildConflictIndex() {
+        Variable<?>[] variables = getVariables().toArray(new Variable<?>[0]);
+        Map<Object, BitSet>[] byValue = new Map[variables.length];
+        for (int k = 0; k < variables.length; k++) byValue[k] = new LinkedHashMap<>();
         int position = 0;
         for (Assignment conflict : conflicts) {
-            for (Variable<?> v : getVariables()) {
-                Object value = conflict.getValue(v).orElseThrow();
-                index.get(v).computeIfAbsent(value, key -> new BitSet(conflicts.size())).set(position);
+            for (int k = 0; k < variables.length; k++) {
+                Object value = conflict.getValue(variables[k]).orElseThrow();
+                byValue[k].computeIfAbsent(value, key -> new BitSet(conflicts.size())).set(position);
             }
             position++;
         }
-        return index;
+        return new ConflictIndex(variables, byValue, conflicts.size());
     }
 
     /**
@@ -126,12 +138,13 @@ public class NaryConflictTuplesConstraint extends NaryConstraint implements Prop
      */
     @Override
     public Optional<Map<Variable<?>, Domain<?>>> propagate(@NonNull Map<Variable<?>, Domain<?>> domains) {
-        Map<Variable<?>, Map<Object, BitSet>> index = conflictIndex();
+        ConflictIndex index = conflictIndex();
+        Variable<?>[] vars = index.variables();
         BitSet live = null;
-        for (Variable<?> v : getVariables()) {
-            Map<Object, BitSet> conflictsByValue = index.get(v);
-            BitSet union = new BitSet(conflicts.size());
-            for (Object value : ((DiscreteDomain<?>) domains.get(v)).asCollection()) {
+        for (int k = 0; k < vars.length; k++) {
+            Map<Object, BitSet> conflictsByValue = index.byValue()[k];
+            BitSet union = new BitSet(index.conflictCount());
+            for (Object value : ((DiscreteDomain<?>) domains.get(vars[k])).asCollection()) {
                 BitSet occurrences = conflictsByValue.get(value);
                 if (occurrences != null) union.or(occurrences);
             }
@@ -144,18 +157,18 @@ public class NaryConflictTuplesConstraint extends NaryConstraint implements Prop
 
         long maxPossibleCount = live.cardinality();
         Map<Variable<?>, Domain<?>> updated = new HashMap<>();
-        for (Variable<?> v : getVariables()) {
+        for (int k = 0; k < vars.length; k++) {
             long otherDomainProduct = 1;
             boolean tooLargeToMatter = false;
-            for (Variable<?> other : getVariables()) {
-                if (other.equals(v)) continue;
-                otherDomainProduct *= domains.get(other).size();
+            for (int other = 0; other < vars.length; other++) {
+                if (other == k) continue;
+                otherDomainProduct *= domains.get(vars[other]).size();
                 if (otherDomainProduct > maxPossibleCount) { tooLargeToMatter = true; break; }
             }
             if (tooLargeToMatter) continue;
 
-            Map<Object, BitSet> conflictsByValue = index.get(v);
-            DiscreteDomain<?> dom = (DiscreteDomain<?>) domains.get(v);
+            Map<Object, BitSet> conflictsByValue = index.byValue()[k];
+            DiscreteDomain<?> dom = (DiscreteDomain<?>) domains.get(vars[k]);
             Set<Object> unsupported = new HashSet<>();
             for (Object value : dom.asCollection()) {
                 BitSet occurrences = conflictsByValue.get(value);
@@ -171,7 +184,7 @@ public class NaryConflictTuplesConstraint extends NaryConstraint implements Prop
             for (var value : unsupported) builder.delete(value);
             var narrowed = builder.build();
             if (narrowed.isEmpty()) return Optional.empty();
-            updated.put(v, narrowed);
+            updated.put(vars[k], narrowed);
         }
         return Optional.of(updated);
     }
