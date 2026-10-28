@@ -88,6 +88,7 @@ import io.github.rcrida.jcsp.domains.BoundedDomain;
 import io.github.rcrida.jcsp.domains.Domain;
 import io.github.rcrida.jcsp.domains.SetBoundedDomain;
 import io.github.rcrida.jcsp.variables.Variable;
+import io.github.rcrida.jcsp.variables.VariableMap;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 
@@ -439,7 +440,7 @@ public class FixpointPropagation {
     private Optional<ConstraintSatisfactionProblem> applyInPlace(
             ConstraintSatisfactionProblem csp, Map<Variable<?>, Domain<?>> initialUpdates, Worklist worklist,
             Statistics statistics, Cancellation cancellation) {
-        Map<Variable<?>, Domain<?>> updates = new HashMap<>(initialUpdates);
+        Map<Variable<?>, Domain<?>> updates = new VariableMap<>(initialUpdates);
         var view = DomainOverlay.of(csp.getVariableDomains(), updates);
         for (int i = worklist.next(); i >= 0; i = worklist.next()) {
             if (cancellation.isCancelled()) {

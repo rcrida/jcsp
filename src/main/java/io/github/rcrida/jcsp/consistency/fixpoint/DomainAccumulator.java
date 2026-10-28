@@ -4,8 +4,8 @@ import io.github.rcrida.jcsp.ConstraintSatisfactionProblem;
 import io.github.rcrida.jcsp.consistency.DomainOverlay;
 import io.github.rcrida.jcsp.domains.Domain;
 import io.github.rcrida.jcsp.variables.Variable;
+import io.github.rcrida.jcsp.variables.VariableMap;
 
-import java.util.HashMap;
 import java.util.Map;
 
 /**
@@ -37,7 +37,7 @@ final class DomainAccumulator {
 
     void record(Map<Variable<?>, Domain<?>> updates) {
         if (allUpdates == null) {
-            allUpdates = new HashMap<>();
+            allUpdates = new VariableMap<>();
             view = DomainOverlay.of(initial, allUpdates);
         }
         allUpdates.putAll(updates);

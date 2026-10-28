@@ -10,6 +10,7 @@ import io.github.rcrida.jcsp.constraints.nary.NogoodConstraint;
 import io.github.rcrida.jcsp.constraints.nary.RangeNogoodConstraint;
 import io.github.rcrida.jcsp.domains.Domain;
 import io.github.rcrida.jcsp.variables.Variable;
+import io.github.rcrida.jcsp.variables.VariableMap;
 import lombok.AccessLevel;
 import lombok.RequiredArgsConstructor;
 import lombok.Value;
@@ -190,7 +191,7 @@ public class FixpointConsistency implements ConstraintConsistency {
     @Override
     public Optional<ConstraintSatisfactionProblem> apply(ConstraintSatisfactionProblem csp,
                                                           @Nullable Set<Variable<?>> changedSinceLastRun) {
-        Map<Variable<?>, Domain<?>> updates = new HashMap<>();
+        Map<Variable<?>, Domain<?>> updates = new VariableMap<>();
         return narrow(csp, DomainOverlay.of(csp.getVariableDomains(), updates), updates, changedSinceLastRun)
                 .map(changed -> csp.withDomains(updates));
     }
