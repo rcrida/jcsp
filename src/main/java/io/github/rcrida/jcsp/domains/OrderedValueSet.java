@@ -46,9 +46,22 @@ final class OrderedValueSet<T> extends AbstractSet<T> {
      */
     static final int SCAN_LIMIT = 8;
 
+    /**
+     * A set of {@link Integer}s no more than this many bits per element wide is tested by a bit instead of by
+     * hashing: at most a long's worth of memory per element, and a lookup that is one array read where a hash
+     * probe chases a table slot, a node and a boxed key.
+     */
+    private static final int BITS_PER_ELEMENT_LIMIT = 64;
+
     private final @NonNull Object[] elements;
     /** Handed in by {@link #handingOver}; otherwise built by the first {@link #contains} that needs it. */
     private volatile @Nullable Set<T> membership;
+    /**
+     * Decided by the first {@link #contains} that is not a scan of a small array: bits if the elements are dense
+     * integers, which are then tested instead of {@link #membership} even when that was handed in, and otherwise
+     * {@link IntBits#NOT_DENSE}.
+     */
+    private volatile @Nullable IntBits intBits;
 
     private OrderedValueSet(@NonNull Object[] elements, @Nullable Set<T> membership) {
         this.elements = elements;
@@ -93,20 +106,69 @@ final class OrderedValueSet<T> extends AbstractSet<T> {
     @Override
     @SuppressWarnings("unchecked")
     public boolean contains(@Nullable Object value) {
-        Set<T> index = membership;
-        if (index == null) {
-            if (elements.length <= SCAN_LIMIT) {
+        IntBits bits = intBits;
+        if (bits == null) {
+            if (membership == null && elements.length <= SCAN_LIMIT) {
                 for (Object element : elements) {
                     if (element.equals(value)) return true;
                 }
                 return false;
             }
-            // Idempotent, so two threads racing here each build an equal set and either may win.
+            // Idempotent, so two threads racing here each decide the same and either may win.
+            bits = IntBits.of(elements);
+            intBits = bits;
+        }
+        if (bits != IntBits.NOT_DENSE) return bits.contains(value);
+        Set<T> index = membership;
+        if (index == null) {
             index = HashSet.newHashSet(elements.length);
             for (Object element : elements) index.add((T) element);
             membership = index;
         }
         return index.contains(value);
+    }
+
+    /**
+     * Membership of a set of {@link Integer}s as one bit per value from the smallest, for a set dense enough
+     * that this is small. A scheduling domain of start times is the typical case, and {@code contains} over it
+     * is the innermost call of the element constraint's support check.
+     */
+    private static final class IntBits {
+        /** The answer for elements that are not dense integers: test them through {@link #membership} instead. */
+        static final IntBits NOT_DENSE = new IntBits(0, new long[0]);
+
+        private final int min;
+        private final long[] words;
+
+        private IntBits(int min, long[] words) {
+            this.min = min;
+            this.words = words;
+        }
+
+        /** The bits of {@code elements}, or {@link #NOT_DENSE} if any is not an {@link Integer} or they are too sparse. */
+        static IntBits of(Object[] elements) {
+            int min = Integer.MAX_VALUE;
+            int max = Integer.MIN_VALUE;
+            for (Object element : elements) {
+                if (!(element instanceof Integer integer)) return NOT_DENSE;
+                min = Math.min(min, integer);
+                max = Math.max(max, integer);
+            }
+            long span = (long) max - min + 1;
+            if (span > (long) elements.length * BITS_PER_ELEMENT_LIMIT) return NOT_DENSE;
+            long[] words = new long[(int) ((span + 63) >>> 6)];
+            for (Object element : elements) {
+                int offset = (Integer) element - min;
+                words[offset >>> 6] |= 1L << offset;
+            }
+            return new IntBits(min, words);
+        }
+
+        boolean contains(@Nullable Object value) {
+            if (!(value instanceof Integer integer)) return false;
+            long offset = (long) integer - min;
+            return offset >= 0 && offset < (long) words.length * 64 && (words[(int) (offset >>> 6)] & (1L << offset)) != 0;
+        }
     }
 
     @Override

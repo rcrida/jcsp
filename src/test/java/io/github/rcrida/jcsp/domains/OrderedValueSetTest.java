@@ -66,6 +66,120 @@ class OrderedValueSetTest {
     }
 
     @Test
+    void ofDistinct_denseIntegers_containsTestsABitAndMatchesAHashSet() {
+        Object[] values = new Object[40];
+        for (int i = 0; i < values.length; i++) values[i] = 100 + i * 3;
+        OrderedValueSet<Integer> set = OrderedValueSet.ofDistinct(values);
+        Set<Object> oracle = new LinkedHashSet<>(List.of(values));
+
+        for (int probe = 90; probe < 250; probe++) {
+            assertThat(set.contains(probe)).as("contains(%d)", probe).isEqualTo(oracle.contains(probe));
+        }
+        assertThat(set.contains(Integer.MIN_VALUE)).isFalse();
+        assertThat(set.contains(Integer.MAX_VALUE)).isFalse();
+    }
+
+    @Test
+    void ofDistinct_denseIntegersAcrossZero_containsHandlesNegativeValues() {
+        Object[] values = new Object[20];
+        for (int i = 0; i < values.length; i++) values[i] = i - 7;
+        OrderedValueSet<Integer> set = OrderedValueSet.ofDistinct(values);
+
+        assertThat(set.contains(-7)).isTrue();
+        assertThat(set.contains(0)).isTrue();
+        assertThat(set.contains(12)).isTrue();
+        assertThat(set.contains(-8)).isFalse();
+        assertThat(set.contains(13)).isFalse();
+    }
+
+    @Test
+    void ofDistinct_aBitSetIsNotMistakenForOtherTypes() {
+        Object[] values = new Object[20];
+        for (int i = 0; i < values.length; i++) values[i] = i;
+        OrderedValueSet<Integer> set = OrderedValueSet.ofDistinct(values);
+
+        assertThat(set.contains(5)).isTrue();
+        assertThat(set.contains(5L)).isFalse();
+        assertThat(set.contains("5")).isFalse();
+        assertThat(set.contains(null)).isFalse();
+    }
+
+    @Test
+    void ofDistinct_sparseIntegers_fallBackToHashingAndStayCorrect() {
+        Object[] values = new Object[12];
+        for (int i = 0; i < values.length; i++) values[i] = i * 100_000;
+        OrderedValueSet<Integer> set = OrderedValueSet.ofDistinct(values);
+
+        assertThat(set.contains(300_000)).isTrue();
+        assertThat(set.contains(300_001)).isFalse();
+    }
+
+    @Test
+    void ofDistinct_integersSpanningTheWholeIntRange_doNotOverflowTheSpan() {
+        Object[] values = new Object[10];
+        for (int i = 0; i < values.length - 2; i++) values[i] = i;
+        values[8] = Integer.MIN_VALUE;
+        values[9] = Integer.MAX_VALUE;
+        OrderedValueSet<Integer> set = OrderedValueSet.ofDistinct(values);
+
+        assertThat(set.contains(Integer.MIN_VALUE)).isTrue();
+        assertThat(set.contains(Integer.MAX_VALUE)).isTrue();
+        assertThat(set.contains(3)).isTrue();
+        assertThat(set.contains(9)).isFalse();
+    }
+
+    @Test
+    void handingOver_denseIntegers_areTestedByBitsDespiteTheIndexHandedIn() {
+        Set<Integer> handedIn = new LinkedHashSet<>();
+        for (int i = 0; i < 40; i++) handedIn.add(200 + i * 2);
+        OrderedValueSet<Integer> set = OrderedValueSet.handingOver(handedIn);
+
+        for (int probe = 190; probe < 300; probe++) {
+            assertThat(set.contains(probe)).as("contains(%d)", probe).isEqualTo(handedIn.contains(probe));
+        }
+    }
+
+    @Test
+    void handingOver_sparseIntegers_stayOnTheIndexHandedIn() {
+        Set<Integer> handedIn = new LinkedHashSet<>();
+        for (int i = 0; i < 12; i++) handedIn.add(i * 100_000);
+        OrderedValueSet<Integer> set = OrderedValueSet.handingOver(handedIn);
+
+        assertThat(set.contains(700_000)).isTrue();
+        assertThat(set.contains(700_001)).isFalse();
+    }
+
+    @Test
+    void handingOver_aSmallSet_isAlsoTestedByBits() {
+        OrderedValueSet<Integer> set = OrderedValueSet.handingOver(new LinkedHashSet<>(List.of(4, 8, 6)));
+
+        assertThat(set.contains(6)).isTrue();
+        assertThat(set.contains(5)).isFalse();
+    }
+
+    @Test
+    void ofDistinct_mixedTypes_fallBackToHashing() {
+        Object[] values = new Object[12];
+        for (int i = 0; i < values.length - 1; i++) values[i] = i;
+        values[11] = "eleven";
+        OrderedValueSet<Object> set = OrderedValueSet.ofDistinct(values);
+
+        assertThat(set.contains("eleven")).isTrue();
+        assertThat(set.contains(4)).isTrue();
+        assertThat(set.contains(11)).isFalse();
+    }
+
+    @Test
+    void ofDistinct_longs_fallBackToHashingAndAnIntegerOfTheSameValueIsAbsent() {
+        Object[] values = new Object[12];
+        for (int i = 0; i < values.length; i++) values[i] = (long) i;
+        OrderedValueSet<Long> set = OrderedValueSet.ofDistinct(values);
+
+        assertThat(set.contains(5L)).isTrue();
+        assertThat(set.contains(5)).isFalse();
+    }
+
+    @Test
     void elements_isTheBackingArrayInOrder() {
         assertThat(of(5, 1, 9).elements()).containsExactly(5, 1, 9);
     }

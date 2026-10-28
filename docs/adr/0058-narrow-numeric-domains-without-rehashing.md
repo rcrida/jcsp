@@ -76,3 +76,13 @@ times at once, `ArrayList.indexOf` with `Integer.equals` was 34% of the profile'
 `OrderedValueSet.SCAN_LIMIT` deletions the list is now hashed into a set once, and below it the short
 list is still scanned, so the common one-or-two-deletion narrowing hashes nothing. That run went from
 3.26s to 2.97s with identical node counts.
+
+Once the element constraint asked many `contains` questions of those domains, the membership index
+itself showed up: 25.6% of `Taillard-os-04-04-0`'s samples, 82% of that in `HashMap.getNode`/`hash`,
+not in building the index. A set of more than a few `Integer`s no more than 64 bits of range per
+element wide is now tested by a bit in a `long[]` instead, whether it was built by narrowing or handed
+in with its own hash set, which a first attempt missed by consulting the handed-in set first: that
+run measured nothing, and a profile showing `HashMap.getNode` still on top is what caught it. Sparse
+integers, mixed types and `Long`s keep the hash index. `Taillard-os-04-04-0` went from 1.82s to 1.65s
+with identical node counts; `Taillard-js-015-15-0`, `Vrp-P-n16-k8` and `driverlogw-09` did not move
+beyond noise.
