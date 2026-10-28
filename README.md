@@ -240,7 +240,7 @@ stats.getRootSearchSpace().ifPresent(root ->
 
 On the bundled `Steiner3-08` instance that prints `99.999995%` after twelve seconds and 1.6 million nodes — the search had barely started, which the node count alone does not convey. On the satisfaction chain the estimate covers the restart in progress, since restarts re-descend from the root and keep no record of what earlier ones refuted.
 
-`getCurrentSearchSpace()` is **deprecated since 3.1.0, for removal in 4.0.0**: it sampled whichever single node the search happened to occupy when the clock stopped, which is not a measure of remaining work — three runs of one build on that same instance reported 216, 746,496 and 10,077,696.
+`Statistics.getCurrentSearchSpace()` sampled whichever single node the search happened to occupy when the clock stopped, which is not a measure of remaining work — three runs of one build on that same instance reported 216, 746,496 and 10,077,696. It was deprecated in 3.1.0 and removed in 4.0.0, along with the `c search-space-after:` line `Xcsp3ProblemRunner` printed.
 
 **Cancellation** — a `Cancellation` token lets a caller stop a solve from *outside*, e.g. from a `SolverListener` callback that observes something worth stopping for:
 
@@ -495,11 +495,19 @@ InitialAssignmentFactory factory = FallbackAssignmentFactory.builder()
 <dependency>
     <groupId>io.github.rcrida</groupId>
     <artifactId>jcsp</artifactId>
-    <version>3.6.0</version>
+    <version>4.0.0</version>
 </dependency>
 ```
 
 jcsp pulls in [ojAlgo](https://www.ojalgo.org/) (MIT-licensed) as a transitive compile-scope dependency, used for the LP relaxation behind `LinearObjective`-driven optimization (see above), and [xcsp3-tools](https://github.com/xcsp3team/XCSP3-Java-Tools) (MIT-licensed) as a transitive compile-scope dependency, used for `Xcsp3Parser` (see above).
+
+### Upgrading from 3.x
+
+Variables are now issued by the problem they belong to, and the deprecated search-space statistic is gone.
+
+- **Create variables through the builder.** `ConstraintSatisfactionProblem.builder().createVariable(name, domain)` issues the variable and registers its domain in one call, from a `Variable.Factory` the builder owns; the built problem keeps that factory, and `toBuilder()` continues its index space. `Variable.Factory` is now a class, and `Variable.Factory.INSTANCE` is removed — code that made variables with `Variable.Factory.INSTANCE.create(name)` should use `createVariable`, or `new Variable.Factory()` where there is no builder to own one. See [ADR-0060](docs/adr/0060-problem-scoped-indexed-variables.md).
+- **Variables are equal only to themselves.** A factory rejects a name it has already issued, so two variables of one problem never share a name, and `equals` is identity rather than name. A problem refuses a variable that no factory issued, or whose factory is not on the same lineage as the rest (a leaf factory and its ancestors); a variable from an unrelated factory with the same name is a different variable, not a duplicate.
+- **`Statistics.getCurrentSearchSpace()` and `updateCurrentSearchSpace(BigInteger)` are removed**, as announced in 3.1.0. Read `getRootSearchSpace()` for the figure that is stable across runs, or `getRemainingSearchSpace()` for unexplored work. `Xcsp3ProblemRunner` no longer prints a `c search-space-after:` line.
 
 ### Upgrading from 3.2
 
@@ -527,7 +535,7 @@ One behaviour change worth noting even though it compiles: the optimization chai
 One rename, and one deprecation; everything else is source- and behaviour-compatible.
 
 - **`DomWdegVariableSelector`'s four search hooks are renamed**, having moved onto the new `AdaptiveVariableSelector` interface (see **Variable ordering** above), where they are named for the event rather than for dom/wdeg's response to it: `incrementWeights` → `onConflict`, `recordConflict` → `onValueRejected`, `reseedTieBreak` → `onRestart`, `resetWeights` → `onStagnation`. Signatures are unchanged. Only code that drove a selector directly is affected; callers going through `Solver.Factory` are not.
-- **`Statistics.getCurrentSearchSpace()` is deprecated** for removal in 4.0.0 — see **How far did it get?** above for the two figures that replace it.
+- **`Statistics.getCurrentSearchSpace()` is deprecated** (removed in 4.0.0) — see **How far did it get?** above for the two figures that replace it.
 
 ### Upgrading from 2.x
 

@@ -15,7 +15,7 @@ Before adding a paragraph here, check whether it's actually Javadoc-shaped (put 
 <dependency>
     <groupId>io.github.rcrida</groupId>
     <artifactId>jcsp</artifactId>
-    <version>3.6.0</version>
+    <version>4.0.0</version>
 </dependency>
 ```
 
@@ -71,7 +71,7 @@ Every domain is a record except `ObjectEmptyDomain`/`NumericEmptyDomain` (final 
 
   See also [ADR-0005](docs/adr/0005-config-object-for-solver-configuration.md), [ADR-0010](docs/adr/0010-push-listener-for-solve-progress.md), [ADR-0011](docs/adr/0011-cancellation-token-for-main-chain-search.md) and [ADR-0038](docs/adr/0038-injectable-variable-selector-factory.md).
 - **`InconclusiveSearchException`** — the supertype of `LimitExceededException`, `SolverCancelledException` and `RestartsExhaustedException`. `getSolution()`'s `Optional.empty()` means **proven unsatisfiable**; every path that stops early throws instead, so the two can be told apart ([ADR-0043](docs/adr/0043-inconclusive-is-not-unsatisfiable.md)). Thrown from the single-solution searches (`DomWdegLubySearch.getSolution()`, `CutsetConditioningSolver.getSolution()`) and from preprocessing. Every `getSolutions()` stream truncates silently instead — `SolverDecorator.getSolutions` is the single place that applies that, catching the supertype around `preprocess`. See also [ADR-0011](docs/adr/0011-cancellation-token-for-main-chain-search.md).
-- **`Statistics`** — shared counters. `getRootSearchSpace()`/`getRemainingSearchSpace()` (via `SearchProgress`) replace the deprecated `getCurrentSearchSpace()` ([ADR-0033](docs/adr/0033-search-space-metrics-that-mean-something.md)). The two snapshots are first-write-wins (deepest-first as a cancelled stream unwinds), so a phase whose snapshots describe a different search than the figures claim clears them: `clearSearchSpaceSnapshots()`, which `BranchAndBoundSolver` calls once its incumbent seeder is done.
+- **`Statistics`** — shared counters. `getRootSearchSpace()`/`getRemainingSearchSpace()` (via `SearchProgress`) replace the removed `getCurrentSearchSpace()` ([ADR-0033](docs/adr/0033-search-space-metrics-that-mean-something.md)). The two snapshots are first-write-wins (deepest-first as a cancelled stream unwinds), so a phase whose snapshots describe a different search than the figures claim clears them: `clearSearchSpaceSnapshots()`, which `BranchAndBoundSolver` calls once its incumbent seeder is done.
 - **`BoundSolver`** — the public API `createSolver` returns, with the CSP already bound.
 - **`PropagationResult`** — `propagateWithReasons`'s result: updated domains plus an optional `NogoodConstraint` reason (`null` means the caller falls back to the full assignment).
 - **`NogoodStore`** — accumulates learned `NogoodConstraint`s (capped, evicting largest arity first). It is shared across Luby restarts and across one whole B&B search, but no further: `clear()` empties it, and `BranchAndBoundSolver` calls that per solve because a nogood derived under an incumbent bound is not an unconditional fact ([ADR-0048](docs/adr/0048-a-bound-conditional-nogood-lives-for-one-search.md)).
