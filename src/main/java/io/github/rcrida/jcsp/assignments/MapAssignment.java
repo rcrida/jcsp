@@ -7,6 +7,7 @@ import org.jspecify.annotations.NonNull;
 
 import java.util.Map;
 import java.util.Set;
+import java.util.function.BiConsumer;
 
 /**
  * An {@link Assignment} backed by one unmodifiable {@link Map}, whose entry order is unspecified.
@@ -51,9 +52,14 @@ record MapAssignment(Map<Variable<?>, Object> values, Statistics statistics, Sol
         return values.entrySet();
     }
 
+    /**
+     * Straight to {@link Map#forEach}, which hands over each key and value with no entry object: {@link
+     * #entries} allocates one wrapper per entry to keep them read-only. Copying through it, as {@link
+     * Assignment#toBuilder} does, is what used to cost an allocation per entry here.
+     */
     @Override
-    public Assignment.AssignmentBuilder toBuilder() {
-        return Assignment.builder().values(values).statistics(statistics).listener(listener).cancellation(cancellation);
+    public void forEach(@NonNull BiConsumer<? super Variable<?>, ? super Object> action) {
+        values.forEach(action);
     }
 
     @Override

@@ -56,9 +56,15 @@ public interface Assignment extends Valuation {
 
     Cancellation cancellation();
 
-    /** A builder pre-loaded with this assignment's entries, statistics, listener and cancellation. */
+    /**
+     * A builder pre-loaded with this assignment's entries, statistics, listener and cancellation. Sized for
+     * one more entry than this holds, which is what most callers add, so copying never grows the map; and
+     * copied through {@link #forEach}, which hands over each key and value without the entry objects that
+     * iterating {@link #entries} would allocate for every one.
+     */
     default AssignmentBuilder toBuilder() {
-        AssignmentBuilder builder = builder().statistics(getStatistics()).listener(listener()).cancellation(cancellation());
+        AssignmentBuilder builder = new AssignmentBuilder(size() + 1)
+                .statistics(getStatistics()).listener(listener()).cancellation(cancellation());
         forEach(builder::value);
         return builder;
     }
@@ -176,13 +182,19 @@ public interface Assignment extends Valuation {
      * Entry order is unspecified, as for {@link Assignment}.
      */
     final class AssignmentBuilder {
-        private Map<Variable<?>, Object> values = new HashMap<>();
+        private Map<Variable<?>, Object> values;
         private boolean shared;
         private Statistics statistics;
         private SolverListener listener;
         private Cancellation cancellation;
 
         private AssignmentBuilder() {
+            values = new HashMap<>();
+        }
+
+        /** A builder whose map holds {@code expectedEntries} without growing. */
+        private AssignmentBuilder(int expectedEntries) {
+            values = HashMap.newHashMap(expectedEntries);
         }
 
         public AssignmentBuilder value(Variable<?> variable, Object value) {

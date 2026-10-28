@@ -9,6 +9,7 @@ import java.util.AbstractSet;
 import java.util.Iterator;
 import java.util.Map;
 import java.util.Set;
+import java.util.function.BiConsumer;
 import java.util.function.Function;
 
 /**
@@ -129,6 +130,15 @@ final class OverlayAssignment implements Assignment {
                 return layersThenBase(layer -> layer.variable, base.variables().iterator());
             }
         };
+    }
+
+    /** Each layer's variable and value, then the base's, with no entry object per entry as {@link #entries} makes. */
+    @Override
+    public void forEach(@NonNull BiConsumer<? super Variable<?>, ? super Object> action) {
+        for (OverlayAssignment layer = this; layer != null; layer = layer.below) {
+            action.accept(layer.variable, layer.value);
+        }
+        base.forEach(action);
     }
 
     @Override

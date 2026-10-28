@@ -13,6 +13,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Set;
@@ -342,6 +343,53 @@ public class AssignmentTest {
         assertThat(assignment).isEqualTo(new EntriesOnly(Map.of(a, 1, b, 2)));
         assertThat(assignment).isNotEqualTo(new EntriesOnly(Map.of(a, 1, b, 3)));
         assertThat(assignment).isNotEqualTo(new EntriesOnly(Map.of(a, 1)));
+    }
+
+    private static Map<Variable<?>, Object> collected(Valuation valuation) {
+        Map<Variable<?>, Object> seen = new HashMap<>();
+        valuation.forEach(seen::put);
+        return seen;
+    }
+
+    @Test
+    void forEach_overAMapBackedAssignment_visitsEveryEntryOnce() {
+        val a = variables.<Integer>create("a");
+        val b = variables.<Integer>create("b");
+        val c = variables.<Integer>create("c");
+
+        assertThat(collected(Assignment.builder().value(a, 1).value(b, 2).value(c, 3).build()))
+                .containsOnly(Map.entry(a, 1), Map.entry(b, 2), Map.entry(c, 3));
+        assertThat(collected(Assignment.empty())).isEmpty();
+    }
+
+    @Test
+    void forEach_overLayers_visitsEachLayerThenTheBase() {
+        val a = variables.<Integer>create("a");
+        val b = variables.<Integer>create("b");
+        val c = variables.<Integer>create("c");
+        val layered = Assignment.builder().value(a, 1).build().withValue(b, 2).withValue(c, 3);
+
+        assertThat(layered).isInstanceOf(OverlayAssignment.class);
+        assertThat(collected(layered)).containsOnly(Map.entry(a, 1), Map.entry(b, 2), Map.entry(c, 3));
+    }
+
+    @Test
+    void forEach_defaultOverAnyValuation_goesThroughItsEntries() {
+        val a = variables.<Integer>create("a");
+
+        assertThat(collected(new EntriesOnly(Map.of(a, 7)))).containsOnly(Map.entry(a, 7));
+        assertThat(collected(new EntriesOnly(Map.of()))).isEmpty();
+    }
+
+    @Test
+    void toBuilder_ofALayeredAssignment_keepsEveryLayerAndTheBase() {
+        val a = variables.<Integer>create("a");
+        val b = variables.<Integer>create("b");
+        val c = variables.<Integer>create("c");
+        val layered = Assignment.builder().value(a, 1).build().withValue(b, 2).withValue(c, 3);
+
+        assertThat(collected(layered.toBuilder().value(a, 10).build()))
+                .containsOnly(Map.entry(a, 10), Map.entry(b, 2), Map.entry(c, 3));
     }
 
     /** A {@link Valuation} that is not a {@link MapAssignment}, to reach the generic {@code equals} path. */
