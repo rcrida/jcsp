@@ -105,6 +105,23 @@ public class NaryElementConstraintTest {
     }
 
     @Test
+    void propagate_resultKeptWhenEveryValueIsSupportedBySomeLiveVar_evenIfTheLastIsFoundEarly() {
+        // A={alpha,gamma} supports result's first and last values; B={beta} then supports the middle
+        // one, so the last unsupported value is found before the end of the result's values and the
+        // scan must stop there. Nothing is pruned, and C (index 3 is not live) is never consulted.
+        var domains = Map.<Variable<?>, io.github.rcrida.jcsp.domains.Domain<?>>of(
+                INDEX, IntRangeDomain.of(1, 2),
+                RESULT, DiscreteDomain.of("alpha", "beta", "gamma"),
+                A, DiscreteDomain.of("alpha", "gamma"),
+                B, DiscreteDomain.of("beta"),
+                C, DiscreteDomain.of("delta")
+        );
+        var result = constraint.propagate(domains);
+        assertThat(result).isPresent();
+        assertThat(result.get()).doesNotContainKey(RESULT);
+    }
+
+    @Test
     void propagate_prunesSelectedVarWhenIndexSingleton() {
         // index={2} singleton; B has extra values not in result; result={beta}
         var domains = Map.<Variable<?>, io.github.rcrida.jcsp.domains.Domain<?>>of(

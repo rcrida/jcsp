@@ -171,8 +171,16 @@ class DomainMapTest {
         Variable<Integer> fromParent = parent.create("fromParent");
         Variable<Integer> fromFork = parent.fork().create("fromFork");
 
-        DomainMap forkSecond = DomainMap.of(new LinkedHashMap<>(Map.of(fromParent, domain(1), fromFork, domain(2))));
-        DomainMap forkFirst = DomainMap.of(new LinkedHashMap<>(Map.of(fromFork, domain(2), fromParent, domain(1))));
+        // Explicit insertion orders: Map.of's iteration order is salted per JVM, and these two tests exist to
+        // meet the leaf factory before its ancestor, and after it.
+        Map<Variable<?>, Domain<?>> parentThenFork = new LinkedHashMap<>();
+        parentThenFork.put(fromParent, domain(1));
+        parentThenFork.put(fromFork, domain(2));
+        Map<Variable<?>, Domain<?>> forkThenParent = new LinkedHashMap<>();
+        forkThenParent.put(fromFork, domain(2));
+        forkThenParent.put(fromParent, domain(1));
+        DomainMap forkSecond = DomainMap.of(parentThenFork);
+        DomainMap forkFirst = DomainMap.of(forkThenParent);
 
         assertThat(forkSecond).hasSize(2);
         assertThat(forkSecond.get(fromFork)).isEqualTo(domain(2));

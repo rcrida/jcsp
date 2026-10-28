@@ -114,17 +114,15 @@ public class NaryElementConstraint<T> extends NaryConstraint implements Propagat
             }
         }
 
-        // Pass 2: prune result — intersect with union of vars[i-1].domain for all live i
+        // Pass 2: prune result — keep a value only if some live vars[i-1] holds it
         {
-            Set<T> reachable = new HashSet<>();
-            for (Integer i : indexDomain.asCollection()) {
-                reachable.addAll(varDomains.get(i - 1).asCollection());
-            }
+            Object[] values = resultDomain.asCollection().toArray();
+            boolean[] supported = supportedValues(values, indexDomain, varDomains);
             DiscreteDomain.Builder<T> builder = null;
-            for (T v : resultDomain.asCollection()) {
-                if (reachable.contains(v)) continue;
+            for (int j = 0; j < values.length; j++) {
+                if (supported[j]) continue;
                 if (builder == null) builder = resultDomain.toBuilder();
-                builder.delete(v);
+                builder.delete((T) values[j]);
             }
             if (builder != null) {
                 DiscreteDomain<T> newResult = (DiscreteDomain<T>) builder.build();
@@ -153,6 +151,32 @@ public class NaryElementConstraint<T> extends NaryConstraint implements Propagat
         }
 
         return Optional.of(updated);
+    }
+
+    /**
+     * For each of {@code values} (the result's), whether some live {@code vars[i-1]} holds it. Asks each
+     * live variable only about the values still unsupported, and stops once none are, rather than adding
+     * every value of every live variable to a set to look the result's up in: that hashed all of them on
+     * each propagation, which was most of this constraint's time on a scheduling problem whose start
+     * times run to hundreds of values. A result already pruned to what the variables can reach, the usual
+     * case after the first pass, is found supported by the first live variable or two.
+     */
+    @SuppressWarnings("unchecked")
+    private static <T> boolean[] supportedValues(Object[] values, DiscreteDomain<Integer> indexDomain,
+                                                 List<DiscreteDomain<T>> varDomains) {
+        boolean[] supported = new boolean[values.length];
+        int unsupported = values.length;
+        for (Integer i : indexDomain.asCollection()) {
+            DiscreteDomain<T> source = varDomains.get(i - 1);
+            for (int j = 0; j < values.length && unsupported > 0; j++) {
+                if (!supported[j] && source.contains((T) values[j])) {
+                    supported[j] = true;
+                    unsupported--;
+                }
+            }
+            if (unsupported == 0) break;
+        }
+        return supported;
     }
 
     /**
