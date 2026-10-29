@@ -175,6 +175,15 @@ public class LexConstraintTest {
     }
 
     @Test
+    void propagate_lastPosition_lt_alreadyStrictlyOrdered_changesNothing() {
+        // [x1] < [y1] with x1=[1..2] and y1=[3..4]: every x1 is already below every y1, so neither
+        // domain loses a value and the update map stays empty.
+        var c = LexConstraint.of(List.of(x1), Operator.LT, List.of(y1));
+        var domains = Map.<Variable<?>, Domain<?>>of(x1, IntRangeDomain.of(1, 2), y1, IntRangeDomain.of(3, 4));
+        assertThat(c.propagate(domains).orElseThrow()).isEmpty();
+    }
+
+    @Test
     void propagate_infeasible_pruneEmptiesDomain() {
         // [x1] < [y1]: x1={5} (definite), y1=[1..5] → strict, x1 must be < max(y1)=5 but x1==5
         var c = LexConstraint.of(List.of(x1), Operator.LT, List.of(y1));

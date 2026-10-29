@@ -221,6 +221,8 @@ public class LexConstraint<T extends Comparable<T>> extends NaryConstraint imple
             if (newMax >= bd.getMax().doubleValue()) return domain;
             return (Domain<T>) bd.withBounds(bd.getMin().doubleValue(), newMax);
         }
+        int atMax = domainMax(domain).compareTo(max);
+        if (strict ? atMax < 0 : atMax <= 0) return domain;
         Predicate<T> keep = strict ? v -> v.compareTo(max) < 0 : v -> v.compareTo(max) <= 0;
         return prune((DiscreteDomain<T>) domain, keep);
     }
@@ -232,6 +234,8 @@ public class LexConstraint<T extends Comparable<T>> extends NaryConstraint imple
             if (newMin <= bd.getMin().doubleValue()) return domain;
             return (Domain<T>) bd.withBounds(newMin, bd.getMax().doubleValue());
         }
+        int atMin = domainMin(domain).compareTo(min);
+        if (strict ? atMin > 0 : atMin >= 0) return domain;
         Predicate<T> keep = strict ? v -> v.compareTo(min) > 0 : v -> v.compareTo(min) >= 0;
         return prune((DiscreteDomain<T>) domain, keep);
     }
