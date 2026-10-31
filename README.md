@@ -329,6 +329,19 @@ SolverConfig.builder()
 
 That is worth knowing about for a dense constraint graph. dom/wdeg ranks by `domainSize / weightedDegree`, summing weights across each candidate variable's constraints, where minimum-remaining-values only reads domain sizes — so on a problem with thousands of constraints the ranking can cost more than it saves.
 
+**Value ordering** — both chains try a variable's values fewest-conflicts-first by default. `valueOrder` is a `DomainValuesOrderer.Factory`, and the alternatives are constants on it:
+
+```java
+SolverConfig.builder().valueOrder(DomainValuesOrderer.Factory.REVERSED_DOMAIN_ORDER).build();
+SolverConfig.builder().valueOrder(DomainValuesOrderer.Factory.ALTERNATING).build();   // domain order, then reversed, per restart
+SolverConfig.builder().valueOrder(DomainValuesOrderer.Factory.cycle(
+        DomainValuesOrderer.Factory.LEAST_CONSTRAINING,
+        DomainValuesOrderer.Factory.reversed(DomainValuesOrderer.Factory.LEAST_CONSTRAINING),
+        myRandomOrder)).build();
+```
+
+`LEAST_CONSTRAINING` (the default), `DOMAIN_ORDER`, `REVERSED_DOMAIN_ORDER` and `ALTERNATING` are provided; `reversed(...)` and `cycle(...)` combine any factories, including your own. A factory because an order may keep per-search state, and its `DomainValuesOrderer` is told of each restart through `onRestart`. No order has been shown to win everywhere, which is why the default has not changed: a reversed order proves capacity-packing instances several times faster, but a corpus-wide run with a restart-alternating order was slower overall and the cause was not pinned down ([ADR-0063](docs/adr/0063-value-order-is-a-setting-not-a-default.md)). Like variable ordering, it changes only the order assignments are visited in, never which are reachable.
+
 ### Constraint builder methods
 
 **Unary**

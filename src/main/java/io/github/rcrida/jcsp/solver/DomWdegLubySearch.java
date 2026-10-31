@@ -239,6 +239,7 @@ public class DomWdegLubySearch implements Solver {
                 stagnantRestarts = 0;
             }
             selector.onRestart(restartRandomization.randomFor(k));
+            domainValuesOrderer.onRestart(k);
             long budget = budgets.getAsLong();
             int[] failures = {0};
             try {

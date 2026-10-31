@@ -13,7 +13,6 @@ import io.github.rcrida.jcsp.domains.Domain;
 import io.github.rcrida.jcsp.domains.SetBoundedDomain;
 import io.github.rcrida.jcsp.variables.Variable;
 import io.github.rcrida.jcsp.solver.backtrackingsearch.order.DefaultValueOrderer;
-import io.github.rcrida.jcsp.solver.backtrackingsearch.order.LeastConstrainingValueOrderer;
 import io.github.rcrida.jcsp.solver.backtrackingsearch.selector.MinimumRemainingValuesSelector;
 import io.github.rcrida.jcsp.solver.redundant.RedundantConstraints;
 import io.github.rcrida.jcsp.solver.tree.TreeSolver;
@@ -261,7 +260,7 @@ public interface Solver {
                                               int maxRestarts) {
             val cancellation = config.getCancellation();
             val domWdegLubySearch = DomWdegLubySearch.builder()
-                    .domainValuesOrderer(LeastConstrainingValueOrderer.INSTANCE)
+                    .domainValuesOrderer(config.getValueOrder().create())
                     .inference(inference)
                     .limits(config.getLimits())
                     .nogoodStore(NogoodStore.forProblem(sub))
@@ -459,7 +458,7 @@ public interface Solver {
                 Solver terminal = BranchAndBoundSolver.builder()
                         .objective(objective)
                         .selectorFactory(config.getVariableSelectorFactory())
-                        .domainValuesOrderer(LeastConstrainingValueOrderer.INSTANCE)
+                        .domainValuesOrderer(config.getValueOrder().create())
                         .inference(nogoodLearningInference(config, fixpointPropagation))
                         .limits(limits)
                         .nogoodStore(NogoodStore.forProblem(csp))

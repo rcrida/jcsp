@@ -304,6 +304,7 @@ public class BranchAndBoundSolver implements Solver {
                     RunState run = new RunState(failBudget(restartFailBase, restartGrowth, k));
                     previous[0] = run;
                     selector.onRestart(restartRandomization.randomFor(k));
+                    domainValuesOrderer.onRestart(k);
                     return search(csp, rootAssignment(), incumbent, deadline, 1.0, new SearchProgress(),
                             selector, lpGate, hasContinuous, rootBound, run);
                 });

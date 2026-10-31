@@ -124,3 +124,4 @@ section instead.
 | [0060](0060-problem-scoped-indexed-variables.md) | Variables are issued by their problem and carry a dense index | Accepted |
 | [0061](0061-branch-and-bound-remembers-its-deepest-path.md) | Branch-and-bound remembers its deepest path until it has a solution of its own | Accepted |
 | [0062](0062-lex-chains-are-opt-in.md) | Lex chains are an opt-in constraint; the parser keeps emitting pairs | Accepted |
+| [0063](0063-value-order-is-a-setting-not-a-default.md) | Value order is a setting, not a new default | Accepted |

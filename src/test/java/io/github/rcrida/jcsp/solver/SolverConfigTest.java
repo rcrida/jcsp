@@ -5,6 +5,8 @@ import io.github.rcrida.jcsp.assignments.Assignment;
 import io.github.rcrida.jcsp.assignments.Statistics;
 import io.github.rcrida.jcsp.domains.IntRangeDomain;
 import io.github.rcrida.jcsp.domains.NumericDiscreteDomain;
+import io.github.rcrida.jcsp.solver.backtrackingsearch.order.DefaultValueOrderer;
+import io.github.rcrida.jcsp.solver.backtrackingsearch.order.DomainValuesOrderer;
 import io.github.rcrida.jcsp.solver.listener.SolverListener;
 import io.github.rcrida.jcsp.variables.Variable;
 import org.junit.jupiter.api.Test;
@@ -221,5 +223,64 @@ class SolverConfigTest {
 
         assertThat(small.getRestarts()).isPositive();
         assertThat(huge.getRestarts()).isZero();
+    }
+
+    @Test
+    void valueOrder_defaultsToLeastConstraining() {
+        assertThat(SolverConfig.builder().build().getValueOrder())
+                .isSameAs(DomainValuesOrderer.Factory.LEAST_CONSTRAINING);
+    }
+
+    /** A factory that counts how many searches asked for an orderer, and hands out plain domain order. */
+    private static final class CountingOrder implements DomainValuesOrderer.Factory {
+        final java.util.concurrent.atomic.AtomicInteger created = new java.util.concurrent.atomic.AtomicInteger();
+        final java.util.concurrent.atomic.AtomicInteger asked = new java.util.concurrent.atomic.AtomicInteger();
+
+        @Override
+        public DomainValuesOrderer create() {
+            created.incrementAndGet();
+            return (csp, variable, assignment) -> {
+                asked.incrementAndGet();
+                return DefaultValueOrderer.INSTANCE.order(csp, variable, assignment);
+            };
+        }
+    }
+
+    /** {@code n} variables over {@code 1..n}, all different; {@code vars} is filled with them. */
+    private ConstraintSatisfactionProblem pigeons(int n, List<Variable<Integer>> vars) {
+        var builder = ConstraintSatisfactionProblem.builder();
+        for (int i = 0; i < n; i++) {
+            Variable<Integer> v = VF.create("vo" + n + "_" + i);
+            vars.add(v);
+            builder.variableDomain(v, IntRangeDomain.of(1, n));
+        }
+        return builder.allDiffConstraint(new java.util.LinkedHashSet<>(vars)).build();
+    }
+
+    @Test
+    void valueOrder_isUsedByTheSatisfactionChain() {
+        CountingOrder order = new CountingOrder();
+
+        var solution = Solver.Factory.INSTANCE
+                .createSolver(pigeons(3, new ArrayList<>()), SolverConfig.builder().valueOrder(order).build()).getSolution();
+
+        assertThat(solution).isPresent();
+        assertThat(order.created.get()).isPositive();
+        assertThat(order.asked.get()).isPositive();
+    }
+
+    @Test
+    void valueOrder_isUsedByTheOptimizationChain() {
+        CountingOrder order = new CountingOrder();
+        List<Variable<Integer>> vars = new ArrayList<>();
+        var csp = pigeons(3, vars);
+
+        var solution = Solver.Factory.INSTANCE.createSolver(csp,
+                a -> vars.stream().mapToInt(v -> a.getValue(v).orElse(0)).sum(),
+                SolverConfig.builder().valueOrder(order).build()).getSolution();
+
+        assertThat(solution).isPresent();
+        assertThat(order.created.get()).isPositive();
+        assertThat(order.asked.get()).isPositive();
     }
 }

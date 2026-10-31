@@ -14,6 +14,7 @@ import io.github.rcrida.jcsp.domains.NumericDiscreteDomain;
 import io.github.rcrida.jcsp.solver.backtrackingsearch.order.LeastConstrainingValueOrderer;
 import io.github.rcrida.jcsp.solver.backtrackingsearch.selector.AdaptiveVariableSelector;
 import io.github.rcrida.jcsp.solver.listener.SolverListener;
+import io.github.rcrida.jcsp.solver.backtrackingsearch.order.DomainValuesOrderer;
 import io.github.rcrida.jcsp.variables.Variable;
 import org.junit.jupiter.api.Test;
 
@@ -978,6 +979,45 @@ class DomWdegLubySearchTest {
 
         assertThat(tightSolver.getSolution(fourQueensCsp())).isPresent();
         assertThat(restarts).isNotEmpty();
+    }
+
+    @Test
+    void domainValuesOrdererIsToldOfEachRestart() {
+        List<Integer> told = new CopyOnWriteArrayList<>();
+        List<Integer> restarts = new CopyOnWriteArrayList<>();
+        DomainValuesOrderer orderer = new DomainValuesOrderer() {
+            @Override
+            public java.util.stream.Stream<?> order(ConstraintSatisfactionProblem csp,
+                                                    Variable<?> variable, Assignment assignment) {
+                return LeastConstrainingValueOrderer.INSTANCE.order(csp, variable, assignment);
+            }
+
+            @Override
+            public void onRestart(int restart) {
+                told.add(restart);
+            }
+        };
+        SolverListener recorder = new SolverListener() {
+            @Override
+            public void onRestart(int restartNumber) {
+                restarts.add(restartNumber);
+            }
+        };
+
+        DomWdegLubySearch tightSolver = DomWdegLubySearch.builder()
+                .lubyUnit(1)
+                .maxRestarts(512)
+                .domainValuesOrderer(orderer)
+                .inference(Solver.Factory.FULL_PROPAGATION_INFERENCE)
+                .listener(recorder)
+                .build();
+
+        assertThat(tightSolver.getSolution(fourQueensCsp())).isPresent();
+        // The listener hears of each run that was abandoned; the orderer is also told of the last
+        // one, which found the solution.
+        assertThat(restarts).isNotEmpty();
+        assertThat(told).containsExactlyElementsOf(
+                java.util.stream.IntStream.rangeClosed(1, restarts.size() + 1).boxed().toList());
     }
 
     @Test

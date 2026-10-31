@@ -17,6 +17,7 @@ import io.github.rcrida.jcsp.solver.backtrackingsearch.selector.AdaptiveVariable
 import io.github.rcrida.jcsp.solver.backtrackingsearch.selector.MinimumRemainingValuesSelector;
 import io.github.rcrida.jcsp.solver.backtrackingsearch.order.PhaseMemory;
 import io.github.rcrida.jcsp.solver.listener.SolverListener;
+import io.github.rcrida.jcsp.solver.backtrackingsearch.order.DomainValuesOrderer;
 import io.github.rcrida.jcsp.variables.Variable;
 import org.junit.jupiter.api.Test;
 
@@ -120,6 +121,47 @@ public class BranchAndBoundSolverTest {
         }
         assertThat(restarts).isNotEmpty().startsWith(1);
         assertThat(statistics.getRestarts()).isEqualTo(restarts.size());
+    }
+
+    @Test
+    void domainValuesOrdererIsToldOfEachRestart() {
+        var told = new CopyOnWriteArrayList<Integer>();
+        var restarts = new CopyOnWriteArrayList<Integer>();
+        DomainValuesOrderer orderer = new DomainValuesOrderer() {
+            @Override
+            public java.util.stream.Stream<?> order(ConstraintSatisfactionProblem csp,
+                                                    Variable<?> variable, Assignment assignment) {
+                return DefaultValueOrderer.INSTANCE.order(csp, variable, assignment);
+            }
+
+            @Override
+            public void onRestart(int restart) {
+                told.add(restart);
+            }
+        };
+        SolverListener listener = new SolverListener() {
+            @Override
+            public void onRestart(int restartNumber) {
+                restarts.add(restartNumber);
+            }
+        };
+
+        BranchAndBoundSolver.builder()
+                .objective(BranchAndBoundSolverTest::sum)
+                .selectorFactory(constraints -> MinimumRemainingValuesSelector.INSTANCE)
+                .domainValuesOrderer(orderer)
+                .inference((problem, variable, assignment) -> Optional.of(problem))
+                .restartFailBase(1)
+                .restartGrowth(2.0)
+                .listener(listener)
+                .build()
+                .getSolutions(CSP).toList();
+
+        // The listener hears of each run that was abandoned; the orderer is also told of the last,
+        // un-aborted one that ends the search.
+        assertThat(restarts).isNotEmpty();
+        assertThat(told).containsExactlyElementsOf(
+                java.util.stream.IntStream.rangeClosed(1, restarts.size() + 1).boxed().toList());
     }
 
     @Test

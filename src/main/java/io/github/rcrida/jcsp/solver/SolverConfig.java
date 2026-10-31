@@ -3,6 +3,7 @@ package io.github.rcrida.jcsp.solver;
 import io.github.rcrida.jcsp.assignments.SolverLimits;
 import io.github.rcrida.jcsp.assignments.Statistics;
 import io.github.rcrida.jcsp.solver.listener.SolverListener;
+import io.github.rcrida.jcsp.solver.backtrackingsearch.order.DomainValuesOrderer;
 import io.github.rcrida.jcsp.solver.backtrackingsearch.selector.AdaptiveVariableSelector;
 import lombok.Builder;
 import lombok.Value;
@@ -138,6 +139,18 @@ public class SolverConfig {
      */
     @Builder.Default AdaptiveVariableSelector.@NonNull Factory variableSelectorFactory =
             AdaptiveVariableSelector.Factory.INSTANCE;
+
+    /**
+     * In what order both chains' searches try a variable's values. Defaults to
+     * {@link DomainValuesOrderer.Factory#LEAST_CONSTRAINING}; the other constants there, and
+     * {@link DomainValuesOrderer.Factory#reversed}/{@link DomainValuesOrderer.Factory#cycle}, are the
+     * alternatives. A factory because an order may keep per-search state -- see
+     * {@link DomainValuesOrderer.Factory}. No order wins everywhere (ADR-0063).
+     * <p>
+     * Affects only the order in which assignments are visited, never which ones are.
+     */
+    @Builder.Default DomainValuesOrderer.@NonNull Factory valueOrder =
+            DomainValuesOrderer.Factory.LEAST_CONSTRAINING;
 
     /**
      * Whether nogood learning actually runs: an explicit {@link #nogoodLearningEnabled} if the
