@@ -201,6 +201,7 @@ csp.increasingConstraint(List.of(v1, v2, v3))
 csp.decreasingConstraint(List.of(v1, v2, v3))
 csp.orderedConstraint(List.of(v1, v2, v3), Operator.LT)  // LT/LEQ/GEQ/GT
 csp.lexConstraint(List.of(a1, a2), Operator.LEQ, List.of(b1, b2))
+csp.lexChainConstraint(rows, Operator.LEQ)           // rows ordered as one constraint; opt-in, the parser emits pairwise lex (ADR-0062)
 csp.predicateConstraint(Set.of(v1, v2, v3), predicate)
 csp.circuitConstraint(List.of(s0, s1, s2))           // Hamiltonian circuit, 1-indexed successors
 csp.subCircuitConstraint(List.of(s0, s1, s2))        // circuit through some nodes; self-loop = sits out

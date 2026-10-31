@@ -54,6 +54,7 @@ import io.github.rcrida.jcsp.constraints.nary.AndConstraint;
 import io.github.rcrida.jcsp.constraints.nary.ImplicationConstraint;
 import io.github.rcrida.jcsp.constraints.nary.IncreasingConstraint;
 import io.github.rcrida.jcsp.constraints.nary.InverseConstraint;
+import io.github.rcrida.jcsp.constraints.nary.LexChainConstraint;
 import io.github.rcrida.jcsp.constraints.nary.LexConstraint;
 import io.github.rcrida.jcsp.constraints.nary.LinearBooleanBoundConstraint;
 import io.github.rcrida.jcsp.constraints.nary.LinearBooleanVariableConstraint;
@@ -208,6 +209,7 @@ public class FixpointPropagation {
             FixpointConsistency.of(ParitySystemConstraint.class),
             FixpointConsistency.of(PigeonholeConstraint.class),
             FixpointConsistency.of(LexConstraint.class),
+            FixpointConsistency.of(LexChainConstraint.class),
             FixpointConsistency.of(MaxConstraint.class),
             FixpointConsistency.of(MaxVariableConstraint.class),
             FixpointConsistency.of(MinConstraint.class),

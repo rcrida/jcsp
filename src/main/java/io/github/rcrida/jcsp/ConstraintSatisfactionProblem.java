@@ -55,6 +55,7 @@ import io.github.rcrida.jcsp.constraints.nary.CountConstraint;
 import io.github.rcrida.jcsp.constraints.nary.CountVariableConstraint;
 import io.github.rcrida.jcsp.constraints.nary.GlobalCardinalityConstraint;
 import io.github.rcrida.jcsp.constraints.nary.GlobalCardinalityVariableConstraint;
+import io.github.rcrida.jcsp.constraints.nary.LexChainConstraint;
 import io.github.rcrida.jcsp.constraints.nary.LexConstraint;
 import io.github.rcrida.jcsp.constraints.nary.MaxConstraint;
 import io.github.rcrida.jcsp.constraints.nary.MaxVariableConstraint;
@@ -1429,6 +1430,21 @@ public class ConstraintSatisfactionProblem {
         public <T extends Comparable<T>> ConstraintSatisfactionProblemBuilder lexConstraint(
                 @NonNull List<Variable<T>> left, @NonNull Operator operator, @NonNull List<Variable<T>> right) {
             return this.constraint(LexConstraint.of(left, operator, right));
+        }
+
+        /**
+         * Create a lexicographic order over a whole chain of rows at once: {@code rows[0] <op> rows[1]
+         * <op> ... <op> rows[m-1]}, propagated together rather than as {@code m - 1} independent
+         * pairs. Satisfied exactly when every consecutive pair is.
+         *
+         * @param rows     the rows, all the same length, at least two
+         * @param operator one of {@link Operator#LT}, {@link Operator#LEQ}, {@link Operator#GT} or
+         *                 {@link Operator#GEQ}
+         * @return the builder
+         */
+        public <T extends Comparable<T>> ConstraintSatisfactionProblemBuilder lexChainConstraint(
+                @NonNull List<List<Variable<T>>> rows, @NonNull Operator operator) {
+            return this.constraint(LexChainConstraint.of(rows, operator));
         }
 
         /**

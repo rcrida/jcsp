@@ -389,6 +389,7 @@ builder.increasingConstraint(List.of(v1, v2, v3))                   // v1 <= v2 
 builder.decreasingConstraint(List.of(v1, v2, v3))                   // v1 >= v2 >= v3  (MiniZinc decreasing)
 builder.orderedConstraint(List.of(v1, v2, v3), Operator.LT)         // v1 < v2 < v3  (any of LT/LEQ/GEQ/GT, chosen at runtime)
 builder.lexConstraint(List.of(a1,a2), Operator.LEQ, List.of(b1,b2)) // [a1,a2] lex<= [b1,b2]  (MiniZinc lex_lesseq)
+builder.lexChainConstraint(rows, Operator.LEQ)                      // rows (List<List<Variable>>) ordered lexicographically as ONE constraint (MiniZinc lex2 / XCSP3 <lex> matrix); opt-in, see ADR-0062
 builder.allDiffConstraint(Set.of(v1, v2, v3))                       // all different
 builder.allEqualConstraint(Set.of(v1, v2, v3))                      // all equal  (MiniZinc all_equal)
 builder.notAllEqualConstraint(Set.of(v1, v2, v3))                   // not every variable equal (at least 2 distinct values); exact GAC, not just count > 1

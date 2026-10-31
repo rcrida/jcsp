@@ -123,3 +123,4 @@ section instead.
 | [0059](0059-binary-equality-systems-are-solved-jointly-by-lattice-reduction.md) | Systems of binary linear equalities are solved jointly, by lattice reduction | Accepted |
 | [0060](0060-problem-scoped-indexed-variables.md) | Variables are issued by their problem and carry a dense index | Accepted |
 | [0061](0061-branch-and-bound-remembers-its-deepest-path.md) | Branch-and-bound remembers its deepest path until it has a solution of its own | Accepted |
+| [0062](0062-lex-chains-are-opt-in.md) | Lex chains are an opt-in constraint; the parser keeps emitting pairs | Accepted |

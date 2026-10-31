@@ -203,13 +203,13 @@ public class LexConstraint<T extends Comparable<T>> extends NaryConstraint imple
     }
 
     @SuppressWarnings("unchecked")
-    private static <T extends Comparable<T>> T domainMax(Domain<T> domain) {
+    static <T extends Comparable<T>> T domainMax(Domain<T> domain) {
         if (domain instanceof NumericDomain<?> nd) return (T) nd.getMax();
         return Collections.max(((DiscreteDomain<T>) domain).toList());
     }
 
     @SuppressWarnings("unchecked")
-    private static <T extends Comparable<T>> T domainMin(Domain<T> domain) {
+    static <T extends Comparable<T>> T domainMin(Domain<T> domain) {
         if (domain instanceof NumericDomain<?> nd) return (T) nd.getMin();
         return Collections.min(((DiscreteDomain<T>) domain).toList());
     }
