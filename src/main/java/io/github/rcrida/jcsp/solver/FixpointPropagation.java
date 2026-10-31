@@ -174,6 +174,13 @@ public class FixpointPropagation {
             FixpointConsistency.of(BinaryOffsetConstraint.class),
             FixpointConsistency.of(BinaryEqualsConstraint.class),
             FixpointConsistency.of(BinaryNotEqualsConstraint.class),
+            // Lex orderings sit with the cheap bound propagators, not among the global constraints: they
+            // break symmetry, so what they prune is the most that the cardinality, bin-packing and sum
+            // propagators below would otherwise spend their passes on. Position changes only the order
+            // within a round, never the fixpoint, and on BinPacking it cut identical-node proofs by
+            // 21-31% (ADR-0064).
+            FixpointConsistency.of(LexConstraint.class),
+            FixpointConsistency.of(LexChainConstraint.class),
             FixpointConsistency.of(AbsoluteDifferenceConstraint.class),
             FixpointConsistency.of(AbsoluteDifferenceVariableConstraint.class),
             FixpointConsistency.of(SquareConstraint.class),
@@ -208,8 +215,6 @@ public class FixpointPropagation {
             FixpointConsistency.of(NotAllEqualConstraint.class),
             FixpointConsistency.of(ParitySystemConstraint.class),
             FixpointConsistency.of(PigeonholeConstraint.class),
-            FixpointConsistency.of(LexConstraint.class),
-            FixpointConsistency.of(LexChainConstraint.class),
             FixpointConsistency.of(MaxConstraint.class),
             FixpointConsistency.of(MaxVariableConstraint.class),
             FixpointConsistency.of(MinConstraint.class),
