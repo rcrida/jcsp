@@ -5,6 +5,7 @@ import io.github.rcrida.jcsp.assignments.Statistics;
 import io.github.rcrida.jcsp.solver.listener.SolverListener;
 import io.github.rcrida.jcsp.solver.backtrackingsearch.order.DomainValuesOrderer;
 import io.github.rcrida.jcsp.solver.backtrackingsearch.selector.AdaptiveVariableSelector;
+import io.github.rcrida.jcsp.solver.neighbourhood.LargeNeighbourhoodSearch;
 import lombok.Builder;
 import lombok.Value;
 import org.jspecify.annotations.NonNull;
@@ -151,6 +152,18 @@ public class SolverConfig {
      */
     @Builder.Default DomainValuesOrderer.@NonNull Factory valueOrder =
             DomainValuesOrderer.Factory.LEAST_CONSTRAINING;
+
+    /**
+     * Whether the optimization chain also searches the neighbourhood of its incumbent, between the
+     * runs of its complete search, and how. Defaults to {@link LargeNeighbourhoodSearch#OFF}: the
+     * chain's terminal solver is then {@link BranchAndBoundSolver} alone, as it always was.
+     * {@link LargeNeighbourhoodSearch#DEFAULT} wraps it in a {@link NeighbourhoodSearchSolver}, which finds
+     * improvements on large routing, scheduling and assignment problems that the complete search does not
+     * reach in the time -- at a small cost to the ones it could have proved -- see ADR-0065. Affects only
+     * how the search is cut up, never which solutions are valid, and a drained stream is still a proof of
+     * optimality. Has no effect on satisfaction, nor on a problem with a continuous variable.
+     */
+    @Builder.Default LargeNeighbourhoodSearch largeNeighbourhoodSearch = LargeNeighbourhoodSearch.OFF;
 
     /**
      * Whether nogood learning actually runs: an explicit {@link #nogoodLearningEnabled} if the

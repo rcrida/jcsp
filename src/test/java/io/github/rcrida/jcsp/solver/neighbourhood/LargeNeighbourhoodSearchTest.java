@@ -13,7 +13,8 @@ class LargeNeighbourhoodSearchTest {
 
     private static LargeNeighbourhoodSearch with(long grace, double fraction, long failures, long nodes, double share,
                                                  double probe, long patience, double patienceFraction) {
-        return new LargeNeighbourhoodSearch(grace, fraction, failures, nodes, share, probe, patience, patienceFraction, ONE);
+        return new LargeNeighbourhoodSearch(grace, fraction, failures, nodes, share, probe, patience, patienceFraction,
+                DecisionSource.Factory.REPLAY, ONE);
     }
 
     @Test
@@ -37,6 +38,7 @@ class LargeNeighbourhoodSearchTest {
         assertThat(standard.probeShare()).isEqualTo(0.05);
         assertThat(standard.patienceNodes()).isEqualTo(20_000);
         assertThat(standard.patienceFraction()).isEqualTo(0.1);
+        assertThat(standard.decisions()).isSameAs(DecisionSource.Factory.REPLAY);
     }
 
     @Test
@@ -47,7 +49,8 @@ class LargeNeighbourhoodSearchTest {
     @Test
     void theGeneratorListIsCopied() {
         List<NeighbourhoodGenerator.Factory> mutable = new ArrayList<>(ONE);
-        LargeNeighbourhoodSearch search = new LargeNeighbourhoodSearch(0, 0.5, 1, 1, 1.0, 0.0, 0, 0, mutable);
+        LargeNeighbourhoodSearch search = new LargeNeighbourhoodSearch(0, 0.5, 1, 1, 1.0, 0.0, 0, 0,
+                DecisionSource.Factory.REPLAY, mutable);
 
         mutable.add(NeighbourhoodGenerator.Factory.COST_WEIGHTED);
 

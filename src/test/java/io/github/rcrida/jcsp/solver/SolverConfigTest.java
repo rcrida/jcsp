@@ -226,6 +226,20 @@ class SolverConfigTest {
     }
 
     @Test
+    void largeNeighbourhoodSearch_isOffUnlessAskedFor() {
+        assertThat(SolverConfig.builder().build().getLargeNeighbourhoodSearch())
+                .isSameAs(io.github.rcrida.jcsp.solver.neighbourhood.LargeNeighbourhoodSearch.OFF);
+    }
+
+    @Test
+    void largeNeighbourhoodSearch_carriesWhatItIsGiven() {
+        var search = io.github.rcrida.jcsp.solver.neighbourhood.LargeNeighbourhoodSearch.DEFAULT;
+
+        assertThat(SolverConfig.builder().largeNeighbourhoodSearch(search).build().getLargeNeighbourhoodSearch())
+                .isSameAs(search);
+    }
+
+    @Test
     void valueOrder_defaultsToLeastConstraining() {
         assertThat(SolverConfig.builder().build().getValueOrder())
                 .isSameAs(DomainValuesOrderer.Factory.LEAST_CONSTRAINING);

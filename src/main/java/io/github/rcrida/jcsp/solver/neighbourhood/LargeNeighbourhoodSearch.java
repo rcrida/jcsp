@@ -40,16 +40,19 @@ import java.util.List;
  * @param probeShare          the same once they have stopped paying; at most {@code share}
  * @param patienceNodes       neighbourhood nodes without an improvement that are always tolerated
  * @param patienceFraction    fraction of all nodes so far that is tolerated instead, if larger
+ * @param decisions           how the decisions of an incumbent, the variables a run may fix or free, are found
  * @param generators          the ways of choosing the decisions to free; none turns the search off
  */
 public record LargeNeighbourhoodSearch(long graceNodes, double initialFreeFraction, long repairFailures,
                                        long repairNodes, double share, double probeShare, long patienceNodes,
                                        double patienceFraction,
+                                       DecisionSource.@NonNull Factory decisions,
                                        @NonNull List<NeighbourhoodGenerator.Factory> generators) {
 
     /** No neighbourhood runs: the search is the complete one alone. The default. */
     public static final LargeNeighbourhoodSearch OFF =
-            new LargeNeighbourhoodSearch(0, 0.05, 200, 10_000, 1.0, 0.05, 20_000, 0.1, List.of());
+            new LargeNeighbourhoodSearch(0, 0.05, 200, 10_000, 1.0, 0.05, 20_000, 0.1,
+                    DecisionSource.Factory.REPLAY, List.of());
 
     /**
      * Neighbourhood runs after 50,000 nodes, drawing between the random and the cost-weighted generator.
@@ -59,6 +62,7 @@ public record LargeNeighbourhoodSearch(long graceNodes, double initialFreeFracti
      */
     public static final LargeNeighbourhoodSearch DEFAULT =
             new LargeNeighbourhoodSearch(50_000, 0.05, 200, 10_000, 1.0, 0.05, 20_000, 0.1,
+                    DecisionSource.Factory.REPLAY,
                     List.of(NeighbourhoodGenerator.Factory.RANDOM, NeighbourhoodGenerator.Factory.COST_WEIGHTED));
 
     public LargeNeighbourhoodSearch {

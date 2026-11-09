@@ -34,6 +34,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.function.Supplier;
 import java.util.function.ToDoubleFunction;
 import java.util.stream.Stream;
 
@@ -226,24 +227,63 @@ public class BranchAndBoundSolver implements Solver {
     @NonNull RestartRandomization restartRandomization = RestartRandomization.NONE;
 
     /**
+     * The best solution found so far in one solve, and its cost. Every run of the solve reads it and
+     * the improving ones write it, so a neighbourhood run can start from the solution itself and not
+     * only from its cost.
+     */
+    static final class Incumbent {
+        double cost = Double.MAX_VALUE;
+        @Nullable Assignment solution;
+    }
+
+    /**
      * One run's failure count against its cutoff. A run is abandoned by setting this, not by
      * throwing: an exception thrown while a lazy stream is being consumed would escape to the
      * caller's terminal operation, where nothing can recover from it.
+     * <p>
+     * A <em>restricted</em> run is a neighbourhood run. Its ending proves nothing about the whole
+     * problem, and it is also cut off by a node budget as well as by failures, because a connected
+     * neighbourhood can go deep for a long time without failing.
      */
-    private static final class RunState {
+    static final class RunState {
+        private static final long NO_NODE_BUDGET = Long.MAX_VALUE;
+
         private final long failBudget;
+        private final boolean restricted;
+        private final long nodeBudget;
+        private final Statistics statistics;
+        private final long nodesAtStart;
         private long fails;
 
-        RunState(long failBudget) {
+        private RunState(long failBudget, boolean restricted, long nodeBudget, Statistics statistics) {
             this.failBudget = failBudget;
+            this.restricted = restricted;
+            this.nodeBudget = nodeBudget;
+            this.statistics = statistics;
+            this.nodesAtStart = statistics.getNodesExplored();
+        }
+
+        /** A run of the complete search, cut off by failures alone. */
+        static RunState unrestricted(long failBudget, Statistics statistics) {
+            return new RunState(failBudget, false, NO_NODE_BUDGET, statistics);
+        }
+
+        /** A neighbourhood run, cut off by failures or by the nodes it has searched since it began. */
+        static RunState restricted(long failBudget, long nodeBudget, Statistics statistics) {
+            return new RunState(failBudget, true, nodeBudget, statistics);
         }
 
         void fail() {
             fails++;
         }
 
+        boolean restricted() {
+            return restricted;
+        }
+
         boolean aborted() {
-            return fails >= failBudget;
+            return fails >= failBudget
+                    || (nodeBudget != NO_NODE_BUDGET && statistics.getNodesExplored() - nodesAtStart >= nodeBudget);
         }
     }
 
@@ -259,8 +299,19 @@ public class BranchAndBoundSolver implements Solver {
 
     @Override
     public Stream<Assignment> getSolutions(@NonNull ConstraintSatisfactionProblem csp) {
+        Search search = open(csp);
+        int[] unrestricted = {0};
+        return search.improvements(() -> search.unrestrictedRun(++unrestricted[0]));
+    }
+
+    /**
+     * Opens the search of one solve: everything that is per-solve state, before any run is made. {@link
+     * #getSolutions} makes the runs of the complete search over it; {@link NeighbourhoodSearchSolver} makes
+     * those and others.
+     */
+    Search open(@NonNull ConstraintSatisfactionProblem csp) {
         log.info("Search space before branch-and-bound = {}", csp.getSearchSpace());
-        double[] incumbent = {Double.MAX_VALUE};
+        Incumbent incumbent = new Incumbent();
         long deadline = limits.deadlineNanos();
         // Per-solve state, like the selector and the LP gate built below: a nogood here is relative
         // to the incumbent it was derived under, and this search starts unbounded -- see nogoodStore.
@@ -287,28 +338,104 @@ public class BranchAndBoundSolver implements Solver {
             throw new IllegalArgumentException("restartFailBase must be positive and restartGrowth above 1, got: "
                     + restartFailBase + ", " + restartGrowth);
         }
-        AdaptiveVariableSelector selector = selectorFactory.createSelector(csp.getConstraints());
-        LpGate lpGate = lpGateFor(csp);
-        RunState[] previous = new RunState[1];
-        // Each run is a complete DFS from the root under whatever incumbent exists by then; one
-        // that hits its cutoff is abandoned and the next starts, so the stream is a proof of
-        // optimality only when a run ends un-aborted. A flat iterate/flatMap rather than a nested
-        // concat per run: the latter's depth would grow with the number of restarts.
-        Stream<Assignment> improvements = Stream.iterate(1, k -> k + 1)
-                .takeWhile(k -> k == 1 || (previous[0].aborted() && !cancellation.isCancelled()))
-                .flatMap(k -> {
-                    if (k > 1) {
-                        statistics.addRestarts(1);
-                        listener.onRestart(k - 1);
-                    }
-                    RunState run = new RunState(failBudget(restartFailBase, restartGrowth, k));
-                    previous[0] = run;
-                    selector.onRestart(restartRandomization.randomFor(k));
-                    domainValuesOrderer.onRestart(k);
-                    return search(csp, rootAssignment(), incumbent, deadline, 1.0, new SearchProgress(),
-                            selector, lpGate, hasContinuous, rootBound, run);
-                });
-        return seed.map(solution -> Stream.concat(Stream.of(solution), improvements)).orElse(improvements);
+        return new Search(csp, incumbent, deadline, rootBound, hasContinuous,
+                selectorFactory.createSelector(csp.getConstraints()), lpGateFor(csp), seed);
+    }
+
+    /** One run of a solve, and the state that says whether the stream of runs goes on after it. */
+    record Run(RunState state, Stream<Assignment> found) {}
+
+    /**
+     * One solve in progress: its incumbent, its objective bound, the selector and LP gate the complete
+     * search's runs share, and the starting solution the seeder supplied. It makes runs; what order to make
+     * them in is the caller's, so {@link #getSolutions} makes only unrestricted ones and {@link
+     * NeighbourhoodSearchSolver} interleaves others.
+     */
+    final class Search {
+        final ConstraintSatisfactionProblem csp;
+        final Incumbent incumbent;
+        final Bound rootBound;
+        final boolean hasContinuous;
+        private final long deadline;
+        private final AdaptiveVariableSelector selector;
+        private final LpGate lpGate;
+        private final Optional<Assignment> seed;
+
+        Search(ConstraintSatisfactionProblem csp, Incumbent incumbent, long deadline, Bound rootBound,
+               boolean hasContinuous, AdaptiveVariableSelector selector, LpGate lpGate, Optional<Assignment> seed) {
+            this.csp = csp;
+            this.incumbent = incumbent;
+            this.deadline = deadline;
+            this.rootBound = rootBound;
+            this.hasContinuous = hasContinuous;
+            this.selector = selector;
+            this.lpGate = lpGate;
+            this.seed = seed;
+        }
+
+        /**
+         * The improving solutions of the runs {@code next} supplies, one after another, after the seeder's own.
+         * Each unrestricted run is a complete DFS from the root under whatever incumbent exists by then; one
+         * that hits its cutoff is abandoned and the next starts, so the stream is a proof of optimality only
+         * when an unrestricted run ends un-aborted. A flat iterate/flatMap rather than a nested concat per
+         * run: the latter's depth would grow with the number of restarts.
+         */
+        Stream<Assignment> improvements(Supplier<Run> next) {
+            Run[] previous = new Run[1];
+            Stream<Assignment> runs = Stream.iterate(1, k -> k + 1)
+                    .takeWhile(k -> k == 1 || (carriesOn(previous[0].state()) && !cancellation.isCancelled()))
+                    .flatMap(k -> {
+                        previous[0] = next.get();
+                        return previous[0].found();
+                    });
+            return seed.map(solution -> Stream.concat(Stream.of(solution), runs)).orElse(runs);
+        }
+
+        /** Unrestricted run {@code u} (1-based): a complete search from the root, cut off after its failure budget. */
+        Run unrestrictedRun(int u) {
+            if (u > 1) {
+                statistics.addRestarts(1);
+                listener.onRestart(u - 1);
+            }
+            RunState run = RunState.unrestricted(failBudget(restartFailBase, restartGrowth, u), statistics);
+            selector.onRestart(restartRandomization.randomFor(u));
+            domainValuesOrderer.onRestart(u);
+            return new Run(run, search(csp, rootAssignment(), incumbent, deadline, 1.0, new SearchProgress(),
+                    selector, lpGate, hasContinuous, rootBound, run));
+        }
+
+        /**
+         * A search below {@code start}, with {@code assignment} already made, as a restricted run under
+         * {@code state}: its own selector and LP gate keep the complete search's state as it would have been.
+         */
+        Run restrictedRun(ConstraintSatisfactionProblem start, Assignment assignment, Bound bound,
+                          AdaptiveVariableSelector ownSelector, LpGate ownGate, RunState state) {
+            return new Run(state, search(start, assignment, incumbent, deadline, 1.0, new SearchProgress(),
+                    ownSelector, ownGate, false, bound, state));
+        }
+
+        /** The root bound tightened to the incumbent as it now stands. */
+        Bound tightened() {
+            return rootBound.tightenedTo(objective, objectiveCut, csp, incumbent.cost);
+        }
+
+        AdaptiveVariableSelector newSelector() {
+            return selectorFactory.createSelector(csp.getConstraints());
+        }
+
+        LpGate newLpGate() {
+            return lpGateFor(csp);
+        }
+
+        /**
+         * Whether the stream of runs goes on after {@code previous}: an unrestricted run that was cut off, or
+         * a restricted run, which always does unless a limit has been reached.
+         */
+        private boolean carriesOn(RunState previous) {
+            return previous.restricted()
+                    ? limits.checkStop(cancellation, statistics.getNodesExplored(), deadline) == SolverLimits.StopReason.NONE
+                    : previous.aborted();
+        }
     }
 
     /**
@@ -322,7 +449,7 @@ public class BranchAndBoundSolver implements Solver {
      * fixpoint adds a constraint -- so a new cut is applied on top of it rather than by removing the
      * old one from whatever the node happens to hold.
      */
-    private record Bound(@NonNull Set<Constraint> structural,
+    record Bound(@NonNull Set<Constraint> structural,
                          @Nullable LinearBoundConstraint<Integer> cut) {
 
         /**
@@ -364,7 +491,7 @@ public class BranchAndBoundSolver implements Solver {
     }
 
     /** The root of one search: a fresh {@link Assignment} carrying this solver's shared per-solve state. */
-    private Assignment rootAssignment() {
+    Assignment rootAssignment() {
         return Assignment.builder().statistics(statistics).listener(listener).cancellation(cancellation).build();
     }
 
@@ -384,7 +511,7 @@ public class BranchAndBoundSolver implements Solver {
      * region chosen with little regard for cost -- measurably worse solutions, per
      * <a href="../../../../../../../docs/adr/0041-reuse-the-satisfaction-search-for-the-first-solution.md">ADR-0041</a>.
      */
-    private Optional<Assignment> seedIncumbent(ConstraintSatisfactionProblem csp, double[] incumbent) {
+    private Optional<Assignment> seedIncumbent(ConstraintSatisfactionProblem csp, Incumbent incumbent) {
         if (incumbentSeeder == null) {
             return Optional.empty();
         }
@@ -395,7 +522,7 @@ public class BranchAndBoundSolver implements Solver {
 
     private Stream<Assignment> search(ConstraintSatisfactionProblem csp,
                                        Assignment assignment,
-                                       double[] incumbent,
+                                       Incumbent incumbent,
                                        long deadline,
                                        double weight,
                                        SearchProgress progress,
@@ -412,7 +539,7 @@ public class BranchAndBoundSolver implements Solver {
         if (assignment.isComplete(csp) || (hasContinuous && isDiscreteComplete(csp, assignment))) {
             return resolveComplete(csp, assignment, incumbent);
         }
-        Bound bound = inherited.tightenedTo(objective, objectiveCut, csp, incumbent[0]);
+        Bound bound = inherited.tightenedTo(objective, objectiveCut, csp, incumbent.cost);
         // Rebuilding the constraint set rebuilds the ConstraintGraph, and with it every structural
         // memo cached against that graph -- so this happens only when the cut actually changed, which
         // is once per improving solution per path, not per node.
@@ -441,7 +568,7 @@ public class BranchAndBoundSolver implements Solver {
                                          Set<Variable<?>> boundVariables,
                                          Bound appliedBound,
                                          Assignment assignment,
-                                         double[] incumbent,
+                                         Incumbent incumbent,
                                          long deadline,
                                          double weight,
                                          SearchProgress progress,
@@ -453,7 +580,7 @@ public class BranchAndBoundSolver implements Solver {
         if (objective instanceof LinearObjective linearObjective) {
             if (lpGate.solveThisNode()) {
                 Optional<LpBound> bound = LpModelBuilder.solve(csp, linearObjective, lpModelCacheKey);
-                boolean cut = bound.isEmpty() || bound.get().lowerBound() >= incumbent[0];
+                boolean cut = bound.isEmpty() || bound.get().lowerBound() >= incumbent.cost;
                 lpGate.record(cut);
                 if (cut) {
                     return Stream.empty();
@@ -466,7 +593,7 @@ public class BranchAndBoundSolver implements Solver {
             // Nothing is lost by it: the incumbent is enforced by the cut in the constraint set, and
             // a search whose objective has no expressible cut is given a gate that never backs off
             // (see getSolutions), so this node is reached only when the cut is carrying the bound.
-        } else if (objective.applyAsDouble(assignment) >= incumbent[0]) {
+        } else if (objective.applyAsDouble(assignment) >= incumbent.cost) {
             return Stream.empty();
         }
         Variable<?> variable = branchVariable(csp, assignment, hint.orElseGet(() -> selector.select(csp, assignment)));
@@ -541,10 +668,10 @@ public class BranchAndBoundSolver implements Solver {
      * are the solutions <em>this</em> search found, so their values are evidence about where cheap
      * solutions live. {@link #seedIncumbent}'s solution is not, and is deliberately not recorded.
      */
-    private Stream<Assignment> resolveComplete(ConstraintSatisfactionProblem csp, Assignment assignment, double[] incumbent) {
+    private Stream<Assignment> resolveComplete(ConstraintSatisfactionProblem csp, Assignment assignment, Incumbent incumbent) {
         Optional<Assignment> complete = assignment.isComplete(csp)
                 ? Optional.of(assignment)
-                : resolveContinuousResidual(csp, assignment, incumbent[0]);
+                : resolveContinuousResidual(csp, assignment, incumbent.cost);
         Optional<Assignment> accepted = complete.flatMap(solution -> accept(solution, incumbent));
         accepted.ifPresent(solution -> phaseMemory.recordSolution(solution));
         return accepted.stream();
@@ -561,12 +688,13 @@ public class BranchAndBoundSolver implements Solver {
      * {@link #resolveComplete}: a solution this class found is evidence about where cheap solutions
      * live, whereas {@link #seedIncumbent}'s came from a search that never looked at the objective.
      */
-    private Optional<Assignment> accept(Assignment solution, double[] incumbent) {
+    private Optional<Assignment> accept(Assignment solution, Incumbent incumbent) {
         double cost = objective.applyAsDouble(solution);
-        if (cost >= incumbent[0]) {
+        if (cost >= incumbent.cost) {
             return Optional.empty();
         }
-        incumbent[0] = cost;
+        incumbent.cost = cost;
+        incumbent.solution = solution;
         log.info("Found improving solution with cost {}: {}", cost, solution);
         listener.onIncumbentImproved(solution, cost);
         return Optional.of(solution);
@@ -670,7 +798,7 @@ public class BranchAndBoundSolver implements Solver {
                                                  Set<Variable<?>> boundVariables,
                                                  Bound appliedBound,
                                                  Assignment assignment,
-                                                 double[] incumbent,
+                                                 Incumbent incumbent,
                                                  long deadline,
                                                  double weight,
                                                  SearchProgress progress,

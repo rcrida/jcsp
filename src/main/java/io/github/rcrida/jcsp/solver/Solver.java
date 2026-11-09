@@ -455,7 +455,7 @@ public interface Solver {
                 // Handles any BoundedDomain variables itself -- see this class's own Javadoc and
                 // ADR-0009 -- rather than being nested inside a BisectionConditioningSolver that runs
                 // first, so it's the chain's terminal solver unconditionally.
-                Solver terminal = BranchAndBoundSolver.builder()
+                BranchAndBoundSolver complete = BranchAndBoundSolver.builder()
                         .objective(objective)
                         .selectorFactory(config.getVariableSelectorFactory())
                         .domainValuesOrderer(config.getValueOrder().create())
@@ -470,6 +470,9 @@ public interface Solver {
                         .restartRandomization(config.getRestartRandomization().forSearch(Integer.MAX_VALUE))
                         .incumbentSeeder(incumbentSeeder)
                         .build();
+                Solver terminal = config.getLargeNeighbourhoodSearch().isEnabled()
+                        ? new NeighbourhoodSearchSolver(complete, config.getLargeNeighbourhoodSearch())
+                        : complete;
                 Solver afterPropagation = hasSets
                         ? SetBranchingSolver.builder().inner(terminal).objective(objective).listener(config.getListener())
                                 .limits(limits).cancellation(cancellation).statistics(config.getStatistics())

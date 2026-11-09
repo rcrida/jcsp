@@ -13,7 +13,8 @@ class NeighbourhoodScheduleTest {
 
     /** Grace 100 nodes, 10% of decisions free, share 1.0 then 0.1 once 50 nodes (or 20% of all) go without a gain. */
     private static NeighbourhoodSchedule schedule(List<NeighbourhoodGenerator.Factory> generators) {
-        return new NeighbourhoodSchedule(new LargeNeighbourhoodSearch(100, 0.1, 10, 100, 1.0, 0.1, 50, 0.2, generators));
+        return new NeighbourhoodSchedule(new LargeNeighbourhoodSearch(100, 0.1, 10, 100, 1.0, 0.1, 50, 0.2,
+                DecisionSource.Factory.REPLAY, generators));
     }
 
     @Test
