@@ -89,6 +89,25 @@ be spread across the 32-bit range first (multiplied by an odd constant): `Valuat
 variable's hash with its value's, and with bare indices `Steiner3-08`'s 80,640 six-tuples collapsed
 into a few hash codes again, so parsing took 28 seconds to honour a 5 second limit instead of 7.
 
+Two per-node hash maps were then moved to arrays indexed by `getIndex()`: `DomWdegVariableSelector`'s
+own variable numbering, read for every variable at every node, and the fixpoint's wake lists
+(`FixpointPropagation`'s propagator coverage and `FixpointConsistency`'s constraint incidences),
+read for every changed variable on every wake, now an `IncidenceIndex`. Interleaved A/B against
+the commit before each, seed 12345, 5 pairs, medians, identical node counts throughout:
+
+| Instance | dom/wdeg selector | Fixpoint wake lists |
+|---|---|---|
+| `driverlogw-09` | 2.115s → 2.113s | 2.135s → 2.169s |
+| `Taillard-os-04-04-0` | 1.610s → 1.615s | 1.641s → 1.602s |
+| `GolombRuler-09-a4` | 21.31s → 21.55s | 21.41s → 21.46s |
+
+Neither is measurable. Once `Variable.Impl` hashes from its index and compares by identity, a hash
+lookup no longer hashes a name, so what an array saves is a probe and a boxed `Integer`, and on
+these instances that is no measurable share of a solve. The claim this section set out to test, that array
+lookup beats hashing a name, was settled by the identity change rather than by arrays. Further
+conversions are kept for what they simplify, not proposed as speedups without a profile showing the
+lookup.
+
 Obligations: every test that builds variables through `Variable.Factory` migrates to the builder;
 `equals`/`hashCode` of `Assignment`, constraints and `ConstraintSatisfactionProblem` are revisited
 once identity replaces name equality.
