@@ -315,19 +315,19 @@ public class AC3 implements ConstraintConsistency {
     public Optional<ConstraintSatisfactionProblem> revise(ConstraintSatisfactionProblem problem, Arc arc) {
         val entry = arcIndex(problem).entries().get(arc);
         val arcConstraints = entry == null ? List.<BinaryConstraint<?, ?>>of() : entry.constraints();
-        val variableDomains = new HashMap<Variable<?>, Domain<?>>(problem.getVariableDomains());
+        val revisions = new Revisions(problem);
         for (BinaryConstraint<?, ?> binaryConstraint : arcConstraints) {
-            val optionalRevisedD = revise(variableDomains, arc, binaryConstraint);
+            val optionalRevisedD = revise(revisions.view(), arc, binaryConstraint);
             if (optionalRevisedD.isPresent()) {
                 val revisedD = optionalRevisedD.get();
                 if (revisedD.isEmpty()) {
                     log.debug("Domain of variable {} is empty after revising arc {}", arc.getFrom(), arc);
                     return Optional.empty();
                 }
-                variableDomains.put(arc.getFrom(), revisedD);
+                revisions.record(arc.getFrom(), revisedD);
             }
         }
-        return Optional.of(problem.withDomains(variableDomains));
+        return Optional.of(revisions.finish(problem));
     }
 
     /**
