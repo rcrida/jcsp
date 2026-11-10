@@ -342,6 +342,14 @@ SolverConfig.builder().valueOrder(DomainValuesOrderer.Factory.cycle(
 
 `LEAST_CONSTRAINING` (the default), `DOMAIN_ORDER`, `REVERSED_DOMAIN_ORDER` and `ALTERNATING` are provided; `reversed(...)` and `cycle(...)` combine any factories, including your own. A factory because an order may keep per-search state, and its `DomainValuesOrderer` is told of each restart through `onRestart`. No order has been shown to win everywhere, which is why the default has not changed: a reversed order proves capacity-packing instances several times faster, but a corpus-wide run with a restart-alternating order was slower overall and the cause was not pinned down ([ADR-0063](docs/adr/0063-value-order-is-a-setting-not-a-default.md)). Like variable ordering, it changes only the order assignments are visited in, never which are reachable.
 
+**Large neighbourhood search** — off by default. For a large optimization problem where the incumbent is the bottleneck, `largeNeighbourhoodSearch` interleaves small searches around the incumbent (fix most variables, free a few, search under the objective cut) with the complete search, which still decides optimality:
+
+```java
+SolverConfig.builder().largeNeighbourhoodSearch(LargeNeighbourhoodSearch.DEFAULT).build();
+```
+
+Scheduling is counted in nodes, so a fixed `restartRandomization` seed reproduces a run. The generators (`NeighbourhoodGenerator.Factory.RANDOM`, `COST_WEIGHTED`) are pluggable. On the bundled corpus it cut `Vrp-A-n32-k5`'s cost by 30% and kept every proved optimum, at about 3% more total time ([ADR-0065](docs/adr/0065-large-neighbourhood-search-is-an-opt-in-wrapper-around-branch-and-bound.md)).
+
 ### Constraint builder methods
 
 **Unary**
