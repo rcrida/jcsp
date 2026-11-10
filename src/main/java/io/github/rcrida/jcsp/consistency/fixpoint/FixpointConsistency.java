@@ -10,6 +10,7 @@ import io.github.rcrida.jcsp.constraints.nary.NogoodConstraint;
 import io.github.rcrida.jcsp.constraints.nary.RangeNogoodConstraint;
 import io.github.rcrida.jcsp.domains.Domain;
 import io.github.rcrida.jcsp.variables.Variable;
+import io.github.rcrida.jcsp.variables.IncidenceIndex;
 import io.github.rcrida.jcsp.variables.VariableMap;
 import lombok.AccessLevel;
 import lombok.RequiredArgsConstructor;
@@ -18,10 +19,8 @@ import lombok.extern.slf4j.Slf4j;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 
-import java.util.ArrayList;
 import java.util.BitSet;
 import java.util.Collections;
-import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -52,7 +51,7 @@ public class FixpointConsistency implements ConstraintConsistency {
      * {@link java.util.IdentityHashMap}-backed {@link Set}.
      */
     private record FilterCache(Set<Constraint> source, List<Propagatable> filtered,
-                               Map<Variable<?>, int[]> indicesByVariable) {}
+                               IncidenceIndex indicesByVariable) {}
 
     public static FixpointConsistency of(Class<? extends Propagatable> constraintType) {
         return new FixpointConsistency(constraintType);
@@ -111,23 +110,11 @@ public class FixpointConsistency implements ConstraintConsistency {
             return cached;
         }
         List<Propagatable> filtered = (List) source.stream().filter(constraintType::isInstance).toList();
-        Map<Variable<?>, List<Integer>> incidences = new HashMap<>();
-        for (int i = 0; i < filtered.size(); i++) {
-            for (Variable<?> variable : ((Constraint) filtered.get(i)).getVariables()) {
-                incidences.computeIfAbsent(variable, ignored -> new ArrayList<>()).add(i);
-            }
-        }
-        Map<Variable<?>, int[]> indicesByVariable = new HashMap<>(incidences.size() * 2);
-        incidences.forEach((variable, indices) -> indicesByVariable.put(variable, toIntArray(indices)));
+        IncidenceIndex indicesByVariable = IncidenceIndex.of(
+                filtered.stream().map(constraint -> ((Constraint) constraint).getVariables()).toList());
         FilterCache fresh = new FilterCache(source, filtered, indicesByVariable);
         holder.set(fresh);
         return fresh;
-    }
-
-    private static int[] toIntArray(List<Integer> values) {
-        int[] result = new int[values.size()];
-        for (int i = 0; i < result.length; i++) result[i] = values.get(i);
-        return result;
     }
 
     private List<Propagatable> filteredConstraints(ConstraintSatisfactionProblem csp) {
@@ -165,7 +152,7 @@ public class FixpointConsistency implements ConstraintConsistency {
      */
     @Override
     public Set<Variable<?>> variablesCovered(ConstraintSatisfactionProblem csp) {
-        return filterCache(csp).indicesByVariable().keySet();
+        return filterCache(csp).indicesByVariable().variables();
     }
 
     public boolean appliesTo(ConstraintSatisfactionProblem csp) {
@@ -306,8 +293,6 @@ public class FixpointConsistency implements ConstraintConsistency {
      * prune further against the domains it produced.
      */
     private static final class ConstraintQueue {
-        private static final int[] NO_INDICES = new int[0];
-
         private final FilterCache cache;
         /**
          * Ring buffer of {@link FilterCache#filtered} positions. Capacity is exactly the filtered
@@ -365,7 +350,7 @@ public class FixpointConsistency implements ConstraintConsistency {
 
         void wake(Set<Variable<?>> narrowed) {
             for (Variable<?> variable : narrowed) {
-                for (int index : cache.indicesByVariable().getOrDefault(variable, NO_INDICES)) {
+                for (int index : cache.indicesByVariable().positionsOf(variable)) {
                     if (!queued.get(index)) {
                         queued.set(index);
                         queue[tail] = index;

@@ -89,6 +89,7 @@ import io.github.rcrida.jcsp.domains.BoundedDomain;
 import io.github.rcrida.jcsp.domains.Domain;
 import io.github.rcrida.jcsp.domains.SetBoundedDomain;
 import io.github.rcrida.jcsp.variables.Variable;
+import io.github.rcrida.jcsp.variables.IncidenceIndex;
 import io.github.rcrida.jcsp.variables.VariableMap;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
@@ -96,7 +97,6 @@ import org.jspecify.annotations.Nullable;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
-import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -495,9 +495,7 @@ public class FixpointPropagation {
      * reached just once, with the union of everything that woke it.
      */
     private static final class Worklist {
-        private static final int[] NO_WATCHERS = new int[0];
-
-        private final Map<Variable<?>, int[]> byVariable;
+        private final IncidenceIndex byVariable;
         private final int[] alwaysWoken;
         private final boolean[] queued;
         private final boolean[] convergesInternally;
@@ -572,7 +570,7 @@ public class FixpointPropagation {
         void wake(int source, Set<Variable<?>> changed) {
             int skip = convergesInternally[source] ? source : -1;
             for (Variable<?> variable : changed) {
-                for (int watcher : byVariable.getOrDefault(variable, NO_WATCHERS)) {
+                for (int watcher : byVariable.positionsOf(variable)) {
                     if (watcher != skip) wakeOne(watcher, changed);
                 }
             }
@@ -616,7 +614,7 @@ public class FixpointPropagation {
     }
 
     /** {@link Worklist}'s wake index: which propagators each variable's narrowing must re-run. */
-    private record Coverage(Map<Variable<?>, int[]> byVariable, int[] alwaysWoken) {
+    private record Coverage(IncidenceIndex byVariable, int[] alwaysWoken) {
     }
 
     /**
@@ -644,21 +642,18 @@ public class FixpointPropagation {
     }
 
     private Coverage buildCoverage(ConstraintSatisfactionProblem csp) {
-        Map<Variable<?>, List<Integer>> watchers = new HashMap<>();
+        List<Set<Variable<?>>> covered = new ArrayList<>(propagators.size());
         List<Integer> always = new ArrayList<>();
         for (int i = 0; i < propagators.size(); i++) {
-            Set<Variable<?>> covered = propagators.get(i).variablesCovered(csp);
-            if (covered == null) {
+            Set<Variable<?>> variables = propagators.get(i).variablesCovered(csp);
+            if (variables == null) {
                 always.add(i);
+                covered.add(Set.of());
             } else {
-                for (Variable<?> variable : covered) {
-                    watchers.computeIfAbsent(variable, ignored -> new ArrayList<>()).add(i);
-                }
+                covered.add(variables);
             }
         }
-        Map<Variable<?>, int[]> packed = new HashMap<>(watchers.size() * 2);
-        watchers.forEach((variable, indices) -> packed.put(variable, toIntArray(indices)));
-        return new Coverage(packed, toIntArray(always));
+        return new Coverage(IncidenceIndex.of(covered), toIntArray(always));
     }
 
     private static int[] toIntArray(List<Integer> values) {
