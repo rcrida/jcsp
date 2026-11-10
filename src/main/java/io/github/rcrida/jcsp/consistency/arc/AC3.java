@@ -5,6 +5,7 @@ import lombok.val;
 import io.github.rcrida.jcsp.ConstraintSatisfactionProblem;
 import io.github.rcrida.jcsp.consistency.ConsistencyResult;
 import io.github.rcrida.jcsp.consistency.ConstraintConsistency;
+import io.github.rcrida.jcsp.consistency.DomainOverlay;
 import io.github.rcrida.jcsp.consistency.Propagatable;
 import io.github.rcrida.jcsp.constraints.binary.BinaryConstraint;
 import io.github.rcrida.jcsp.constraints.nary.GroundNogoodConstraint;
@@ -12,6 +13,7 @@ import io.github.rcrida.jcsp.constraints.nary.NogoodConstraint;
 import io.github.rcrida.jcsp.domains.DiscreteDomain;
 import io.github.rcrida.jcsp.domains.Domain;
 import io.github.rcrida.jcsp.variables.Variable;
+import io.github.rcrida.jcsp.variables.VariableMap;
 import org.jspecify.annotations.Nullable;
 
 import java.util.*;
@@ -178,8 +180,9 @@ public class AC3 implements ConstraintConsistency {
      */
     private static final class Revisions {
         private final Map<Variable<?>, Domain<?>> base;
-        private Map<Variable<?>, Domain<?>> working;
-        private Map<Variable<?>, Domain<?>> updates;
+        /** The narrowings read through {@link DomainOverlay} over {@link #base}, rather than a copy of it. */
+        private @Nullable Map<Variable<?>, Domain<?>> working;
+        private @Nullable Map<Variable<?>, Domain<?>> updates;
 
         Revisions(ConstraintSatisfactionProblem problem) {
             this.base = problem.getVariableDomains();
@@ -190,11 +193,10 @@ public class AC3 implements ConstraintConsistency {
         }
 
         void record(Variable<?> variable, Domain<?> narrowed) {
-            if (working == null) {
-                working = new HashMap<>(base);
-                updates = new HashMap<>();
+            if (updates == null) {
+                updates = new VariableMap<>();
+                working = DomainOverlay.of(base, updates);
             }
-            working.put(variable, narrowed);
             updates.put(variable, narrowed);
         }
 
