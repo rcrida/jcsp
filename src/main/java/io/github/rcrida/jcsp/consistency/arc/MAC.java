@@ -34,7 +34,7 @@ public class MAC implements Inference {
      */
     @Override
     public Optional<ConstraintSatisfactionProblem> apply(ConstraintSatisfactionProblem problem, Variable<?> variable, Assignment assignment) {
-        return AC3.INSTANCE.applyQueue(
+        return AC3.INSTANCE.run(
                 problem.withDomain(variable, assignedDomain(variable, assignment)),
                 seedQueue(problem, variable, assignment));
     }
@@ -54,8 +54,8 @@ public class MAC implements Inference {
      */
     public static boolean revisesNothing(ConstraintSatisfactionProblem problem, Variable<?> variable,
                                           Assignment assignment) {
-        for (Arc arc : AC3.INSTANCE.arcsInto(problem, variable)) {
-            if (!assignment.isAssigned(arc.getFrom())) return false;
+        for (AC3.ArcEntry entry : AC3.INSTANCE.arcsInto(problem, variable)) {
+            if (!assignment.isAssigned(entry.arc().getFrom())) return false;
         }
         return true;
     }
@@ -68,7 +68,7 @@ public class MAC implements Inference {
      */
     @Override
     public ConsistencyResult applyWithReason(ConstraintSatisfactionProblem problem, Variable<?> variable, Assignment assignment) {
-        return AC3.INSTANCE.applyQueueWithReason(
+        return AC3.INSTANCE.runWithReason(
                 problem.withDomain(variable, assignedDomain(variable, assignment)),
                 seedQueue(problem, variable, assignment));
     }
@@ -86,11 +86,11 @@ public class MAC implements Inference {
      * by-target index already holds, which on a large instance means tens of thousands of arc
      * comparisons per node to find the handful incident on one variable.
      */
-    private static Queue<Arc> seedQueue(ConstraintSatisfactionProblem problem, Variable<?> variable,
-                                         Assignment assignment) {
-        val queue = new ArrayDeque<Arc>();
-        for (Arc arc : AC3.INSTANCE.arcsInto(problem, variable)) {
-            if (!assignment.isAssigned(arc.getFrom())) queue.add(arc);
+    private static Queue<AC3.ArcEntry> seedQueue(ConstraintSatisfactionProblem problem, Variable<?> variable,
+                                                  Assignment assignment) {
+        val queue = new ArrayDeque<AC3.ArcEntry>();
+        for (AC3.ArcEntry entry : AC3.INSTANCE.arcsInto(problem, variable)) {
+            if (!assignment.isAssigned(entry.arc().getFrom())) queue.add(entry);
         }
         return queue;
     }

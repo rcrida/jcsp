@@ -32,8 +32,19 @@ import java.util.stream.Collectors;
 public class AC3 implements ConstraintConsistency {
     public static final AC3 INSTANCE = new AC3();
 
-    private record ArcIndex(Set<Arc> allArcs, Map<Arc, List<BinaryConstraint<?, ?>>> arcConstraints,
-                             Map<Variable<?>, List<Arc>> arcsByTarget) {}
+    /**
+     * An arc together with the constraints revised along it, so that the revise queue holds
+     * everything a revision needs and taking an arc off it costs no lookup.
+     */
+    record ArcEntry(Arc arc, List<BinaryConstraint<?, ?>> constraints) {}
+
+    /**
+     * {@code entries} is only for {@link #applyQueue}'s and {@link #applyQueueWithReason}'s public
+     * {@link Arc} queues and the single-arc {@link #revise(ConstraintSatisfactionProblem, Arc)}; the
+     * revise loop itself reads {@code entriesByTarget}.
+     */
+    private record ArcIndex(List<ArcEntry> allEntries, Map<Arc, ArcEntry> entries,
+                             Map<Variable<?>, List<ArcEntry>> entriesByTarget) {}
 
     private AC3() {}
 
@@ -54,14 +65,14 @@ public class AC3 implements ConstraintConsistency {
 
     /**
      * Every arc whose {@link Arc#getTo} is {@code variable}, read straight off {@link
-     * ArcIndex#arcsByTarget} -- the same memoized index {@link #applyQueue}'s own internal requeue
+     * ArcIndex#entriesByTarget} -- the same memoized index {@link #applyQueue}'s own internal requeue
      * rule uses. Package-private so {@link MAC} can reuse it instead of filtering {@code
      * ConstraintSatisfactionProblem#getAllBinaryArcs()} itself, which cost {@code O(|arcs|)} plus a
      * fresh {@link java.util.HashSet} at every search node for a result this lookup gives in
      * {@code O(1)}.
      */
-    List<Arc> arcsInto(ConstraintSatisfactionProblem problem, Variable<?> variable) {
-        return arcIndex(problem).arcsByTarget().getOrDefault(variable, List.of());
+    List<ArcEntry> arcsInto(ConstraintSatisfactionProblem problem, Variable<?> variable) {
+        return arcIndex(problem).entriesByTarget().getOrDefault(variable, List.of());
     }
 
     /**
@@ -71,7 +82,7 @@ public class AC3 implements ConstraintConsistency {
      */
     @Override
     public Set<Variable<?>> variablesCovered(ConstraintSatisfactionProblem problem) {
-        return arcIndex(problem).arcsByTarget().keySet();
+        return arcIndex(problem).entriesByTarget().keySet();
     }
 
     /** The revise queue requeues every arc a narrowing makes revisable, so a pass ends arc-consistent. */
@@ -81,16 +92,19 @@ public class AC3 implements ConstraintConsistency {
     }
 
     private ArcIndex buildArcIndex(ConstraintSatisfactionProblem problem) {
-        Map<Arc, List<BinaryConstraint<?, ?>>> arcConstraints = problem.getAllBinaryArcConstraints();
-        Map<Variable<?>, List<Arc>> arcsByTarget = arcConstraints.keySet().stream()
-                .collect(Collectors.groupingBy(Arc::getTo, Collectors.toUnmodifiableList()));
-        return new ArcIndex(arcConstraints.keySet(), arcConstraints, arcsByTarget);
+        List<ArcEntry> allEntries = problem.getAllBinaryArcConstraints().entrySet().stream()
+                .map(e -> new ArcEntry(e.getKey(), e.getValue()))
+                .toList();
+        Map<Arc, ArcEntry> entries = allEntries.stream()
+                .collect(Collectors.toUnmodifiableMap(ArcEntry::arc, entry -> entry));
+        Map<Variable<?>, List<ArcEntry>> entriesByTarget = allEntries.stream()
+                .collect(Collectors.groupingBy(entry -> entry.arc().getTo(), Collectors.toUnmodifiableList()));
+        return new ArcIndex(allEntries, entries, entriesByTarget);
     }
 
     @Override
     public Optional<ConstraintSatisfactionProblem> apply(ConstraintSatisfactionProblem problem) {
-        val queue = new ArrayDeque<>(arcIndex(problem).allArcs());
-        return applyQueue(problem, queue);
+        return run(problem, new ArrayDeque<>(arcIndex(problem).allEntries()));
     }
 
     /**
@@ -101,7 +115,7 @@ public class AC3 implements ConstraintConsistency {
      * <p>
      * Sound because it enqueues exactly what {@link #applyQueue}'s own internal requeue rule already
      * enqueues after it narrows a domain: an arc {@code (X_k, X_i)} can only newly prune {@code D_k}
-     * when {@code D_i} -- its <em>support</em> side -- has shrunk, so {@link ArcIndex#arcsByTarget}
+     * when {@code D_i} -- its <em>support</em> side -- has shrunk, so {@link ArcIndex#entriesByTarget}
      * for each changed variable is the complete set of arcs that could have become revisable. Every
      * other arc was left arc-consistent by the pass that last ran to fixpoint over it, and nothing
      * outside {@code changedSinceLastRun} has touched it since.
@@ -117,12 +131,12 @@ public class AC3 implements ConstraintConsistency {
      * {@code null} (unknown -- a preprocessing call, or any caller with no parent state to diff
      * against) falls back to the full arc queue, exactly as before.
      */
-    private Queue<Arc> seedQueue(ConstraintSatisfactionProblem problem, @Nullable Set<Variable<?>> changedSinceLastRun) {
+    private Queue<ArcEntry> seedQueue(ConstraintSatisfactionProblem problem, @Nullable Set<Variable<?>> changedSinceLastRun) {
         val index = arcIndex(problem);
-        if (changedSinceLastRun == null) return new ArrayDeque<>(index.allArcs());
-        val queue = new ArrayDeque<Arc>();
+        if (changedSinceLastRun == null) return new ArrayDeque<>(index.allEntries());
+        val queue = new ArrayDeque<ArcEntry>();
         for (Variable<?> variable : changedSinceLastRun) {
-            queue.addAll(index.arcsByTarget().getOrDefault(variable, List.of()));
+            queue.addAll(index.entriesByTarget().getOrDefault(variable, List.of()));
         }
         return queue;
     }
@@ -134,19 +148,31 @@ public class AC3 implements ConstraintConsistency {
     @Override
     public Optional<ConstraintSatisfactionProblem> apply(ConstraintSatisfactionProblem problem,
                                                           @Nullable Set<Variable<?>> changedSinceLastRun) {
-        return applyQueue(problem, seedQueue(problem, changedSinceLastRun));
+        return run(problem, seedQueue(problem, changedSinceLastRun));
     }
 
+    /** Revises {@code queue}'s arcs, and every arc a revision makes revisable, to arc consistency. */
     public Optional<ConstraintSatisfactionProblem> applyQueue(ConstraintSatisfactionProblem problem, Queue<Arc> queue) {
-        val index = arcIndex(problem);
-        val arcConstraints = index.arcConstraints();
-        val arcsByTarget = index.arcsByTarget();
+        return run(problem, toEntries(problem, queue));
+    }
+
+    /** {@code queue}'s arcs as this problem's {@link ArcEntry}s, in order. */
+    private Queue<ArcEntry> toEntries(ConstraintSatisfactionProblem problem, Queue<Arc> queue) {
+        val entries = arcIndex(problem).entries();
+        val result = new ArrayDeque<ArcEntry>(queue.size());
+        for (Arc arc : queue) result.add(entries.get(arc));
+        return result;
+    }
+
+    /** {@link #applyQueue} over a queue of entries, so that taking an arc off it needs no lookup. */
+    Optional<ConstraintSatisfactionProblem> run(ConstraintSatisfactionProblem problem, Queue<ArcEntry> queue) {
+        val entriesByTarget = arcIndex(problem).entriesByTarget();
         val revisions = new Revisions(problem);
         while (!queue.isEmpty()) {
-            val arc = queue.poll();
+            val entry = queue.poll();
+            val arc = entry.arc();
             val X_i = arc.getFrom();
-            val X_j = arc.getTo();
-            for (BinaryConstraint<?, ?> binaryConstraint : arcConstraints.get(arc)) {
+            for (BinaryConstraint<?, ?> binaryConstraint : entry.constraints()) {
                 val optionalRevisedD_i = revise(revisions.view(), arc, binaryConstraint);
                 if (optionalRevisedD_i.isPresent()) {
                     val revisedD_i = optionalRevisedD_i.get();
@@ -155,14 +181,22 @@ public class AC3 implements ConstraintConsistency {
                         return Optional.empty();
                     }
                     revisions.record(X_i, revisedD_i);
-                    val X_iNeighbours = arcsByTarget.getOrDefault(X_i, List.of()).stream()
-                            .filter(c -> !c.getFrom().equals(X_j))
-                            .toList();
-                    queue.addAll(X_iNeighbours);
+                    requeueNeighbours(queue, entriesByTarget, arc);
                 }
             }
         }
         return Optional.of(revisions.finish(problem));
+    }
+
+    /**
+     * Queues every arc into {@code revised}'s {@code from} side except the one back from its {@code
+     * to} side, which {@code revised} itself just made consistent.
+     */
+    private static void requeueNeighbours(Queue<ArcEntry> queue, Map<Variable<?>, List<ArcEntry>> entriesByTarget,
+                                          Arc revised) {
+        for (ArcEntry neighbour : entriesByTarget.getOrDefault(revised.getFrom(), List.of())) {
+            if (!neighbour.arc().getFrom().equals(revised.getTo())) queue.add(neighbour);
+        }
     }
 
     /**
@@ -212,7 +246,7 @@ public class AC3 implements ConstraintConsistency {
      */
     @Override
     public Optional<NogoodConstraint> explainConflict(ConstraintSatisfactionProblem problem) {
-        ConsistencyResult result = applyQueueWithReason(problem, new ArrayDeque<>(arcIndex(problem).allArcs()));
+        ConsistencyResult result = runWithReason(problem, new ArrayDeque<>(arcIndex(problem).allEntries()));
         return result.isInfeasible() ? Optional.ofNullable(result.reason()) : Optional.empty();
     }
 
@@ -220,7 +254,7 @@ public class AC3 implements ConstraintConsistency {
     @Override
     public ConsistencyResult applyWithReason(ConstraintSatisfactionProblem problem,
                                              @Nullable Set<Variable<?>> changedSinceLastRun) {
-        return applyQueueWithReason(problem, seedQueue(problem, changedSinceLastRun));
+        return runWithReason(problem, seedQueue(problem, changedSinceLastRun));
     }
 
     /**
@@ -250,15 +284,19 @@ public class AC3 implements ConstraintConsistency {
      * need separate justification not attempted in this pass.
      */
     public ConsistencyResult applyQueueWithReason(ConstraintSatisfactionProblem problem, Queue<Arc> queue) {
-        val index = arcIndex(problem);
-        val arcConstraints = index.arcConstraints();
-        val arcsByTarget = index.arcsByTarget();
+        return runWithReason(problem, toEntries(problem, queue));
+    }
+
+    /** {@link #applyQueueWithReason} over a queue of entries, so that taking an arc off it needs no lookup. */
+    ConsistencyResult runWithReason(ConstraintSatisfactionProblem problem, Queue<ArcEntry> queue) {
+        val entriesByTarget = arcIndex(problem).entriesByTarget();
         val revisions = new Revisions(problem);
         while (!queue.isEmpty()) {
-            val arc = queue.poll();
+            val entry = queue.poll();
+            val arc = entry.arc();
             val X_i = arc.getFrom();
             val X_j = arc.getTo();
-            for (BinaryConstraint<?, ?> binaryConstraint : arcConstraints.get(arc)) {
+            for (BinaryConstraint<?, ?> binaryConstraint : entry.constraints()) {
                 val optionalRevisedD_i = revise(revisions.view(), arc, binaryConstraint);
                 if (optionalRevisedD_i.isPresent()) {
                     val revisedD_i = optionalRevisedD_i.get();
@@ -267,10 +305,7 @@ public class AC3 implements ConstraintConsistency {
                         return ConsistencyResult.infeasible(reason.isEmpty() ? null : GroundNogoodConstraint.of(reason));
                     }
                     revisions.record(X_i, revisedD_i);
-                    val X_iNeighbours = arcsByTarget.getOrDefault(X_i, List.of()).stream()
-                            .filter(c -> !c.getFrom().equals(X_j))
-                            .toList();
-                    queue.addAll(X_iNeighbours);
+                    requeueNeighbours(queue, entriesByTarget, arc);
                 }
             }
         }
@@ -278,7 +313,8 @@ public class AC3 implements ConstraintConsistency {
     }
 
     public Optional<ConstraintSatisfactionProblem> revise(ConstraintSatisfactionProblem problem, Arc arc) {
-        val arcConstraints = arcIndex(problem).arcConstraints().getOrDefault(arc, List.of());
+        val entry = arcIndex(problem).entries().get(arc);
+        val arcConstraints = entry == null ? List.<BinaryConstraint<?, ?>>of() : entry.constraints();
         val variableDomains = new HashMap<Variable<?>, Domain<?>>(problem.getVariableDomains());
         for (BinaryConstraint<?, ?> binaryConstraint : arcConstraints) {
             val optionalRevisedD = revise(variableDomains, arc, binaryConstraint);

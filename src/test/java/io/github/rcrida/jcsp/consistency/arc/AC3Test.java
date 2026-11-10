@@ -17,6 +17,7 @@ import io.github.rcrida.jcsp.solver.examples.AustraliaMapColouringTest;
 import io.github.rcrida.jcsp.variables.Variable;
 import org.junit.jupiter.api.Test;
 
+import java.util.ArrayDeque;
 import java.util.EnumSet;
 import java.util.List;
 import java.util.Map;
@@ -102,6 +103,33 @@ public class AC3Test {
                 .build();
         val result = AC3.INSTANCE.revise(problem, Arc.of(WA, NT));
         assertThat(((DiscreteDomain<?>) result.get().getDomain(WA)).toList()).isEqualTo(List.of(GREEN));
+    }
+
+    @Test
+    void applyQueue_revisesTheGivenArcs() {
+        val problem = ConstraintSatisfactionProblem.builder()
+                .variableDomain(WA, new EnumDomain<>(EnumSet.of(RED, GREEN)))
+                .variableDomain(NT, new EnumDomain<>(EnumSet.of(RED)))
+                .notEqualsConstraint(WA, NT)
+                .build();
+
+        val result = AC3.INSTANCE.applyQueue(problem, new ArrayDeque<>(List.of(Arc.of(WA, NT))));
+
+        assertThat(((DiscreteDomain<?>) result.orElseThrow().getDomain(WA)).toList()).isEqualTo(List.of(GREEN));
+    }
+
+    @Test
+    void applyQueueWithReason_revisesTheGivenArcs() {
+        val problem = ConstraintSatisfactionProblem.builder()
+                .variableDomain(WA, new EnumDomain<>(EnumSet.of(RED, GREEN)))
+                .variableDomain(NT, new EnumDomain<>(EnumSet.of(RED)))
+                .notEqualsConstraint(WA, NT)
+                .build();
+
+        val result = AC3.INSTANCE.applyQueueWithReason(problem, new ArrayDeque<>(List.of(Arc.of(WA, NT))));
+
+        assertThat(result.isInfeasible()).isFalse();
+        assertThat(((DiscreteDomain<?>) result.problem().getDomain(WA)).toList()).isEqualTo(List.of(GREEN));
     }
 
     @Test
