@@ -13,7 +13,6 @@ import org.jspecify.annotations.Nullable;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Random;
@@ -31,7 +30,7 @@ import java.util.Set;
  * therefore chosen last.
  * <p>
  * The constructor's {@code constraints} set is fixed for the life of the instance and indexed
- * once into integer arrays (see {@link #variableIndex}), rather than re-derived from the live CSP
+ * once into integer arrays (see {@link #slotByIndex}), rather than re-derived from the live CSP
  * on every {@link #select}/{@link #onConflict} call: {@link NogoodConstraint}s are never active
  * (see below) and {@code csp.getConstraints()} in production always includes every nogood
  * learned so far (up to {@code 20 * variableCount}, see {@link io.github.rcrida.jcsp.assignments.NogoodStore}), so re-scanning it
@@ -70,8 +69,12 @@ public class DomWdegVariableSelector implements AdaptiveVariableSelector {
      * Only variables that appear in some structural constraint are indexed; any other has no
      * weighted degree, so {@link #select} gives it the worst ratio without looking further.
      */
-    private final Map<Variable<?>, Integer> variableIndex = new HashMap<>();
     private final Variable<?>[] variables;
+    /**
+     * Per {@link Variable#getIndex()}, the variable's position in {@link #variables}, or -1. Read
+     * through {@link #slotOf}, which also confirms the variable is exactly the one indexed.
+     */
+    private final int[] slotByIndex;
     /** Per constraint, the indices of its variables. */
     private final int[][] scope;
     /** Per variable, the indices of the constraints it appears in. */
@@ -95,6 +98,17 @@ public class DomWdegVariableSelector implements AdaptiveVariableSelector {
      */
     public DomWdegVariableSelector(@NonNull Set<Constraint> constraints) {
         List<Constraint> structural = constraints.stream().filter(c -> !(c instanceof NogoodConstraint)).toList();
+        int highest = -1;
+        for (Constraint constraint : structural) {
+            for (Variable<?> v : constraint.getVariables()) {
+                if (v.getIndex() == Variable.UNINDEXED) {
+                    throw new IllegalArgumentException("Variable was not issued by a Variable.Factory: " + v);
+                }
+                highest = Math.max(highest, v.getIndex());
+            }
+        }
+        slotByIndex = new int[highest + 1];
+        Arrays.fill(slotByIndex, -1);
         List<Variable<?>> indexed = new ArrayList<>();
         scope = new int[structural.size()][];
         for (int ci = 0; ci < structural.size(); ci++) {
@@ -102,13 +116,16 @@ public class DomWdegVariableSelector implements AdaptiveVariableSelector {
             scope[ci] = new int[vars.size()];
             int k = 0;
             for (Variable<?> v : vars) {
-                Integer index = variableIndex.get(v);
-                if (index == null) {
-                    index = indexed.size();
-                    variableIndex.put(v, index);
+                int slot = slotByIndex[v.getIndex()];
+                if (slot < 0) {
+                    slot = indexed.size();
+                    slotByIndex[v.getIndex()] = slot;
                     indexed.add(v);
+                } else if (indexed.get(slot) != v) {
+                    throw new IllegalArgumentException("Variables " + indexed.get(slot) + " and " + v
+                            + " share index " + v.getIndex());
                 }
-                scope[ci][k++] = index;
+                scope[ci][k++] = slot;
             }
         }
         variables = indexed.toArray(new Variable<?>[0]);
@@ -136,8 +153,8 @@ public class DomWdegVariableSelector implements AdaptiveVariableSelector {
      */
     @Override
     public void onConflict(@NonNull Variable<?> variable, @NonNull Assignment nextAssignment) {
-        Integer index = variableIndex.get(variable);
-        if (index == null) return;
+        int index = slotOf(variable);
+        if (index < 0) return;
         for (int ci : incident[index]) {
             if (isActive(ci, index, nextAssignment)) {
                 weights[ci]++;
@@ -198,9 +215,9 @@ public class DomWdegVariableSelector implements AdaptiveVariableSelector {
         double bestRatio = Double.MAX_VALUE;
         List<Variable<?>> tied = new ArrayList<>();
         for (Map.Entry<Variable<?>, Domain<?>> e : csp.getVariableDomains().entrySet()) {
-            Integer index = variableIndex.get(e.getKey());
+            int index = slotOf(e.getKey());
             double ratio;
-            if (index == null) {
+            if (index < 0) {
                 // In no structural constraint, so nothing to weigh it by -- but still has to be unassigned.
                 if (assignment.isAssigned(e.getKey())) continue;
                 ratio = Double.MAX_VALUE;
@@ -223,14 +240,26 @@ public class DomWdegVariableSelector implements AdaptiveVariableSelector {
     }
 
     /**
+     * {@code variable}'s position in {@link #variables}, or -1 if it is in no structural constraint:
+     * issued after construction (an index past {@link #slotByIndex}), never indexed, or another
+     * variable sharing an indexed one's index.
+     */
+    private int slotOf(Variable<?> variable) {
+        int index = variable.getIndex();
+        if (index < 0 || index >= slotByIndex.length) return -1;
+        int slot = slotByIndex[index];
+        return slot >= 0 && variables[slot] == variable ? slot : -1;
+    }
+
+    /**
      * Fills {@link #assigned} and {@link #unassigned} from {@code assignment}: one pass over the
      * assignment's variables, then one over every constraint's scope.
      */
     private void markAssigned(@NonNull Assignment assignment) {
         Arrays.fill(assigned, false);
         for (Variable<?> held : assignment.variables()) {
-            Integer index = variableIndex.get(held);
-            if (index != null) assigned[index] = true;
+            int index = slotOf(held);
+            if (index >= 0) assigned[index] = true;
         }
         for (int ci = 0; ci < scope.length; ci++) {
             int open = 0;

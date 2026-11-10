@@ -257,6 +257,61 @@ class DomWdegVariableSelectorTest {
         assertThat(selector.select(csp, Assignment.empty())).isEqualTo(v2);
     }
 
+    /** A variable no {@link Variable.Factory} issued, so {@link Variable#getIndex()} is {@link Variable#UNINDEXED}. */
+    private record Unindexed(String name) implements Variable<Integer> {
+        @Override
+        public String getName() {
+            return name;
+        }
+    }
+
+    private static Constraint over(Variable<?>... variables) {
+        Constraint constraint = mock(Constraint.class);
+        when(constraint.getVariables()).thenReturn(Set.of(variables));
+        return constraint;
+    }
+
+    @Test
+    void rejectsAConstraintOverAVariableNoFactoryIssued() {
+        assertThatThrownBy(() -> new DomWdegVariableSelector(Set.of(over(v1, new Unindexed("u")))))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("Variable was not issued by a Variable.Factory: Unindexed[name=u]");
+    }
+
+    @Test
+    void rejectsTwoVariablesSharingAnIndex() {
+        Variable<Integer> sameIndexAsV1 = new Variable.Factory().create("other");
+
+        assertThatThrownBy(() -> new DomWdegVariableSelector(new java.util.LinkedHashSet<>(
+                java.util.List.of(over(v1), over(sameIndexAsV1)))))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("Variables v1 and other share index 0");
+    }
+
+    @Test
+    void aVariableOutsideTheIndexedOnesIsIgnored() {
+        // Constraints over v1 and v3 only: v2's index lies inside the indexed range with no slot,
+        // a later variable's lies past it, and the others are no variable the selector indexed.
+        var csp = new Problem().variable(v1, 2).variable(v3, 2).differ(v1, v3).build();
+        var selector = selectorFor(csp);
+        Variable<Integer> later = variableFactory.create("later");
+        Variable<Integer> sameIndexAsV1 = new Variable.Factory().create("other");
+        Unindexed unindexed = new Unindexed("u");
+
+        for (Variable<?> outsider : java.util.List.of(v2, later, sameIndexAsV1, unindexed)) {
+            selector.onConflict(outsider, Assignment.empty());
+        }
+        Map<Variable<?>, Object> values = new LinkedHashMap<>();
+        values.put(v2, 1);
+        values.put(later, 1);
+        values.put(sameIndexAsV1, 1);
+        values.put(unindexed, 1);
+
+        // The outsider sharing v1's index did not mark v1 assigned: v1 and v3 still tie, and the
+        // first declared wins.
+        assertThat(selector.select(csp, Assignment.of(values))).isEqualTo(v1);
+    }
+
     @Test
     void throwsWhenNoUnassignedVariable() {
         var csp = new Problem().variable(v1, 1).build();
