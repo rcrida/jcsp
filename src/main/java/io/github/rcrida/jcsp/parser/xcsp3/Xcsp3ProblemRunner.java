@@ -10,6 +10,7 @@ import io.github.rcrida.jcsp.solver.RestartRandomization;
 import io.github.rcrida.jcsp.solver.Solver;
 import io.github.rcrida.jcsp.solver.InconclusiveSearchException;
 import io.github.rcrida.jcsp.solver.SolverConfig;
+import io.github.rcrida.jcsp.solver.neighbourhood.LargeNeighbourhoodSearch;
 import io.github.rcrida.jcsp.solver.listener.SolverListener;
 import io.github.rcrida.jcsp.variables.Variable;
 import org.jspecify.annotations.Nullable;
@@ -62,7 +63,10 @@ public final class Xcsp3ProblemRunner {
         RestartRandomization restartRandomization = args.length >= 3
                 ? RestartRandomization.seeded(Long.parseLong(args[2]))
                 : null;
-        run(Xcsp3Parser.parse(instanceFile), timeLimitSeconds, restartRandomization, System.out);
+        LargeNeighbourhoodSearch neighbourhoods = args.length >= 4 && args[3].equals("lns")
+                ? LargeNeighbourhoodSearch.DEFAULT
+                : LargeNeighbourhoodSearch.OFF;
+        run(Xcsp3Parser.parse(instanceFile), timeLimitSeconds, restartRandomization, neighbourhoods, System.out);
     }
 
     /**
@@ -70,14 +74,16 @@ public final class Xcsp3ProblemRunner {
      * background timer once it elapses, then delegates to {@link #solve}. {@code null}
      * {@code restartRandomization} leaves {@link SolverConfig}'s own random-per-call default in
      * place -- see this class's own Javadoc for when a caller should pass a fixed seed instead.
+     * {@code neighbourhoods} applies to an optimization instance; {@link #main}'s optional fourth
+     * argument {@code lns} selects {@link LargeNeighbourhoodSearch#DEFAULT}.
      */
-    static void run(Xcsp3Instance instance, long timeLimitSeconds,
-                     @Nullable RestartRandomization restartRandomization, PrintStream out) {
+    static void run(Xcsp3Instance instance, long timeLimitSeconds, @Nullable RestartRandomization restartRandomization,
+                     LargeNeighbourhoodSearch neighbourhoods, PrintStream out) {
         Cancellation cancellation = new Cancellation();
         ScheduledExecutorService timer = Executors.newSingleThreadScheduledExecutor();
         timer.schedule(cancellation::cancel, timeLimitSeconds, TimeUnit.SECONDS);
         try {
-            solve(instance, cancellation, SolverListener.NONE, restartRandomization, out);
+            solve(instance, cancellation, SolverListener.NONE, restartRandomization, neighbourhoods, out);
         } finally {
             timer.shutdownNow();
         }
@@ -101,12 +107,18 @@ public final class Xcsp3ProblemRunner {
 
     static void solve(Xcsp3Instance instance, Cancellation cancellation, SolverListener listener,
                        @Nullable RestartRandomization restartRandomization, PrintStream out) {
+        solve(instance, cancellation, listener, restartRandomization, LargeNeighbourhoodSearch.OFF, out);
+    }
+
+    static void solve(Xcsp3Instance instance, Cancellation cancellation, SolverListener listener,
+                       @Nullable RestartRandomization restartRandomization, LargeNeighbourhoodSearch neighbourhoods,
+                       PrintStream out) {
         out.println("c search-space-before: " + instance.csp().getSearchSpace());
         Statistics stats = new Statistics();
         if (instance.objective() == null) {
             solveSatisfaction(instance, cancellation, listener, restartRandomization, stats, out);
         } else {
-            solveOptimization(instance, cancellation, listener, restartRandomization, stats, out);
+            solveOptimization(instance, cancellation, listener, restartRandomization, neighbourhoods, stats, out);
         }
         out.println("c stats: " + stats);
         stats.getRootSearchSpace().ifPresent(space -> out.println("c search-space-at-root: " + space));
@@ -114,8 +126,10 @@ public final class Xcsp3ProblemRunner {
     }
 
     private static SolverConfig configFor(
-            Cancellation cancellation, SolverListener listener, @Nullable RestartRandomization restartRandomization, Statistics stats) {
-        var builder = SolverConfig.builder().cancellation(cancellation).listener(listener).statistics(stats);
+            Cancellation cancellation, SolverListener listener, @Nullable RestartRandomization restartRandomization,
+            LargeNeighbourhoodSearch neighbourhoods, Statistics stats) {
+        var builder = SolverConfig.builder().cancellation(cancellation).listener(listener).statistics(stats)
+                .largeNeighbourhoodSearch(neighbourhoods);
         if (restartRandomization != null) {
             builder.restartRandomization(restartRandomization);
         }
@@ -135,7 +149,7 @@ public final class Xcsp3ProblemRunner {
      */
     private static void solveSatisfaction(Xcsp3Instance instance, Cancellation cancellation, SolverListener listener,
                                            @Nullable RestartRandomization restartRandomization, Statistics stats, PrintStream out) {
-        SolverConfig config = configFor(cancellation, listener, restartRandomization, stats);
+        SolverConfig config = configFor(cancellation, listener, restartRandomization, LargeNeighbourhoodSearch.OFF, stats);
         BoundSolver solver = Solver.Factory.INSTANCE.createSolver(instance.csp(), config);
         try {
             Optional<Assignment> solution = solver.getSolution();
@@ -175,8 +189,9 @@ public final class Xcsp3ProblemRunner {
      * {@code forEach} delivered each within a fraction of a millisecond of its own production.
      */
     private static void solveOptimization(Xcsp3Instance instance, Cancellation cancellation, SolverListener listener,
-                                           @Nullable RestartRandomization restartRandomization, Statistics stats, PrintStream out) {
-        SolverConfig config = configFor(cancellation, listener, restartRandomization, stats);
+                                           @Nullable RestartRandomization restartRandomization,
+                                           LargeNeighbourhoodSearch neighbourhoods, Statistics stats, PrintStream out) {
+        SolverConfig config = configFor(cancellation, listener, restartRandomization, neighbourhoods, stats);
         BoundSolver solver = Solver.Factory.INSTANCE.createSolver(instance.csp(), instance.objective(), config);
         Assignment[] best = new Assignment[1];
         solver.getSolutions().forEach(solution -> {

@@ -77,6 +77,36 @@ class Xcsp3ProblemRunnerTest {
         assertThat(buffer.toString(StandardCharsets.UTF_8)).contains("s SATISFIABLE").contains("v <instantiation><list> x </list>");
     }
 
+    private String mainOutputFor(String... arguments) throws IOException {
+        Path instanceFile = tempDir.resolve("optimisation.xml");
+        Files.writeString(instanceFile, """
+                <instance format="XCSP3" type="COP">
+                <variables><var id="x"> 0..3 </var><var id="y"> 0..3 </var><var id="z"> 0..3 </var></variables>
+                <constraints><intension> ge(add(x,y,z),2) </intension></constraints>
+                <objectives><minimize type="sum"><list> x y z </list><coeffs> 1 1 1 </coeffs></minimize></objectives>
+                </instance>
+                """);
+        String[] args = new String[arguments.length + 1];
+        args[0] = instanceFile.toString();
+        System.arraycopy(arguments, 0, args, 1, arguments.length);
+        ByteArrayOutputStream buffer = new ByteArrayOutputStream();
+        System.setOut(printStreamInto(buffer));
+        try {
+            Xcsp3ProblemRunner.main(args);
+        } finally {
+            System.setOut(new PrintStream(new java.io.FileOutputStream(java.io.FileDescriptor.out), true, StandardCharsets.UTF_8));
+        }
+        return buffer.toString(StandardCharsets.UTF_8);
+    }
+
+    @Test void main_withFourthArgumentLns_searchesTheNeighbourhoodsAndStillProvesTheOptimum() throws IOException {
+        assertThat(mainOutputFor("60", "42", "lns")).contains("s OPTIMUM FOUND").contains("o 2");
+    }
+
+    @Test void main_withAFourthArgumentThatIsNotLns_ignoresIt() throws IOException {
+        assertThat(mainOutputFor("60", "42", "something")).contains("s OPTIMUM FOUND").contains("o 2");
+    }
+
     // ---- satisfaction chain -------------------------------------------------------------------------------------
 
     @Test void satisfaction_solvableProblem_reportsSatisfiableWithSolutionLine() {

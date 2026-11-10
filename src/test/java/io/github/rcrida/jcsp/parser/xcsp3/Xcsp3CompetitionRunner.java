@@ -14,6 +14,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Stream;
@@ -95,7 +96,8 @@ public final class Xcsp3CompetitionRunner {
         Path directory = args.length >= 1 ? Path.of(args[0]) : bundledInstanceDirectory();
         long timeLimitSeconds = args.length >= 2 ? Long.parseLong(args[1]) : DEFAULT_TIME_LIMIT_SECONDS;
         long seed = args.length >= 3 ? Long.parseLong(args[2]) : DEFAULT_RESTART_RANDOMIZATION_SEED;
-        run(directory, timeLimitSeconds, seed, System.out);
+        boolean neighbourhoods = args.length >= 4 && args[3].equals("lns");
+        run(directory, timeLimitSeconds, seed, neighbourhoods, System.out);
     }
 
     private static Path bundledInstanceDirectory() throws URISyntaxException {
@@ -111,6 +113,12 @@ public final class Xcsp3CompetitionRunner {
     private static final String ROW_FORMAT = "%-32s %-8s %-20s %-10s %-12s %-24s %-14s %-14s %-14s %s";
 
     static void run(Path directory, long timeLimitSeconds, long seed, PrintStream out) throws IOException, InterruptedException {
+        run(directory, timeLimitSeconds, seed, false, out);
+    }
+
+    /** As above, with the large neighbourhood search switched on for each instance when {@code neighbourhoods}. */
+    static void run(Path directory, long timeLimitSeconds, long seed, boolean neighbourhoods, PrintStream out)
+            throws IOException, InterruptedException {
         List<Path> instances;
         try (Stream<Path> files = Files.list(directory)) {
             instances = files.filter(Xcsp3CompetitionRunner::isXcsp3Instance).sorted().toList();
@@ -124,7 +132,7 @@ public final class Xcsp3CompetitionRunner {
         double solveSeconds = 0;
         long batchStartNanos = System.nanoTime();
         for (Path instance : instances) {
-            Result result = runOne(instance, timeLimitSeconds, seed);
+            Result result = runOne(instance, timeLimitSeconds, seed, neighbourhoods);
             out.println(ROW_FORMAT.formatted(instanceName(instance), "%.2f".formatted(result.elapsedSeconds()),
                     result.summary(), result.crossCheck(), result.objective(), result.model(),
                     formatSearchSpace(result.searchSpaceBefore()), formatSearchSpace(result.searchSpaceAtRoot()),
@@ -246,15 +254,20 @@ public final class Xcsp3CompetitionRunner {
      * ({@code bmc-ibm-3-04_X2}). The first was fixed by suppressing the logging, which cannot help the
      * second.
      */
-    private static Result runOne(Path instance, long timeLimitSeconds, long seed) throws IOException, InterruptedException {
+    private static Result runOne(Path instance, long timeLimitSeconds, long seed, boolean neighbourhoods)
+            throws IOException, InterruptedException {
         Model model = modelInfo(instance);
 
         String javaBin = System.getProperty("java.home") + File.separator + "bin" + File.separator + "java";
         String classpath = System.getProperty("java.class.path");
-        ProcessBuilder builder = new ProcessBuilder(
+        List<String> command = new ArrayList<>(List.of(
                 javaBin, "-cp", classpath, "-Dorg.slf4j.simpleLogger.defaultLogLevel=error",
                 Xcsp3ProblemRunner.class.getName(), instance.toString(), String.valueOf(timeLimitSeconds),
-                String.valueOf(seed));
+                String.valueOf(seed)));
+        if (neighbourhoods) {
+            command.add("lns");
+        }
+        ProcessBuilder builder = new ProcessBuilder(command);
         builder.redirectErrorStream(true);
         Path outputFile = Files.createTempFile("xcsp3-child-", ".out");
         builder.redirectOutput(outputFile.toFile());
