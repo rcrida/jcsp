@@ -1,7 +1,7 @@
 package io.github.rcrida.jcsp.constraints.nary;
 
 import java.util.ArrayList;
-import java.util.BitSet;
+import java.util.Arrays;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
@@ -101,66 +101,120 @@ final class SubsetSumCoveragePropagation {
             sufMax[i] = sufMax[i + 1] + maxContribs[i];
         }
 
-        BitSet[] forward = new BitSet[n + 1];
-        forward[0] = new BitSet(1);
-        forward[0].set(0);
+        long[][] forward = new long[n + 1][];
+        forward[0] = new long[] {1L};
         for (int i = 0; i < n; i++) {
-            int width = cumMax[i + 1] - cumMin[i + 1] + 1;
-            BitSet next = new BitSet(width);
-            for (int v : values.get(i)) {
-                int delta = coeffs[i] * v - minContribs[i];
-                for (int idx = forward[i].nextSetBit(0); idx >= 0; idx = forward[i].nextSetBit(idx + 1)) {
-                    next.set(idx + delta);
-                }
-            }
-            forward[i + 1] = next;
+            forward[i + 1] = shiftedUnion(forward[i], deltas(values.get(i), coeffs[i], minContribs[i]),
+                    Math.abs(coeffs[i]), cumMax[i + 1] - cumMin[i + 1] + 1);
         }
 
-        BitSet[] backward = new BitSet[n + 1];
-        backward[n] = new BitSet(1);
-        backward[n].set(0);
+        long[][] backward = new long[n + 1][];
+        backward[n] = new long[] {1L};
         for (int i = n - 1; i >= 0; i--) {
-            int width = sufMax[i] - sufMin[i] + 1;
-            BitSet next = new BitSet(width);
-            for (int v : values.get(i)) {
-                int delta = coeffs[i] * v - minContribs[i];
-                for (int idx = backward[i + 1].nextSetBit(0); idx >= 0; idx = backward[i + 1].nextSetBit(idx + 1)) {
-                    next.set(idx + delta);
-                }
-            }
-            backward[i] = next;
+            backward[i] = shiftedUnion(backward[i + 1], deltas(values.get(i), coeffs[i], minContribs[i]),
+                    Math.abs(coeffs[i]), sufMax[i] - sufMin[i] + 1);
         }
 
         List<Set<Integer>> kept = new ArrayList<>(n);
         boolean anyEmpty = false;
         for (int i = 0; i < n; i++) {
-            BitSet fSet = forward[i];
-            BitSet bSet = backward[i + 1];
-            int fOffset = cumMin[i];
-            int bOffset = sufMin[i + 1];
-            boolean iterateForward = fSet.cardinality() <= bSet.cardinality();
+            // Every s1 + s2 with s1 reachable in forward[i] and s2 in backward[i + 1], built once so
+            // that each value's support is one bit test.
+            int width = (cumMax[i] - cumMin[i] + 1) + (sufMax[i + 1] - sufMin[i + 1] + 1) - 1;
+            long[] pairSums = pairSums(forward[i], backward[i + 1], width);
+            int offset = cumMin[i] + sufMin[i + 1];
 
             Set<Integer> keptForTerm = new HashSet<>();
             for (int v : values.get(i)) {
-                int dLocal = bound - coeffs[i] * v - fOffset - bOffset; // need idx1 + idx2 == dLocal
-                boolean supported = false;
-                if (iterateForward) {
-                    for (int idx1 = fSet.nextSetBit(0); idx1 >= 0; idx1 = fSet.nextSetBit(idx1 + 1)) {
-                        int idx2 = dLocal - idx1;
-                        if (idx2 >= 0 && bSet.get(idx2)) { supported = true; break; }
-                    }
-                } else {
-                    for (int idx2 = bSet.nextSetBit(0); idx2 >= 0; idx2 = bSet.nextSetBit(idx2 + 1)) {
-                        int idx1 = dLocal - idx2;
-                        if (idx1 >= 0 && fSet.get(idx1)) { supported = true; break; }
-                    }
-                }
-                if (supported) keptForTerm.add(v);
+                int index = bound - coeffs[i] * v - offset;
+                if (index >= 0 && index < width && isSet(pairSums, index)) keptForTerm.add(v);
             }
             if (keptForTerm.isEmpty()) anyEmpty = true;
             kept.add(keptForTerm);
         }
 
         return anyEmpty ? Optional.empty() : Optional.of(kept);
+    }
+
+    /** Each value's contribution above the term's minimum, ascending and without duplicates. */
+    private static int[] deltas(int[] values, int coeff, int minContrib) {
+        int[] deltas = new int[values.length];
+        for (int k = 0; k < values.length; k++) deltas[k] = coeff * values[k] - minContrib;
+        return Arrays.stream(deltas).sorted().distinct().toArray();
+    }
+
+    /**
+     * The union of {@code reachable} shifted by each of {@code deltas}, as a bit set {@code width}
+     * bits wide. Deltas {@code step} apart are taken as one run and shifted by doubling, so a term
+     * over an integer range costs about {@code log2} of its size in whole-word shifts rather than one
+     * bit-by-bit pass per value.
+     */
+    private static long[] shiftedUnion(long[] reachable, int[] deltas, int step, int width) {
+        long[] result = new long[wordsFor(width)];
+        long[] run = new long[result.length];
+        for (int start = 0, end; start < deltas.length; start = end) {
+            end = start + 1;
+            while (end < deltas.length && deltas[end] - deltas[end - 1] == step) end++;
+            Arrays.fill(run, 0L);
+            System.arraycopy(reachable, 0, run, 0, reachable.length);
+            // run |= run << step, << 2·step, ... until it holds shifts 0, step, ..., (count - 1)·step.
+            int count = end - start;
+            int covered = 1;
+            while (covered * 2 <= count) {
+                orShifted(run, run, covered * step);
+                covered *= 2;
+            }
+            if (covered < count) orShifted(run, run, (count - covered) * step);
+            orShifted(run, result, deltas[start]);
+        }
+        return result;
+    }
+
+    /** {@code {a + b}} over the bits {@code a} of {@code left} and {@code b} of {@code right}, {@code width} bits wide. */
+    private static long[] pairSums(long[] left, long[] right, int width) {
+        boolean leftSmaller = cardinality(left) <= cardinality(right);
+        return shiftedUnion(leftSmaller ? right : left, setBits(leftSmaller ? left : right), 1, width);
+    }
+
+    /**
+     * {@code target |= source << shift}, dropping bits past {@code target}'s end. Walks downwards so
+     * that {@code source} may be {@code target}: every write lands at or above the word being read,
+     * and a word below has not been read yet.
+     */
+    private static void orShifted(long[] source, long[] target, int shift) {
+        int wordShift = shift >>> 6;
+        int bitShift = shift & 63;
+        for (int i = Math.min(source.length - 1, target.length - 1 - wordShift); i >= 0; i--) {
+            long word = source[i];
+            int j = i + wordShift;
+            target[j] |= word << bitShift;
+            if (bitShift != 0 && j + 1 < target.length) target[j + 1] |= word >>> (64 - bitShift);
+        }
+    }
+
+    private static int wordsFor(int bits) {
+        return (bits + 63) >>> 6;
+    }
+
+    private static boolean isSet(long[] bits, int index) {
+        return (bits[index >>> 6] & (1L << index)) != 0;
+    }
+
+    private static int cardinality(long[] bits) {
+        int count = 0;
+        for (long word : bits) count += Long.bitCount(word);
+        return count;
+    }
+
+    /** The indices of {@code bits}' set bits, ascending. */
+    private static int[] setBits(long[] bits) {
+        int[] indices = new int[cardinality(bits)];
+        int k = 0;
+        for (int w = 0; w < bits.length; w++) {
+            for (long word = bits[w]; word != 0; word &= word - 1) {
+                indices[k++] = (w << 6) + Long.numberOfTrailingZeros(word);
+            }
+        }
+        return indices;
     }
 }
