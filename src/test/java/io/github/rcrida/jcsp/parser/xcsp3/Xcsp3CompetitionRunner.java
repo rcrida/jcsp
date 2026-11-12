@@ -33,6 +33,8 @@ import java.util.stream.Stream;
  * test-compile} then {@code java -cp target/classes:target/test-classes:$(mvn -q
  * dependency:build-classpath -Dmdep.outputFile=/dev/stdout)
  * io.github.rcrida.jcsp.parser.xcsp3.Xcsp3CompetitionRunner [instanceDirectory] [timeLimitSeconds]}.
+ * Instances are found in {@code instanceDirectory} and every folder below it, and each is named by
+ * its path relative to {@code instanceDirectory}.
  * With no arguments, runs the small real-instance corpus bundled at {@code
  * src/test/resources/xcsp3/competition/} — sourced from {@code xcsp3team/XCSP3-Java-Tools}'s own
  * parser-conformance test fixtures (real competition-distributed {@code .xml.lzma} files, not
@@ -120,8 +122,9 @@ public final class Xcsp3CompetitionRunner {
     static void run(Path directory, long timeLimitSeconds, long seed, boolean neighbourhoods, PrintStream out)
             throws IOException, InterruptedException {
         List<Path> instances;
-        try (Stream<Path> files = Files.list(directory)) {
-            instances = files.filter(Xcsp3CompetitionRunner::isXcsp3Instance).sorted().toList();
+        try (Stream<Path> files = Files.walk(directory)) {
+            instances = files.filter(Files::isRegularFile).filter(Xcsp3CompetitionRunner::isXcsp3Instance)
+                    .sorted().toList();
         }
         String header = ROW_FORMAT.formatted("Instance", "Time(s)", "Result", "Check", "Objective",
                 "Model (xcsp3->csp)", "Space Before", "Space At Root", "Space Left", "Statistics");
@@ -133,7 +136,7 @@ public final class Xcsp3CompetitionRunner {
         long batchStartNanos = System.nanoTime();
         for (Path instance : instances) {
             Result result = runOne(instance, timeLimitSeconds, seed, neighbourhoods);
-            out.println(ROW_FORMAT.formatted(instanceName(instance), "%.2f".formatted(result.elapsedSeconds()),
+            out.println(ROW_FORMAT.formatted(instanceName(directory.relativize(instance)), "%.2f".formatted(result.elapsedSeconds()),
                     result.summary(), result.crossCheck(), result.objective(), result.model(),
                     formatSearchSpace(result.searchSpaceBefore()), formatSearchSpace(result.searchSpaceAtRoot()),
                     formatSpaceLeftPercent(result.searchSpaceAtRoot(), result.searchSpaceLeft()),
@@ -417,8 +420,9 @@ public final class Xcsp3CompetitionRunner {
                 .orElse("(no search-space)");
     }
 
+    /** {@code instance}'s path below the instance directory, without the extension, so nested series stay distinct. */
     private static String instanceName(Path instance) {
-        String name = instance.getFileName().toString();
+        String name = instance.toString().replace(instance.getFileSystem().getSeparator(), "/");
         if (name.endsWith(".xml.lzma")) return name.substring(0, name.length() - ".xml.lzma".length());
         if (name.endsWith(".xml")) return name.substring(0, name.length() - ".xml".length());
         return name;

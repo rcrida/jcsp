@@ -49,4 +49,18 @@ class Xcsp3CompetitionRunnerTest {
         assertThat(report).doesNotContain("HUNG");
         assertThat(report).contains("SATISFIABLE");
     }
+
+    @Test
+    void instancesInNestedFoldersAreRunAndNamedByTheirRelativePath(@TempDir Path directory)
+            throws IOException, InterruptedException {
+        Path series = Files.createDirectories(directory.resolve("Series"));
+        Files.writeString(series.resolve("nested.xml"), instanceWithALargeSolution());
+        ByteArrayOutputStream captured = new ByteArrayOutputStream();
+
+        Xcsp3CompetitionRunner.run(directory, 5, 1L, new PrintStream(captured, true, StandardCharsets.UTF_8));
+
+        String report = captured.toString(StandardCharsets.UTF_8);
+        assertThat(report).contains("Series/nested ");
+        assertThat(report).contains("1 solved, 0 unknown/timeout, 0 failed (of 1)");
+    }
 }
