@@ -193,12 +193,16 @@ public class CutsetConditioningSolver extends SolverDecorator {
     private Optional<Decomposition> decomposeCsp(@NonNull ConstraintSatisfactionProblem csp) {
         val unsplittableVariables = csp.getUnsplittableVariables();
         val constraintCounts = computeConstraintCounts(csp);
-        return csp.getVariableDomains().keySet().stream()
+        val decomposition = csp.getVariableDomains().keySet().stream()
                 .filter(Predicate.not(unsplittableVariables::contains))
                 .sorted(Comparator.comparing(constraintCounts::get))
                 .map(variable -> decomposeCsp(csp, unsplittableVariables, variable, constraintCounts))
                 .flatMap(Optional::stream)
                 .findFirst();
+        log.debug("Cutset decomposition of {} variables, {} unsplittable: {}", csp.getNumVariables(),
+                unsplittableVariables.size(),
+                decomposition.map(d -> d.cycleCutset().getNumVariables() + " in the cutset").orElse("none found"));
+        return decomposition;
     }
 
     private static Map<Variable<?>, Integer> computeConstraintCounts(@NonNull ConstraintSatisfactionProblem csp) {
