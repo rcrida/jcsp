@@ -32,14 +32,10 @@ import java.util.Set;
  * {@code N-1} separate pairwise constraints a direct decomposition would give).
  * <p>
  * {@link #isSatisfiedBy} and {@link #getAsBinaryConstraints} are exact for all four operators.
- * {@link #propagate}/{@link #explainInfeasible}, however, reuse {@link IncreasingConstraint}/
- * {@link DecreasingConstraint}'s own non-strict bounds-consistency computation ({@link
- * OrderingPropagation}) unconditionally -- sound but not maximally tight for the two strict
- * operators ({@code LT} narrows exactly as {@code LEQ} would, {@code GT} as {@code GEQ} would),
- * since anything satisfying a strict chain also satisfies its non-strict relaxation. The strict
- * aspect itself is still fully enforced, just by {@link #isSatisfiedBy} and the {@link
- * BinaryDecomposable} pairs' own {@link BinaryComparatorConstraint} propagation rather than by
- * this class's own whole-chain bounds pass.
+ * {@link #propagate} is bounds-consistent for each: {@code LEQ}/{@code GEQ} through {@link
+ * IncreasingConstraint}/{@link DecreasingConstraint}'s non-strict chain computation, {@code
+ * LT}/{@code GT} through {@link OrderingPropagation#strictlyIncreasingBounds}, so a chain with two
+ * equal neighbours fails.
  */
 @SuperBuilder
 @EqualsAndHashCode(callSuper = true)
@@ -84,15 +80,30 @@ public class OrderedConstraint<T extends Comparable<T>> extends NaryConstraint
         return binaryConstraints;
     }
 
+    private boolean strict() {
+        return operator == Operator.LT || operator == Operator.GT;
+    }
+
     @Override
     @SuppressWarnings("unchecked")
     public Optional<Map<Variable<?>, Domain<?>>> propagate(@NonNull Map<Variable<?>, Domain<?>> domains) {
         List<Variable<T>> chain = ascending() ? orderedVariables : orderedVariables.reversed();
-        var bounds = OrderingPropagation.nonDecreasingBounds(chain, domains);
+        List<T> newMins;
+        List<T> newMaxs;
+        if (strict()) {
+            var bounds = OrderingPropagation.strictlyIncreasingBounds(chain, domains);
+            if (bounds.isEmpty()) return Optional.empty();
+            newMins = bounds.get().newMins();
+            newMaxs = bounds.get().newMaxs();
+        } else {
+            var bounds = OrderingPropagation.nonDecreasingBounds(chain, domains);
+            newMins = bounds.newMins();
+            newMaxs = bounds.newMaxs();
+        }
         Map<Variable<?>, Domain<?>> updated = new HashMap<>();
         for (int i = 0; i < chain.size(); i++) {
-            T newMin = bounds.newMins().get(i);
-            T newMax = bounds.newMaxs().get(i);
+            T newMin = newMins.get(i);
+            T newMax = newMaxs.get(i);
             if (newMin.compareTo(newMax) > 0) return Optional.empty();
             Domain<T> current = (Domain<T>) domains.get(chain.get(i));
             var narrowed = ComparableBounds.narrow(current, newMin, newMax);
@@ -104,10 +115,19 @@ public class OrderedConstraint<T extends Comparable<T>> extends NaryConstraint
         return Optional.of(updated);
     }
 
-    /** Same reasoning as {@link IncreasingConstraint#explainInfeasible}, over whichever direction {@link #ascending()} selects. */
+    /**
+     * Same reasoning as {@link IncreasingConstraint#explainInfeasible}, over whichever direction
+     * {@link #ascending()} selects. A strict chain's infeasibility can also rest on the variables
+     * between the two ends, so it is explained only once every variable is a single value.
+     */
     @Override
     public Optional<NogoodConstraint> explainInfeasible(@NonNull Map<Variable<?>, Domain<?>> domains) {
         List<Variable<T>> chain = ascending() ? orderedVariables : orderedVariables.reversed();
+        if (strict()) {
+            if (OrderingPropagation.strictlyIncreasingBounds(chain, domains).isPresent()) return Optional.empty();
+            var reason = Propagatable.allSingletonReason(orderedVariables, domains);
+            return reason.size() == orderedVariables.size() ? GroundNogoodConstraint.fromReason(reason) : Optional.empty();
+        }
         var bounds = OrderingPropagation.nonDecreasingBounds(chain, domains);
         for (int i = 0; i < chain.size(); i++) {
             if (bounds.newMins().get(i).compareTo(bounds.newMaxs().get(i)) > 0) {

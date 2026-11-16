@@ -7,10 +7,14 @@ import io.github.rcrida.jcsp.domains.Domain;
 import io.github.rcrida.jcsp.domains.NumericDomain;
 import io.github.rcrida.jcsp.variables.Variable;
 
+import org.jspecify.annotations.Nullable;
+
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 /**
  * Shared bounds-consistency computation for {@link IncreasingConstraint}/{@link DecreasingConstraint},
@@ -85,5 +89,59 @@ final class OrderingPropagation {
         }
 
         return new ChainBounds<>(newMins, newMaxs, minSource, maxSource);
+    }
+
+    /** Each position's tightened bounds for a strictly increasing chain. */
+    record StrictChainBounds<T extends Comparable<T>>(List<T> newMins, List<T> newMaxs) {}
+
+    /**
+     * Bounds consistency for a strictly increasing chain over {@code orderedVariables}: each
+     * position's lower bound is the smallest value of its domain above the previous position's,
+     * and each upper bound the largest value below the next position's. Empty when some position
+     * has no such value.
+     */
+    @SuppressWarnings("unchecked")
+    static <T extends Comparable<T>> Optional<StrictChainBounds<T>> strictlyIncreasingBounds(
+            List<Variable<T>> orderedVariables, Map<Variable<?>, Domain<?>> domains) {
+        int n = orderedVariables.size();
+        List<T> newMins = new ArrayList<>(n);
+        T floor = null;
+        for (Variable<T> v : orderedVariables) {
+            Domain<T> d = (Domain<T>) domains.get(v);
+            floor = floor == null ? ComparableBounds.min(d) : above(d, floor);
+            if (floor == null) return Optional.empty();
+            newMins.add(floor);
+        }
+        // The floors just found are a strictly increasing chain within the domains, so every
+        // position has a value below the next position's ceiling: this pass cannot fail.
+        List<T> newMaxs = new ArrayList<>(Collections.nCopies(n, (T) null));
+        T ceiling = null;
+        for (int i = n - 1; i >= 0; i--) {
+            Domain<T> d = (Domain<T>) domains.get(orderedVariables.get(i));
+            ceiling = ceiling == null ? ComparableBounds.max(d) : below(d, ceiling);
+            newMaxs.set(i, ceiling);
+        }
+        return Optional.of(new StrictChainBounds<>(newMins, newMaxs));
+    }
+
+    /** The smallest value of {@code d} strictly above {@code x}, or null if none. */
+    @SuppressWarnings("unchecked")
+    private static <T extends Comparable<T>> @Nullable T above(Domain<T> d, T x) {
+        T min = ComparableBounds.min(d);
+        if (min.compareTo(x) > 0) return min;
+        if (d instanceof BoundedDomain<?> bounded) {
+            double next = Math.nextUp(((Number) x).doubleValue());
+            return next <= bounded.getMax().doubleValue() ? (T) Double.valueOf(next) : null;
+        }
+        return ((DiscreteDomain<T>) d).stream().filter(v -> v.compareTo(x) > 0).min(Comparator.naturalOrder()).orElse(null);
+    }
+
+    /** The largest value of {@code d} strictly below {@code x}, given that {@code d} has one. */
+    @SuppressWarnings("unchecked")
+    private static <T extends Comparable<T>> T below(Domain<T> d, T x) {
+        T max = ComparableBounds.max(d);
+        if (max.compareTo(x) < 0) return max;
+        if (d instanceof BoundedDomain<?>) return (T) Double.valueOf(Math.nextDown(((Number) x).doubleValue()));
+        return ((DiscreteDomain<T>) d).stream().filter(v -> v.compareTo(x) < 0).max(Comparator.naturalOrder()).orElseThrow();
     }
 }

@@ -5,6 +5,7 @@ import io.github.rcrida.jcsp.constraints.Operator;
 import io.github.rcrida.jcsp.assignments.Assignment;
 import io.github.rcrida.jcsp.domains.DiscreteDomain;
 import io.github.rcrida.jcsp.domains.IntRangeDomain;
+import io.github.rcrida.jcsp.domains.IntervalDomain;
 import io.github.rcrida.jcsp.domains.NumericDiscreteDomain;
 import io.github.rcrida.jcsp.solver.Solver;
 import io.github.rcrida.jcsp.variables.Variable;
@@ -136,7 +137,7 @@ class OrderedConstraintTest {
 
     @Test
     void propagate_ascending_narrowsRunningBounds() {
-        var result = lt.propagate(Map.of(
+        var result = leq.propagate(Map.of(
                 v1, IntRangeDomain.of(0, 10), v2, IntRangeDomain.of(5, 10),
                 v3, IntRangeDomain.of(0, 5), v4, IntRangeDomain.of(0, 10))).orElseThrow();
         assertThat(((DiscreteDomain<Integer>) result.get(v1)).toList()).containsExactlyInAnyOrder(0, 1, 2, 3, 4, 5);
@@ -145,10 +146,7 @@ class OrderedConstraintTest {
     }
 
     @Test
-    void propagate_leq_alsoTreatedAsAscending() {
-        // Distinct from lt: exercises ascending() taking its "operator == LEQ" branch (LT alone,
-        // used by every other ascending propagate/explainInfeasible test here, short-circuits
-        // before ever evaluating that comparison).
+    void propagate_leq_noChange_returnsEmptyMap() {
         var result = leq.propagate(Map.of(
                 v1, IntRangeDomain.of(0, 3), v2, IntRangeDomain.of(3, 6),
                 v3, IntRangeDomain.of(6, 9), v4, IntRangeDomain.of(9, 12)));
@@ -160,7 +158,7 @@ class OrderedConstraintTest {
     void propagate_ascending_coarseBoundsCrossed_infeasible() {
         // v1={10} forces the running floor to 10; v4={3} forces the running ceiling to 3 -- the
         // coarse newMin(10) > newMax(3) check catches this directly, no gapped domain needed.
-        var result = lt.propagate(Map.of(
+        var result = leq.propagate(Map.of(
                 v1, IntRangeDomain.of(10, 10), v2, IntRangeDomain.of(0, 20),
                 v3, IntRangeDomain.of(0, 20), v4, IntRangeDomain.of(3, 3)));
         assertThat(result).isEmpty();
@@ -168,7 +166,7 @@ class OrderedConstraintTest {
 
     @Test
     void propagate_descending_narrowsRunningBounds() {
-        var result = gt.propagate(Map.of(
+        var result = geq.propagate(Map.of(
                 v1, IntRangeDomain.of(0, 10), v2, IntRangeDomain.of(0, 5),
                 v3, IntRangeDomain.of(5, 10), v4, IntRangeDomain.of(0, 10))).orElseThrow();
         assertThat(((DiscreteDomain<Integer>) result.get(v1)).toList()).containsExactlyInAnyOrder(5, 6, 7, 8, 9, 10);
@@ -191,7 +189,7 @@ class OrderedConstraintTest {
 
     @Test
     void explainInfeasible_ascending_citesSingletonPair() {
-        var result = lt.explainInfeasible(Map.of(
+        var result = leq.explainInfeasible(Map.of(
                 v1, IntRangeDomain.of(10, 10), v2, IntRangeDomain.of(0, 20),
                 v3, IntRangeDomain.of(0, 20), v4, IntRangeDomain.of(3, 3)));
         assertThat(result).isPresent();
@@ -199,7 +197,7 @@ class OrderedConstraintTest {
 
     @Test
     void explainInfeasible_descending_citesSingletonPair() {
-        var result = gt.explainInfeasible(Map.of(
+        var result = geq.explainInfeasible(Map.of(
                 v1, IntRangeDomain.of(1, 1), v2, IntRangeDomain.of(0, 20),
                 v3, IntRangeDomain.of(0, 20), v4, IntRangeDomain.of(9, 9)));
         assertThat(result).isPresent();
@@ -207,9 +205,100 @@ class OrderedConstraintTest {
 
     @Test
     void explainInfeasible_feasibleChain_returnsEmpty() {
-        var result = lt.explainInfeasible(Map.of(
+        Map<Variable<?>, io.github.rcrida.jcsp.domains.Domain<?>> domains = Map.of(
                 v1, IntRangeDomain.of(0, 3), v2, IntRangeDomain.of(3, 6),
-                v3, IntRangeDomain.of(6, 9), v4, IntRangeDomain.of(9, 12)));
+                v3, IntRangeDomain.of(6, 9), v4, IntRangeDomain.of(9, 12));
+        assertThat(lt.explainInfeasible(domains)).isEmpty();
+        assertThat(leq.explainInfeasible(domains)).isEmpty();
+    }
+
+    // Strict chains (LT/GT): each position must sit strictly past its neighbour.
+
+    @Test
+    void propagate_strict_equalSingletons_infeasible() {
+        var result = lt.propagate(Map.of(
+                v1, IntRangeDomain.of(5, 5), v2, IntRangeDomain.of(5, 5),
+                v3, IntRangeDomain.of(0, 20), v4, IntRangeDomain.of(0, 20)));
+        assertThat(result).isEmpty();
+    }
+
+    @Test
+    void propagate_strictAscending_narrowsOneStepPerPosition() {
+        var range = IntRangeDomain.of(0, 10);
+        var result = lt.propagate(Map.of(v1, range, v2, range, v3, range, v4, range)).orElseThrow();
+        assertThat(((DiscreteDomain<Integer>) result.get(v1)).toList()).containsExactly(0, 1, 2, 3, 4, 5, 6, 7);
+        assertThat(((DiscreteDomain<Integer>) result.get(v2)).toList()).containsExactly(1, 2, 3, 4, 5, 6, 7, 8);
+        assertThat(((DiscreteDomain<Integer>) result.get(v3)).toList()).containsExactly(2, 3, 4, 5, 6, 7, 8, 9);
+        assertThat(((DiscreteDomain<Integer>) result.get(v4)).toList()).containsExactly(3, 4, 5, 6, 7, 8, 9, 10);
+    }
+
+    @Test
+    void propagate_strictDescending_narrowsOneStepPerPosition() {
+        var range = IntRangeDomain.of(0, 10);
+        var result = gt.propagate(Map.of(v1, range, v2, range, v3, range, v4, range)).orElseThrow();
+        assertThat(((DiscreteDomain<Integer>) result.get(v1)).toList()).containsExactly(3, 4, 5, 6, 7, 8, 9, 10);
+        assertThat(((DiscreteDomain<Integer>) result.get(v4)).toList()).containsExactly(0, 1, 2, 3, 4, 5, 6, 7);
+    }
+
+    @Test
+    void propagate_strict_gappedDomain_skipsToTheNextValueAbove() {
+        // v1={2}: v2 must exceed 2, and its next value above 2 is 4.
+        var result = lt.propagate(Map.of(
+                v1, NumericDiscreteDomain.of(2), v2, NumericDiscreteDomain.of(1, 2, 4),
+                v3, IntRangeDomain.of(0, 20), v4, IntRangeDomain.of(0, 20))).orElseThrow();
+        assertThat(((DiscreteDomain<Integer>) result.get(v2)).toList()).containsExactly(4);
+        assertThat(((DiscreteDomain<Integer>) result.get(v3)).toList()).doesNotContain(0, 1, 2, 3, 4);
+    }
+
+    @Test
+    void propagate_strict_gappedDomain_nothingAbove_infeasible() {
+        var result = lt.propagate(Map.of(
+                v1, NumericDiscreteDomain.of(2), v2, NumericDiscreteDomain.of(1, 2),
+                v3, IntRangeDomain.of(0, 20), v4, IntRangeDomain.of(0, 20)));
+        assertThat(result).isEmpty();
+    }
+
+    @Test
+    void propagate_strict_continuousDomains_clipToTheAdjacentDouble() {
+        Variable<Double> x = variableFactory.create("x_cont"), y = variableFactory.create("y_cont");
+        var result = OrderedConstraint.of(List.of(x, y), Operator.LT)
+                .propagate(Map.of(x, IntervalDomain.of(0.0, 1.0), y, IntervalDomain.of(0.0, 1.0))).orElseThrow();
+        assertThat(((IntervalDomain) result.get(x)).getMax()).isEqualTo(Math.nextDown(1.0));
+        assertThat(((IntervalDomain) result.get(y)).getMin()).isEqualTo(Math.nextUp(0.0));
+    }
+
+    @Test
+    void propagate_strict_continuousDomains_nothingAbove_infeasible() {
+        Variable<Double> x = variableFactory.create("x_cont_inf"), y = variableFactory.create("y_cont_inf");
+        var result = OrderedConstraint.of(List.of(x, y), Operator.LT)
+                .propagate(Map.of(x, IntervalDomain.of(1.0, 1.0), y, IntervalDomain.of(0.0, 1.0)));
+        assertThat(result).isEmpty();
+    }
+
+    @Test
+    void propagate_strict_nonNumeric_usesNaturalOrder() {
+        Variable<String> a = variableFactory.create("a_str"), b = variableFactory.create("b_str");
+        var ordered = OrderedConstraint.of(List.of(a, b), Operator.LT);
+        assertThat(ordered.propagate(Map.of(a, DiscreteDomain.of("m"), b, DiscreteDomain.of("m")))).isEmpty();
+        var result = ordered.propagate(Map.of(a, DiscreteDomain.of("a", "m", "z"), b, DiscreteDomain.of("a", "m"))).orElseThrow();
+        assertThat(((DiscreteDomain<String>) result.get(a)).toList()).containsExactly("a");
+        assertThat(((DiscreteDomain<String>) result.get(b)).toList()).containsExactly("m");
+    }
+
+    @Test
+    void explainInfeasible_strict_allSingleton_citesEveryVariable() {
+        var result = lt.explainInfeasible(Map.of(
+                v1, IntRangeDomain.of(1, 1), v2, IntRangeDomain.of(2, 2),
+                v3, IntRangeDomain.of(2, 2), v4, IntRangeDomain.of(3, 3)));
+        assertThat(result).hasValueSatisfying(nogood -> assertThat(nogood.getVariables()).containsExactlyInAnyOrder(v1, v2, v3, v4));
+    }
+
+    @Test
+    void explainInfeasible_strict_notAllSingleton_declines() {
+        // Infeasible, but whether it is depends on v2's and v3's whole domains, not just v1 and v4.
+        var result = lt.explainInfeasible(Map.of(
+                v1, IntRangeDomain.of(1, 1), v2, IntRangeDomain.of(1, 2),
+                v3, IntRangeDomain.of(1, 2), v4, IntRangeDomain.of(3, 3)));
         assertThat(result).isEmpty();
     }
 }
