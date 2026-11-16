@@ -48,15 +48,15 @@ final class TabulationRecognizer implements ConstraintRecognizer {
 
     /**
      * Ceiling on {@link NaryTuplesConstraint}'s support index, which is a bitset per (variable,
-     * value) pair over tuple positions and so costs {@code sum(|domain|) * tuples} bits -- the
-     * real memory driver, unlike a plain tuple count, which ignores both arity and domain width.
+     * value) pair over tuple positions and so costs {@code sum(|domain|) * tuples} bits for the
+     * tuples it keeps -- the real memory driver, unlike a plain tuple count, which ignores both
+     * arity and domain width. Checked after enumeration, since only then is the kept count known:
+     * a sparse relation over wide domains, such as a knight's move on a 15x15 board, makes a small
+     * table from many candidates.
      * <p>
-     * 1 MiB, derived from the bundled corpus rather than tuned: every constraint this recognizer
-     * is reached for sits at 93,312 bits (the 71 knight's-move constraints of {@code
-     * KnightTour-06-int}/{@code QueenAttacking-06}) or below, except one in {@code
-     * Domino-300-300} at 54,000,000. Nothing lies between, so any cap in that range selects the
-     * same set; this one sits an order of magnitude above what is needed and well below what is
-     * refused.
+     * 1 MiB. In the bundled corpus the tables this recognizer builds sit well below it: {@code
+     * Knights-015-05}'s knight's-move tables at 655,200 bits each, {@code Domino-300-300}'s at
+     * 180,000.
      */
     static final long MAX_INDEX_BITS = 8L * 1024 * 1024;
 
@@ -102,19 +102,19 @@ final class TabulationRecognizer implements ConstraintRecognizer {
             domainSum += domain.size();
             // Checked as each domain is folded in rather than once at the end: the product only
             // grows, so an early return is equivalent, and it also stops a wide scope overflowing
-            // the multiplication before the ceiling is ever consulted.
-            if (tuples * domainSum > MAX_INDEX_BITS) return Optional.empty();
+            // the multiplication before the budget is ever consulted.
+            if (tuplesMaterialized + tuples > totalTupleBudget) return Optional.empty();
         }
-        if (tuplesMaterialized + tuples > totalTupleBudget) return Optional.empty();
 
         Predicate<Assignment> predicate = handler.intensionPredicate(tree);
         Set<Assignment> supports = new LinkedHashSet<>();
         enumerate(scope, values, 0, new LinkedHashMap<>(), predicate, supports);
-        if (supports.isEmpty()) return Optional.empty();
-        // Charged in candidates rather than kept supports, the same unit the check above uses:
-        // enumeration walks every candidate whether it survives or not, and a budget spent in one
-        // unit and tested in another reads as a bug even when it happens to be conservative.
+        // Charged in candidates, whether or not the table is kept: enumeration walks every
+        // candidate, and that walk is what the budget bounds.
         tuplesMaterialized += tuples;
+        // The index is sized by the supports kept, not the candidates walked: a sparse relation
+        // over wide domains, such as a knight's move, makes a small table.
+        if (supports.isEmpty() || supports.size() * domainSum > MAX_INDEX_BITS) return Optional.empty();
         return Optional.of(NaryTuplesConstraint.of(supports));
     }
 

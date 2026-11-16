@@ -69,13 +69,39 @@ class TabulationRecognizerTest {
         assertThat(recognizer.recognize(andOverOneVariable(unregistered, 1, 3))).isEmpty();
     }
 
+    /** {@code and(ne(name, a), ne(name, b))}: every value but two satisfies it. */
+    private static XNode<XVarInteger> allButTwo(XVarInteger x, int a, int b) {
+        return new XNodeParent<>(TypeExpr.AND,
+                new XNodeParent<>(TypeExpr.NE, new XNodeLeaf<>(TypeExpr.VAR, x), new XNodeLeaf<>(TypeExpr.LONG, (long) a)),
+                new XNodeParent<>(TypeExpr.NE, new XNodeLeaf<>(TypeExpr.VAR, x), new XNodeLeaf<>(TypeExpr.LONG, (long) b)));
+    }
+
     @Test
-    void scopeAboveTheIndexCeiling_declinesBeforeEnumerating() {
-        // One variable of 4096 values: 4096 * 4096 bits is over MAX_INDEX_BITS, and the ceiling is
-        // consulted before the Cartesian product is walked, so this returns without enumerating.
+    void sparseRelationOverAWideDomain_isCompiledIntoATable() {
+        // 4096 candidates, but one support: 1 x 4096 bits, far under MAX_INDEX_BITS.
         XVarInteger wide = XcspTestNodes.var("wide", 0, 4095);
         var recognizer = new TabulationRecognizer(XcspTestNodes.handlerWith(wide));
-        assertThat(recognizer.recognize(andOverOneVariable(wide, 1, 3))).isEmpty();
+        Optional<Constraint> result = recognizer.recognize(andOverOneVariable(wide, 1, 3));
+        assertThat(result).get().isInstanceOf(NaryTuplesConstraint.class);
+        assertThat(((NaryTuplesConstraint) result.orElseThrow()).getTuples()).hasSize(1);
+    }
+
+    @Test
+    void denseRelationAboveTheIndexCeiling_declines() {
+        // 4094 supports x 4096 values is over MAX_INDEX_BITS.
+        XVarInteger wide = XcspTestNodes.var("wide", 0, 4095);
+        var recognizer = new TabulationRecognizer(XcspTestNodes.handlerWith(wide));
+        assertThat(recognizer.recognize(allButTwo(wide, 1, 3))).isEmpty();
+    }
+
+    @Test
+    void declinedEnumeration_stillSpendsTheBudget() {
+        XVarInteger wide = XcspTestNodes.var("wide", 0, 4095);
+        XVarInteger x = XcspTestNodes.var("x", 0, 1);
+        // The dense scope walks 4096 candidates and is declined; the one left over cannot hold x's two.
+        var recognizer = new TabulationRecognizer(XcspTestNodes.handlerWith(wide, x), 4097);
+        assertThat(recognizer.recognize(allButTwo(wide, 1, 3))).isEmpty();
+        assertThat(recognizer.recognize(andOverOneVariable(x, 1, 0))).isEmpty();
     }
 
     @Test

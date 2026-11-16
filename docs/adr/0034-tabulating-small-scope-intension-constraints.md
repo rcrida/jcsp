@@ -115,3 +115,15 @@ constants-only tree, so any `and(eq(1,1),...)` would have thrown an NPE mid-pars
 keeps `RoomMate-sr0050-int` away from tabulation. It is kept as the guard against an instance of the
 same shape without that fast path, and is covered by a unit test that injects a three-tuple budget
 rather than materializing half a million.
+
+**Later: `MAX_INDEX_BITS` is checked on the supports kept, not the candidates walked.** Charging it
+in candidate tuples overestimated a sparse relation's index by the ratio of candidates to supports.
+`Knights-015-05`'s knight's move on a 15x15 board walks 50,625 candidates per constraint for 1,456
+supports: 22.8M bits by candidates, 655,200 by supports. Declined, the move fell to the
+`div`/`mod`/`dist` decomposition, whose bounds reasoning left the fixed neighbour's non-moves in each
+knight's domain; half the instance's backtracks were assignments it should have pruned. The check now
+runs after enumeration. Enumeration itself is still bounded per instance by `MAX_TOTAL_TUPLES`, now
+charged for a declined scope as well, since walking its candidates is the cost that budget bounds.
+Two instances in the corpus change, at 60s, seed 12345, 3 pairs: `Knights-015-05` from UNKNOWN
+(once UNSAT in 41s) to UNSAT in 1.8–2.1s and 1,025 nodes, and `Domino-300-300` (whose 300-support
+constraint the candidate count put at 54M bits) from 2.4–3.1s to 1.3–1.7s.

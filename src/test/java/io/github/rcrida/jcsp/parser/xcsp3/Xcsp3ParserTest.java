@@ -1043,24 +1043,24 @@ class Xcsp3ParserTest {
     }
 
     @Test void intensionOrNestedChild_aboveTabulationCap_stillDecomposesRecursively() throws IOException {
-        // The same or(and(...), ...) shape as above, but over three 0..49 domains: the or's own
-        // scope would need a 3 * 50^4-bit support index, past TabulationRecognizer's ceiling, so it
+        // The same or(and(...), ...) shape as above, but over three 0..99 domains: the or's own
+        // scope has 100^3 candidates, more than TabulationRecognizer's whole-instance budget, so it
         // declines and the recursive decomposition this shape was originally written for runs --
         // one AtLeastNConstraint over a reified indicator per disjunct. The nested and(...) spans
-        // only x and y, is comfortably under the ceiling, and is tabulated inside its own
-        // indicator, which is exactly the intended layering. Asserts structure only: enumerating
-        // 50^3 assignments would buy nothing the below-cap test above doesn't already pin.
+        // only x and y, is comfortably within budget, and is tabulated inside its own indicator,
+        // which is exactly the intended layering. Asserts structure only: enumerating 100^3
+        // assignments would buy nothing the below-cap test above doesn't already pin.
         Xcsp3Instance instance = parseXml(
-                "<var id=\"x\"> 0..49 </var><var id=\"y\"> 0..49 </var><var id=\"z\"> 0..49 </var>",
+                "<var id=\"x\"> 0..99 </var><var id=\"y\"> 0..99 </var><var id=\"z\"> 0..99 </var>",
                 "<intension> or(and(eq(x,1),eq(y,2)),eq(z,3)) </intension>");
         assertThat(instance.csp().getConstraints()).anyMatch(c -> c instanceof AtLeastNConstraint);
     }
 
     @Test void intensionAnd_aboveTabulationCap_stillBuildsAnAndConstraint() throws IOException {
-        // and(...) spanning all three 0..49 variables needs the same out-of-reach index as the or
+        // and(...) spanning all three 0..99 variables is as far out of tabulation's reach as the or
         // above, so AndRecognizer keeps the shape rather than tabulation claiming it.
         Xcsp3Instance instance = parseXml(
-                "<var id=\"x\"> 0..49 </var><var id=\"y\"> 0..49 </var><var id=\"z\"> 0..49 </var>",
+                "<var id=\"x\"> 0..99 </var><var id=\"y\"> 0..99 </var><var id=\"z\"> 0..99 </var>",
                 "<intension> and(eq(x,1),eq(y,2),eq(z,3)) </intension>");
         assertThat(instance.csp().getConstraints().iterator().next()).isInstanceOf(AndConstraint.class);
         assertThat(instance.csp().getConstraints()).noneMatch(c -> c instanceof NaryTuplesConstraint);
@@ -4736,35 +4736,35 @@ class Xcsp3ParserTest {
     // TabulationRecognizer sits ahead of RelationSumRecognizer/ChannelRecognizer/AndRecognizer/
     // OrRecognizer and claims any scope it can afford a table for, so the small-domain versions of
     // the tests above now assert a NaryTuplesConstraint. These siblings widen the same models past
-    // MAX_INDEX_BITS so tabulation declines and the recognizer each one was written for runs
-    // instead. Structure only: the cap is checked before the Cartesian product is walked, so these
-    // cost a parse and nothing more, and the semantics are already pinned by the below-cap
-    // versions.
+    // what tabulation will take -- more candidates than the whole-instance MAX_TOTAL_TUPLES budget,
+    // or a support index past MAX_INDEX_BITS -- so tabulation declines and the recognizer each one
+    // was written for runs instead. Structure only: the semantics are already pinned by the
+    // below-cap versions.
 
     @Test void intensionSumOfRelations_constantTarget_aboveTabulationCap() throws IOException {
         Xcsp3Instance instance = parseXml(
-                "<var id=\"x\"> 0..299 </var><var id=\"y\"> 0..299 </var>",
+                "<var id=\"x\"> 0..999 </var><var id=\"y\"> 0..999 </var>",
                 "<intension> eq(add(le(2,x),le(3,y)),1) </intension>");
         assertThat(instance.csp().getConstraints()).anyMatch(c -> c instanceof LinearBooleanBoundConstraint);
     }
 
     @Test void intensionSumOfRelations_geOperatorSwapsAddToSecondOperand_aboveTabulationCap() throws IOException {
         Xcsp3Instance instance = parseXml(
-                "<var id=\"x\"> 0..49 </var><var id=\"y\"> 0..49 </var><var id=\"z\"> 0..49 </var>",
+                "<var id=\"x\"> 0..99 </var><var id=\"y\"> 0..99 </var><var id=\"z\"> 0..99 </var>",
                 "<intension> ge(add(eq(x,1),eq(y,1),eq(z,1)),2) </intension>");
         assertThat(instance.csp().getConstraints()).anyMatch(c -> c instanceof LinearBooleanBoundConstraint);
     }
 
     @Test void intensionSumOfRelations_variableTarget_aboveTabulationCap() throws IOException {
         Xcsp3Instance instance = parseXml(
-                "<var id=\"x\"> 0..49 </var><var id=\"y\"> 0..49 </var><var id=\"z\"> 0..49 </var>",
+                "<var id=\"x\"> 0..99 </var><var id=\"y\"> 0..99 </var><var id=\"z\"> 0..99 </var>",
                 "<intension> eq(z,add(le(2,x),le(3,y))) </intension>");
         assertThat(instance.csp().getConstraints()).anyMatch(c -> c instanceof LinearBooleanVariableConstraint);
     }
 
     @Test void intensionSumOfThreeRelations_aboveTabulationCap() throws IOException {
         Xcsp3Instance instance = parseXml(
-                "<var id=\"x\"> 0..49 </var><var id=\"y\"> 0..49 </var><var id=\"z\"> 0..49 </var>",
+                "<var id=\"x\"> 0..99 </var><var id=\"y\"> 0..99 </var><var id=\"z\"> 0..99 </var>",
                 "<intension> eq(add(le(2,x),le(2,y),le(2,z)),2) </intension>");
         assertThat(instance.csp().getConstraints()).anyMatch(c -> c instanceof LinearBooleanBoundConstraint);
     }
@@ -4778,7 +4778,7 @@ class Xcsp3ParserTest {
 
     @Test void intensionChannelEquals_aboveTabulationCap() throws IOException {
         Xcsp3Instance instance = parseXml(
-                "<var id=\"x\"> 0..49 </var><var id=\"y\"> 0..49 </var><var id=\"b\"> 0..49 </var>",
+                "<var id=\"x\"> 0..99 </var><var id=\"y\"> 0..99 </var><var id=\"b\"> 0..99 </var>",
                 "<intension> eq(and(ne(x,y),eq(x,1)),b) </intension>");
         assertThat(instance.csp().getConstraints()).anyMatch(c -> c instanceof BinaryComparatorConstraint<?>);
     }
@@ -4821,7 +4821,7 @@ class Xcsp3ParserTest {
 
     @Test void intensionIffOperandBareVariable_aboveTabulationCap() throws IOException {
         Xcsp3Instance instance = parseXml(
-                "<var id=\"x\"> 0..299 </var><var id=\"y\"> 0..299 </var>",
+                "<var id=\"x\"> 0..999 </var><var id=\"y\"> 0..999 </var>",
                 "<intension> iff(eq(x,1),y) </intension>");
         assertThat(instance.csp().getConstraints()).anyMatch(c -> c instanceof BinaryComparatorConstraint<?>);
     }

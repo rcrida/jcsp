@@ -292,7 +292,8 @@ class Xcsp3CallbackHandlerTest {
         // The one-variable arm of the generic fallback. Reaching it needs a tree no recognizer
         // claims AND a scope TabulationRecognizer declines: mul(x,x,x) is a cube, which
         // ProductRecognizer refuses because its factor set cannot hold one variable three times,
-        // and 4096 values put the table's support index over the ceiling.
+        // and x^3 != 8 keeps 4095 of 4096 values, which puts the table's support index over the
+        // ceiling.
         XVarInteger x = XcspTestNodes.var("x", 0, 4095);
         Xcsp3CallbackHandler handler = XcspTestNodes.handlerWith(x);
         XNode<XVarInteger> cube = new XNodeParent<>(TypeExpr.MUL,
@@ -300,7 +301,7 @@ class Xcsp3CallbackHandlerTest {
                         new XNodeLeaf<>(TypeExpr.VAR, x),
                         new XNodeLeaf<>(TypeExpr.VAR, x)));
         XNodeParent<XVarInteger> tree =
-                new XNodeParent<>(TypeExpr.EQ, cube, new XNodeLeaf<>(TypeExpr.LONG, 8L));
+                new XNodeParent<>(TypeExpr.NE, cube, new XNodeLeaf<>(TypeExpr.LONG, 8L));
 
         handler.buildCtrIntension("c0", new XVarInteger[]{x}, tree);
 
@@ -310,7 +311,7 @@ class Xcsp3CallbackHandlerTest {
         // only invoking it proves the fallback wires the right variable into the right expression.
         Variable<Integer> variable = handler.toInstance().csp().getVariableDomains().keySet().stream()
                 .map(v -> (Variable<Integer>) v).findFirst().orElseThrow();
-        assertThat(built.isSatisfiedBy(Assignment.of(Map.of(variable, 2)))).isTrue();
-        assertThat(built.isSatisfiedBy(Assignment.of(Map.of(variable, 3)))).isFalse();
+        assertThat(built.isSatisfiedBy(Assignment.of(Map.of(variable, 2)))).isFalse();
+        assertThat(built.isSatisfiedBy(Assignment.of(Map.of(variable, 3)))).isTrue();
     }
 }
