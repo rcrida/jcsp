@@ -30,7 +30,9 @@ import java.util.Set;
  * Implements {@link Propagatable} to narrow bounds via {@link NumericBounds}: {@link BoundedDomain}
  * sides via {@code withBounds}, discrete sides via value deletion — including a plain
  * discrete/discrete pair, as long as its values are actually {@link Number}s (both sides share
- * the same type parameter, so checking one side settles it for both). For a non-numeric
+ * the same type parameter, so checking one side settles it for both). {@link Operator#LT} and
+ * {@link Operator#GT} clip strictly, to the adjacent {@code double} ({@link Math#nextDown}/
+ * {@link Math#nextUp}), so two equal singletons fail. For a non-numeric
  * {@link Comparable} pair (e.g. ordering {@link String} or enum variables), propagation stays
  * a no-op and the ordering is enforced purely by {@code isSatisfiedBy} plus AC3 during search,
  * since {@link NumericBounds} has no notion of bounds for a type it can't convert to
@@ -93,12 +95,18 @@ public class BinaryComparatorConstraint<T extends Comparable<T>> extends BinaryC
         double rMin = NumericBounds.min(rNumeric);
         double rMax = NumericBounds.max(rNumeric);
         double newLMin = lMin, newLMax = lMax, newRMin = rMin, newRMax = rMax;
-        if (operator == Operator.LEQ || operator == Operator.LT) {
+        if (operator == Operator.LEQ) {
             newLMax = Math.min(lMax, rMax);
             newRMin = Math.max(rMin, lMin);
-        } else if (operator == Operator.GEQ || operator == Operator.GT) {
+        } else if (operator == Operator.LT) {
+            newLMax = Math.min(lMax, Math.nextDown(rMax));
+            newRMin = Math.max(rMin, Math.nextUp(lMin));
+        } else if (operator == Operator.GEQ) {
             newLMin = Math.max(lMin, rMin);
             newRMax = Math.min(rMax, lMax);
+        } else if (operator == Operator.GT) {
+            newLMin = Math.max(lMin, Math.nextUp(rMin));
+            newRMax = Math.min(rMax, Math.nextDown(lMax));
         } else { // EQ
             newLMin = newRMin = Math.max(lMin, rMin);
             newLMax = newRMax = Math.min(lMax, rMax);

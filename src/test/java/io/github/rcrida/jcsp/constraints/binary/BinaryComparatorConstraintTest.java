@@ -114,9 +114,29 @@ public class BinaryComparatorConstraintTest {
         assertThat(result.containsKey(L)).isFalse();
     }
 
-    @Test void propagate_lt_sameAsLeq() {
+    @Test void propagate_lt_clipsLeftMaxStrictlyBelowRightMax() {
         var result = BinaryComparatorConstraint.of(L, Operator.LT, R).propagate(domains(0.0, 10.0, 3.0, 8.0)).orElseThrow();
-        assertThat(left(result).getMax()).isEqualTo(8.0);
+        assertThat(left(result).getMax()).isEqualTo(Math.nextDown(8.0));
+    }
+
+    @Test void propagate_lt_clipsRightMinStrictlyAboveLeftMin() {
+        var result = BinaryComparatorConstraint.of(L, Operator.LT, R).propagate(domains(2.0, 7.0, 0.0, 8.0)).orElseThrow();
+        assertThat(right(result).getMin()).isEqualTo(Math.nextUp(2.0));
+    }
+
+    @Test void propagate_lt_bothDiscrete_narrowsByOneEachSide() {
+        Variable<Integer> il = F.create("il_lt"), ir = F.create("ir_lt");
+        var result = BinaryComparatorConstraint.of(il, Operator.LT, ir)
+                .propagate(Map.of(il, IntRangeDomain.of(0, 10), ir, IntRangeDomain.of(0, 8))).orElseThrow();
+        assertThat(((DiscreteDomain<Integer>) result.get(il)).toList()).containsExactly(0, 1, 2, 3, 4, 5, 6, 7);
+        assertThat(((DiscreteDomain<Integer>) result.get(ir)).toList()).containsExactly(1, 2, 3, 4, 5, 6, 7, 8);
+    }
+
+    @Test void propagate_lt_equalSingletons_infeasible() {
+        Variable<Integer> il = F.create("il_lt_eq"), ir = F.create("ir_lt_eq");
+        var result = BinaryComparatorConstraint.of(il, Operator.LT, ir)
+                .propagate(Map.of(il, IntRangeDomain.of(-100, -100), ir, IntRangeDomain.of(-100, -100)));
+        assertThat(result).isEmpty();
     }
 
     @Test void propagate_geq_clipsLeftMin() {
@@ -133,9 +153,29 @@ public class BinaryComparatorConstraintTest {
         assertThat(result.containsKey(L)).isFalse();
     }
 
-    @Test void propagate_gt_sameAsGeq() {
+    @Test void propagate_gt_clipsLeftMinStrictlyAboveRightMin() {
         var result = BinaryComparatorConstraint.of(L, Operator.GT, R).propagate(domains(0.0, 10.0, 3.0, 8.0)).orElseThrow();
-        assertThat(left(result).getMin()).isEqualTo(3.0);
+        assertThat(left(result).getMin()).isEqualTo(Math.nextUp(3.0));
+    }
+
+    @Test void propagate_gt_clipsRightMaxStrictlyBelowLeftMax() {
+        var result = BinaryComparatorConstraint.of(L, Operator.GT, R).propagate(domains(3.0, 8.0, 0.0, 10.0)).orElseThrow();
+        assertThat(right(result).getMax()).isEqualTo(Math.nextDown(8.0));
+    }
+
+    @Test void propagate_gt_bothDiscrete_narrowsByOneEachSide() {
+        Variable<Integer> il = F.create("il_gt"), ir = F.create("ir_gt");
+        var result = BinaryComparatorConstraint.of(il, Operator.GT, ir)
+                .propagate(Map.of(il, IntRangeDomain.of(0, 8), ir, IntRangeDomain.of(0, 10))).orElseThrow();
+        assertThat(((DiscreteDomain<Integer>) result.get(il)).toList()).containsExactly(1, 2, 3, 4, 5, 6, 7, 8);
+        assertThat(((DiscreteDomain<Integer>) result.get(ir)).toList()).containsExactly(0, 1, 2, 3, 4, 5, 6, 7);
+    }
+
+    @Test void propagate_gt_equalSingletons_infeasible() {
+        Variable<Integer> il = F.create("il_gt_eq"), ir = F.create("ir_gt_eq");
+        var result = BinaryComparatorConstraint.of(il, Operator.GT, ir)
+                .propagate(Map.of(il, IntRangeDomain.of(5, 5), ir, IntRangeDomain.of(5, 5)));
+        assertThat(result).isEmpty();
     }
 
     @Test void propagate_eq_intersectsDomains() {
