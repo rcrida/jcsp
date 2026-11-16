@@ -270,6 +270,54 @@ public class BinaryComparatorConstraintTest {
         assertThat(result.get()).isEmpty();
     }
 
+    @Test void isNecessarilySatisfied_orderings_holdOnlyOnceTheBoundsSettleThem() {
+        Variable<Integer> il = F.create("il_ent"), ir = F.create("ir_ent");
+        Map<Variable<?>, Domain<?>> apart = Map.of(il, IntRangeDomain.of(0, 2), ir, IntRangeDomain.of(3, 5));
+        Map<Variable<?>, Domain<?>> touching = Map.of(il, IntRangeDomain.of(0, 3), ir, IntRangeDomain.of(3, 5));
+        Map<Variable<?>, Domain<?>> overlapping = Map.of(il, IntRangeDomain.of(0, 4), ir, IntRangeDomain.of(3, 5));
+        assertThat(BinaryComparatorConstraint.of(il, Operator.LT, ir).isNecessarilySatisfied(apart)).isTrue();
+        assertThat(BinaryComparatorConstraint.of(il, Operator.LT, ir).isNecessarilySatisfied(touching)).isFalse();
+        assertThat(BinaryComparatorConstraint.of(il, Operator.LEQ, ir).isNecessarilySatisfied(touching)).isTrue();
+        assertThat(BinaryComparatorConstraint.of(il, Operator.LEQ, ir).isNecessarilySatisfied(overlapping)).isFalse();
+        assertThat(BinaryComparatorConstraint.of(ir, Operator.GT, il).isNecessarilySatisfied(apart)).isTrue();
+        assertThat(BinaryComparatorConstraint.of(ir, Operator.GT, il).isNecessarilySatisfied(touching)).isFalse();
+        assertThat(BinaryComparatorConstraint.of(ir, Operator.GEQ, il).isNecessarilySatisfied(touching)).isTrue();
+        assertThat(BinaryComparatorConstraint.of(ir, Operator.GEQ, il).isNecessarilySatisfied(overlapping)).isFalse();
+    }
+
+    @Test void isNecessarilySatisfied_eq_holdsOnlyForTheSameSingleValue() {
+        Variable<Integer> il = F.create("il_ent_eq"), ir = F.create("ir_ent_eq");
+        var eq = BinaryComparatorConstraint.of(il, Operator.EQ, ir);
+        assertThat(eq.isNecessarilySatisfied(Map.of(il, IntRangeDomain.of(3, 3), ir, IntRangeDomain.of(3, 3)))).isTrue();
+        assertThat(eq.isNecessarilySatisfied(Map.of(il, IntRangeDomain.of(3, 3), ir, IntRangeDomain.of(4, 4)))).isFalse();
+        assertThat(eq.isNecessarilySatisfied(Map.of(il, IntRangeDomain.of(3, 3), ir, IntRangeDomain.of(3, 4)))).isFalse();
+        assertThat(eq.isNecessarilySatisfied(Map.of(il, IntRangeDomain.of(3, 4), ir, IntRangeDomain.of(3, 3)))).isFalse();
+    }
+
+    @Test void isNecessarilySatisfied_continuousSides_comparesBounds() {
+        assertThat(BinaryComparatorConstraint.of(L, Operator.LT, R).isNecessarilySatisfied(domains(0.0, 1.0, 2.0, 3.0))).isTrue();
+        assertThat(BinaryComparatorConstraint.of(L, Operator.LT, R).isNecessarilySatisfied(domains(0.0, 2.5, 2.0, 3.0))).isFalse();
+    }
+
+    @Test void isNecessarilySatisfied_mixedDiscreteAndContinuous_comparesBounds() {
+        Variable<Double> dl = F.create("dl_ent");
+        assertThat(BinaryComparatorConstraint.of(dl, Operator.LT, R)
+                .isNecessarilySatisfied(Map.of(dl, NumericDiscreteDomain.of(0.0, 1.0), R, IntervalDomain.of(2.0, 3.0)))).isTrue();
+        assertThat(BinaryComparatorConstraint.of(L, Operator.LT, dl)
+                .isNecessarilySatisfied(Map.of(L, IntervalDomain.of(-1.0, -0.5), dl, NumericDiscreteDomain.of(0.0, 1.0)))).isTrue();
+    }
+
+    @Test void isNecessarilySatisfied_nonNumeric_isFalse() {
+        Variable<String> sl = F.create("sl_ent"), sr = F.create("sr_ent");
+        assertThat(BinaryComparatorConstraint.of(sl, Operator.LT, sr)
+                .isNecessarilySatisfied(Map.of(sl, DiscreteDomain.of("a"), sr, DiscreteDomain.of("b")))).isFalse();
+    }
+
+    @Test void isNecessarilySatisfied_neqFromTheBuilder_isFalse() {
+        var neq = BinaryComparatorConstraint.<Double>builder().left(L).operator(Operator.NEQ).right(R).build();
+        assertThat(neq.isNecessarilySatisfied(domains(0.0, 1.0, 2.0, 3.0))).isFalse();
+    }
+
     @Test void propagate_leftBounded_rightDiscrete_clipsLeft() {
         // Left is IntervalDomain, right is discrete {3.0}: L.max clips to 3.
         Variable<Double> il = F.create("il_bd"), ir = F.create("ir_bd");

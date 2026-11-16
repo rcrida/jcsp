@@ -97,6 +97,16 @@ public class BinaryNotEqualsConstraint<T> extends SymmetricBinaryConstraint<T> i
         return Optional.of(updated);
     }
 
+    /** Holds once either side is a single value the other side no longer contains. */
+    @Override
+    @SuppressWarnings("unchecked")
+    public boolean isNecessarilySatisfied(@NonNull Map<Variable<?>, Domain<?>> domains) {
+        DiscreteDomain<T> lDomain = (DiscreteDomain<T>) domains.get(getLeft());
+        DiscreteDomain<T> rDomain = (DiscreteDomain<T>) domains.get(getRight());
+        return lDomain.isSingleton() && !rDomain.contains(lDomain.singleValue().orElseThrow())
+                || rDomain.isSingleton() && !lDomain.contains(rDomain.singleValue().orElseThrow());
+    }
+
     private static <T> Optional<DiscreteDomain<T>> deleteIfPresent(DiscreteDomain<T> domain, T value) {
         if (!domain.contains(value)) return Optional.empty();
         return Optional.of(domain.toBuilder().delete(value).build());

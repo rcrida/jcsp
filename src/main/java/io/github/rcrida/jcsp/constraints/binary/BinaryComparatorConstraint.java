@@ -128,6 +128,34 @@ public class BinaryComparatorConstraint<T extends Comparable<T>> extends BinaryC
     }
 
     /**
+     * Decided from the two sides' bounds: an ordering holds once every left value is on the
+     * required side of every right value, and {@link Operator#EQ} once both sides are the same
+     * single value. Always {@code false} for a non-numeric pair, which has no bounds to compare.
+     */
+    @Override
+    @SuppressWarnings("unchecked")
+    public boolean isNecessarilySatisfied(Map<Variable<?>, Domain<?>> domains) {
+        if (operator == Operator.NEQ) return false;
+        Domain<?> lDomain = domains.get(getLeft());
+        Domain<?> rDomain = domains.get(getRight());
+        if (!(lDomain instanceof BoundedDomain<?>) && !(rDomain instanceof BoundedDomain<?>)
+                && !isNumericDiscrete(lDomain)) {
+            return false;
+        }
+        double lMin = NumericBounds.min((Domain<? extends Number>) lDomain);
+        double lMax = NumericBounds.max((Domain<? extends Number>) lDomain);
+        double rMin = NumericBounds.min((Domain<? extends Number>) rDomain);
+        double rMax = NumericBounds.max((Domain<? extends Number>) rDomain);
+        return switch (operator) {
+            case LT -> lMax < rMin;
+            case LEQ -> lMax <= rMin;
+            case GT -> lMin > rMax;
+            case GEQ -> lMin >= rMax;
+            default -> lMin == lMax && rMin == rMax && lMin == rMin;
+        };
+    }
+
+    /**
      * Whether a plain (non-{@link BoundedDomain}) discrete domain holds {@link Number} values,
      * i.e. whether {@link NumericBounds} can be applied to it at all. Peeking a single value
      * suffices since a {@link DiscreteDomain}'s values are uniformly typed.

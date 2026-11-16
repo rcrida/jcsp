@@ -176,4 +176,25 @@ public class BinaryNotEqualsConstraintTest {
         assertThat(result.isInfeasible()).isTrue();
         assertThat(result.reason()).isEqualTo(GroundNogoodConstraint.of(Map.of(left, 5, right, 5)));
     }
+
+    @Test
+    void isNecessarilySatisfied_leftSingletonMissingFromRight_isTrue() {
+        assertThat(constraint.isNecessarilySatisfied(Map.of(left, DiscreteDomain.of(1), right, DiscreteDomain.of(2, 3)))).isTrue();
+    }
+
+    @Test
+    void isNecessarilySatisfied_rightSingletonMissingFromLeft_isTrue() {
+        assertThat(constraint.isNecessarilySatisfied(Map.of(left, DiscreteDomain.of(2, 3), right, DiscreteDomain.of(1)))).isTrue();
+    }
+
+    @Test
+    void isNecessarilySatisfied_singletonStillOnTheOtherSide_isFalse() {
+        assertThat(constraint.isNecessarilySatisfied(Map.of(left, DiscreteDomain.of(2), right, DiscreteDomain.of(2, 3)))).isFalse();
+        assertThat(constraint.isNecessarilySatisfied(Map.of(left, DiscreteDomain.of(2, 3), right, DiscreteDomain.of(3)))).isFalse();
+    }
+
+    @Test
+    void isNecessarilySatisfied_neitherSingleton_isFalse() {
+        assertThat(constraint.isNecessarilySatisfied(Map.of(left, DiscreteDomain.of(0, 1), right, DiscreteDomain.of(2, 3)))).isFalse();
+    }
 }
