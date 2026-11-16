@@ -1,6 +1,7 @@
 package io.github.rcrida.jcsp.constraints.nary;
 
 import io.github.rcrida.jcsp.consistency.Propagatable;
+import io.github.rcrida.jcsp.constraints.NumericBounds;
 import io.github.rcrida.jcsp.constraints.Operator;
 import io.github.rcrida.jcsp.domains.DiscreteDomain;
 import io.github.rcrida.jcsp.domains.Domain;
@@ -201,7 +202,9 @@ final class ExtremumPropagation {
      * #propagateEqCoverage}'s value-level coverage reasoning rather than the bounds-only {@code EQ}
      * pass in {@link #narrowMaxAgainstTarget}: {@code operator} must be {@link Operator#EQ}, and
      * every one of {@code vars} plus {@code target} must have a {@link DiscreteDomain} (no
-     * continuous {@link io.github.rcrida.jcsp.domains.BoundedDomain} variable involved). Shared by
+     * continuous {@link io.github.rcrida.jcsp.domains.BoundedDomain} variable involved). It must
+     * also have a gap somewhere: when every domain is a contiguous run of integers, the bounds pass
+     * already reaches the same fixpoint, without enumerating any domain. Shared by
      * {@link MaxVariableConstraint#propagate} and {@link MinVariableConstraint#propagate} so the
      * eligibility rule can't drift between the two mirror-image constraints.
      */
@@ -209,7 +212,17 @@ final class ExtremumPropagation {
             Operator operator, Collection<Variable<N>> vars, Variable<N> target,
             Map<Variable<?>, Domain<?>> domains) {
         return operator == Operator.EQ && domains.get(target) instanceof DiscreteDomain<?>
-                && vars.stream().allMatch(v -> domains.get(v) instanceof DiscreteDomain<?>);
+                && vars.stream().allMatch(v -> domains.get(v) instanceof DiscreteDomain<?>)
+                && !(isContiguousIntegers(domains.get(target))
+                        && vars.stream().allMatch(v -> isContiguousIntegers(domains.get(v))));
+    }
+
+    /** Whether {@code domain} holds integer values only, with none missing between its bounds. */
+    private static boolean isContiguousIntegers(Domain<?> domain) {
+        DiscreteDomain<?> discrete = (DiscreteDomain<?>) domain;
+        if (!(discrete.stream().findFirst().orElse(null) instanceof Integer)) return false;
+        @SuppressWarnings("unchecked") Domain<? extends Number> numeric = (Domain<? extends Number>) domain;
+        return discrete.size() == NumericBounds.max(numeric) - NumericBounds.min(numeric) + 1;
     }
 
     /** Value-level result of {@link #narrowMaxEqCoverage}: the exact retained value set for
@@ -274,7 +287,7 @@ final class ExtremumPropagation {
         for (double t : targetValues) {
             if (t >= mLo && union.contains(t)) {
                 tSet.add(t);
-                if (t > t1) t1 = t;
+                t1 = Math.max(t1, t);
             }
         }
         if (tSet.isEmpty()) return Optional.empty();
@@ -303,7 +316,7 @@ final class ExtremumPropagation {
                 for (double v : varValues.get(i)) unionExcludingSole.add(v);
             }
             for (double t : tSet) {
-                if (t > soleThreshold && unionExcludingSole.contains(t)) soleThreshold = t;
+                if (unionExcludingSole.contains(t)) soleThreshold = Math.max(soleThreshold, t);
             }
         }
 
