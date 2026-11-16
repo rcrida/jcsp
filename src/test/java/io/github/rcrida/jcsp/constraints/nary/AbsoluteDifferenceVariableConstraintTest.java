@@ -258,8 +258,7 @@ class AbsoluteDifferenceVariableConstraintTest {
                 l, IntRangeDomain.of(0, 0), r, IntRangeDomain.of(10, 10), t, IntRangeDomain.of(5, 5));
         var result = AbsoluteDifferenceVariableConstraint.of(l, r, Operator.EQ, t).propagateWithReasons(domainsMap);
         assertThat(result.isInfeasible()).isTrue();
-        assertThat(result.reason()).isEqualTo(RangeNogoodConstraint.of(Map.of(
-                l, IntervalDomain.of(0, 0), r, IntervalDomain.of(10, 10), t, IntervalDomain.of(5, 5))));
+        assertThat(result.reason()).isEqualTo(GroundNogoodConstraint.of(Map.of(l, 0, r, 10, t, 5)));
     }
 
     @Test void explainInfeasible_notAllSingleton_citesCurrentBounds() {
@@ -283,5 +282,81 @@ class AbsoluteDifferenceVariableConstraintTest {
         assertThat(result.isInfeasible()).isTrue();
         assertThat(result.reason()).isEqualTo(ValueSetNogoodConstraint.of(Map.of(
                 l, Set.of(0), r, Set.of(10, 12), t, Set.of(0, 1, 2, 3, 4, 5))));
+    }
+
+    // --- forward checking: two of the three single values ---
+
+    static <T> java.util.List<T> values(Map<Variable<?>, Domain<?>> result, Variable<?> v) {
+        @SuppressWarnings("unchecked") var domain = (DiscreteDomain<T>) result.get(v);
+        return domain.toList();
+    }
+
+    @Test void propagate_twoFixed_eq_rightKeepsOnlyTheTwoDistances() {
+        Variable<Integer> l = F.create("l_fc1"), r = F.create("r_fc1"), t = F.create("t_fc1");
+        var result = AbsoluteDifferenceVariableConstraint.of(l, r, Operator.EQ, t).propagate(Map.of(
+                l, IntRangeDomain.of(7, 7), r, IntRangeDomain.of(0, 10), t, IntRangeDomain.of(3, 3))).orElseThrow();
+        assertThat(values(result, r)).containsExactlyInAnyOrder(4, 10);
+    }
+
+    @Test void propagate_twoFixed_geq_leftLosesTheHoleAroundRight() {
+        Variable<Integer> l = F.create("l_fc2"), r = F.create("r_fc2"), t = F.create("t_fc2");
+        var result = AbsoluteDifferenceVariableConstraint.of(l, r, Operator.GEQ, t).propagate(Map.of(
+                l, IntRangeDomain.of(0, 10), r, IntRangeDomain.of(5, 5), t, IntRangeDomain.of(2, 2))).orElseThrow();
+        assertThat(values(result, l)).containsExactlyInAnyOrder(0, 1, 2, 3, 7, 8, 9, 10);
+    }
+
+    @Test void propagate_twoFixed_neq_targetLosesTheDistance() {
+        Variable<Integer> l = F.create("l_fc3"), r = F.create("r_fc3"), t = F.create("t_fc3");
+        var result = AbsoluteDifferenceVariableConstraint.of(l, r, Operator.NEQ, t).propagate(Map.of(
+                l, IntRangeDomain.of(4, 4), r, IntRangeDomain.of(7, 7), t, IntRangeDomain.of(0, 5))).orElseThrow();
+        assertThat(values(result, t)).containsExactlyInAnyOrder(0, 1, 2, 4, 5);
+    }
+
+    @Test void propagate_twoFixed_noValueLeft_infeasible() {
+        Variable<Integer> l = F.create("l_fc4"), r = F.create("r_fc4"), t = F.create("t_fc4");
+        var constraint = AbsoluteDifferenceVariableConstraint.of(l, r, Operator.EQ, t);
+        Map<Variable<?>, Domain<?>> domains = Map.of(
+                l, IntRangeDomain.of(1, 1), r, IntRangeDomain.of(1, 1), t, NumericDiscreteDomain.of(2, 3));
+        assertThat(constraint.propagate(domains)).isEmpty();
+        // Rests on t's actual values, so the reason cites them rather than a range.
+        assertThat(constraint.explainInfeasible(domains)).contains(ValueSetNogoodConstraint.of(Map.of(
+                l, Set.of(1), r, Set.of(1), t, Set.of(2, 3))));
+    }
+
+    @Test void propagate_twoFixed_everyValueAllowed_noChange() {
+        Variable<Integer> l = F.create("l_fc5"), r = F.create("r_fc5"), t = F.create("t_fc5");
+        var result = AbsoluteDifferenceVariableConstraint.of(l, r, Operator.EQ, t).propagate(Map.of(
+                l, NumericDiscreteDomain.of(1, 5), r, IntRangeDomain.of(3, 3), t, IntRangeDomain.of(2, 2)));
+        assertThat(result).contains(Map.of());
+    }
+
+    @Test void propagate_allFixed_decidesTheRelation() {
+        Variable<Integer> l = F.create("l_fc6"), r = F.create("r_fc6"), t = F.create("t_fc6");
+        var lt = AbsoluteDifferenceVariableConstraint.of(l, r, Operator.LT, t);
+        assertThat(lt.propagate(Map.of(l, IntRangeDomain.of(1, 1), r, IntRangeDomain.of(4, 4), t, IntRangeDomain.of(5, 5))))
+                .contains(Map.of());
+        assertThat(lt.propagate(Map.of(l, IntRangeDomain.of(1, 1), r, IntRangeDomain.of(4, 4), t, IntRangeDomain.of(3, 3))))
+                .isEmpty();
+    }
+
+    @Test void propagate_eq_leftWhollyBelowRight_targetRisesToTheClosestGap() {
+        // left [0,2], right [5,8]: left - right lies in [-8,-3], so |left - right| is at least 3.
+        var result = of(Operator.EQ).propagate(domains(0.0, 2.0, 5.0, 8.0, 0.0, 10.0)).orElseThrow();
+        assertThat(tDom(result).getMin()).isEqualTo(3.0);
+        assertThat(tDom(result).getMax()).isEqualTo(8.0);
+    }
+
+    @Test void propagate_eq_leftWhollyAboveRight_targetRisesToTheClosestGap() {
+        // left [10,12], right [0,3]: left - right lies in [7,12].
+        var result = of(Operator.EQ).propagate(domains(10.0, 12.0, 0.0, 3.0, 0.0, 20.0)).orElseThrow();
+        assertThat(tDom(result).getMin()).isEqualTo(7.0);
+        assertThat(tDom(result).getMax()).isEqualTo(12.0);
+    }
+
+    @Test void propagate_twoFixed_continuousOpenSide_usesBounds() {
+        // L is an interval, so there are no values to keep: the bounds pass clips it to [1, 7].
+        var result = of(Operator.EQ).propagate(domains(0.0, 10.0, 4.0, 4.0, 3.0, 3.0)).orElseThrow();
+        assertThat(lDom(result).getMin()).isEqualTo(1.0);
+        assertThat(lDom(result).getMax()).isEqualTo(7.0);
     }
 }

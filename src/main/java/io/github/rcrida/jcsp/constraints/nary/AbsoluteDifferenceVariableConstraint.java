@@ -4,12 +4,14 @@ import io.github.rcrida.jcsp.assignments.Assignment;
 import io.github.rcrida.jcsp.consistency.Propagatable;
 import io.github.rcrida.jcsp.constraints.NumericBounds;
 import io.github.rcrida.jcsp.constraints.Operator;
+import io.github.rcrida.jcsp.domains.DiscreteDomain;
 import io.github.rcrida.jcsp.domains.Domain;
 import io.github.rcrida.jcsp.variables.Variable;
 import lombok.EqualsAndHashCode;
 import lombok.Getter;
 import lombok.experimental.SuperBuilder;
 import org.jspecify.annotations.NonNull;
+import org.jspecify.annotations.Nullable;
 
 import java.util.EnumSet;
 import java.util.HashMap;
@@ -68,9 +70,10 @@ public class AbsoluteDifferenceVariableConstraint<N extends Number> extends Nary
     }
 
     /**
-     * Bounds-consistency propagation for {@code |left - right| <op> target}. Only {@link
-     * Operator#EQ}, {@link Operator#LEQ}, and {@link Operator#GEQ} propagate, matching every other
-     * target-comparing propagator in this codebase.
+     * Bounds-consistency propagation for {@code |left - right| <op> target}, once {@link
+     * #forwardCheck} has settled any state with two of the three already single values. Only {@link
+     * Operator#EQ}, {@link Operator#LEQ}, and {@link Operator#GEQ} propagate by bounds, matching every
+     * other target-comparing propagator in this codebase.
      * <p>
      * The achievable range of {@code left - right} over the current box is {@code [diffLo, diffHi]}
      * ({@code diffLo = left.min - right.max}, {@code diffHi = left.max - right.min}). From there,
@@ -113,6 +116,8 @@ public class AbsoluteDifferenceVariableConstraint<N extends Number> extends Nary
     @Override
     @SuppressWarnings("unchecked")
     public Optional<Map<Variable<?>, Domain<?>>> propagate(@NonNull Map<Variable<?>, Domain<?>> domains) {
+        ForwardCheck check = forwardCheck(domains);
+        if (check != null) return check.infeasible() ? Optional.empty() : Optional.of(check.narrowed());
         if (!PROPAGATING_OPERATORS.contains(operator)) return Optional.of(Map.of());
 
         Domain<N> leftDomain = (Domain<N>) domains.get(left);
@@ -164,15 +169,68 @@ public class AbsoluteDifferenceVariableConstraint<N extends Number> extends Nary
         return Optional.of(updated);
     }
 
+    /** {@link #forwardCheck}'s outcome: infeasible, or the open variable's narrowed domain (if any). */
+    private record ForwardCheck(boolean infeasible, Map<Variable<?>, Domain<?>> narrowed) {
+    }
+
+    /**
+     * Once two of the three variables are single values, the third keeps exactly the values that
+     * satisfy the relation with them, whatever the operator -- including the hole {@code |l - r| >=
+     * t} leaves between {@code l - t} and {@code l + t}, which bounds cannot express. Null when fewer
+     * than two are single values or the third is not discrete, leaving it to the bounds pass.
+     */
+    @SuppressWarnings("unchecked")
+    private @Nullable ForwardCheck forwardCheck(Map<Variable<?>, Domain<?>> domains) {
+        Domain<?> leftDomain = domains.get(left);
+        Domain<?> rightDomain = domains.get(right);
+        Domain<?> targetDomain = domains.get(target);
+        boolean leftOpen = !leftDomain.isSingleton();
+        boolean rightOpen = !rightDomain.isSingleton();
+        boolean targetOpen = !targetDomain.isSingleton();
+        int open = (leftOpen ? 1 : 0) + (rightOpen ? 1 : 0) + (targetOpen ? 1 : 0);
+        if (open > 1) return null;
+        double l = leftOpen ? 0 : value(leftDomain);
+        double r = rightOpen ? 0 : value(rightDomain);
+        double t = targetOpen ? 0 : value(targetDomain);
+        if (open == 0) return new ForwardCheck(!satisfied(l, r, t), Map.of());
+
+        Variable<N> openVariable = leftOpen ? left : rightOpen ? right : target;
+        if (!(domains.get(openVariable) instanceof DiscreteDomain<?> openValues)) return null;
+        DiscreteDomain<N> openDomain = (DiscreteDomain<N>) openValues;
+        DiscreteDomain.Builder<N> builder = null;
+        for (N candidate : openDomain.toList()) {
+            double c = candidate.doubleValue();
+            if (!satisfied(leftOpen ? c : l, rightOpen ? c : r, targetOpen ? c : t)) {
+                if (builder == null) builder = openDomain.toBuilder();
+                builder.delete(candidate);
+            }
+        }
+        if (builder == null) return new ForwardCheck(false, Map.of());
+        Domain<N> narrowed = builder.build();
+        return new ForwardCheck(narrowed.isEmpty(), Map.of(openVariable, narrowed));
+    }
+
+    private boolean satisfied(double l, double r, double t) {
+        return operator.compare(Math.abs(l - r), t);
+    }
+
+    private static double value(Domain<?> singleton) {
+        return ((Number) singleton.singleValue().orElseThrow()).doubleValue();
+    }
+
     /**
      * {@link #propagate}'s bounds-only infeasibility checks are derived purely from {@link #left}/
      * {@link #right}/{@link #target}'s current bounding ranges, so {@link
-     * RangeNogoodConstraint#fromCurrentBounds} is always a sound explanation, falling back to {@link
-     * ValueSetNogoodConstraint#fromCurrentState} when a side isn't safely citable as a range (the
-     * same two-step fallback {@link MaxVariableConstraint#explainInfeasible} uses).
+     * RangeNogoodConstraint#fromCurrentBounds} is a sound explanation for them, falling back to
+     * {@link ValueSetNogoodConstraint#fromCurrentState} when a side isn't safely citable as a range
+     * (the same two-step fallback {@link MaxVariableConstraint#explainInfeasible} uses). Where
+     * {@link #forwardCheck} applies it is the whole of {@link #propagate}, and its failures rest on
+     * the open variable's actual values, which a range would overstate, so they cite the current
+     * value sets directly.
      */
     @Override
     public Optional<NogoodConstraint> explainInfeasible(@NonNull Map<Variable<?>, Domain<?>> domains) {
+        if (forwardCheck(domains) != null) return ValueSetNogoodConstraint.fromCurrentState(getVariables(), domains);
         return RangeNogoodConstraint.fromCurrentBounds(getVariables(), domains)
                 .or(() -> ValueSetNogoodConstraint.fromCurrentState(getVariables(), domains));
     }
