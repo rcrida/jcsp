@@ -204,6 +204,7 @@ final class Xcsp3CallbackHandler implements XCallbacks2 {
             new ExtremumRecognizer(this),
             new ProductRecognizer(this),
             new TabulationRecognizer(this),
+            new ReifiedRelationRecognizer(this, this::recognizeConstraint),
             new AndRecognizer(this::recognizeConstraint),
             new OrRecognizer(this, this::recognizeConstraint, false),
             new RelationSumRecognizer(this, this::recognizeConstraint),

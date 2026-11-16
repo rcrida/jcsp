@@ -44,6 +44,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.function.BiPredicate;
+import java.util.function.Predicate;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -2165,6 +2167,165 @@ class Xcsp3ParserTest {
         for (Assignment a : found) {
             assertThat(digitOf(a, "t")).isEqualTo(digitOf(a, "x"));
         }
+    }
+
+    // ---- reified comparison: or(and(eq(b,1),R),and(eq(b,0),not R)) ------------------------------------------------------
+
+    // y is wide enough that TabulationRecognizer, registered ahead, declines every shape below.
+    private static final String REIFIED_VARS =
+            "<var id=\"b\"> 0 1 </var><var id=\"x\"> 0..2 </var><var id=\"y\"> 0..3000 </var>";
+
+    private static void assertIndicatorTracks(Xcsp3Instance instance, BiPredicate<Integer, Integer> relation) {
+        Set<Assignment> found = solutions(instance.csp());
+        assertThat(found).hasSize(3 * 3001);
+        for (Assignment a : found) {
+            int x = digitOf(a, "x"), y = digitOf(a, "y");
+            assertThat(digitOf(a, "b")).as("x=%d, y=%d", x, y).isEqualTo(relation.test(x, y) ? 1 : 0);
+        }
+    }
+
+    private static void assertEverySolutionSatisfies(Xcsp3Instance instance, Predicate<Assignment> original) {
+        Set<Assignment> found = solutions(instance.csp());
+        assertThat(found).isNotEmpty();
+        assertThat(found).allMatch(original);
+    }
+
+    @Test void intensionReifiedComparison_booleanIndicator_isOneReification() throws IOException {
+        Xcsp3Instance instance = parseXml(REIFIED_VARS,
+                "<intension> or(and(eq(b,1),le(x,y)),and(eq(b,0),gt(x,y))) </intension>");
+        assertThat(instance.csp().getConstraints())
+                .noneMatch(c -> c instanceof AtLeastNConstraint || c instanceof AndConstraint);
+        assertIndicatorTracks(instance, (x, y) -> x <= y);
+    }
+
+    @Test void intensionReifiedComparison_wideIndicator_isConfinedToZeroOrOne() throws IOException {
+        Xcsp3Instance instance = parseXml(
+                "<var id=\"b\"> -5..5 </var><var id=\"x\"> 0..2 </var><var id=\"y\"> 0..3000 </var>",
+                "<intension> or(and(eq(b,1),le(x,y)),and(eq(b,0),gt(x,y))) </intension>");
+        assertThat(instance.csp().getConstraints()).anyMatch(c -> c instanceof AndConstraint)
+                .noneMatch(c -> c instanceof AtLeastNConstraint);
+        assertIndicatorTracks(instance, (x, y) -> x <= y);
+    }
+
+    @Test void intensionReifiedComparison_relationFirstAndFalseBranchFirst_isOneReification() throws IOException {
+        Xcsp3Instance instance = parseXml(REIFIED_VARS,
+                "<intension> or(and(lt(x,y),eq(b,0)),and(ge(x,y),eq(b,1))) </intension>");
+        assertThat(instance.csp().getConstraints()).noneMatch(c -> c instanceof AtLeastNConstraint);
+        assertIndicatorTracks(instance, (x, y) -> x >= y);
+    }
+
+    @Test void intensionReifiedComparison_equality_isOneReification() throws IOException {
+        Xcsp3Instance instance = parseXml(REIFIED_VARS,
+                "<intension> or(and(eq(b,1),eq(x,y)),and(eq(b,0),ne(x,y))) </intension>");
+        assertThat(instance.csp().getConstraints()).noneMatch(c -> c instanceof AtLeastNConstraint);
+        assertIndicatorTracks(instance, (x, y) -> x.equals(y));
+    }
+
+    @Test void intensionReifiedComparison_relationsNotComplementary_decomposes() throws IOException {
+        Xcsp3Instance instance = parseXml(REIFIED_VARS,
+                "<intension> or(and(eq(b,1),le(x,y)),and(eq(b,0),ge(x,y))) </intension>");
+        assertThat(instance.csp().getConstraints()).anyMatch(c -> c instanceof AtLeastNConstraint);
+        assertEverySolutionSatisfies(instance, a -> digitOf(a, "b") == 1
+                ? digitOf(a, "x") <= digitOf(a, "y") : digitOf(a, "x") >= digitOf(a, "y"));
+    }
+
+    @Test void intensionReifiedComparison_sameIndicatorValueInBothBranches_decomposes() throws IOException {
+        Xcsp3Instance instance = parseXml(REIFIED_VARS,
+                "<intension> or(and(eq(b,1),le(x,y)),and(eq(b,1),gt(x,y))) </intension>");
+        assertThat(instance.csp().getConstraints()).anyMatch(c -> c instanceof AtLeastNConstraint);
+        assertEverySolutionSatisfies(instance, a -> digitOf(a, "b") == 1);
+    }
+
+    @Test void intensionReifiedComparison_differentIndicators_decomposes() throws IOException {
+        Xcsp3Instance instance = parseXml(REIFIED_VARS + "<var id=\"c\"> 0 1 </var>",
+                "<intension> or(and(eq(b,1),le(x,y)),and(eq(c,0),gt(x,y))) </intension>");
+        assertThat(instance.csp().getConstraints()).anyMatch(c -> c instanceof AtLeastNConstraint);
+        assertEverySolutionSatisfies(instance, a -> digitOf(a, "b") == 1 && digitOf(a, "x") <= digitOf(a, "y")
+                || digitOf(a, "c") == 0 && digitOf(a, "x") > digitOf(a, "y"));
+    }
+
+    @Test void intensionReifiedComparison_indicatorValueNotZeroOrOne_decomposes() throws IOException {
+        Xcsp3Instance instance = parseXml(
+                "<var id=\"b\"> 0..2 </var><var id=\"x\"> 0..2 </var><var id=\"y\"> 0..3000 </var>",
+                "<intension> or(and(eq(b,2),le(x,y)),and(eq(b,0),gt(x,y))) </intension>");
+        assertThat(instance.csp().getConstraints()).anyMatch(c -> c instanceof AtLeastNConstraint);
+        assertEverySolutionSatisfies(instance, a -> digitOf(a, "b") == 2
+                ? digitOf(a, "x") <= digitOf(a, "y") : digitOf(a, "b") == 0 && digitOf(a, "x") > digitOf(a, "y"));
+    }
+
+    @Test void intensionReifiedComparison_compoundRelation_isOneReification() throws IOException {
+        Xcsp3Instance instance = parseXml(REIFIED_VARS,
+                "<intension> or(and(eq(b,1),eq(add(x,1),y)),and(eq(b,0),ne(add(x,1),y))) </intension>");
+        assertThat(instance.csp().getConstraints()).noneMatch(c -> c instanceof AtLeastNConstraint);
+        assertIndicatorTracks(instance, (x, y) -> x + 1 == y);
+    }
+
+    @Test void intensionReifiedComparison_threeDisjuncts_decomposes() throws IOException {
+        Xcsp3Instance instance = parseXml(REIFIED_VARS,
+                "<intension> or(and(eq(b,1),le(x,y)),and(eq(b,0),gt(x,y)),eq(x,0)) </intension>");
+        assertThat(instance.csp().getConstraints()).anyMatch(c -> c instanceof AtLeastNConstraint);
+        assertEverySolutionSatisfies(instance, a -> digitOf(a, "x") == 0
+                || (digitOf(a, "b") == 1) == (digitOf(a, "x") <= digitOf(a, "y")));
+    }
+
+    @Test void intensionReifiedComparison_threeConjuncts_decomposes() throws IOException {
+        Xcsp3Instance instance = parseXml(REIFIED_VARS,
+                "<intension> or(and(eq(b,1),le(x,y),le(x,1)),and(eq(b,0),gt(x,y))) </intension>");
+        assertThat(instance.csp().getConstraints()).anyMatch(c -> c instanceof AtLeastNConstraint);
+        assertEverySolutionSatisfies(instance, a -> digitOf(a, "b") == 1
+                ? digitOf(a, "x") <= digitOf(a, "y") && digitOf(a, "x") <= 1 : digitOf(a, "x") > digitOf(a, "y"));
+    }
+
+    @Test void intensionReifiedComparison_disjunctNotAConjunction_decomposes() throws IOException {
+        Xcsp3Instance instance = parseXml(REIFIED_VARS,
+                "<intension> or(and(eq(b,1),le(x,y)),gt(x,y)) </intension>");
+        assertThat(instance.csp().getConstraints()).anyMatch(c -> c instanceof AtLeastNConstraint);
+        assertEverySolutionSatisfies(instance, a -> digitOf(a, "b") == 1 || digitOf(a, "x") > digitOf(a, "y"));
+    }
+
+    @Test void intensionReifiedComparison_bareVariableBesideTheLiteral_decomposes() throws IOException {
+        Xcsp3Instance instance = parseXml(REIFIED_VARS + "<var id=\"c\"> 0 1 </var><var id=\"d\"> 0 1 </var>",
+                "<intension> or(and(eq(b,1),c),and(eq(b,0),d)) </intension>");
+        assertEverySolutionSatisfies(instance, a -> digitOf(a, "b") == 1 && digitOf(a, "c") == 1
+                || digitOf(a, "b") == 0 && digitOf(a, "d") == 1);
+    }
+
+    @Test void intensionReifiedComparison_nonRelationBesideTheLiteral_decomposes() throws IOException {
+        Xcsp3Instance instance = parseXml(REIFIED_VARS,
+                "<intension> or(and(eq(b,1),or(le(x,y),eq(x,0))),and(eq(b,0),gt(x,y))) </intension>");
+        assertThat(instance.csp().getConstraints()).anyMatch(c -> c instanceof AtLeastNConstraint);
+        assertEverySolutionSatisfies(instance, a -> digitOf(a, "b") == 1
+                ? digitOf(a, "x") <= digitOf(a, "y") || digitOf(a, "x") == 0 : digitOf(a, "x") > digitOf(a, "y"));
+    }
+
+    @Test void intensionReifiedComparison_sameRelationInBothBranches_decomposes() throws IOException {
+        Xcsp3Instance instance = parseXml(REIFIED_VARS,
+                "<intension> or(and(eq(b,1),le(x,y)),and(eq(b,0),le(x,y))) </intension>");
+        assertThat(instance.csp().getConstraints()).anyMatch(c -> c instanceof AtLeastNConstraint);
+        assertEverySolutionSatisfies(instance, a -> digitOf(a, "x") <= digitOf(a, "y"));
+    }
+
+    @Test void intensionReifiedComparison_naryEqualityAsTheLiteral_decomposes() throws IOException {
+        Xcsp3Instance instance = parseXml(REIFIED_VARS + "<var id=\"c\"> 0 1 </var>",
+                "<intension> or(and(eq(b,c,1),le(x,y)),and(eq(b,0),gt(x,y))) </intension>");
+        assertEverySolutionSatisfies(instance, a -> digitOf(a, "b") == 1 && digitOf(a, "c") == 1
+                && digitOf(a, "x") <= digitOf(a, "y") || digitOf(a, "b") == 0 && digitOf(a, "x") > digitOf(a, "y"));
+    }
+
+    @Test void intensionReifiedComparison_naryEqualityAsTheRelation_decomposes() throws IOException {
+        Xcsp3Instance instance = parseXml(REIFIED_VARS + "<var id=\"z\"> 0..2 </var>",
+                "<intension> or(and(eq(b,1),eq(x,y,z)),and(eq(b,0),ne(x,y))) </intension>");
+        assertEverySolutionSatisfies(instance, a -> digitOf(a, "b") == 1
+                ? digitOf(a, "x") == digitOf(a, "y") && digitOf(a, "y") == digitOf(a, "z")
+                : digitOf(a, "x") != digitOf(a, "y"));
+    }
+
+    @Test void intensionReifiedComparison_indicatorInsideTheRelation_decomposes() throws IOException {
+        Xcsp3Instance instance = parseXml(REIFIED_VARS,
+                "<intension> or(and(eq(b,1),le(b,y)),and(eq(b,0),gt(b,y))) </intension>");
+        assertThat(instance.csp().getConstraints()).anyMatch(c -> c instanceof AtLeastNConstraint);
+        assertEverySolutionSatisfies(instance, a -> digitOf(a, "b") == 1
+                ? 1 <= digitOf(a, "y") : 0 > digitOf(a, "y"));
     }
 
     // ---- regular ------------------------------------------------------------------------------------------------------
