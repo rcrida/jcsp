@@ -18,6 +18,7 @@ import io.github.rcrida.jcsp.constraints.nary.LinearBooleanBoundConstraint;
 import io.github.rcrida.jcsp.constraints.nary.LinearBooleanVariableConstraint;
 import io.github.rcrida.jcsp.constraints.nary.LinearBoundConstraint;
 import io.github.rcrida.jcsp.constraints.nary.LinearVariableConstraint;
+import io.github.rcrida.jcsp.constraints.nary.MaxVariableConstraint;
 import io.github.rcrida.jcsp.constraints.nary.MinVariableConstraint;
 import io.github.rcrida.jcsp.constraints.nary.PredicateConstraint;
 import io.github.rcrida.jcsp.constraints.nary.ProductConstraint;
@@ -2090,6 +2091,80 @@ class Xcsp3ParserTest {
             assertThat(digitOf(a, "k")).isEqualTo(Math.max(digitOf(a, "x"), digitOf(a, "y")));
         }
         assertThat(solutions(instance.csp())).isNotEmpty();
+    }
+
+    @Test void intensionMin_variableTarget_routesThroughMinVariableConstraint() throws IOException {
+        Xcsp3Instance instance = parseXml(
+                "<var id=\"x\"> 0..3 </var><var id=\"y\"> 0..3 </var><var id=\"t\"> 0..3 </var>",
+                "<intension> eq(t,min(x,y)) </intension>");
+        assertThat(instance.csp().getConstraints()).singleElement().isInstanceOf(MinVariableConstraint.class);
+        Set<Assignment> found = solutions(instance.csp());
+        assertThat(found).hasSize(16);
+        for (Assignment a : found) {
+            assertThat(digitOf(a, "t")).isEqualTo(Math.min(digitOf(a, "x"), digitOf(a, "y")));
+        }
+    }
+
+    @Test void intensionMax_threeOperands_routesThroughMaxVariableConstraint() throws IOException {
+        Xcsp3Instance instance = parseXml(
+                "<var id=\"x\"> 0..2 </var><var id=\"y\"> 0..2 </var><var id=\"z\"> 0..2 </var><var id=\"t\"> 0..2 </var>",
+                "<intension> eq(max(x,y,z),t) </intension>");
+        assertThat(instance.csp().getConstraints()).singleElement().isInstanceOf(MaxVariableConstraint.class);
+        Set<Assignment> found = solutions(instance.csp());
+        assertThat(found).hasSize(27);
+        for (Assignment a : found) {
+            assertThat(digitOf(a, "t")).isEqualTo(Math.max(digitOf(a, "x"), Math.max(digitOf(a, "y"), digitOf(a, "z"))));
+        }
+    }
+
+    @Test void intensionMin_targetDomainTooWideToTabulate_stillRoutesThroughMinVariableConstraint() throws IOException {
+        // A boolean AND gate whose output is declared over a wide range: too wide to tabulate, so
+        // without this recognizer it fell back to an unpropagated PredicateConstraint.
+        Xcsp3Instance instance = parseXml(
+                "<var id=\"x\"> 0 1 </var><var id=\"y\"> 0 1 </var><var id=\"t\"> -10000..10000 </var>",
+                "<intension> eq(t,min(x,y)) </intension>");
+        assertThat(instance.csp().getConstraints()).singleElement().isInstanceOf(MinVariableConstraint.class);
+        Set<Assignment> found = solutions(instance.csp());
+        assertThat(found).hasSize(4);
+        for (Assignment a : found) {
+            assertThat(digitOf(a, "t")).isEqualTo(Math.min(digitOf(a, "x"), digitOf(a, "y")));
+        }
+    }
+
+    @Test void intensionMin_constantOperand_isNotAnExtremumConstraint() throws IOException {
+        Xcsp3Instance instance = parseXml(
+                "<var id=\"x\"> 0..5 </var><var id=\"t\"> 0..5 </var>",
+                "<intension> eq(t,min(x,3)) </intension>");
+        assertThat(instance.csp().getConstraints()).noneMatch(c -> c instanceof MinVariableConstraint);
+        Set<Assignment> found = solutions(instance.csp());
+        assertThat(found).hasSize(6);
+        for (Assignment a : found) {
+            assertThat(digitOf(a, "t")).isEqualTo(Math.min(digitOf(a, "x"), 3));
+        }
+    }
+
+    @Test void intensionMin_targetIsAlsoAnOperand_isNotAnExtremumConstraint() throws IOException {
+        Xcsp3Instance instance = parseXml(
+                "<var id=\"x\"> 0..3 </var><var id=\"y\"> 0..3 </var>",
+                "<intension> eq(x,min(x,y)) </intension>");
+        assertThat(instance.csp().getConstraints()).noneMatch(c -> c instanceof MinVariableConstraint);
+        Set<Assignment> found = solutions(instance.csp());
+        assertThat(found).hasSize(10);
+        for (Assignment a : found) {
+            assertThat(digitOf(a, "x")).isLessThanOrEqualTo(digitOf(a, "y"));
+        }
+    }
+
+    @Test void intensionMax_repeatedOperand_isNotAnExtremumConstraint() throws IOException {
+        Xcsp3Instance instance = parseXml(
+                "<var id=\"x\"> 0..3 </var><var id=\"t\"> 0..3 </var>",
+                "<intension> eq(t,max(x,x)) </intension>");
+        assertThat(instance.csp().getConstraints()).noneMatch(c -> c instanceof MaxVariableConstraint);
+        Set<Assignment> found = solutions(instance.csp());
+        assertThat(found).hasSize(4);
+        for (Assignment a : found) {
+            assertThat(digitOf(a, "t")).isEqualTo(digitOf(a, "x"));
+        }
     }
 
     // ---- regular ------------------------------------------------------------------------------------------------------

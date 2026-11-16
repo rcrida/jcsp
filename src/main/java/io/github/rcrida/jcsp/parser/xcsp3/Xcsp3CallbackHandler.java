@@ -201,6 +201,7 @@ final class Xcsp3CallbackHandler implements XCallbacks2 {
             new DistanceOfPairRecognizer(this),
             new OrRecognizer(this, this::recognizeConstraint, true),
             new BooleanProductChannelRecognizer(this),
+            new ExtremumRecognizer(this),
             new ProductRecognizer(this),
             new TabulationRecognizer(this),
             new AndRecognizer(this::recognizeConstraint),
