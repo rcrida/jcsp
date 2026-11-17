@@ -746,6 +746,31 @@ class Xcsp3ParserTest {
         }
     }
 
+    @Test void intensionDistanceOfPair_gtConstant_canonizedWithDistSecond_routesThroughAbsoluteDifferenceConstraint() throws IOException {
+        // gt(dist(x,y),2) is canonized to le(3,dist(x,y)): dist arrives as the second operand.
+        Xcsp3Instance instance = parseXml(
+                "<var id=\"x\"> 1..5 </var><var id=\"y\"> 1..5 </var>",
+                "<intension> gt(dist(x,y),2) </intension>");
+        assertThat(instance.csp().getConstraints().iterator().next()).isInstanceOf(AbsoluteDifferenceConstraint.class);
+        Set<Assignment> found = solutions(instance.csp());
+        assertThat(found).hasSize(6);
+        for (Assignment a : found) {
+            assertThat(Math.abs(digitOf(a, "x") - digitOf(a, "y"))).isGreaterThan(2);
+        }
+    }
+
+    @Test void intensionDistanceOfPair_geVariable_canonizedWithDistSecond_routesThroughAbsoluteDifferenceVariableConstraint() throws IOException {
+        Xcsp3Instance instance = parseXml(
+                "<var id=\"x\"> 1..5 </var><var id=\"y\"> 1..5 </var><var id=\"t\"> 0..4 </var>",
+                "<intension> ge(dist(x,y),t) </intension>");
+        assertThat(instance.csp().getConstraints().iterator().next()).isInstanceOf(AbsoluteDifferenceVariableConstraint.class);
+        Set<Assignment> found = solutions(instance.csp());
+        assertThat(found).isNotEmpty();
+        for (Assignment a : found) {
+            assertThat(Math.abs(digitOf(a, "x") - digitOf(a, "y"))).isGreaterThanOrEqualTo(digitOf(a, "t"));
+        }
+    }
+
     @Test void intensionDistanceOfPair_operandNotVariable_fallsBackToPredicateConstraint() throws IOException {
         // dist(add(x,1),y): the dist node's first operand is itself a compound expression, not a
         // bare variable -- exercises asVariable(distNode.sons[0]).isEmpty() specifically.
