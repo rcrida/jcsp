@@ -13,7 +13,9 @@ import org.xcsp.common.Types.TypeExpr;
 import org.xcsp.common.predicates.XNode;
 import org.xcsp.parser.entries.XVariables.XVarInteger;
 
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
@@ -28,10 +30,11 @@ import java.util.Optional;
  * mul(var,const)}, {@code neg(var)}, {@code sub(var,var)}; shared with {@link
  * Xcsp3CallbackHandler#addAuxiliary} for the same term-folding needed when {@code add} itself
  * appears as a nested value-producing sub-expression rather than a whole relation's operand) --
- * anything deeper (a nested {@code add} the canonizer didn't
- * already flatten, a product of two variables, a bare constant term, etc.) declines the whole
- * recognition, always safe, just less propagated, never incorrect, the same contract every
- * recognizer in this package documents. The choice between the "sum" and "linear" siblings is made
+ * anything deeper (a nested {@code add} the canonizer didn't already flatten, etc.) declines the
+ * whole recognition, always safe, just less propagated, never incorrect, the same contract every
+ * recognizer in this package documents. A product of two distinct variables and a constant term
+ * decline too, except in the extended instance (see {@link
+ * #SumOrLinearRecognizer(Xcsp3CallbackHandler, boolean)}). The choice between the "sum" and "linear" siblings is made
  * once, from every term's own final coefficient after same-variable terms are combined (e.g.
  * {@code add(x,x)} contributes coefficient 2 to {@code x}, {@code sub(x,x)} contributes 0 -- a
  * degenerate but harmless case, not specially rejected) -- {@code SumVariableConstraint}/{@code
@@ -80,9 +83,21 @@ import java.util.Optional;
 final class SumOrLinearRecognizer implements ConstraintRecognizer {
 
     private final Xcsp3CallbackHandler handler;
+    private final boolean extended;
 
     SumOrLinearRecognizer(@NonNull Xcsp3CallbackHandler handler) {
+        this(handler, false);
+    }
+
+    /**
+     * {@code extended} also accepts {@code mul(var, var)} terms, each folded as a product auxiliary,
+     * and constant terms, moved across to a constant target (or dropped when zero against a variable
+     * one). Those decompositions propagate more weakly than a table, so the extended instance is
+     * registered after {@link TabulationRecognizer}, which keeps first claim on small scopes.
+     */
+    SumOrLinearRecognizer(@NonNull Xcsp3CallbackHandler handler, boolean extended) {
         this.handler = handler;
+        this.extended = extended;
     }
 
     @Override
@@ -104,32 +119,45 @@ final class SumOrLinearRecognizer implements ConstraintRecognizer {
     private Optional<Constraint> recognizeAgainstAdd(
             XNode<XVarInteger> addSide, Operator operator, XNode<XVarInteger> targetSide) {
         Map<Variable<Integer>, Integer> coefficients = new LinkedHashMap<>();
+        List<List<Variable<Integer>>> productPairs = extended ? new ArrayList<>() : null;
+        int offset = 0;
         for (XNode<XVarInteger> term : addSide.sons) {
-            if (!handler.foldAddTerm(coefficients, term)) {
+            Optional<Integer> constantTerm = extended ? Xcsp3CallbackHandler.asConstant(term) : Optional.empty();
+            if (constantTerm.isPresent()) {
+                offset += constantTerm.get();
+            } else if (!handler.foldAddTerm(coefficients, term, productPairs)) {
                 return Optional.empty();
             }
         }
-        boolean unitCoefficients = coefficients.values().stream().allMatch(c -> c == 1);
 
-        Optional<Variable<Integer>> targetVar = handler.asVariable(targetSide);
-        if (targetVar.isPresent()) {
-            return Optional.of(unitCoefficients
-                    ? SumVariableConstraint.of(coefficients.keySet(), operator, targetVar.get())
-                    : LinearVariableConstraint.of(coefficients, operator, targetVar.get()));
+        int shift = offset;
+        Optional<Integer> targetConstant = Xcsp3CallbackHandler.asConstant(targetSide).map(k -> k - shift);
+        if (targetConstant.isEmpty() && offset != 0) {
+            return Optional.empty();
         }
-        Optional<Integer> targetConstant = Xcsp3CallbackHandler.asConstant(targetSide);
+        Optional<Variable<Integer>> targetVar = targetConstant.isPresent()
+                ? Optional.empty()
+                : handler.asVariable(targetSide)
+                // Neither a bare variable nor a constant -- e.g. eq(add(y,z),div(x,2)), the shape
+                // xcsp3-tools' canonizer produces from eq(sub(div(x,2),y),z) by moving the subtracted
+                // term across the relation. resolveVariable materializes a compound target
+                // (neg/sub/div/mod) into a real auxiliary variable, so the variable-target siblings
+                // still apply -- just with one extra auxiliary instead of the tighter constant-bound form.
+                .or(() -> handler.resolveVariable(targetSide));
+        if (targetConstant.isEmpty() && targetVar.isEmpty()) {
+            return Optional.empty();
+        }
+        if (productPairs != null) {
+            handler.foldProducts(coefficients, productPairs);
+        }
+        boolean unitCoefficients = coefficients.values().stream().allMatch(c -> c == 1);
         if (targetConstant.isPresent()) {
             return Optional.of(unitCoefficients
                     ? SumBoundConstraint.of(coefficients.keySet(), operator, targetConstant.get())
                     : LinearBoundConstraint.of(coefficients, operator, targetConstant.get()));
         }
-        // Neither a bare variable nor a constant -- e.g. eq(add(y,z),div(x,2)), the shape
-        // xcsp3-tools' canonizer produces from eq(sub(div(x,2),y),z) by moving the subtracted term
-        // across the relation. resolveVariable materializes a compound target (neg/sub/div/mod) into
-        // a real auxiliary variable, so the variable-target siblings still apply -- just with one
-        // extra auxiliary instead of the tighter constant-bound form.
-        return handler.resolveVariable(targetSide).map(resolvedTarget -> unitCoefficients
-                ? SumVariableConstraint.of(coefficients.keySet(), operator, resolvedTarget)
-                : LinearVariableConstraint.of(coefficients, operator, resolvedTarget));
+        return Optional.of(unitCoefficients
+                ? SumVariableConstraint.of(coefficients.keySet(), operator, targetVar.get())
+                : LinearVariableConstraint.of(coefficients, operator, targetVar.get()));
     }
 }

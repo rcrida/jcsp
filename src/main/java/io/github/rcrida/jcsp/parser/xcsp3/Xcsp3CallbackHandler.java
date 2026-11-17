@@ -152,6 +152,7 @@ final class Xcsp3CallbackHandler implements XCallbacks2 {
     private final Map<String, DivModAuxiliaries> divModAuxiliaries = new LinkedHashMap<>();
     private final Map<String, Variable<Integer>> negAuxiliaries = new LinkedHashMap<>();
     private final Map<String, Variable<Integer>> subAuxiliaries = new LinkedHashMap<>();
+    private final Map<Set<Variable<Integer>>, Variable<Integer>> productAuxiliaries = new LinkedHashMap<>();
     private final Map<String, Variable<Integer>> addAuxiliaries = new LinkedHashMap<>();
     private final Map<Set<Variable<Integer>>, List<PendingCount>> pendingSingleValueCounts = new LinkedHashMap<>();
     private @Nullable ToDoubleFunction<Assignment> objective;
@@ -205,6 +206,7 @@ final class Xcsp3CallbackHandler implements XCallbacks2 {
             new ExtremumRecognizer(this),
             new ProductRecognizer(this),
             new TabulationRecognizer(this),
+            new SumOrLinearRecognizer(this, true),
             new ReifiedRelationRecognizer(this, this::recognizeConstraint),
             new AndRecognizer(this::recognizeConstraint),
             new OrRecognizer(this, this::recognizeConstraint, false),
@@ -737,6 +739,17 @@ final class Xcsp3CallbackHandler implements XCallbacks2 {
      * sync.
      */
     boolean foldAddTerm(Map<Variable<Integer>, Integer> coefficients, XNode<XVarInteger> term) {
+        return foldAddTerm(coefficients, term, null);
+    }
+
+    /**
+     * {@link #foldAddTerm(Map, XNode)}, additionally accepting {@code mul(var, var)} over two
+     * distinct variables when {@code productPairs} is non-null: the pair is appended there rather
+     * than materialized, so a caller that later declines leaves no auxiliary behind. {@link
+     * #foldProducts} turns the pairs into coefficients once the caller has committed.
+     */
+    boolean foldAddTerm(Map<Variable<Integer>, Integer> coefficients, XNode<XVarInteger> term,
+                        @Nullable List<List<Variable<Integer>>> productPairs) {
         Optional<Variable<Integer>> bareVar = asVariable(term);
         if (bareVar.isPresent()) {
             coefficients.merge(bareVar.get(), 1, Integer::sum);
@@ -750,6 +763,16 @@ final class Xcsp3CallbackHandler implements XCallbacks2 {
                     coefficients.merge(mulVar.get(), mulConst.get(), Integer::sum);
                     return true;
                 }
+            }
+        }
+        if (productPairs != null && term.getType() == TypeExpr.MUL && term.sons.length == 2) {
+            // Right first: the canonizer puts a compound factor before a variable, so a variable
+            // left of a compound one never arrives here.
+            Optional<Variable<Integer>> right = asVariable(term.sons[1]);
+            Optional<Variable<Integer>> left = asVariable(term.sons[0]);
+            if (right.isPresent() && left.isPresent() && !left.get().equals(right.get())) {
+                productPairs.add(List.of(left.get(), right.get()));
+                return true;
             }
         }
         if (term.getType() == TypeExpr.NEG && term.sons.length == 1) {
@@ -1420,19 +1443,43 @@ final class Xcsp3CallbackHandler implements XCallbacks2 {
      * that instance's 750 boolean product terms.
      */
     private Variable<Integer> productOfPair(XVarInteger a, XVarInteger b, String id, int index) {
-        Variable<Integer> varA = variableFor(a);
-        Variable<Integer> varB = variableFor(b);
-        int[] boundsA = boundsByName.get(a.id());
-        int[] boundsB = boundsByName.get(b.id());
+        return product(id + "$product" + index, variableFor(a), variableFor(b));
+    }
+
+    /**
+     * Folds each pair {@link #foldAddTerm(Map, XNode, List)} collected into {@code coefficients}
+     * with coefficient {@code 1} on its {@link #productAuxiliary}, merging a repeated pair.
+     */
+    void foldProducts(Map<Variable<Integer>, Integer> coefficients, List<List<Variable<Integer>>> productPairs) {
+        for (List<Variable<Integer>> pair : productPairs) {
+            coefficients.merge(productAuxiliary(pair.get(0), pair.get(1)), 1, Integer::sum);
+        }
+    }
+
+    /**
+     * Fresh variable holding {@code a*b}, memoized per unordered pair so a product repeated across
+     * constraints shares one auxiliary. Unlike {@link #productOfPair}'s per-position auxiliaries, a
+     * shared one is safe here because {@link #foldProducts} merges a repeated pair into its
+     * coefficient rather than collecting a set.
+     */
+    private Variable<Integer> productAuxiliary(Variable<Integer> a, Variable<Integer> b) {
+        return productAuxiliaries.computeIfAbsent(Set.of(a, b),
+                pair -> product(a.getName() + "$mul$" + b.getName(), a, b));
+    }
+
+    private Variable<Integer> product(String name, Variable<Integer> a, Variable<Integer> b) {
+        int[] boundsA = boundsByName.get(a.getName());
+        int[] boundsB = boundsByName.get(b.getName());
         int p1 = boundsA[0] * boundsB[0], p2 = boundsA[0] * boundsB[1];
         int p3 = boundsA[1] * boundsB[0], p4 = boundsA[1] * boundsB[1];
         int lo = Math.min(Math.min(p1, p2), Math.min(p3, p4));
         int hi = Math.max(Math.max(p1, p2), Math.max(p3, p4));
-        Variable<Integer> product = builder.createVariable(id + "$product" + index, IntRangeDomain.of(lo, hi));
+        Variable<Integer> product = builder.createVariable(name, IntRangeDomain.of(lo, hi));
         Constraint productConstraint = isBooleanBounds(boundsA) && isBooleanBounds(boundsB)
-                ? MinVariableConstraint.of(Set.of(varA, varB), Operator.EQ, product)
-                : ProductVariableConstraint.of(Set.of(varA, varB), Operator.EQ, product);
+                ? MinVariableConstraint.of(Set.of(a, b), Operator.EQ, product)
+                : ProductVariableConstraint.of(Set.of(a, b), Operator.EQ, product);
         builder.constraint(productConstraint);
+        boundsByName.put(name, new int[]{lo, hi});
         return product;
     }
 

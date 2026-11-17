@@ -4832,6 +4832,84 @@ class Xcsp3ParserTest {
         assertThat(found).hasSize(5).allMatch(a -> digitOf(a, "y") != 5);
     }
 
+    // ---- sums of variable products (extended SumOrLinearRecognizer, after tabulation) ------------
+
+    @Test void intensionSumOfProducts_booleanTimesIntWithZeroTerm_routesThroughProductAuxiliaries() throws IOException {
+        // radi_X2's shape: a constant equals a sum of boolean-times-int products plus a 0 term.
+        Xcsp3Instance instance = parseXml(
+                "<var id=\"a0\"> 0..1 </var><var id=\"a1\"> 0..1 </var>"
+                        + "<var id=\"y0\"> 0..2999 </var><var id=\"y1\"> 0..2999 </var>",
+                "<intension> eq(2000,add(mul(a0,y0),add(mul(a1,y1),0))) </intension>"
+                        + "<intension> eq(a0,1) </intension><intension> eq(a1,1) </intension>"
+                        + "<intension> eq(y0,3) </intension>");
+        assertThat(instance.csp().getConstraints())
+                .anyMatch(c -> c instanceof ProductVariableConstraint<?>)
+                .anyMatch(c -> c instanceof SumBoundConstraint<?>);
+        Set<Assignment> found = solutions(instance.csp());
+        assertThat(found).hasSize(1).allMatch(a -> digitOf(a, "y1") == 1997);
+    }
+
+    @Test void intensionSumOfProducts_repeatedBooleanPair_sharesOneMinAuxiliary() throws IOException {
+        Xcsp3Instance instance = parseXml(
+                "<var id=\"p\"> 0..1 </var><var id=\"q\"> 0..1 </var>"
+                        + "<var id=\"z\"> 0..2999 </var><var id=\"w\"> 0..2999 </var>",
+                "<intension> le(add(mul(p,q),z),2000) </intension>"
+                        + "<intension> le(add(mul(q,p),w),2000) </intension>");
+        assertThat(instance.csp().getConstraints().stream().filter(c -> c instanceof MinVariableConstraint<?>))
+                .hasSize(1);
+        assertThat(instance.csp().getConstraints().stream().filter(c -> c instanceof SumBoundConstraint<?>))
+                .hasSize(2);
+    }
+
+    @Test void intensionSumOfProducts_constantTermAgainstConstantTarget_movesAcross() throws IOException {
+        Xcsp3Instance instance = parseXml(
+                "<var id=\"p\"> 0..1 </var><var id=\"y\"> 0..2999 </var><var id=\"z\"> 0..2999 </var>",
+                "<intension> le(add(mul(p,y),z,3),2000) </intension>");
+        assertThat(instance.csp().getConstraints())
+                .anyMatch(c -> c instanceof SumBoundConstraint<?> s && s.getBound().intValue() == 1997);
+    }
+
+    @Test void intensionSumOfProducts_zeroTermAgainstVariableTarget_routesThroughSumVariableConstraint() throws IOException {
+        Xcsp3Instance instance = parseXml(
+                "<var id=\"p\"> 0..1 </var><var id=\"y\"> 0..2999 </var><var id=\"z\"> 0..2999 </var>",
+                "<intension> eq(z,add(mul(p,y),0)) </intension>");
+        assertThat(instance.csp().getConstraints()).anyMatch(c -> c instanceof SumVariableConstraint<?>);
+    }
+
+    @Test void intensionSumOfProducts_nonZeroTermAgainstVariableTarget_throwsUnsupported() {
+        assertThatThrownBy(() -> parseXml(
+                "<var id=\"p\"> 0..1 </var><var id=\"y\"> 0..2999 </var><var id=\"z\"> 0..2999 </var>",
+                "<intension> eq(z,add(mul(p,y),3)) </intension>"))
+                .isInstanceOf(UnsupportedXcsp3ConstraintException.class);
+    }
+
+    @Test void intensionSumOfProducts_squareTerm_declines() throws IOException {
+        Xcsp3Instance instance = parseXml(
+                "<var id=\"y\"> 0..2999 </var><var id=\"z\"> 0..2999 </var>",
+                "<intension> le(add(mul(y,y),z),2000) </intension>");
+        assertThat(instance.csp().getConstraints()).noneMatch(c -> c instanceof ProductVariableConstraint<?>);
+    }
+
+    @Test void intensionSumOfProducts_compoundFactor_throwsUnsupported() {
+        String vars = "<var id=\"a\"> 0..2999 </var><var id=\"b\"> 0..2999 </var>"
+                + "<var id=\"c\"> 0..2999 </var><var id=\"d\"> 0..2999 </var>";
+        assertThatThrownBy(() -> parseXml(vars, "<intension> le(add(mul(a,add(b,c)),d),2000) </intension>"))
+                .isInstanceOf(UnsupportedXcsp3ConstraintException.class);
+        assertThatThrownBy(() -> parseXml(vars, "<intension> le(add(mul(add(a,b),add(c,d)),a),2000) </intension>"))
+                .isInstanceOf(UnsupportedXcsp3ConstraintException.class);
+        assertThatThrownBy(() -> parseXml(vars, "<intension> le(add(mul(a,b,c),d),2000) </intension>"))
+                .isInstanceOf(UnsupportedXcsp3ConstraintException.class);
+    }
+
+    @Test void intensionSumOfProducts_smallScope_isTabulatedNotDecomposed() throws IOException {
+        Xcsp3Instance instance = parseXml(
+                "<var id=\"p\"> 0..1 </var><var id=\"y\"> 0..9 </var><var id=\"z\"> 0..9 </var>",
+                "<intension> le(add(mul(p,y),z),5) </intension>");
+        assertThat(instance.csp().getConstraints())
+                .anyMatch(c -> c instanceof NaryTuplesConstraint)
+                .noneMatch(c -> c instanceof ProductVariableConstraint<?>);
+    }
+
     @Test void intensionIffOneSideCompoundSum_aboveTabulationCap() throws IOException {
         Xcsp3Instance instance = parseXml(
                 "<var id=\"x\"> 0..49 </var><var id=\"y\"> 0..49 </var><var id=\"z\"> 0..49 </var>",
