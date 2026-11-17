@@ -8,6 +8,7 @@ import io.github.rcrida.jcsp.constraints.Operator;
 import io.github.rcrida.jcsp.constraints.binary.AbsoluteDifferenceConstraint;
 import io.github.rcrida.jcsp.constraints.binary.BinaryComparatorConstraint;
 import io.github.rcrida.jcsp.constraints.binary.BinaryElementConstraint;
+import io.github.rcrida.jcsp.constraints.binary.BinaryPredicateConstraint;
 import io.github.rcrida.jcsp.constraints.binary.BinaryNotEqualsConstraint;
 import io.github.rcrida.jcsp.constraints.binary.BinaryOffsetConstraint;
 import io.github.rcrida.jcsp.constraints.nary.AbsoluteDifferenceVariableConstraint;
@@ -921,10 +922,9 @@ final class Xcsp3CallbackHandler implements XCallbacks2 {
      * routing onto real propagating constraints ({@link BinaryComparatorConstraint}, {@link
      * BinaryOffsetConstraint}, {@link UnaryComparatorConstraint}, {@link
      * AbsoluteDifferenceConstraint}, {@link AndConstraint}, {@link AtLeastNConstraint}, and more)
-     * instead of the generic {@link PredicateConstraint}, which has none (only checked once every
-     * variable is assigned). Recognition failure everywhere is always safe, just less propagated,
-     * never incorrect -- see {@link ConstraintRecognizer}'s own Javadoc for the registration order
-     * and how to extend it.
+     * instead of the generic fallback ({@link #genericIntensionConstraint}), which propagates one-
+     * and two-variable shapes and refuses wider ones. See {@link ConstraintRecognizer}'s own
+     * Javadoc for the registration order and how to extend it.
      */
     Optional<Constraint> recognizeConstraint(XNode<XVarInteger> node) {
         for (ConstraintRecognizer recognizer : recognizers) {
@@ -936,7 +936,7 @@ final class Xcsp3CallbackHandler implements XCallbacks2 {
 
     @Override
     public void buildCtrIntension(String id, XVarInteger[] list, XNodeParent<XVarInteger> tree) {
-        addOrReify(recognizeConstraint(tree).orElseGet(() -> genericIntensionConstraint(list, tree)), id);
+        addOrReify(recognizeConstraint(tree).orElseGet(() -> genericIntensionConstraint(id, list, tree)), id);
     }
 
     // Package-private: derives a fresh boolean indicator's name from an operand constraint's own
@@ -1024,23 +1024,28 @@ final class Xcsp3CallbackHandler implements XCallbacks2 {
     }
 
     /**
-     * A genuinely single-variable intension (e.g. a bare {@code eq(x,5)}, unreachable by {@link
-     * BinaryRelationRecognizer} since neither side is a plain variable-vs-variable or
-     * variable-vs-{@code add(var,const)} shape) routes through {@link UnaryPredicateConstraint}
-     * rather than {@link PredicateConstraint} -- same reasoning as {@link #buildCtrExtension(String,
-     * XVarInteger, int[], boolean, Set)}'s unary form: a real {@code UnaryConstraint} is eligible
-     * for {@link io.github.rcrida.jcsp.consistency.node.NodeConsistency}'s domain-pruning
-     * preprocessing, where an n-ary {@link PredicateConstraint} (even over one variable) is not.
-     * Everything with two or more distinct variables keeps using {@link PredicateConstraint}.
+     * The constraint for an intension no recognizer matched, keyed on its distinct variables. One
+     * variable becomes a {@link UnaryPredicateConstraint}, which {@link
+     * io.github.rcrida.jcsp.consistency.node.NodeConsistency} filters completely before search. Two
+     * become a {@link BinaryPredicateConstraint}, which arc consistency revises. Three or more
+     * throw: an opaque n-ary check prunes nothing until every variable is assigned, so the shape
+     * needs a recognizer instead.
      */
-    private Constraint genericIntensionConstraint(XVarInteger[] list, XNodeParent<XVarInteger> tree) {
-        Predicate<Assignment> predicate = IntensionExpressionEvaluator.toPredicate(tree, variablesByName);
-        if (list.length == 1) {
-            Variable<Integer> variable = variableFor(list[0]);
-            return UnaryPredicateConstraint.of(variable,
-                    (Integer value) -> predicate.test(Assignment.of(Map.of(variable, value))));
+    private Constraint genericIntensionConstraint(String id, XVarInteger[] list, XNodeParent<XVarInteger> tree) {
+        List<Variable<Integer>> variables = List.copyOf(toVariableSet(list));
+        if (variables.size() > 2) {
+            throw new UnsupportedXcsp3ConstraintException(
+                    "No recognizer for intension over " + variables.size() + " variables: " + id + " " + tree);
         }
-        return PredicateConstraint.builder().variables(toVariableSet(list)).predicate(predicate).build();
+        Predicate<Assignment> predicate = IntensionExpressionEvaluator.toPredicate(tree, variablesByName);
+        Variable<Integer> first = variables.get(0);
+        if (variables.size() == 1) {
+            return UnaryPredicateConstraint.of(first,
+                    (Integer value) -> predicate.test(Assignment.of(Map.of(first, value))));
+        }
+        Variable<Integer> second = variables.get(1);
+        return BinaryPredicateConstraint.of(first, second,
+                (Integer l, Integer r) -> predicate.test(Assignment.of(Map.of(first, l, second, r))));
     }
 
     // Package-private (not private): TypeExpr.GE/GT never reach here through any real XCSP3

@@ -128,3 +128,4 @@ section instead.
 | [0064](0064-lex-propagators-run-among-the-cheap-bound-propagators.md) | Lex propagators run among the cheap bound propagators | Accepted |
 | [0065](0065-large-neighbourhood-search-is-an-opt-in-wrapper-around-branch-and-bound.md) | Large neighbourhood search is an opt-in wrapper around branch-and-bound | Accepted |
 | [0066](0066-branch-on-a-small-cycle-cutset-first.md) | Branch on a small cycle cutset first | Accepted |
+| [0067](0067-unrecognized-wide-intensions-fail-parsing.md) | An unrecognized intension over three or more variables fails parsing | Accepted |

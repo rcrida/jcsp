@@ -12,10 +12,11 @@ import java.util.function.Function;
 /**
  * One pattern-matcher in {@link Xcsp3CallbackHandler}'s XCSP3 {@code <intension>} recognition
  * chain: tries to recognize {@code node} as a specific relation shape and, on success, returns a
- * real propagating {@link Constraint} for it instead of falling through to the generic,
- * unpropagated {@code PredicateConstraint}/{@code UnaryPredicateConstraint}. Declining (returning
- * {@link Optional#empty()}) is always safe -- the caller tries the next registered recognizer, or
- * ultimately falls back to the generic predicate form; a recognizer must never guess.
+ * real propagating {@link Constraint} for it instead of falling through to the generic fallback: a
+ * {@code UnaryPredicateConstraint} or {@code BinaryPredicateConstraint} over one or two variables,
+ * and an {@link UnsupportedXcsp3ConstraintException} over three or more. Declining (returning
+ * {@link Optional#empty()}) is always sound -- the caller tries the next registered recognizer, or
+ * ultimately that fallback; a recognizer must never guess.
  * <p>
  * Implementations are registered, in a fixed priority order matching the order each one used to
  * appear in {@link Xcsp3CallbackHandler#buildCtrIntension}'s hand-written chain, on {@link

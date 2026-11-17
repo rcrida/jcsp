@@ -6,6 +6,7 @@ import io.github.rcrida.jcsp.constraints.binary.AbsoluteDifferenceConstraint;
 import io.github.rcrida.jcsp.constraints.binary.BinaryComparatorConstraint;
 import io.github.rcrida.jcsp.constraints.binary.BinaryNotEqualsConstraint;
 import io.github.rcrida.jcsp.constraints.binary.BinaryOffsetConstraint;
+import io.github.rcrida.jcsp.constraints.binary.BinaryPredicateConstraint;
 import io.github.rcrida.jcsp.constraints.binary.SquareVariableConstraint;
 import io.github.rcrida.jcsp.constraints.nary.AbsoluteDifferenceVariableConstraint;
 import io.github.rcrida.jcsp.constraints.nary.AndConstraint;
@@ -4808,15 +4809,27 @@ class Xcsp3ParserTest {
         assertThat(instance.csp().getConstraints()).anyMatch(c -> c instanceof BinaryComparatorConstraint<?>);
     }
 
-    @Test void intensionChannelRightSideUnrecognizable_aboveTabulationCap() throws IOException {
-        Xcsp3Instance instance = parseXml(
+    @Test void intensionChannelRightSideUnrecognizable_aboveTabulationCap_throwsUnsupported() {
+        assertThatThrownBy(() -> parseXml(
                 // Every sub-scope must clear the cap, not just the whole tree's: OrRecognizer
                 // recurses, so a child like mul(p,q,r) is offered to tabulation on its own and
                 // would be claimed there while the outer node was still declining.
                 "<var id=\"x\"> 0..299 </var><var id=\"y\"> 0..299 </var><var id=\"a\"> 0..299 </var>"
                         + "<var id=\"p\"> 1..300 </var><var id=\"q\"> 1..300 </var><var id=\"r\"> 1..300 </var>",
-                "<intension> ne(and(ne(x,y),eq(x,1)),or(mul(p,q,r),eq(a,1))) </intension>");
-        assertThat(instance.csp().getConstraints()).anyMatch(c -> c instanceof PredicateConstraint);
+                "<intension> ne(and(ne(x,y),eq(x,1)),or(mul(p,q,r),eq(a,1))) </intension>"))
+                .isInstanceOf(UnsupportedXcsp3ConstraintException.class)
+                .hasMessageContaining("6 variables");
+    }
+
+    @Test void intensionOverTwoVariables_noRecognizer_buildsBinaryPredicateConstraint() throws IOException {
+        // Haystacks' shape: 0 > (x-y)(y-x) is x != y, above the tabulation cap and unrecognized.
+        Xcsp3Instance instance = parseXml(
+                "<var id=\"x\"> 0..2999 </var><var id=\"y\"> 0..2999 </var>",
+                "<intension> gt(0,mul(sub(x,y),sub(y,x))) </intension>"
+                        + "<intension> eq(x,5) </intension><intension> le(y,5) </intension>");
+        assertThat(instance.csp().getConstraints()).anyMatch(c -> c instanceof BinaryPredicateConstraint<?, ?>);
+        Set<Assignment> found = solutions(instance.csp());
+        assertThat(found).hasSize(5).allMatch(a -> digitOf(a, "y") != 5);
     }
 
     @Test void intensionIffOneSideCompoundSum_aboveTabulationCap() throws IOException {
