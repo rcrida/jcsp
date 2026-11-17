@@ -20,6 +20,7 @@ import org.jspecify.annotations.NonNull;
 
 import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -191,6 +192,10 @@ public class CutsetConditioningSolver extends SolverDecorator {
      * @return if a tree is found then a decomposition containing the tree and remaining cycleCutset, otherwise empty
      */
     private Optional<Decomposition> decomposeCsp(@NonNull ConstraintSatisfactionProblem csp) {
+        if (!admitsCutsetWithinCap(csp)) {
+            log.debug("No cutset of {} variables fits within {} assignments, skipping decomposition", csp.getNumVariables(), MAX_CUTSET_ASSIGNMENTS);
+            return Optional.empty();
+        }
         val unsplittableVariables = csp.getUnsplittableVariables();
         val constraintCounts = computeConstraintCounts(csp);
         val decomposition = csp.getVariableDomains().keySet().stream()
@@ -278,6 +283,37 @@ public class CutsetConditioningSolver extends SolverDecorator {
      * "too big to ever be worth materializing" judgment call.
      */
     private static final double MAX_CUTSET_ASSIGNMENTS = 1_000_000;
+
+    /**
+     * Whether the constraint graph's edge count leaves room for any cutset within {@link
+     * #MAX_CUTSET_ASSIGNMENTS}, so that {@link #decomposeCsp} need not try every seed to find out.
+     * A seed's tree spans at most {@code t - 1} edges, since each variable joins it with at most one
+     * tree neighbour, so every other edge has an end in the cutset, and {@code c} cutset variables
+     * cover at most the {@code c} largest degrees. If no admissible {@code c} covers every edge, no
+     * seed can yield a decomposition the cap accepts.
+     */
+    static boolean admitsCutsetWithinCap(@NonNull ConstraintSatisfactionProblem csp) {
+        val variables = csp.getVariableDomains().keySet();
+        int n = variables.size();
+        int d = csp.getVariableDomains().values().stream().mapToInt(Domain::size).max().orElse(0);
+        int maxCutset = 0;
+        while (maxCutset < n && Math.pow(d, maxCutset + 1) <= MAX_CUTSET_ASSIGNMENTS) {
+            maxCutset++;
+        }
+        val neighbours = csp.getNeighbours();
+        int[] degrees = variables.stream()
+                .mapToInt(v -> (int) neighbours.getOrDefault(v, Set.of()).stream().filter(variables::contains).count())
+                .sorted()
+                .toArray();
+        long edges = Arrays.stream(degrees).asLongStream().sum() / 2;
+        long coverable = n - 1L;
+        long cutsetDegrees = 0;
+        for (int c = 1; c <= maxCutset; c++) {
+            cutsetDegrees += degrees[n - c];
+            coverable = Math.max(coverable, n - c - 1L + cutsetDegrees);
+        }
+        return edges <= coverable;
+    }
 
     /**
      * Is conditioning applied to this cycle cutset expected to decrease the overall problem complexity?

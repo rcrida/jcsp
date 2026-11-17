@@ -131,6 +131,42 @@ public class CutsetConditioningSolverTest {
         assertThat(cutsetConditioningSolver.getSolutions(csp)).containsExactly(assignment);
     }
 
+    private ConstraintSatisfactionProblem completeGraph(int size, Domain domain) {
+        List<Variable<Integer>> vars = new ArrayList<>();
+        for (int i = 0; i < size; i++) vars.add(testVariables.create("K" + i));
+        var builder = ConstraintSatisfactionProblem.builder();
+        for (Variable<Integer> v : vars) builder = builder.variableDomain(v, domain);
+        for (int i = 0; i < vars.size(); i++) {
+            for (int j = i + 1; j < vars.size(); j++) {
+                builder = builder.notEqualsConstraint(vars.get(i), vars.get(j));
+            }
+        }
+        return builder.build();
+    }
+
+    @Test
+    void admitsCutsetWithinCap_edgesCoverableByTheCutsetTheCapAllows_isTrue() {
+        // K10, 10 values: the cap allows 6 cutset variables, covering 3 tree edges + 6 * 9 >= 45.
+        assertThat(CutsetConditioningSolver.admitsCutsetWithinCap(completeGraph(10, IntRangeDomain.of(0, 9)))).isTrue();
+        // 9^5 assignments fit the cap, so the whole problem may be cutset.
+        assertThat(CutsetConditioningSolver.admitsCutsetWithinCap(CUTSET_CONDITIONING_PROBLEM)).isTrue();
+    }
+
+    @Test
+    void admitsCutsetWithinCap_moreEdgesThanTheCapAllowsACutsetToCover_isFalse() {
+        // K10, 100 values: the cap allows 3 cutset variables, covering 6 tree edges + 3 * 9 = 33 < 45.
+        assertThat(CutsetConditioningSolver.admitsCutsetWithinCap(completeGraph(10, IntRangeDomain.of(0, 99)))).isFalse();
+        assertThat(CutsetConditioningSolver.admitsCutsetWithinCap(EmptyTest.problem())).isFalse();
+    }
+
+    @Test
+    void getSolutions_noCutsetWithinCap_delegatesToInner() {
+        val csp = completeGraph(10, IntRangeDomain.of(0, 99));
+        val assignment = Assignment.empty();
+        when(cycleCutsetSolver.getSolutions(csp)).thenReturn(Stream.of(assignment));
+        assertThat(cutsetConditioningSolver.getSolutions(csp)).containsExactly(assignment);
+    }
+
     @Test
     void getSolutions_complexityImprovement() {
         val cutset = ConstraintSatisfactionProblem.builder()
