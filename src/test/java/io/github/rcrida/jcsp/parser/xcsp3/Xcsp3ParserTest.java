@@ -4910,6 +4910,33 @@ class Xcsp3ParserTest {
                 .noneMatch(c -> c instanceof ProductVariableConstraint<?>);
     }
 
+    // ---- relations between a variable and itself --------------------------------------------------
+
+    @Test void intensionSelfRelation_decidedForEveryValue() throws IOException {
+        // Each holds for every x in 0..9 or for none; a binary constraint cannot name x twice.
+        Map<String, Integer> expectedSolutions = Map.of(
+                "eq(x,x)", 10, "ne(x,x)", 0, "le(x,x)", 10,
+                "eq(x,add(x,0))", 10, "eq(x,add(x,1))", 0, "lt(x,add(x,1))", 10, "eq(add(x,2),x)", 0,
+                "eq(div(x,2),div(x,2))", 10);
+        expectedSolutions.forEach((expression, count) -> {
+            try {
+                Xcsp3Instance instance = parseXml("<var id=\"x\"> 0..9 </var>",
+                        "<intension> " + expression + " </intension>");
+                assertThat(instance.csp().getConstraints())
+                        .as(expression).anyMatch(c -> c instanceof UnaryPredicateConstraint<?>);
+                assertThat(solutions(instance.csp())).as(expression).hasSize(count);
+            } catch (IOException e) {
+                throw new AssertionError(e);
+            }
+        });
+    }
+
+    @Test void intensionOrWithSelfRelationLiteral_isDecided() throws IOException {
+        String vars = "<var id=\"x\"> 0..9 </var><var id=\"y\"> 0..9 </var>";
+        assertThat(solutions(parseXml(vars, "<intension> or(ne(x,x),ne(y,x)) </intension>").csp())).hasSize(90);
+        assertThat(solutions(parseXml(vars, "<intension> or(eq(x,x),ne(y,x)) </intension>").csp())).hasSize(100);
+    }
+
     @Test void intensionIffOneSideCompoundSum_aboveTabulationCap() throws IOException {
         Xcsp3Instance instance = parseXml(
                 "<var id=\"x\"> 0..49 </var><var id=\"y\"> 0..49 </var><var id=\"z\"> 0..49 </var>",

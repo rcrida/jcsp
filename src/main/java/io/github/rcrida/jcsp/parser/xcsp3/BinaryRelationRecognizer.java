@@ -2,10 +2,10 @@ package io.github.rcrida.jcsp.parser.xcsp3;
 
 import io.github.rcrida.jcsp.constraints.Constraint;
 import io.github.rcrida.jcsp.constraints.Operator;
-import io.github.rcrida.jcsp.constraints.Constraint;
 import io.github.rcrida.jcsp.constraints.binary.BinaryComparatorConstraint;
 import io.github.rcrida.jcsp.constraints.binary.BinaryNotEqualsConstraint;
 import io.github.rcrida.jcsp.constraints.binary.BinaryOffsetConstraint;
+import io.github.rcrida.jcsp.constraints.unary.UnaryPredicateConstraint;
 import io.github.rcrida.jcsp.variables.Variable;
 import org.jspecify.annotations.NonNull;
 import org.xcsp.common.predicates.XNode;
@@ -44,26 +44,45 @@ final class BinaryRelationRecognizer implements ConstraintRecognizer {
         Optional<Variable<Integer>> leftVar = handler.asVariable(left);
         Optional<Variable<Integer>> rightVar = handler.asVariable(right);
         if (leftVar.isPresent() && rightVar.isPresent()) {
-            return Optional.of(binaryRelation(leftVar.get(), operator, rightVar.get()));
+            return Optional.of(relation(leftVar.get(), operator, rightVar.get()));
         }
         // "var <op> var+k" rearranges to "var+k <flip(op)> var" to match BinaryOffsetConstraint's
         // fixed "left + offset <op> right" shape, which only ever applies the offset to the left side.
         if (leftVar.isPresent()) {
             Optional<Constraint> offset = handler.asVariablePlusConstant(right)
-                    .<Constraint>map(vk -> BinaryOffsetConstraint.of(
-                            vk.variable(), vk.offset(), Xcsp3CallbackHandler.flip(operator), leftVar.get()));
+                    .map(vk -> offsetRelation(vk.variable(), vk.offset(), Xcsp3CallbackHandler.flip(operator), leftVar.get()));
             if (offset.isPresent()) return offset;
         }
         if (rightVar.isPresent()) {
             Optional<Constraint> offset = handler.asVariablePlusConstant(left)
-                    .<Constraint>map(vk -> BinaryOffsetConstraint.of(vk.variable(), vk.offset(), operator, rightVar.get()));
+                    .map(vk -> offsetRelation(vk.variable(), vk.offset(), operator, rightVar.get()));
             if (offset.isPresent()) return offset;
         }
         if (Xcsp3CallbackHandler.asConstant(left).isPresent() || Xcsp3CallbackHandler.asConstant(right).isPresent()) {
             return Optional.empty();
         }
         return handler.resolveVariable(left).flatMap(l -> handler.resolveVariable(right)
-                .map(r -> binaryRelation(l, operator, r)));
+                .map(r -> relation(l, operator, r)));
+    }
+
+    private static Constraint relation(Variable<Integer> left, Operator operator, Variable<Integer> right) {
+        return left.equals(right) ? decided(left, operator.compare(0, 0)) : binaryRelation(left, operator, right);
+    }
+
+    private static Constraint offsetRelation(Variable<Integer> left, int offset, Operator operator, Variable<Integer> right) {
+        return left.equals(right)
+                ? decided(left, operator.compare(offset, 0))
+                : BinaryOffsetConstraint.of(left, offset, operator, right);
+    }
+
+    /**
+     * A relation between a variable and itself, such as {@code eq(x,add(x,0))}, holds for every
+     * value or for none. A binary constraint cannot name one variable twice, so it becomes a unary
+     * constraint that node consistency resolves before search: no-op when it holds, a wipeout when
+     * it does not.
+     */
+    private static Constraint decided(Variable<Integer> variable, boolean holds) {
+        return UnaryPredicateConstraint.of(variable, (Integer value) -> holds);
     }
 
     /**

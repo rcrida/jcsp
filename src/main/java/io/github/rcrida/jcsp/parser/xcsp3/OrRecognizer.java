@@ -145,7 +145,11 @@ final class OrRecognizer implements ConstraintRecognizer {
         if (leftVar.isPresent()) {
             Optional<Variable<Integer>> rightVar = handler.asVariable(node.sons[1]);
             if (rightVar.isPresent()) {
-                return Optional.of(new RelationLogicConstraint.VariableLiteral(leftVar.get(), operator, rightVar.get()));
+                // A literal comparing a variable with itself has no two-variable form; declining
+                // leaves the or to tabulation or to per-disjunct recognition, which decides it.
+                return leftVar.get().equals(rightVar.get())
+                        ? Optional.empty()
+                        : Optional.of(new RelationLogicConstraint.VariableLiteral(leftVar.get(), operator, rightVar.get()));
             }
             return Xcsp3CallbackHandler.asConstant(node.sons[1])
                     .map(constant -> new RelationLogicConstraint.ValueLiteral(leftVar.get(), operator, constant));
