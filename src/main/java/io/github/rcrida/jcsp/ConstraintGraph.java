@@ -41,7 +41,7 @@ class ConstraintGraph {
     boolean isCyclic;
     boolean isFullyConnected;
     /**
-     * A map containing each variable in the problem that has at least one neighbour, along with its neighbours.
+     * Each variable in the problem mapped to its neighbours; a variable with none maps to an empty set.
      */
     @EqualsAndHashCode.Exclude Map<Variable<?>, Set<Variable<?>>> neighbours;
     /**
