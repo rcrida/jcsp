@@ -165,7 +165,7 @@ public class DomWdegLubySearch implements Solver {
      * Builds this search's variable ordering, once per {@link #getSolutions}/{@link #getSolution}
      * call -- a factory rather than a selector because an {@link AdaptiveVariableSelector}
      * accumulates state about the search it is watching, so two calls must not share one. Defaults
-     * to {@link AdaptiveVariableSelector.Factory#INSTANCE}, dom/wdeg.
+     * to {@link AdaptiveVariableSelector.Factory#INSTANCE}, dom/wdeg with a cutset-first tier.
      */
     AdaptiveVariableSelector.@NonNull Factory selectorFactory;
 

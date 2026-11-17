@@ -37,8 +37,11 @@ public interface AdaptiveVariableSelector extends UnassignedVariableSelector {
     @FunctionalInterface
     interface Factory {
 
-        /** dom/wdeg, the satisfaction chain's default -- see {@link DomWdegVariableSelector}. */
-        Factory INSTANCE = DomWdegVariableSelector::new;
+        /** The default: dom/wdeg, branching on a small cycle cutset first -- see {@link CutsetFirstSelector}. */
+        Factory INSTANCE = CutsetFirstSelector::new;
+
+        /** dom/wdeg alone, with no cutset tier -- see {@link DomWdegVariableSelector}. */
+        Factory DOM_WDEG = DomWdegVariableSelector::new;
 
         AdaptiveVariableSelector createSelector(@NonNull Set<Constraint> constraints);
     }

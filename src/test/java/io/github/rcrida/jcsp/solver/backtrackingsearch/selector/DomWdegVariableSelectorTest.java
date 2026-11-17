@@ -11,6 +11,8 @@ import org.junit.jupiter.api.Test;
 
 import java.util.HashSet;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Random;
 import java.util.Set;
@@ -320,5 +322,42 @@ class DomWdegVariableSelectorTest {
         assertThatThrownBy(() -> selector.select(csp, assigned(v1)))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessage("No unassigned variable found");
+    }
+
+    @Test
+    void selectAmong_ranksOnlyTheCandidates() {
+        // v1: 1 / 1 = 1.0 would win outright; among {v2, v3}, v2: 4 / 2 = 2.0 beats v3: 3 / 1 = 3.0.
+        var csp = new Problem().variable(v1, 1).variable(v2, 4).variable(v3, 3).differ(v1, v2).differ(v2, v3).build();
+
+        assertThat(selectorFor(csp).selectAmong(csp, Assignment.empty(), Set.of(v2, v3))).contains(v2);
+    }
+
+    @Test
+    void selectAmong_isEmptyWhenNoCandidateIsOpen() {
+        var csp = new Problem().variable(v1, 2).variable(v2, 2).differ(v1, v2).build();
+        var selector = selectorFor(csp);
+        Variable<Integer> elsewhere = variableFactory.create("elsewhere");
+
+        assertThat(selector.selectAmong(csp, assigned(v1), Set.of(v1, elsewhere))).isEmpty();
+        assertThat(selector.selectAmong(csp, Assignment.empty(), Set.of())).isEmpty();
+    }
+
+    @Test
+    void selectAmong_skipsACandidateTheProblemDoesNotHold() {
+        var csp = new Problem().variable(v1, 2).variable(v2, 3).differ(v1, v2).build();
+        Variable<Integer> elsewhere = variableFactory.create("elsewhere");
+
+        assertThat(selectorFor(csp).selectAmong(csp, Assignment.empty(), new LinkedHashSet<>(List.of(elsewhere, v2))))
+                .contains(v2);
+    }
+
+    @Test
+    void selectAmong_honoursLastConflictOnlyForACandidate() {
+        var csp = new Problem().variable(v1, 1).variable(v2, 4).variable(v3, 3).differ(v1, v2).differ(v2, v3).build();
+        var selector = selectorFor(csp);
+        selector.onValueRejected(v3);
+
+        assertThat(selector.selectAmong(csp, Assignment.empty(), Set.of(v1, v2))).contains(v1);
+        assertThat(selector.selectAmong(csp, Assignment.empty(), Set.of(v2, v3))).contains(v3);
     }
 }

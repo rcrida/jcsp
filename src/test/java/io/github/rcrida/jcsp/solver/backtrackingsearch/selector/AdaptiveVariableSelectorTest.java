@@ -48,8 +48,14 @@ class AdaptiveVariableSelectorTest {
     }
 
     @Test
-    void factoryInstance_buildsDomWdeg() {
+    void factoryInstance_buildsCutsetFirst() {
         assertThat(AdaptiveVariableSelector.Factory.INSTANCE.createSelector(Set.of()))
+                .isInstanceOf(CutsetFirstSelector.class);
+    }
+
+    @Test
+    void factoryDomWdeg_buildsDomWdeg() {
+        assertThat(AdaptiveVariableSelector.Factory.DOM_WDEG.createSelector(Set.of()))
                 .isInstanceOf(DomWdegVariableSelector.class);
     }
 }

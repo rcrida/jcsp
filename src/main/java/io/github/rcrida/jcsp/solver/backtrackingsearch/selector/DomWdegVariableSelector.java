@@ -14,7 +14,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.List;
-import java.util.Map;
+import java.util.Optional;
 import java.util.Random;
 import java.util.Set;
 
@@ -207,36 +207,66 @@ public class DomWdegVariableSelector implements AdaptiveVariableSelector {
 
     @Override
     public Variable<?> select(@NonNull ConstraintSatisfactionProblem csp, @NonNull Assignment assignment) {
+        return best(csp, assignment, csp.getVariableDomains().keySet(), null)
+                .orElseThrow(() -> new IllegalStateException("No unassigned variable found"));
+    }
+
+    /**
+     * What {@link #select} would choose if {@code candidates} were the only variables, or empty when
+     * none of them is still unassigned in {@code csp}. Last-conflict applies only to a candidate, and
+     * ties are broken among candidates alone. Returns before ranking anything when every candidate is
+     * assigned, so asking about a small set that has run out costs a lookup per candidate.
+     */
+    public Optional<Variable<?>> selectAmong(@NonNull ConstraintSatisfactionProblem csp, @NonNull Assignment assignment,
+                                             @NonNull Set<Variable<?>> candidates) {
+        for (Variable<?> candidate : candidates) {
+            if (csp.getVariableDomains().containsKey(candidate) && !assignment.isAssigned(candidate)) {
+                return best(csp, assignment, candidates, candidates);
+            }
+        }
+        return Optional.empty();
+    }
+
+    /**
+     * The unassigned variable of {@code csp}, among {@code scan}, with the smallest dom/wdeg ratio --
+     * after the last-conflict variable, if it is unassigned and {@code eligible} (or {@code
+     * eligible} is {@code null}, accepting every variable).
+     */
+    private Optional<Variable<?>> best(ConstraintSatisfactionProblem csp, Assignment assignment,
+                                       Collection<? extends Variable<?>> scan, @Nullable Set<Variable<?>> eligible) {
         if (lastConflictVariable != null && csp.getVariableDomains().containsKey(lastConflictVariable)
-                && !assignment.isAssigned(lastConflictVariable)) {
-            return lastConflictVariable;
+                && !assignment.isAssigned(lastConflictVariable)
+                && (eligible == null || eligible.contains(lastConflictVariable))) {
+            return Optional.of(lastConflictVariable);
         }
         markAssigned(assignment);
         double bestRatio = Double.MAX_VALUE;
         List<Variable<?>> tied = new ArrayList<>();
-        for (Map.Entry<Variable<?>, Domain<?>> e : csp.getVariableDomains().entrySet()) {
-            int index = slotOf(e.getKey());
+        for (Variable<?> variable : scan) {
+            Domain<?> domain = csp.getVariableDomains().get(variable);
+            if (domain == null) continue;
+            int index = slotOf(variable);
             double ratio;
             if (index < 0) {
                 // In no structural constraint, so nothing to weigh it by -- but still has to be unassigned.
-                if (assignment.isAssigned(e.getKey())) continue;
+                if (assignment.isAssigned(variable)) continue;
                 ratio = Double.MAX_VALUE;
             } else {
                 if (assigned[index]) continue;
-                ratio = ratio(index, e.getValue().size());
+                ratio = ratio(index, domain.size());
             }
             if (ratio < bestRatio) {
                 bestRatio = ratio;
                 tied.clear();
-                tied.add(e.getKey());
+                tied.add(variable);
             } else if (ratio == bestRatio) {
-                tied.add(e.getKey());
+                tied.add(variable);
             }
         }
-        if (tied.isEmpty()) throw new IllegalStateException("No unassigned variable found");
-        return tieBreakRandom == null || tied.size() == 1
+        if (tied.isEmpty()) return Optional.empty();
+        return Optional.of(tieBreakRandom == null || tied.size() == 1
                 ? tied.get(0)
-                : tied.get(tieBreakRandom.nextInt(tied.size()));
+                : tied.get(tieBreakRandom.nextInt(tied.size())));
     }
 
     /**

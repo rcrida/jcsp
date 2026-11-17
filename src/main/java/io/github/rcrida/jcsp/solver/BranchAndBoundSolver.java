@@ -147,8 +147,8 @@ public class BranchAndBoundSolver implements Solver {
     /**
      * Built once per {@link #getSolutions} call, as {@link DomWdegLubySearch} does and for the same
      * reason: an {@link AdaptiveVariableSelector} accumulates state about the search it is watching,
-     * so two solves from one solver must not share one. Defaults to dom/wdeg via {@link
-     * AdaptiveVariableSelector.Factory#INSTANCE}, and {@link SolverConfig#getVariableSelectorFactory}
+     * so two solves from one solver must not share one. Defaults to dom/wdeg with a cutset-first tier
+     * via {@link AdaptiveVariableSelector.Factory#INSTANCE}, and {@link SolverConfig#getVariableSelectorFactory}
      * reaches here -- until this field existed it reached only the satisfaction chain, so setting it
      * and then calling {@link Solver.Factory#createSolver(ConstraintSatisfactionProblem, ToDoubleFunction)}
      * silently had no effect (ADR-0038).
@@ -618,7 +618,7 @@ public class BranchAndBoundSolver implements Solver {
      * <p>
      * Substituting rather than requiring the selector to prefer discrete variables, because the
      * default selector does not: dom/wdeg ({@link AdaptiveVariableSelector.Factory#INSTANCE}, what
-     * {@link Solver.Factory} wires in per ADR-0038) ranks on {@code domainSize / weight}, and a
+     * {@link Solver.Factory} wires in per ADR-0038, cutset tier or not) ranks on {@code domainSize / weight}, and a
      * discrete variable whose weight is still zero scores {@link Double#MAX_VALUE} -- worse than any
      * non-singleton {@link BoundedDomain}, whose {@code size()} caps the ratio at {@link
      * Integer#MAX_VALUE}. Late in a descent, where the remaining discrete variables often share no

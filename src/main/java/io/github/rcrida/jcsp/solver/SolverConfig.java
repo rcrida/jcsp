@@ -131,7 +131,8 @@ public class SolverConfig {
 
     /**
      * How {@link DomWdegLubySearch} orders the variables it branches on. Defaults to
-     * {@link AdaptiveVariableSelector.Factory#INSTANCE}, dom/wdeg with last-conflict; supply
+     * {@link AdaptiveVariableSelector.Factory#INSTANCE}, dom/wdeg with last-conflict that branches on
+     * a small cycle cutset first; {@link AdaptiveVariableSelector.Factory#DOM_WDEG} is dom/wdeg alone. Supply
      * another to search the same problem in a different order. A factory rather than a selector
      * because each solve needs its own -- see {@link AdaptiveVariableSelector.Factory}.
      * <p>
