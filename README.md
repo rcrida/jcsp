@@ -195,6 +195,13 @@ not fit simply parses the way it always did. Candidate tuples are tested with th
 evaluator the general fallback uses, so tabulation changes how a constraint propagates and never
 what it means. See [ADR-0034](docs/adr/0034-tabulating-small-scope-intension-constraints.md).
 
+An intension that no recognizer matches and that is too large to tabulate falls back by the number
+of variables it names: one becomes a `UnaryPredicateConstraint`, which node consistency filters
+completely, and two a `BinaryPredicateConstraint`, which arc consistency revises. Three or more
+fail parsing with `UnsupportedXcsp3ConstraintException`, since a predicate over them could be
+checked only once every variable is assigned. See
+[ADR-0067](docs/adr/0067-unrecognized-wide-intensions-fail-parsing.md).
+
 ### Solver configuration
 
 `createSolver` takes an optional `SolverConfig` — a builder with defaults, so new knobs don't mean new overloads. `SolverConfig.builder().build()` reproduces the library's unconfigured defaults: unlimited search, standard nogood learning, and randomized restart tie-breaking seeded fresh per config (see **Restart randomization** below — this is the one knob here that doesn't default to "off"):
@@ -517,7 +524,7 @@ InitialAssignmentFactory factory = FallbackAssignmentFactory.builder()
 <dependency>
     <groupId>io.github.rcrida</groupId>
     <artifactId>jcsp</artifactId>
-    <version>4.2.0</version>
+    <version>4.3.0</version>
 </dependency>
 ```
 
@@ -528,6 +535,8 @@ jcsp pulls in [ojAlgo](https://www.ojalgo.org/) (MIT-licensed) as a transitive c
 One source-incompatible change, reachable only by naming the domain type rather than calling its factory, which is why this is a minor release rather than a major one:
 
 - **`IntRangeDomain` is now just the factory.** `IntRangeDomain.of(min, max)` returns a `NumericSetDomain<Integer>` whose values are the range: it iterates as an array, tests membership by its bounds, narrows by slicing without copying, and prints as `[min..max]`. Passing it straight to `createVariable`, or holding it as a `Domain<Integer>`, `NumericDomain<Integer>` or `DiscreteDomain<Integer>`, compiles unchanged. Declaring a variable or field as `IntRangeDomain`, calling `new IntRangeDomain(...)`, or testing `instanceof IntRangeDomain` no longer compiles: use `NumericSetDomain<Integer>` or one of its interfaces. Code compiled against 4.2 must be recompiled, since the factory's return type changed.
+
+One behaviour change worth noting even though it compiles: an XCSP3 `<intension>` over three or more variables that no recognizer matches and that is too large to tabulate now fails parsing with `UnsupportedXcsp3ConstraintException`, naming the constraint and its expression. It used to become a `PredicateConstraint` checked only once every variable was assigned, which prunes nothing, so such an instance parsed but rarely solved. See [ADR-0067](docs/adr/0067-unrecognized-wide-intensions-fail-parsing.md).
 
 ### Upgrading from 3.x
 
