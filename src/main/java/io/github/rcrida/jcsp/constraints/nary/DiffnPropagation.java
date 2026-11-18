@@ -3,10 +3,7 @@ package io.github.rcrida.jcsp.constraints.nary;
 import io.github.rcrida.jcsp.consistency.DomainOverlay;
 import io.github.rcrida.jcsp.consistency.Propagatable;
 import io.github.rcrida.jcsp.constraints.NumericBounds;
-import io.github.rcrida.jcsp.domains.BoundedDomain;
 import io.github.rcrida.jcsp.domains.Domain;
-import io.github.rcrida.jcsp.domains.IntRangeDomain;
-import io.github.rcrida.jcsp.domains.IntervalDomain;
 import io.github.rcrida.jcsp.variables.Variable;
 import lombok.extern.slf4j.Slf4j;
 import org.jspecify.annotations.Nullable;
@@ -173,18 +170,18 @@ final class DiffnPropagation {
         return NumericBounds.max((Domain<Number>) updated.getOrDefault(var, domains.get(var)));
     }
 
+    /**
+     * Narrows {@code var}'s current domain to {@code [newMin, newMax]}, keeping only the values it
+     * already has. Never empties it: {@link #separateOnOverlap} only ever lowers a maximum to at
+     * least the current minimum, or raises a minimum to at most the current maximum.
+     */
     @SuppressWarnings("unchecked")
     static void applyBound(Variable<?> var, double newMin, double newMax,
             Map<Variable<?>, Domain<?>> domains, Map<Variable<?>, Domain<?>> updated) {
-        Domain<?> current = updated.getOrDefault(var, domains.get(var));
-        double curMin = NumericBounds.min((Domain<Number>) current);
-        double curMax = NumericBounds.max((Domain<Number>) current);
-        double lo = Math.max(curMin, newMin);
-        double hi = Math.min(curMax, newMax);
-        if (lo == curMin && hi == curMax) return; // no tightening
-        log.debug("diffn tightening {} from [{}, {}] to [{}, {}]", var, curMin, curMax, lo, hi);
-        updated.put(var, current instanceof BoundedDomain<?>
-                ? IntervalDomain.of(lo, hi)
-                : IntRangeDomain.of((int) lo, (int) hi));
+        Domain<Number> current = (Domain<Number>) updated.getOrDefault(var, domains.get(var));
+        NumericBounds.narrow(current, newMin, newMax).ifPresent(narrowed -> {
+            log.debug("diffn tightening {} from {} to {}", var, current, narrowed);
+            updated.put(var, narrowed);
+        });
     }
 }

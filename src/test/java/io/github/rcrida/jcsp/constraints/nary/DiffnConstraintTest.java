@@ -5,6 +5,7 @@ import io.github.rcrida.jcsp.assignments.Assignment;
 import io.github.rcrida.jcsp.domains.Domain;
 import io.github.rcrida.jcsp.domains.IntervalDomain;
 import io.github.rcrida.jcsp.domains.IntRangeDomain;
+import io.github.rcrida.jcsp.domains.NumericDiscreteDomain;
 import io.github.rcrida.jcsp.solver.Solver;
 import io.github.rcrida.jcsp.variables.Variable;
 import org.junit.jupiter.api.Test;
@@ -176,6 +177,35 @@ public class DiffnConstraintTest {
         assertThat(result).isPresent();
         assertThat(result.get().get(y0)).isEqualTo(IntRangeDomain.of(0, 2));
         assertThat(result.get()).doesNotContainKey(y1);
+    }
+
+    @Test
+    void propagate_domainWithHoles_narrowsWithoutRestoringDeletedValues() {
+        Variable<Integer> x0 = F.create("px0h"), y0 = F.create("py0h");
+        Variable<Integer> x1 = F.create("px1h"), y1 = F.create("py1h");
+        var c = xOverlapConstraint(x0, y0, x1, y1, 2.0, 2.0);
+        // y0={0,3}, y1=[4,4]: only A, so y0 <= 2. Rebuilding y0 as the range 0..2 would bring back 1
+        // and 2, which are not in its domain.
+        var d = domains(
+                x0, IntRangeDomain.of(0, 0), x1, IntRangeDomain.of(2, 2),
+                y0, NumericDiscreteDomain.of(0, 3), y1, IntRangeDomain.of(4, 4));
+        var result = c.propagate(d);
+        assertThat(result).isPresent();
+        assertThat(result.get().get(y0)).isEqualTo(NumericDiscreteDomain.of(0));
+    }
+
+    @Test
+    void propagate_nonIntegerDiscreteDomain_keepsItsValues() {
+        Variable<Integer> x0 = F.create("px0r"), x1 = F.create("px1r");
+        Variable<Double> y0 = F.create("py0r"), y1 = F.create("py1r");
+        var c = DiffnConstraint.of(List.of(x0, x1), List.of(y0, y1), List.of(4.0, 4.0), List.of(2.0, 2.0));
+        // Only A again, so y0 <= 2.5: its own values below that, not the integers 0..2.
+        var d = domains(
+                x0, IntRangeDomain.of(0, 0), x1, IntRangeDomain.of(2, 2),
+                y0, NumericDiscreteDomain.of(0.0, 0.5, 3.0), y1, NumericDiscreteDomain.of(4.5));
+        var result = c.propagate(d);
+        assertThat(result).isPresent();
+        assertThat(result.get().get(y0)).isEqualTo(NumericDiscreteDomain.of(0.0, 0.5));
     }
 
     @Test
