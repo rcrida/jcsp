@@ -2,6 +2,7 @@ package io.github.rcrida.jcsp.solver.backtrackingsearch.selector;
 
 import io.github.rcrida.jcsp.ConstraintSatisfactionProblem;
 import io.github.rcrida.jcsp.constraints.Constraint;
+import io.github.rcrida.jcsp.constraints.nary.AllDiffConstraint;
 import io.github.rcrida.jcsp.constraints.nary.GroundNogoodConstraint;
 import io.github.rcrida.jcsp.domains.IntRangeDomain;
 import io.github.rcrida.jcsp.variables.Variable;
@@ -106,13 +107,12 @@ class FeedbackVertexSetTest {
 
     @Test
     void aGraphOverTheAdjacencyBudgetIsRefusedUnbuilt() {
+        // The constraint alone, not a problem: building one would decompose it into millions of
+        // pairwise constraints, which is what the budget exists to avoid.
         int width = (int) Math.sqrt(FeedbackVertexSet.MAX_ADJACENCY) + 2;
-        List<Variable<Integer>> v = create("b", width);
-        var builder = ConstraintSatisfactionProblem.builder();
-        for (Variable<Integer> x : v) builder.variableDomain(x, IntRangeDomain.of(1, width));
-        builder.allDiffConstraint(new HashSet<>(v));
+        Constraint allDiff = AllDiffConstraint.<Integer>builder().variables(new HashSet<>(create("b", width))).build();
 
-        assertThat(FeedbackVertexSet.within(new HashSet<>(builder.build().getConstraints()), width)).isEmpty();
+        assertThat(FeedbackVertexSet.within(Set.of(allDiff), width)).isEmpty();
     }
 
     @Test
