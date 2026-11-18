@@ -14,7 +14,7 @@ import java.util.Optional;
  * Shared bounds extraction and narrowing for {@code double}-based propagation. Dispatches through
  * {@link NumericDomain} where available — implemented by both {@link
  * io.github.rcrida.jcsp.domains.BoundedDomain} (e.g. {@link io.github.rcrida.jcsp.domains.IntervalDomain})
- * and {@link io.github.rcrida.jcsp.domains.IntRangeDomain} — falling back to a plain enumerable
+ * and {@link io.github.rcrida.jcsp.domains.NumericSetDomain} — falling back to a plain enumerable
  * {@link DiscreteDomain} scan for domain kinds that don't implement it (e.g. {@link
  * io.github.rcrida.jcsp.domains.ObjectSetDomain}).
  */

@@ -523,6 +523,12 @@ InitialAssignmentFactory factory = FallbackAssignmentFactory.builder()
 
 jcsp pulls in [ojAlgo](https://www.ojalgo.org/) (MIT-licensed) as a transitive compile-scope dependency, used for the LP relaxation behind `LinearObjective`-driven optimization (see above), and [xcsp3-tools](https://github.com/xcsp3team/XCSP3-Java-Tools) (MIT-licensed) as a transitive compile-scope dependency, used for `Xcsp3Parser` (see above).
 
+### Upgrading from 4.2
+
+One source-incompatible change, reachable only by naming the domain type rather than calling its factory, which is why this is a minor release rather than a major one:
+
+- **`IntRangeDomain` is now just the factory.** `IntRangeDomain.of(min, max)` returns a `NumericSetDomain<Integer>` whose values are the range: it iterates as an array, tests membership by its bounds, narrows by slicing without copying, and prints as `[min..max]`. Passing it straight to `createVariable`, or holding it as a `Domain<Integer>`, `NumericDomain<Integer>` or `DiscreteDomain<Integer>`, compiles unchanged. Declaring a variable or field as `IntRangeDomain`, calling `new IntRangeDomain(...)`, or testing `instanceof IntRangeDomain` no longer compiles: use `NumericSetDomain<Integer>` or one of its interfaces. Code compiled against 4.2 must be recompiled, since the factory's return type changed.
+
 ### Upgrading from 3.x
 
 Variables are now issued by the problem they belong to, and the deprecated search-space statistic is gone.

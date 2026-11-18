@@ -17,7 +17,7 @@ public class IntRangeDomainTest {
 
     @Test
     void contains() {
-        IntRangeDomain domain = IntRangeDomain.of(5, 10);
+        NumericSetDomain<Integer> domain = IntRangeDomain.of(5, 10);
         assertThat(domain.contains(5)).isTrue();
         assertThat(domain.contains(10)).isTrue();
         assertThat(domain.contains(4)).isFalse();
@@ -26,26 +26,26 @@ public class IntRangeDomainTest {
 
     @Test
     void containsNull() {
-        IntRangeDomain domain = IntRangeDomain.of(5, 10);
+        NumericSetDomain<Integer> domain = IntRangeDomain.of(5, 10);
         assertThat(domain.contains(null)).isFalse();
     }
 
     @Test
     void containsInvalid() {
-        IntRangeDomain domain = IntRangeDomain.of(5, 10);
+        NumericSetDomain<Integer> domain = IntRangeDomain.of(5, 10);
         assertThat(domain.contains(5.5)).isFalse();
         assertThat(domain.contains("5")).isFalse();
     }
 
     @Test
     void stream() {
-        IntRangeDomain domain = IntRangeDomain.of(5, 10);
+        NumericSetDomain<Integer> domain = IntRangeDomain.of(5, 10);
         assertThat(domain.stream()).containsOnly(5, 6, 7, 8, 9, 10);
     }
 
     @Test
     void getMinAndMax_of() {
-        IntRangeDomain domain = IntRangeDomain.of(5, 10);
+        NumericSetDomain<Integer> domain = IntRangeDomain.of(5, 10);
         assertThat(domain.getMin()).isEqualTo(5);
         assertThat(domain.getMax()).isEqualTo(10);
     }
@@ -63,7 +63,7 @@ public class IntRangeDomainTest {
      */
     @Test
     void equals_singletonRange_matchesNumericSingletonDomain_bothDirections() {
-        IntRangeDomain range = IntRangeDomain.of(5, 5);
+        NumericSetDomain<Integer> range = IntRangeDomain.of(5, 5);
         NumericSingletonDomain<Integer> singleton = new NumericSingletonDomain<>(5);
 
         assertThat(range.equals(singleton)).isTrue();
@@ -71,29 +71,13 @@ public class IntRangeDomainTest {
     }
 
     @Test
-    void constructor_mismatchedMin_throwsAssertionError() {
-        // of() can never produce this (it always passes its own minInclusive/maxInclusive
-        // straight through), but the canonical constructor is necessarily public -- a record's
-        // canonical constructor can't be more restrictive than the record itself -- so the
-        // min/max-matches-values invariant is enforced by assertion instead of access control.
-        assertThatThrownBy(() -> new IntRangeDomain(Set.of(1, 2, 3), 100, 200))
-                .isInstanceOf(AssertionError.class);
-    }
+    void of_isANumericSetDomainOverARange() {
+        NumericSetDomain<Integer> domain = IntRangeDomain.of(5, 10);
 
-    @Test
-    void constructor_mismatchedMax_throwsAssertionError() {
-        // Distinct from the mismatched-min case above: min==1 matches, so the short-circuiting
-        // && only reaches (and fails) the max comparison here, not the min one.
-        assertThatThrownBy(() -> new IntRangeDomain(Set.of(1, 2, 3), 1, 200))
-                .isInstanceOf(AssertionError.class);
-    }
-
-    @Test
-    void constructor_emptyValues_skipsMinMaxCheck() {
-        // Collections.min/max would throw NoSuchElementException on an empty collection; the
-        // assert's isEmpty() short-circuit avoids ever evaluating them in that case.
-        var domain = new IntRangeDomain(Set.of(), 0, 0);
-        assertThat(domain.isEmpty()).isTrue();
+        assertThat(((OrderedValueSet<?>) domain.values()).isRange()).isTrue();
+        assertThat(domain.toList()).containsExactly(5, 6, 7, 8, 9, 10);
+        assertThat(domain).isEqualTo(NumericDiscreteDomain.of(10, 9, 8, 7, 6, 5));
+        assertThat(domain.hashCode()).isEqualTo(NumericDiscreteDomain.of(10, 9, 8, 7, 6, 5).hashCode());
     }
 
     // ── Narrowing stays numeric ───────────────────────────────────────────────
@@ -131,7 +115,7 @@ public class IntRangeDomainTest {
 
     @Test
     void withBounds_narrowedRange_isASliceOverTheSameValues() {
-        IntRangeDomain wide = IntRangeDomain.of(-10_000, 10_000);
+        NumericSetDomain<Integer> wide = IntRangeDomain.of(-10_000, 10_000);
         NumericDomain<Integer> narrowed = wide.withBounds(-5, 5);
 
         // A NumericSetDomain, as every other narrowing produces, whose values are a range slice.
@@ -164,28 +148,6 @@ public class IntRangeDomainTest {
 
         assertThat(narrower).isEqualTo(IntRangeDomain.of(20, 29));
         assertThat(((OrderedValueSet<?>) ((NumericSetDomain<Integer>) narrower).values()).isRange()).isTrue();
-    }
-
-    @Test
-    void withBounds_rangeBuiltFromAnArbitrarySet_filtersAsAnyDomainDoes() {
-        IntRangeDomain fromSet = new IntRangeDomain(Set.of(3, 1, 2), 1, 3);
-
-        assertThat(fromSet.withBounds(2, 3)).isEqualTo(NumericDiscreteDomain.of(2, 3));
-    }
-
-    @Test
-    void constructor_keepsARangeWithTheseBoundsAsItIs() {
-        OrderedValueSet<Integer> slice = OrderedValueSet.range(0, 9).slice(2, 5);
-
-        assertThat(new IntRangeDomain(slice, 2, 5).values()).isSameAs(slice);
-        assertThat(new IntRangeDomain(OrderedValueSet.handingOver(new java.util.LinkedHashSet<>(Set.of(1, 2))), 1, 2))
-                .isEqualTo(IntRangeDomain.of(1, 2));
-    }
-
-    @Test
-    void constructor_rangeWithOtherBounds_isCheckedAsAnyOtherSet() {
-        assertThatThrownBy(() -> new IntRangeDomain(OrderedValueSet.range(1, 3), 0, 3)).isInstanceOf(AssertionError.class);
-        assertThatThrownBy(() -> new IntRangeDomain(OrderedValueSet.range(1, 3), 1, 4)).isInstanceOf(AssertionError.class);
     }
 
     @Test

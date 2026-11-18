@@ -14,7 +14,7 @@ import java.util.Set;
  * DiscreteDomain.DiscreteDomainBuilder}'s own fallback to {@link ObjectSetDomain} for the same
  * reason.
  * <p>
- * Caches its bounds as extra record components exactly as {@link IntRangeDomain} does, so {@link
+ * Caches its bounds as extra record components, so {@link
  * #getMin}/{@link #getMax} are a field read rather than a scan of every value — the O(1) bounds
  * fast path that {@link io.github.rcrida.jcsp.constraints.NumericBounds#min}/{@link
  * io.github.rcrida.jcsp.constraints.NumericBounds#max} already dispatch to for every other {@link

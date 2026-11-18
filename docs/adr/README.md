@@ -130,3 +130,4 @@ section instead.
 | [0066](0066-branch-on-a-small-cycle-cutset-first.md) | Branch on a small cycle cutset first | Accepted |
 | [0067](0067-unrecognized-wide-intensions-fail-parsing.md) | An unrecognized intension over three or more variables fails parsing | Accepted |
 | [0068](0068-a-range-narrowed-by-its-bounds-shares-its-parents-array.md) | A range narrowed by its bounds shares its parent's array | Accepted |
+| [0069](0069-intrangedomain-is-only-a-factory.md) | `IntRangeDomain` is only a factory | Accepted |

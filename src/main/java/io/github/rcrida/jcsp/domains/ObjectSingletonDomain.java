@@ -29,8 +29,8 @@ import java.util.stream.Stream;
  * DiscreteDomain.DiscreteDomainBuilder#build} construct one directly with no cast needed.
  * <p>
  * {@link #equals}/{@link #hashCode} still compare equal to any {@link DiscreteDomain} (not just
- * another {@link ObjectSingletonDomain}) holding the same single value -- e.g. a singleton {@link
- * IntRangeDomain} and an {@link ObjectSingletonDomain} holding the same value are equal in both directions
+ * another {@link ObjectSingletonDomain}) holding the same single value -- e.g. a one-value {@link
+ * NumericSetDomain} and an {@link ObjectSingletonDomain} holding the same value are equal in both directions
  * -- via {@link DiscreteSetDomain#domainEquals}, which checks {@code instanceof DiscreteDomain} rather than
  * {@code instanceof DiscreteSetDomain} specifically so this class (one of the {@link DiscreteDomain}
  * implementors that isn't a {@link DiscreteSetDomain}) doesn't break that symmetry.

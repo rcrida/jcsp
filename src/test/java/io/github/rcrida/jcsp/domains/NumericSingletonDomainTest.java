@@ -114,7 +114,7 @@ class NumericSingletonDomainTest {
     @Test
     void equals_intRangeDomain_bothDirections() {
         NumericSingletonDomain<Integer> numeric = new NumericSingletonDomain<>(5);
-        IntRangeDomain range = IntRangeDomain.of(5, 5);
+        NumericSetDomain<Integer> range = IntRangeDomain.of(5, 5);
 
         assertThat(numeric.equals(range)).isTrue();
         assertThat(range.equals(numeric)).isTrue();

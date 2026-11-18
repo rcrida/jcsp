@@ -15,7 +15,7 @@ import java.util.Set;
 /**
  * A domain that is both {@link NumericDomain} and {@link DiscreteDomain} -- the capability shared
  * by every enumerable numeric domain in this library ({@link NumericSetDomain}, {@link
- * NumericSingletonDomain}, {@link IntRangeDomain}), as distinct from a continuous {@link
+ * NumericSingletonDomain}), as distinct from a continuous {@link
  * BoundedDomain}, which is {@link NumericDomain} but not enumerable. Exists so code that needs both
  * capabilities together -- most directly, {@link #of}'s own return type -- has a real name for that
  * combination instead of falling back to a Java intersection type or picking just one interface and

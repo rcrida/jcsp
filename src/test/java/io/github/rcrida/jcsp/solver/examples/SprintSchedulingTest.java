@@ -4,6 +4,7 @@ import io.github.rcrida.jcsp.solver.Solver;
 import lombok.val;
 import io.github.rcrida.jcsp.ConstraintSatisfactionProblem;
 import io.github.rcrida.jcsp.domains.IntRangeDomain;
+import io.github.rcrida.jcsp.domains.NumericSetDomain;
 import io.github.rcrida.jcsp.variables.Variable;
 import org.junit.jupiter.api.Test;
 
@@ -36,7 +37,7 @@ public class SprintSchedulingTest {
     static final Variable<Integer> DEV2   = F.create("dev2");
     static final Variable<Integer> REVIEW = F.create("review");
 
-    static final IntRangeDomain HORIZON = IntRangeDomain.of(0, 2);
+    static final NumericSetDomain<Integer> HORIZON = IntRangeDomain.of(0, 2);
 
     static ConstraintSatisfactionProblem problem() {
         return ConstraintSatisfactionProblem.builder()

@@ -8,6 +8,7 @@ import io.github.rcrida.jcsp.assignments.Assignment;
 import io.github.rcrida.jcsp.constraints.Operator;
 import io.github.rcrida.jcsp.constraints.nary.DisjunctiveConstraint;
 import io.github.rcrida.jcsp.domains.IntRangeDomain;
+import io.github.rcrida.jcsp.domains.NumericSetDomain;
 import io.github.rcrida.jcsp.variables.Variable;
 import org.junit.jupiter.api.Test;
 
@@ -50,7 +51,7 @@ public class Prob061JobShopSchedulingTest {
     static final int DUR_21 = 2; // job2, machine B
     static final int DUR_22 = 4; // job2, machine A
 
-    static final IntRangeDomain HORIZON = IntRangeDomain.of(0, 7);
+    static final NumericSetDomain<Integer> HORIZON = IntRangeDomain.of(0, 7);
 
     static final Variable<Integer> START_11 = F.create("start11");
     static final Variable<Integer> START_12 = F.create("start12");

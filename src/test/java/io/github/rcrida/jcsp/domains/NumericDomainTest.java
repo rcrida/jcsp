@@ -64,7 +64,7 @@ class NumericDomainTest {
         // DiscreteSetDomain.domainEquals' own self == o fast path -- rather than by rebuilding the
         // domain and comparing value sets, and the domain keeps its own type rather than being
         // collapsed into whatever NumericDiscreteDomainBuilder would have produced.
-        IntRangeDomain domain = IntRangeDomain.of(1, 5);
+        NumericSetDomain<Integer> domain = IntRangeDomain.of(1, 5);
 
         assertThat(domain.withBounds(0, 10)).isSameAs(domain);
     }

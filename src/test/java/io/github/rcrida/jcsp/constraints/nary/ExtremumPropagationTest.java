@@ -5,6 +5,7 @@ import io.github.rcrida.jcsp.constraints.Operator;
 import io.github.rcrida.jcsp.domains.DiscreteDomain;
 import io.github.rcrida.jcsp.domains.Domain;
 import io.github.rcrida.jcsp.domains.IntRangeDomain;
+import io.github.rcrida.jcsp.domains.NumericSetDomain;
 import io.github.rcrida.jcsp.variables.Variable;
 import org.junit.jupiter.api.Test;
 
@@ -94,7 +95,7 @@ class ExtremumPropagationTest {
         }
     }
 
-    private static IntRangeDomain randomRange(Random random) {
+    private static NumericSetDomain<Integer> randomRange(Random random) {
         int lo = random.nextInt(7) - 3;
         return IntRangeDomain.of(lo, lo + random.nextInt(5));
     }

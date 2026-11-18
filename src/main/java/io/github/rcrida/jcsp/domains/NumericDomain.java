@@ -2,7 +2,7 @@ package io.github.rcrida.jcsp.domains;
 
 /**
  * A {@link Domain} of {@link Number} values that exposes its bounds and can be narrowed to a
- * sub-range, regardless of whether the domain is enumerable ({@link IntRangeDomain}) or continuous
+ * sub-range, regardless of whether the domain is enumerable ({@link NumericSetDomain}) or continuous
  * ({@link BoundedDomain}) — the shared contract {@link io.github.rcrida.jcsp.constraints.NumericBounds}
  * dispatches through instead of separate handling for each domain kind.
  * <p>
@@ -36,10 +36,8 @@ public interface NumericDomain<N extends Number> extends Domain<N> {
      * io.github.rcrida.jcsp.constraints.NumericBounds#narrow} recognise the no-op by reference
      * rather than by an equally sized {@code equals} against a domain it just rebuilt.
      * <p>
-     * Returning {@code this} also keeps the domain's own type, where filtering hands back whatever
-     * {@link NumericDiscreteDomain.NumericDiscreteDomainBuilder} collapses to: an {@link
-     * IntRangeDomain} that survives a covering narrowing intact stays an {@link IntRangeDomain}
-     * rather than degrading to a {@link NumericSetDomain}.
+     * Returning {@code this} also keeps the domain's own type and values, where filtering hands
+     * back whatever {@link NumericDiscreteDomain.NumericDiscreteDomainBuilder} collapses to.
      * <p>
      * A domain holding a range of integers is narrowed by slicing that range's array rather than
      * copying it, so a wide range narrowed a little costs one small object. The result is a {@link

@@ -57,6 +57,7 @@ import io.github.rcrida.jcsp.domains.BooleanDomain;
 import io.github.rcrida.jcsp.domains.DiscreteDomain;
 import io.github.rcrida.jcsp.domains.Domain;
 import io.github.rcrida.jcsp.domains.IntRangeDomain;
+import io.github.rcrida.jcsp.domains.NumericSetDomain;
 import io.github.rcrida.jcsp.domains.NumericDiscreteDomain;
 import io.github.rcrida.jcsp.solver.BranchAndBoundSolver;
 import io.github.rcrida.jcsp.solver.LinearObjective;
@@ -122,8 +123,8 @@ final class Xcsp3CallbackHandler implements XCallbacks2 {
 
     /**
      * Upper bound on a single {@code buildVarInteger(x, min, max)} domain's value count.
-     * {@link IntRangeDomain#of} eagerly materializes every value in the range into a {@code
-     * LinkedHashSet} (it isn't a lazy/interval-backed domain), so an unbounded XCSP3 range (legal
+     * {@link IntRangeDomain#of} eagerly boxes every value in the range into an array (it isn't a
+     * lazy/interval-backed domain), so an unbounded XCSP3 range (legal
      * syntax, e.g. {@code 0..1000000}) would otherwise risk severe slowdown or {@link
      * OutOfMemoryError} purely from parsing, before the solver chain ever runs.
      */
@@ -133,11 +134,11 @@ final class Xcsp3CallbackHandler implements XCallbacks2 {
     private record Range(int min, int max) {}
 
     /**
-     * One {@link IntRangeDomain} per declared range, shared by every variable declared over it: a
+     * One {@link IntRangeDomain#of} domain per declared range, shared by every variable declared over it: a
      * domain is immutable, and an array of thousands of variables over one wide range otherwise
      * materializes that range once per variable.
      */
-    private final Map<Range, IntRangeDomain> rangeDomains = new HashMap<>();
+    private final Map<Range, NumericSetDomain<Integer>> rangeDomains = new HashMap<>();
 
     private final XCallbacks.Implem implem = new XCallbacks.Implem(this);
     private final ConstraintSatisfactionProblemBuilder builder = ConstraintSatisfactionProblem.builder();
@@ -461,7 +462,7 @@ final class Xcsp3CallbackHandler implements XCallbacks2 {
             throw new UnsupportedXcsp3ConstraintException(
                     "Domain too large to materialize (" + domainSize + " values, max " + MAX_MATERIALIZED_DOMAIN_SIZE + "): " + x.id());
         }
-        IntRangeDomain domain = rangeDomains.computeIfAbsent(new Range(minValue, maxValue),
+        NumericSetDomain<Integer> domain = rangeDomains.computeIfAbsent(new Range(minValue, maxValue),
                 range -> IntRangeDomain.of(range.min(), range.max()));
         registerVariable(x, domain, minValue, maxValue);
     }

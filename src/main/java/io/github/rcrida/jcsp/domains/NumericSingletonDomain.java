@@ -11,7 +11,7 @@ import java.util.stream.Stream;
 /**
  * The numeric analogue of {@link ObjectSingletonDomain}: a domain holding exactly one {@link Number}
  * value, produced by {@link NumericDomain#withBounds}'s default method whenever bounds-narrowing a
- * {@link NumericDomain} (e.g. {@link IntRangeDomain}, {@link NumericSetDomain}) leaves exactly one
+ * {@link NumericDomain} (e.g. {@link NumericSetDomain}) leaves exactly one
  * value -- the same allocation-avoidance {@link ObjectSingletonDomain} already gives non-numeric {@link
  * DiscreteSetDomain}-backed domains, without materialising a throwaway {@code Set.of(value)} or {@link
  * NumericSetDomain} wrapper. Implements {@link NumericDiscreteDomain} (unlike {@link

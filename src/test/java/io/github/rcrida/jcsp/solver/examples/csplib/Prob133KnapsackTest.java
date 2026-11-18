@@ -6,6 +6,7 @@ import io.github.rcrida.jcsp.ConstraintSatisfactionProblem;
 import io.github.rcrida.jcsp.assignments.Assignment;
 import io.github.rcrida.jcsp.constraints.Operator;
 import io.github.rcrida.jcsp.domains.IntRangeDomain;
+import io.github.rcrida.jcsp.domains.NumericSetDomain;
 import io.github.rcrida.jcsp.variables.Variable;
 import org.junit.jupiter.api.Test;
 
@@ -38,7 +39,7 @@ public class Prob133KnapsackTest {
     static final Variable<Integer> X2 = F.create("x2");
     static final Variable<Integer> X3 = F.create("x3");
     static final Variable<Integer> X4 = F.create("x4");
-    static final IntRangeDomain BINARY = IntRangeDomain.of(0, 1);
+    static final NumericSetDomain<Integer> BINARY = IntRangeDomain.of(0, 1);
 
     static ConstraintSatisfactionProblem problem() {
         return ConstraintSatisfactionProblem.builder()

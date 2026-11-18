@@ -107,7 +107,7 @@ public class RangeNogoodConstraint extends NaryConstraint implements NogoodConst
      * Delegates min/max lookup to {@link NumericBounds#min}/{@link NumericBounds#max} (the same
      * helpers {@link #fromCurrentBounds} already uses) rather than scanning every value by hand:
      * for {@link io.github.rcrida.jcsp.domains.NumericDomain}-implementing discrete domains (e.g.
-     * {@link io.github.rcrida.jcsp.domains.IntRangeDomain}, {@link
+     * {@link
      * io.github.rcrida.jcsp.domains.NumericSetDomain}) that's an O(1) field read rather than an
      * O(domain size) scan — a real cost on this method's call site, checked on every propagation
      * failure during CDCL search.
