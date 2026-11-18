@@ -132,3 +132,4 @@ section instead.
 | [0068](0068-a-range-narrowed-by-its-bounds-shares-its-parents-array.md) | A range narrowed by its bounds shares its parent's array | Superseded by 0070 |
 | [0069](0069-intrangedomain-is-only-a-factory.md) | `IntRangeDomain` is only a factory | Accepted |
 | [0070](0070-an-ascending-domain-narrowed-by-its-bounds-shares-its-parents-array.md) | An ascending domain narrowed by its bounds shares its parent's array | Accepted |
+| [0071](0071-intrangedomain-of-shares-a-range-through-a-weak-global-cache.md) | `IntRangeDomain.of` shares a range through a weak global cache | Accepted |

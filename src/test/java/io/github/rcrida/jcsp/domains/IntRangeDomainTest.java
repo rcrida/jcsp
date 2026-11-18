@@ -80,6 +80,49 @@ public class IntRangeDomainTest {
         assertThat(domain.hashCode()).isEqualTo(NumericDiscreteDomain.of(10, 9, 8, 7, 6, 5).hashCode());
     }
 
+    // ---- one domain per range, while it is held -----------------------------------------------------
+
+    @Test
+    void of_sameRange_returnsTheSameDomain() {
+        NumericSetDomain<Integer> domain = IntRangeDomain.of(-7_000_001, 7_000_001);
+
+        assertThat(IntRangeDomain.of(-7_000_001, 7_000_001)).isSameAs(domain);
+        assertThat(IntRangeDomain.of(-7_000_001, 7_000_002)).isNotSameAs(domain).isEqualTo(IntRangeDomain.of(-7_000_001, 7_000_002));
+        assertThat(IntRangeDomain.of(-7_000_000, 7_000_001)).isNotSameAs(domain);
+    }
+
+    @Test
+    void of_aCollectedDomain_isBuiltAgain() {
+        NumericSetDomain<Integer> first = IntRangeDomain.of(8_000_001, 8_000_009);
+        IntRangeDomain.Entry entry = IntRangeDomain.cachedEntry(8_000_001, 8_000_009);
+        assertThat(entry).isNotNull();
+
+        // Cleared but not yet enqueued: the lookup finds the entry empty and builds a new domain.
+        entry.clear();
+        NumericSetDomain<Integer> second = IntRangeDomain.of(8_000_001, 8_000_009);
+        assertThat(second).isNotSameAs(first).isEqualTo(first);
+        assertThat(IntRangeDomain.cachedEntry(8_000_001, 8_000_009)).isNotSameAs(entry);
+
+        // The stale entry arriving afterwards must not evict the domain that replaced it.
+        entry.enqueue();
+        assertThat(IntRangeDomain.of(8_000_001, 8_000_009)).isSameAs(second);
+    }
+
+    @Test
+    void of_aCollectedAndEnqueuedDomain_isRemovedAndBuiltAgain() {
+        NumericSetDomain<Integer> first = IntRangeDomain.of(9_000_001, 9_000_009);
+        IntRangeDomain.Entry entry = IntRangeDomain.cachedEntry(9_000_001, 9_000_009);
+        assertThat(entry).isNotNull();
+
+        entry.clear();
+        entry.enqueue();
+        NumericSetDomain<Integer> second = IntRangeDomain.of(9_000_001, 9_000_009);
+
+        assertThat(second).isNotSameAs(first).isEqualTo(first);
+        assertThat(IntRangeDomain.cachedEntry(9_000_001, 9_000_009)).isNotNull().isNotSameAs(entry);
+        assertThat(IntRangeDomain.cachedEntry(9_000_002, 9_000_009)).isNull();
+    }
+
     // ── Narrowing stays numeric ───────────────────────────────────────────────
     // Inheriting DiscreteSetDomain's generic builder demoted a narrowed range to a non-numeric
     // ObjectSetDomain, so every later `instanceof NumericDomain` test on it silently failed. AC3

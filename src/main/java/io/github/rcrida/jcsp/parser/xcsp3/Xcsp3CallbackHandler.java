@@ -57,7 +57,6 @@ import io.github.rcrida.jcsp.domains.BooleanDomain;
 import io.github.rcrida.jcsp.domains.DiscreteDomain;
 import io.github.rcrida.jcsp.domains.Domain;
 import io.github.rcrida.jcsp.domains.IntRangeDomain;
-import io.github.rcrida.jcsp.domains.NumericSetDomain;
 import io.github.rcrida.jcsp.domains.NumericDiscreteDomain;
 import io.github.rcrida.jcsp.solver.BranchAndBoundSolver;
 import io.github.rcrida.jcsp.solver.LinearObjective;
@@ -129,16 +128,6 @@ final class Xcsp3CallbackHandler implements XCallbacks2 {
      * OutOfMemoryError} purely from parsing, before the solver chain ever runs.
      */
     private static final long MAX_MATERIALIZED_DOMAIN_SIZE = 1_000_000;
-
-    /** A declared integer range, as the key {@link #rangeDomains} shares domains by. */
-    private record Range(int min, int max) {}
-
-    /**
-     * One {@link IntRangeDomain#of} domain per declared range, shared by every variable declared over it: a
-     * domain is immutable, and an array of thousands of variables over one wide range otherwise
-     * materializes that range once per variable.
-     */
-    private final Map<Range, NumericSetDomain<Integer>> rangeDomains = new HashMap<>();
 
     private final XCallbacks.Implem implem = new XCallbacks.Implem(this);
     private final ConstraintSatisfactionProblemBuilder builder = ConstraintSatisfactionProblem.builder();
@@ -462,9 +451,7 @@ final class Xcsp3CallbackHandler implements XCallbacks2 {
             throw new UnsupportedXcsp3ConstraintException(
                     "Domain too large to materialize (" + domainSize + " values, max " + MAX_MATERIALIZED_DOMAIN_SIZE + "): " + x.id());
         }
-        NumericSetDomain<Integer> domain = rangeDomains.computeIfAbsent(new Range(minValue, maxValue),
-                range -> IntRangeDomain.of(range.min(), range.max()));
-        registerVariable(x, domain, minValue, maxValue);
+        registerVariable(x, IntRangeDomain.of(minValue, maxValue), minValue, maxValue);
     }
 
     @Override
