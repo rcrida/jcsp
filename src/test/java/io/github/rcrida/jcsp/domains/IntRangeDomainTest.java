@@ -126,4 +126,81 @@ public class IntRangeDomainTest {
         assertThat(narrowed).isInstanceOf(NumericDomain.class);
         assertThat(narrowed.isEmpty()).isTrue();
     }
+
+    // ---- a range narrowed by its bounds shares its parent's array ----------------------------------
+
+    @Test
+    void withBounds_narrowedRange_isASliceOverTheSameValues() {
+        IntRangeDomain wide = IntRangeDomain.of(-10_000, 10_000);
+        NumericDomain<Integer> narrowed = wide.withBounds(-5, 5);
+
+        // A NumericSetDomain, as every other narrowing produces, whose values are a range slice.
+        assertThat(narrowed).isInstanceOf(NumericSetDomain.class).isEqualTo(IntRangeDomain.of(-5, 5));
+        assertThat(((OrderedValueSet<?>) ((NumericSetDomain<Integer>) narrowed).values()).isRange()).isTrue();
+        assertThat(narrowed.getMin()).isEqualTo(-5);
+        assertThat(narrowed.getMax()).isEqualTo(5);
+        assertThat(wide.withBounds(-2.5, 2.5)).isEqualTo(IntRangeDomain.of(-2, 2));
+        assertThat(wide.withBounds(Double.NEGATIVE_INFINITY, -9_999)).isEqualTo(IntRangeDomain.of(-10_000, -9_999));
+        assertThat(wide.withBounds(3, 3)).isEqualTo(NumericDiscreteDomain.of(3)).isInstanceOf(NumericSingletonDomain.class);
+        assertThat(wide.withBounds(20_000, 30_000).isEmpty()).isTrue();
+        assertThat(wide.withBounds(0.2, 0.8).isEmpty()).isTrue();
+        assertThat(wide.withBounds(-20_000, 20_000)).isSameAs(wide);
+    }
+
+    @Test
+    void toString_aNarrowedRangePrintsAsARange() {
+        NumericDomain<Integer> slice = IntRangeDomain.of(0, 99).withBounds(3, 6);
+
+        assertThat(slice).hasToString("[3..6]");
+        assertThat(((DiscreteDomain<Integer>) slice).toBuilder().delete(4).build()).hasToString("{3, 5, 6}");
+        assertThat(OrderedValueSet.range(-2, 2)).hasToString("[-2..2]");
+        assertThat(OrderedValueSet.handingOver(new java.util.LinkedHashSet<>(java.util.List.of(5, 1)))).hasToString("[5, 1]");
+    }
+
+    @Test
+    void withBounds_onASlice_slicesAgain() {
+        NumericDomain<Integer> slice = IntRangeDomain.of(0, 99).withBounds(10, 89);
+        NumericDomain<Integer> narrower = slice.withBounds(20, 29);
+
+        assertThat(narrower).isEqualTo(IntRangeDomain.of(20, 29));
+        assertThat(((OrderedValueSet<?>) ((NumericSetDomain<Integer>) narrower).values()).isRange()).isTrue();
+    }
+
+    @Test
+    void withBounds_rangeBuiltFromAnArbitrarySet_filtersAsAnyDomainDoes() {
+        IntRangeDomain fromSet = new IntRangeDomain(Set.of(3, 1, 2), 1, 3);
+
+        assertThat(fromSet.withBounds(2, 3)).isEqualTo(NumericDiscreteDomain.of(2, 3));
+    }
+
+    @Test
+    void constructor_keepsARangeWithTheseBoundsAsItIs() {
+        OrderedValueSet<Integer> slice = OrderedValueSet.range(0, 9).slice(2, 5);
+
+        assertThat(new IntRangeDomain(slice, 2, 5).values()).isSameAs(slice);
+        assertThat(new IntRangeDomain(OrderedValueSet.handingOver(new java.util.LinkedHashSet<>(Set.of(1, 2))), 1, 2))
+                .isEqualTo(IntRangeDomain.of(1, 2));
+    }
+
+    @Test
+    void constructor_rangeWithOtherBounds_isCheckedAsAnyOtherSet() {
+        assertThatThrownBy(() -> new IntRangeDomain(OrderedValueSet.range(1, 3), 0, 3)).isInstanceOf(AssertionError.class);
+        assertThatThrownBy(() -> new IntRangeDomain(OrderedValueSet.range(1, 3), 1, 4)).isInstanceOf(AssertionError.class);
+    }
+
+    @Test
+    void toBuilder_onASlice_narrowsOnlyTheSlicesValues() {
+        // A slice shares a wider array; the builder must walk only the slice's own part of it.
+        DiscreteDomain<Integer> slice = (DiscreteDomain<Integer>) IntRangeDomain.of(0, 9).withBounds(3, 6);
+
+        assertThat(slice.toBuilder().delete(4).build().toList()).containsExactly(3, 5, 6);
+        assertThat(slice.toBuilder().delete(9).build()).isEqualTo(slice);
+    }
+
+    @Test
+    void equalsAGaplessSetDomain() {
+        assertThat(IntRangeDomain.of(1, 3).withBounds(1, 2)).isEqualTo(NumericDiscreteDomain.of(2, 1));
+        assertThat(NumericDiscreteDomain.of(2, 1)).isEqualTo(IntRangeDomain.of(1, 3).withBounds(1, 2));
+        assertThat(IntRangeDomain.of(1, 3).withBounds(1, 2).hashCode()).isEqualTo(NumericDiscreteDomain.of(2, 1).hashCode());
+    }
 }

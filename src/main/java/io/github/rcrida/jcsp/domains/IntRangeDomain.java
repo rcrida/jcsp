@@ -12,23 +12,31 @@ import java.util.Set;
  * record itself (it would need to be non-{@code public}, which isn't viable for a type this
  * library exposes across packages), so that's enforced by convention plus the assertion below
  * rather than access control.
+ * <p>
+ * {@link #of} boxes its values into one array, which {@link NumericDomain#withBounds} narrows by
+ * slicing rather than copying, so every domain narrowed from one root by its bounds shares it. See
+ * docs/adr/0068.
  */
 public record IntRangeDomain(Set<Integer> values, int min, int max)
         implements DiscreteSetDomain<Integer>, NumericDiscreteDomain<Integer> {
     public IntRangeDomain {
-        // The LinkedHashSet is the defensive copy a caller-supplied set needs; handing that copy
-        // straight to OrderedValueSet, rather than wrapping it, is what makes traversal an array
-        // walk -- and root domains are traversed on every arc revision for the whole solve.
-        values = OrderedValueSet.handingOver(new LinkedHashSet<>(values));
-        assert values.isEmpty() || (min == Collections.min(values) && max == Collections.max(values))
-                : String.format("min (%d) and max (%d) must match the actual bounds of values %s", min, max, values);
+        // A range OrderedValueSet with these bounds is immutable and exactly min..max, so it is kept
+        // as it is: that is what lets a narrowed range share its parent's array.
+        // (A range is never empty: OrderedValueSet#range and #slice both require at least one value.)
+        if (!(values instanceof OrderedValueSet<Integer> ordered && ordered.isRange()
+                && ordered.get(0) == min && ordered.size() == max - min + 1)) {
+            // The LinkedHashSet is the defensive copy a caller-supplied set needs; handing that copy
+            // straight to OrderedValueSet, rather than wrapping it, is what makes traversal an array
+            // walk -- and root domains are traversed on every arc revision for the whole solve.
+            values = OrderedValueSet.handingOver(new LinkedHashSet<>(values));
+            assert values.isEmpty() || (min == Collections.min(values) && max == Collections.max(values))
+                    : String.format("min (%d) and max (%d) must match the actual bounds of values %s", min, max, values);
+        }
     }
 
     public static IntRangeDomain of(int minInclusive, int maxInclusive) {
         assert minInclusive <= maxInclusive : String.format("minInclusive (%d) must be less than or equal to maxInclusive (%d)", minInclusive, maxInclusive);
-        var range = new LinkedHashSet<Integer>(maxInclusive - minInclusive + 1);
-        for (int i = minInclusive; i <= maxInclusive; i++) range.add(i);
-        return new IntRangeDomain(range, minInclusive, maxInclusive);
+        return new IntRangeDomain(OrderedValueSet.range(minInclusive, maxInclusive), minInclusive, maxInclusive);
     }
 
     /**

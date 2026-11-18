@@ -114,8 +114,8 @@ public interface NumericDiscreteDomain<N extends Number> extends NumericDomain<N
         private void materialize() {
             mutableValues = LinkedHashSet.newLinkedHashSet(source.size());
             Collection<Object> deleted = deletions();
-            for (Object value : source.elements()) {
-                if (!deleted.contains(value)) mutableValues.add((N) value);
+            for (N value : source) {
+                if (!deleted.contains(value)) mutableValues.add(value);
             }
             source = null;
             removed = null;
@@ -166,21 +166,23 @@ public interface NumericDiscreteDomain<N extends Number> extends NumericDomain<N
         }
 
         /**
-         * Filters {@link #source}'s array by {@link #deletions}, in one pass, and collapses as {@link
-         * #build} does.
+         * Filters {@link #source} by {@link #deletions}, in one pass, and collapses as {@link
+         * #build} does. A range that only lost values from its ends is still a range, and is sliced
+         * from the source's array instead of copied.
          */
         @SuppressWarnings("unchecked")
         private NumericDiscreteDomain<N> buildNarrowed() {
             OrderedValueSet<N> from = source;
             if (removed == null) return unchanged(from);
-            Object[] elements = from.elements();
-            Object[] kept = new Object[elements.length];
+            int size = from.size();
+            Object[] kept = new Object[size];
             Collection<Object> deleted = deletions();
             int count = 0;
-            for (Object element : elements) {
+            for (int i = 0; i < size; i++) {
+                Object element = from.get(i);
                 if (!deleted.contains(element)) kept[count++] = element;
             }
-            if (count == elements.length) return unchanged(from);
+            if (count == size) return unchanged(from);
             if (count == 0) return NumericEmptyDomain.instance();
             if (count == 1) return new NumericSingletonDomain<>((N) kept[0]);
             if (boundsStale) {

@@ -25,7 +25,7 @@ class NumericDomainTest {
         NumericDomain<Integer> narrowed = IntRangeDomain.of(1, 5).withBounds(3, 10);
 
         assertThat(narrowed).isInstanceOf(NumericSetDomain.class);
-        assertThat(((NumericSetDomain<Integer>) narrowed).values()).containsExactlyInAnyOrder(3, 4, 5);
+        assertThat(((NumericSetDomain<Integer>) narrowed).values()).containsExactly(3, 4, 5);
     }
 
     @Test
@@ -34,6 +34,13 @@ class NumericDomainTest {
 
         assertThat(narrowed).isInstanceOf(NumericSingletonDomain.class);
         assertThat(narrowed.getMin()).isEqualTo(5);
+    }
+
+    @Test
+    void withBounds_setDomainOverAPlainSet_filtersIt() {
+        NumericDomain<Integer> domain = new NumericSetDomain<>(new java.util.LinkedHashSet<>(java.util.List.of(1, 2, 5)));
+
+        assertThat(domain.withBounds(2, 5)).isEqualTo(NumericDiscreteDomain.of(2, 5));
     }
 
     @Test

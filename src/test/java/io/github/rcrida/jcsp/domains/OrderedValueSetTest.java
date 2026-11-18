@@ -179,9 +179,78 @@ class OrderedValueSetTest {
         assertThat(set.contains(5)).isFalse();
     }
 
+    // ---- ranges and their slices ----------------------------------------------------------------
+
     @Test
-    void elements_isTheBackingArrayInOrder() {
-        assertThat(of(5, 1, 9).elements()).containsExactly(5, 1, 9);
+    void range_isTheConsecutiveIntegersAscending() {
+        OrderedValueSet<Integer> range = OrderedValueSet.range(-2, 2);
+        assertThat(range.isRange()).isTrue();
+        assertThat(range).containsExactly(-2, -1, 0, 1, 2);
+        assertThat(of(1, 2, 3).isRange()).isFalse();
+    }
+
+    @Test
+    void slice_isTheSubRange() {
+        OrderedValueSet<Integer> slice = OrderedValueSet.range(0, 9).slice(3, 6);
+        assertThat(slice.isRange()).isTrue();
+        assertThat(slice.size()).isEqualTo(4);
+        assertThat(slice).containsExactly(3, 4, 5, 6);
+        assertThat(slice.toArray()).containsExactly(3, 4, 5, 6);
+        assertThat(slice.stream().toList()).containsExactly(3, 4, 5, 6);
+        assertThat(slice.get(0)).isEqualTo(3);
+        assertThat(slice.slice(4, 5)).containsExactly(4, 5);
+    }
+
+    @Test
+    void slice_outsideTheRange_isRejected() {
+        OrderedValueSet<Integer> range = OrderedValueSet.range(0, 9);
+        assertThatThrownBy(() -> of(1, 2, 3).slice(1, 2)).isInstanceOf(AssertionError.class);
+        assertThatThrownBy(() -> range.slice(-1, 5)).isInstanceOf(AssertionError.class);
+        assertThatThrownBy(() -> range.slice(5, 10)).isInstanceOf(AssertionError.class);
+        assertThatThrownBy(() -> range.slice(6, 5)).isInstanceOf(AssertionError.class);
+    }
+
+    @Test
+    void slice_iteratorStopsAtItsOwnEnd() {
+        Iterator<Integer> iterator = OrderedValueSet.range(0, 9).slice(8, 9).iterator();
+        iterator.next();
+        iterator.next();
+        assertThat(iterator.hasNext()).isFalse();
+        assertThatThrownBy(iterator::next).isInstanceOf(NoSuchElementException.class);
+    }
+
+    @Test
+    void range_containsIsABoundsCheck() {
+        OrderedValueSet<Integer> slice = OrderedValueSet.range(0, 9).slice(3, 6);
+        assertThat(slice.contains(3)).isTrue();
+        assertThat(slice.contains(6)).isTrue();
+        assertThat(slice.contains(2)).isFalse();
+        assertThat(slice.contains(7)).isFalse();
+        assertThat(slice.contains(Integer.MIN_VALUE)).isFalse();
+        assertThat(slice.contains(4L)).isFalse();
+        assertThat(slice.contains(null)).isFalse();
+    }
+
+    @Test
+    void range_equalsAndHashCodeAgreeWithAnyEqualSet() {
+        OrderedValueSet<Integer> slice = OrderedValueSet.range(0, 9).slice(3, 6);
+        assertThat(slice).isEqualTo(OrderedValueSet.range(3, 6));
+        assertThat(slice).isNotEqualTo(OrderedValueSet.range(3, 7));
+        assertThat(slice).isNotEqualTo(OrderedValueSet.range(4, 7));
+        assertThat(slice).isEqualTo(of(6, 5, 4, 3));
+        assertThat(slice).isEqualTo(Set.of(3, 4, 5, 6));
+        assertThat(slice.hashCode()).isEqualTo(Set.of(3, 4, 5, 6).hashCode());
+        assertThat(OrderedValueSet.range(-3, 1).hashCode()).isEqualTo(Set.of(-3, -2, -1, 0, 1).hashCode());
+        OrderedValueSet<Integer> wide = OrderedValueSet.range(Integer.MAX_VALUE - 2, Integer.MAX_VALUE);
+        assertThat(wide.hashCode()).isEqualTo(Set.of(Integer.MAX_VALUE - 2, Integer.MAX_VALUE - 1, Integer.MAX_VALUE).hashCode());
+        assertThat(of(1, 2).hashCode()).isEqualTo(Set.of(1, 2).hashCode());
+        assertThat(of(1, 2)).isEqualTo(OrderedValueSet.range(1, 2));
+    }
+
+    @Test
+    void get_readsTheElementsInOrder() {
+        OrderedValueSet<Integer> set = of(5, 1, 9);
+        assertThat(List.of(set.get(0), set.get(1), set.get(2))).containsExactly(5, 1, 9);
     }
 
     @Test

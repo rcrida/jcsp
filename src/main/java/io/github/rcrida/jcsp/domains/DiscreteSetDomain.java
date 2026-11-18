@@ -94,6 +94,7 @@ public interface DiscreteSetDomain<T> extends DiscreteDomain<T> {
 
     /** Shared {@code toString()} formatting for every {@link DiscreteSetDomain} record -- Object methods can't be interface defaults, so each implementor still overrides {@code toString()} itself and delegates here. */
     static String domainToString(DiscreteSetDomain<?> self) {
+        if (self.values() instanceof OrderedValueSet<?> ordered && ordered.isRange()) return ordered.toString();
         return self.values().stream().map(Object::toString).collect(Collectors.joining(", ", "{", "}"));
     }
 }

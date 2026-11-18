@@ -40,12 +40,26 @@ public interface NumericDomain<N extends Number> extends Domain<N> {
      * {@link NumericDiscreteDomain.NumericDiscreteDomainBuilder} collapses to: an {@link
      * IntRangeDomain} that survives a covering narrowing intact stays an {@link IntRangeDomain}
      * rather than degrading to a {@link NumericSetDomain}.
+     * <p>
+     * A domain holding a range of integers is narrowed by slicing that range's array rather than
+     * copying it, so a wide range narrowed a little costs one small object. The result is a {@link
+     * NumericSetDomain}, the type every other narrowing produces, so the solver's hottest call
+     * sites keep seeing the same domain types (docs/adr/0068).
      */
     @SuppressWarnings("unchecked")
     default NumericDomain<N> withBounds(double newMin, double newMax) {
         DiscreteDomain<N> discrete = (DiscreteDomain<N>) this;
         if (!discrete.isEmpty() && getMin().doubleValue() >= newMin && getMax().doubleValue() <= newMax) {
             return this;
+        }
+        if (this instanceof DiscreteSetDomain<?> set && set.values() instanceof OrderedValueSet<?> ordered
+                && ordered.isRange()) {
+            double lo = Math.max(getMin().doubleValue(), Math.ceil(newMin));
+            double hi = Math.min(getMax().doubleValue(), Math.floor(newMax));
+            if (lo > hi) return NumericEmptyDomain.instance();
+            if (lo == hi) return (NumericDomain<N>) new NumericSingletonDomain<>((int) lo);
+            return (NumericDomain<N>) new NumericSetDomain<>(
+                    ((OrderedValueSet<Integer>) ordered).slice((int) lo, (int) hi), (int) lo, (int) hi);
         }
         var builder = new NumericDiscreteDomain.NumericDiscreteDomainBuilder<N>(discrete.size());
         for (N value : discrete.asCollection()) {

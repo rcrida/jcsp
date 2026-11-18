@@ -4,6 +4,7 @@ import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 
 import java.util.AbstractSet;
+import java.util.Arrays;
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.NoSuchElementException;
@@ -34,6 +35,10 @@ import java.util.Spliterators;
  * numeric domain builds its result that way -- see {@link
  * NumericDiscreteDomain.NumericDiscreteDomainBuilder#narrowing} and
  * docs/adr/0058.
+ * <p>
+ * {@link #range} is the third: consecutive integers, which {@link #slice} narrows by bounds into
+ * a view of the same array, so {@link NumericDomain#withBounds} copies nothing -- see
+ * docs/adr/0068.
  *
  * @param <T> the domain's value type
  */
@@ -54,6 +59,15 @@ final class OrderedValueSet<T> extends AbstractSet<T> {
     private static final int BITS_PER_ELEMENT_LIMIT = 64;
 
     private final @NonNull Object[] elements;
+    /** Where this set's elements start in {@link #elements}; non-zero only for a {@link #slice}. */
+    private final int from;
+    private final int size;
+    /**
+     * Whether the elements are the consecutive ascending {@link Integer}s from {@link #rangeMin}: built by
+     * {@link #range}, and kept by {@link #slice}, so that narrowing a range by its bounds shares one array.
+     */
+    private final boolean range;
+    private final int rangeMin;
     /** Handed in by {@link #handingOver}; otherwise built by the first {@link #contains} that needs it. */
     private volatile @Nullable Set<T> membership;
     /**
@@ -64,10 +78,46 @@ final class OrderedValueSet<T> extends AbstractSet<T> {
     private volatile @Nullable IntBits intBits;
 
     private OrderedValueSet(@NonNull Object[] elements, @Nullable Set<T> membership) {
+        this(elements, 0, elements.length, false, 0, membership);
+    }
+
+    private OrderedValueSet(@NonNull Object[] elements, int from, int size, boolean range, int rangeMin,
+                            @Nullable Set<T> membership) {
         this.elements = elements;
+        this.from = from;
+        this.size = size;
+        this.range = range;
+        this.rangeMin = rangeMin;
         this.membership = membership;
     }
 
+    /** The integers {@code min..max} in ascending order, boxed once into an array every {@link #slice} shares. */
+    static OrderedValueSet<Integer> range(int min, int max) {
+        Integer[] boxed = new Integer[max - min + 1];
+        for (int i = 0; i < boxed.length; i++) boxed[i] = min + i;
+        return new OrderedValueSet<>(boxed, 0, boxed.length, true, min, null);
+    }
+
+    /** Whether this set is the consecutive integers of a {@link #range} or a {@link #slice} of one. */
+    boolean isRange() {
+        return range;
+    }
+
+    /**
+     * The integers {@code lo..hi} of this {@link #range}, sharing its array: narrowing a range by its
+     * bounds costs one small object, however many values survive.
+     */
+    @SuppressWarnings("unchecked")
+    OrderedValueSet<Integer> slice(int lo, int hi) {
+        assert range && lo >= rangeMin && hi < rangeMin + size && lo <= hi : "slice outside the range";
+        return new OrderedValueSet<>(elements, from + (lo - rangeMin), hi - lo + 1, true, lo, null);
+    }
+
+    /** The {@code index}th element, for a caller walking this set by position. */
+    @SuppressWarnings("unchecked")
+    T get(int index) {
+        return (T) elements[from + index];
+    }
     /**
      * Takes ownership of {@code distinct}, which must be duplicate-free and never mutated again,
      * and builds no membership index: narrowing a domain filters the array it already holds, and
@@ -76,11 +126,6 @@ final class OrderedValueSet<T> extends AbstractSet<T> {
      */
     static <T> OrderedValueSet<T> ofDistinct(@NonNull Object[] distinct) {
         return new OrderedValueSet<>(distinct, null);
-    }
-
-    /** The backing array itself, for a caller that reads it once and never writes it. */
-    @NonNull Object[] elements() {
-        return elements;
     }
 
     /**
@@ -95,17 +140,42 @@ final class OrderedValueSet<T> extends AbstractSet<T> {
 
     @Override
     public int size() {
-        return elements.length;
+        return size;
     }
 
     @Override
     public boolean isEmpty() {
-        return elements.length == 0;
+        return size == 0;
+    }
+
+    /** Two ranges compare by their bounds alone; anything else as {@link AbstractSet} does. */
+    @Override
+    public boolean equals(Object o) {
+        if (range && o instanceof OrderedValueSet<?> other && other.range) {
+            return rangeMin == other.rangeMin && size == other.size;
+        }
+        return super.equals(o);
+    }
+
+    /** A range as {@code [min..max]}; anything else as {@link AbstractSet} prints it. */
+    @Override
+    public String toString() {
+        return range ? "[" + rangeMin + ".." + (rangeMin + size - 1) + "]" : super.toString();
+    }
+
+    /** A range's hash in closed form: {@link AbstractSet}'s sum of {@link Integer#hashCode}, wrapped as it would. */
+    @Override
+    public int hashCode() {
+        if (!range) return super.hashCode();
+        return (int) (((long) rangeMin + rangeMin + size - 1) * size / 2);
     }
 
     @Override
     @SuppressWarnings("unchecked")
     public boolean contains(@Nullable Object value) {
+        if (range) {
+            return value instanceof Integer integer && integer >= rangeMin && (long) integer - rangeMin < size;
+        }
         IntBits bits = intBits;
         if (bits == null) {
             if (membership == null && elements.length <= SCAN_LIMIT) {
@@ -173,7 +243,7 @@ final class OrderedValueSet<T> extends AbstractSet<T> {
 
     @Override
     public @NonNull Object[] toArray() {
-        return elements.clone();
+        return Arrays.copyOfRange(elements, from, from + size);
     }
 
     /**
@@ -187,24 +257,25 @@ final class OrderedValueSet<T> extends AbstractSet<T> {
      */
     @Override
     public @NonNull Spliterator<T> spliterator() {
-        return Spliterators.spliterator(elements, 0, elements.length,
+        return Spliterators.spliterator(elements, from, from + size,
                 Spliterator.ORDERED | Spliterator.DISTINCT | Spliterator.IMMUTABLE);
     }
 
     @Override
     public @NonNull Iterator<T> iterator() {
         return new Iterator<>() {
-            private int next;
+            private int next = from;
+            private final int end = from + size;
 
             @Override
             public boolean hasNext() {
-                return next < elements.length;
+                return next < end;
             }
 
             @Override
             @SuppressWarnings("unchecked")
             public T next() {
-                if (next >= elements.length) throw new NoSuchElementException();
+                if (next >= end) throw new NoSuchElementException();
                 return (T) elements[next++];
             }
         };
