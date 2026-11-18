@@ -191,28 +191,126 @@ class OrderedValueSetTest {
 
     @Test
     void slice_isTheSubRange() {
-        OrderedValueSet<Integer> slice = OrderedValueSet.range(0, 9).slice(3, 6);
+        OrderedValueSet<Integer> slice = OrderedValueSet.range(0, 9).between(3, 6);
         assertThat(slice.isRange()).isTrue();
         assertThat(slice.size()).isEqualTo(4);
         assertThat(slice).containsExactly(3, 4, 5, 6);
         assertThat(slice.toArray()).containsExactly(3, 4, 5, 6);
         assertThat(slice.stream().toList()).containsExactly(3, 4, 5, 6);
         assertThat(slice.get(0)).isEqualTo(3);
-        assertThat(slice.slice(4, 5)).containsExactly(4, 5);
+        assertThat(slice.between(4, 5)).containsExactly(4, 5);
     }
 
     @Test
-    void slice_outsideTheRange_isRejected() {
+    void between_clampsToTheElementsPresent() {
         OrderedValueSet<Integer> range = OrderedValueSet.range(0, 9);
-        assertThatThrownBy(() -> of(1, 2, 3).slice(1, 2)).isInstanceOf(AssertionError.class);
-        assertThatThrownBy(() -> range.slice(-1, 5)).isInstanceOf(AssertionError.class);
-        assertThatThrownBy(() -> range.slice(5, 10)).isInstanceOf(AssertionError.class);
-        assertThatThrownBy(() -> range.slice(6, 5)).isInstanceOf(AssertionError.class);
+        assertThat(range.between(-1, 5)).containsExactly(0, 1, 2, 3, 4, 5).hasToString("[0..5]");
+        assertThat(range.between(5, 10)).containsExactly(5, 6, 7, 8, 9).hasToString("[5..9]");
+        assertThat(range.between(2.5, 4.5)).containsExactly(3, 4);
+        assertThat(range.between(6, 5)).isEmpty();
+        assertThat(range.between(20, 30)).isEmpty();
+        assertThat(range.between(Double.NEGATIVE_INFINITY, Double.POSITIVE_INFINITY)).isEqualTo(range);
+    }
+
+    @Test
+    void between_onASetThatDoesNotAscend_isRejected() {
+        assertThatThrownBy(() -> of(3, 1, 2).between(1, 2)).isInstanceOf(AssertionError.class);
+    }
+
+    // ---- ascending sets that are not ranges --------------------------------------------------------
+
+    @Test
+    void isAscending_isDecidedByTheElementsInTheirOwnOrder() {
+        assertThat(OrderedValueSet.range(0, 3).isAscending()).isTrue();
+        assertThat(of(1, 4, 9).isAscending()).isTrue();
+        assertThat(of().isAscending()).isTrue();
+        assertThat(of(3, 1, 2).isAscending()).isFalse();
+        assertThat(of(10, 9, 8).isAscending()).isFalse();
+        assertThat(OrderedValueSet.ofDistinct(new Object[]{1, "a"}).isAscending()).isFalse();
+    }
+
+    @Test
+    void ofDistinct_prefix_takesTheCallersOrderOnTrust() {
+        assertThat(OrderedValueSet.ofDistinct(new Object[]{1, 2, 3}, 3, true).isAscending()).isTrue();
+        assertThat(OrderedValueSet.ofDistinct(new Object[]{1, 2, 3}, 3, false).isAscending()).isFalse();
+    }
+
+    @Test
+    void ofDistinct_whole_decidesItsOrderByLooking() {
+        assertThat(OrderedValueSet.ofDistinct(new Object[]{1, 2, 3}).isAscending()).isTrue();
+        assertThat(OrderedValueSet.ofDistinct(new Object[]{2, 1, 3}).isAscending()).isFalse();
+    }
+
+    @Test
+    void between_aRange_staysARange_andAnAscendingSetDoesNotBecomeOne() {
+        assertThat(OrderedValueSet.range(0, 9).between(2, 5).isRange()).isTrue();
+        assertThat(of(1, 2, 3, 4).isRange()).isFalse();
+        assertThat(of(1, 2, 3, 4).between(2, 3).isRange()).isFalse();
+        assertThat(of(1, 2, 3, 4).between(2, 3).isAscending()).isTrue();
+    }
+
+    /** Odd numbers 1..39: ascending, not a range, and wide enough that a slice of it isn't scanned. */
+    private static OrderedValueSet<Integer> odds() {
+        Object[] values = new Object[20];
+        for (int i = 0; i < values.length; i++) values[i] = 2 * i + 1;
+        return OrderedValueSet.ofDistinct(values);
+    }
+
+    @Test
+    void between_anAscendingSet_isAViewCutAtBothEnds() {
+        OrderedValueSet<Integer> slice = odds().between(6, 30);
+
+        assertThat(slice.isRange()).isFalse();
+        assertThat(slice).containsExactly(7, 9, 11, 13, 15, 17, 19, 21, 23, 25, 27, 29);
+        assertThat(slice.get(0)).isEqualTo(7);
+        assertThat(slice.toArray()).hasSize(12);
+        assertThat(slice.between(10, 14)).containsExactly(11, 13);
+    }
+
+    @Test
+    void between_anAscendingSet_testsMembershipByItsBoundsAndTheWholeSetsIndex() {
+        OrderedValueSet<Integer> slice = odds().between(6, 30);
+
+        assertThat(slice.contains(7)).isTrue();
+        assertThat(slice.contains(29)).isTrue();
+        assertThat(slice.contains(5)).isFalse();   // in the whole set, below the slice
+        assertThat(slice.contains(31)).isFalse();  // in the whole set, above the slice
+        assertThat(slice.contains(8)).isFalse();   // within the slice's bounds, in neither
+        assertThat(slice.contains("7")).isFalse();
+        assertThat(slice.contains(null)).isFalse();
+        // A slice of a slice still answers through the bounds of its own run.
+        OrderedValueSet<Integer> inner = slice.between(9, 27);
+        assertThat(inner.contains(7)).isFalse();
+        assertThat(inner.contains(27)).isTrue();
+        // A slice small enough to scan scans its own run.
+        OrderedValueSet<Integer> small = slice.between(10, 14);
+        assertThat(small.contains(11)).isTrue();
+        assertThat(small.contains(9)).isFalse();
+    }
+
+    @Test
+    void ofDistinct_prefix_ignoresTheRestOfTheArray() {
+        // What a filtered narrowing leaves behind it: the array it was filtered into, part used.
+        assertThat(OrderedValueSet.ofDistinct(new Object[]{5, 1, 9, 99}, 3, false)).containsExactly(5, 1, 9)
+                .doesNotContain(99);
+
+        Object[] dense = new Object[12];
+        for (int i = 0; i < dense.length; i++) dense[i] = i;
+        OrderedValueSet<Integer> densePrefix = OrderedValueSet.ofDistinct(dense, 10, false);
+        assertThat(densePrefix.contains(9)).isTrue();
+        assertThat(densePrefix.contains(10)).isFalse();
+
+        Object[] words = new Object[12];
+        for (int i = 0; i < words.length; i++) words[i] = "w" + i;
+        OrderedValueSet<String> wordPrefix = OrderedValueSet.ofDistinct(words, 10, false);
+        assertThat(wordPrefix.contains("w9")).isTrue();
+        assertThat(wordPrefix.contains("w10")).isFalse();
+        assertThat(wordPrefix).hasSize(10);
     }
 
     @Test
     void slice_iteratorStopsAtItsOwnEnd() {
-        Iterator<Integer> iterator = OrderedValueSet.range(0, 9).slice(8, 9).iterator();
+        Iterator<Integer> iterator = OrderedValueSet.range(0, 9).between(8, 9).iterator();
         iterator.next();
         iterator.next();
         assertThat(iterator.hasNext()).isFalse();
@@ -221,7 +319,7 @@ class OrderedValueSetTest {
 
     @Test
     void range_containsIsABoundsCheck() {
-        OrderedValueSet<Integer> slice = OrderedValueSet.range(0, 9).slice(3, 6);
+        OrderedValueSet<Integer> slice = OrderedValueSet.range(0, 9).between(3, 6);
         assertThat(slice.contains(3)).isTrue();
         assertThat(slice.contains(6)).isTrue();
         assertThat(slice.contains(2)).isFalse();
@@ -233,7 +331,7 @@ class OrderedValueSetTest {
 
     @Test
     void range_equalsAndHashCodeAgreeWithAnyEqualSet() {
-        OrderedValueSet<Integer> slice = OrderedValueSet.range(0, 9).slice(3, 6);
+        OrderedValueSet<Integer> slice = OrderedValueSet.range(0, 9).between(3, 6);
         assertThat(slice).isEqualTo(OrderedValueSet.range(3, 6));
         assertThat(slice).isNotEqualTo(OrderedValueSet.range(3, 7));
         assertThat(slice).isNotEqualTo(OrderedValueSet.range(4, 7));

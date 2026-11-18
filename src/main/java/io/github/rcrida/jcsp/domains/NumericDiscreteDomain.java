@@ -4,7 +4,6 @@ import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashSet;
@@ -89,12 +88,8 @@ public interface NumericDiscreteDomain<N extends Number> extends NumericDomain<N
             return builder;
         }
 
-        /**
-         * Sized for a caller that will add {@code expectedValues} of them, so growing the backing
-         * set never rehashes -- {@link NumericDomain#withBounds} filters a whole domain into a
-         * builder it starts empty, where the default capacity would rehash all the way up.
-         */
-        NumericDiscreteDomainBuilder(int expectedValues) {
+        /** Sized for a caller that will add {@code expectedValues} of them, so growing the backing set never rehashes. */
+        private NumericDiscreteDomainBuilder(int expectedValues) {
             mutableValues = LinkedHashSet.newLinkedHashSet(expectedValues);
         }
 
@@ -183,15 +178,38 @@ public interface NumericDiscreteDomain<N extends Number> extends NumericDomain<N
                 if (!deleted.contains(element)) kept[count++] = element;
             }
             if (count == size) return unchanged(from);
-            if (count == 0) return NumericEmptyDomain.instance();
-            if (count == 1) return new NumericSingletonDomain<>((N) kept[0]);
-            if (boundsStale) {
+            built = true;
+            if (boundsStale && count > 1) {
                 min = (N) extremum(kept, count, -1);
                 max = (N) extremum(kept, count, 1);
                 boundsStale = false;
             }
-            built = true;
-            return new NumericSetDomain<>(OrderedValueSet.ofDistinct(Arrays.copyOf(kept, count)), min, max);
+            return ofDistinct(kept, count, min, max, from.isAscending());
+        }
+
+        /**
+         * The domain of the first {@code count} of {@code kept}, which are distinct and bounded by
+         * {@code min} and {@code max}, collapsed as {@link #build} collapses. Takes ownership of
+         * {@code kept}, which the caller must never mutate again, and neither trims nor hashes it;
+         * {@code ascending} is as {@link OrderedValueSet#ofDistinct(Object[], int, boolean)} takes it.
+         */
+        @SuppressWarnings("unchecked")
+        static <N extends Number> NumericDiscreteDomain<N> ofDistinct(
+                @NonNull Object[] kept, int count, @Nullable N min, @Nullable N max, boolean ascending) {
+            if (count == 0) return NumericEmptyDomain.instance();
+            if (count == 1) return new NumericSingletonDomain<>((N) kept[0]);
+            return new NumericSetDomain<>(OrderedValueSet.ofDistinct(kept, count, ascending), min, max);
+        }
+
+        /**
+         * The domain of an {@link OrderedValueSet#isAscending} set, collapsed as {@link #build}
+         * collapses, whose bounds are simply its first and last values.
+         */
+        static <N extends Number> NumericDiscreteDomain<N> ofAscending(@NonNull OrderedValueSet<N> values) {
+            int size = values.size();
+            if (size == 0) return NumericEmptyDomain.instance();
+            if (size == 1) return new NumericSingletonDomain<>(values.get(0));
+            return new NumericSetDomain<>(values, values.get(0), values.get(size - 1));
         }
 
         /** {@code values} as the domain it already is, with this builder's bounds. */

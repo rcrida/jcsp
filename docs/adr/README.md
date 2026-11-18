@@ -129,5 +129,6 @@ section instead.
 | [0065](0065-large-neighbourhood-search-is-an-opt-in-wrapper-around-branch-and-bound.md) | Large neighbourhood search is an opt-in wrapper around branch-and-bound | Accepted |
 | [0066](0066-branch-on-a-small-cycle-cutset-first.md) | Branch on a small cycle cutset first | Accepted |
 | [0067](0067-unrecognized-wide-intensions-fail-parsing.md) | An unrecognized intension over three or more variables fails parsing | Accepted |
-| [0068](0068-a-range-narrowed-by-its-bounds-shares-its-parents-array.md) | A range narrowed by its bounds shares its parent's array | Accepted |
+| [0068](0068-a-range-narrowed-by-its-bounds-shares-its-parents-array.md) | A range narrowed by its bounds shares its parent's array | Superseded by 0070 |
 | [0069](0069-intrangedomain-is-only-a-factory.md) | `IntRangeDomain` is only a factory | Accepted |
+| [0070](0070-an-ascending-domain-narrowed-by-its-bounds-shares-its-parents-array.md) | An ascending domain narrowed by its bounds shares its parent's array | Accepted |

@@ -39,10 +39,12 @@ public interface NumericDomain<N extends Number> extends Domain<N> {
      * Returning {@code this} also keeps the domain's own type and values, where filtering hands
      * back whatever {@link NumericDiscreteDomain.NumericDiscreteDomainBuilder} collapses to.
      * <p>
-     * A domain holding a range of integers is narrowed by slicing that range's array rather than
-     * copying it, so a wide range narrowed a little costs one small object. The result is a {@link
-     * NumericSetDomain}, the type every other narrowing produces, so the solver's hottest call
-     * sites keep seeing the same domain types (docs/adr/0068).
+     * A domain whose values ascend -- every range, and most declared value lists -- is narrowed by
+     * slicing its array at both ends rather than copying it, so a wide domain narrowed a little
+     * costs one small object. Any other is filtered into an array the result keeps as it is, with
+     * nothing hashed. Either way the result is a {@link NumericSetDomain}, the type every other
+     * narrowing produces, so the solver's hottest call sites keep seeing the same domain types
+     * (docs/adr/0070).
      */
     @SuppressWarnings("unchecked")
     default NumericDomain<N> withBounds(double newMin, double newMax) {
@@ -51,20 +53,22 @@ public interface NumericDomain<N extends Number> extends Domain<N> {
             return this;
         }
         if (this instanceof DiscreteSetDomain<?> set && set.values() instanceof OrderedValueSet<?> ordered
-                && ordered.isRange()) {
-            double lo = Math.max(getMin().doubleValue(), Math.ceil(newMin));
-            double hi = Math.min(getMax().doubleValue(), Math.floor(newMax));
-            if (lo > hi) return NumericEmptyDomain.instance();
-            if (lo == hi) return (NumericDomain<N>) new NumericSingletonDomain<>((int) lo);
-            return (NumericDomain<N>) new NumericSetDomain<>(
-                    ((OrderedValueSet<Integer>) ordered).slice((int) lo, (int) hi), (int) lo, (int) hi);
+                && ordered.isAscending()) {
+            return NumericDiscreteDomain.NumericDiscreteDomainBuilder.ofAscending(
+                    ((OrderedValueSet<N>) ordered).between(newMin, newMax));
         }
-        var builder = new NumericDiscreteDomain.NumericDiscreteDomainBuilder<N>(discrete.size());
+        Object[] kept = new Object[discrete.size()];
+        int count = 0;
+        N min = null;
+        N max = null;
         for (N value : discrete.asCollection()) {
-            if (value.doubleValue() >= newMin && value.doubleValue() <= newMax) {
-                builder.value(value);
+            double v = value.doubleValue();
+            if (v >= newMin && v <= newMax) {
+                kept[count++] = value;
+                if (min == null || v < min.doubleValue()) min = value;
+                if (max == null || v > max.doubleValue()) max = value;
             }
         }
-        return builder.build();
+        return NumericDiscreteDomain.NumericDiscreteDomainBuilder.ofDistinct(kept, count, min, max, false);
     }
 }

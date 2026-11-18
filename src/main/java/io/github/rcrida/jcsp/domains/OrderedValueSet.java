@@ -36,9 +36,10 @@ import java.util.Spliterators;
  * NumericDiscreteDomain.NumericDiscreteDomainBuilder#narrowing} and
  * docs/adr/0058.
  * <p>
- * {@link #range} is the third: consecutive integers, which {@link #slice} narrows by bounds into
- * a view of the same array, so {@link NumericDomain#withBounds} copies nothing -- see
- * docs/adr/0068.
+ * {@link #range} is the third: consecutive integers. A set's order is its insertion order, not a
+ * sort, but when its elements happen to ascend -- a range's always do -- {@link #between} narrows it
+ * by bounds into a view of the same array cut at both ends, so {@link NumericDomain#withBounds}
+ * copies nothing -- see docs/adr/0070.
  *
  * @param <T> the domain's value type
  */
@@ -58,16 +59,31 @@ final class OrderedValueSet<T> extends AbstractSet<T> {
      */
     private static final int BITS_PER_ELEMENT_LIMIT = 64;
 
+    /** How a set's elements are ordered, which decides whether {@link #between} can slice it. */
+    private enum Shape {
+        /**
+         * The consecutive ascending {@link Integer}s from {@link #rangeMin}: built by {@link #range}, kept by
+         * {@link #between}, and compared, hashed, printed and tested for membership by its bounds alone.
+         */
+        RANGE,
+        /** {@link Number}s strictly ascending by {@link Number#doubleValue}, with gaps. */
+        ASCENDING,
+        /** Not known to ascend: filtered, never sliced. */
+        UNORDERED
+    }
+
     private final @NonNull Object[] elements;
-    /** Where this set's elements start in {@link #elements}; non-zero only for a {@link #slice}. */
+    /** Where this set's elements start in {@link #elements}; non-zero only for a slice taken by {@link #between}. */
     private final int from;
     private final int size;
-    /**
-     * Whether the elements are the consecutive ascending {@link Integer}s from {@link #rangeMin}: built by
-     * {@link #range}, and kept by {@link #slice}, so that narrowing a range by its bounds shares one array.
-     */
-    private final boolean range;
+    private final Shape shape;
+    /** The first element of a {@link Shape#RANGE}; unused otherwise. */
     private final int rangeMin;
+    /**
+     * The set owning {@link #elements} -- {@code this}, unless this is a slice of it. A slice tests membership
+     * against its bounds and then the root's index, so narrowing never builds an index of its own.
+     */
+    private final OrderedValueSet<T> root;
     /** Handed in by {@link #handingOver}; otherwise built by the first {@link #contains} that needs it. */
     private volatile @Nullable Set<T> membership;
     /**
@@ -77,40 +93,71 @@ final class OrderedValueSet<T> extends AbstractSet<T> {
      */
     private volatile @Nullable IntBits intBits;
 
-    private OrderedValueSet(@NonNull Object[] elements, @Nullable Set<T> membership) {
-        this(elements, 0, elements.length, false, 0, membership);
-    }
-
-    private OrderedValueSet(@NonNull Object[] elements, int from, int size, boolean range, int rangeMin,
-                            @Nullable Set<T> membership) {
+    private OrderedValueSet(@NonNull Object[] elements, int from, int size, Shape shape, int rangeMin,
+                            @Nullable OrderedValueSet<T> root, @Nullable Set<T> membership) {
         this.elements = elements;
         this.from = from;
         this.size = size;
-        this.range = range;
+        this.shape = shape;
         this.rangeMin = rangeMin;
+        this.root = root == null ? this : root;
         this.membership = membership;
     }
 
-    /** The integers {@code min..max} in ascending order, boxed once into an array every {@link #slice} shares. */
+    /** The integers {@code min..max} in ascending order, boxed once into an array every slice of it shares. */
     static OrderedValueSet<Integer> range(int min, int max) {
         Integer[] boxed = new Integer[max - min + 1];
         for (int i = 0; i < boxed.length; i++) boxed[i] = min + i;
-        return new OrderedValueSet<>(boxed, 0, boxed.length, true, min, null);
+        return new OrderedValueSet<>(boxed, 0, boxed.length, Shape.RANGE, min, null, null);
     }
 
-    /** Whether this set is the consecutive integers of a {@link #range} or a {@link #slice} of one. */
+    /** Whether this set is the consecutive integers of a {@link #range} or a slice of one. */
     boolean isRange() {
-        return range;
+        return shape == Shape.RANGE;
     }
 
     /**
-     * The integers {@code lo..hi} of this {@link #range}, sharing its array: narrowing a range by its
-     * bounds costs one small object, however many values survive.
+     * Whether this set's elements are {@link Number}s strictly ascending by {@link Number#doubleValue}, so
+     * that {@link #between} can slice it: every range, and any other set found or known to ascend when built.
      */
-    @SuppressWarnings("unchecked")
-    OrderedValueSet<Integer> slice(int lo, int hi) {
-        assert range && lo >= rangeMin && hi < rangeMin + size && lo <= hi : "slice outside the range";
-        return new OrderedValueSet<>(elements, from + (lo - rangeMin), hi - lo + 1, true, lo, null);
+    boolean isAscending() {
+        return shape != Shape.UNORDERED;
+    }
+
+    /** {@link Shape#ASCENDING} if the first {@code size} of {@code elements} strictly ascend, else {@link Shape#UNORDERED}. */
+    private static Shape shapeOf(@NonNull Object[] elements, int size) {
+        double previous = Double.NEGATIVE_INFINITY;
+        for (int i = 0; i < size; i++) {
+            if (!(elements[i] instanceof Number number) || !(number.doubleValue() > previous)) return Shape.UNORDERED;
+            previous = number.doubleValue();
+        }
+        return Shape.ASCENDING;
+    }
+
+    /**
+     * The elements between {@code lo} and {@code hi} inclusive, of this {@link #isAscending} set, as a
+     * view of the same array: they are one contiguous run of it, so narrowing by bounds costs two binary
+     * searches and one small object, however many values survive. Empty if none do.
+     */
+    OrderedValueSet<T> between(double lo, double hi) {
+        assert isAscending() : "only an ascending set is sliced by its bounds";
+        int start = firstIndex(lo, true);
+        int end = Math.max(start, firstIndex(hi, false));
+        return new OrderedValueSet<>(elements, from + start, end - start, shape,
+                shape == Shape.RANGE ? rangeMin + start : 0, root, null);
+    }
+
+    /** The position of the first element at least ({@code inclusive}) or above {@code bound}. */
+    private int firstIndex(double bound, boolean inclusive) {
+        int lo = 0;
+        int hi = size;
+        while (lo < hi) {
+            int mid = (lo + hi) >>> 1;
+            double value = ((Number) elements[from + mid]).doubleValue();
+            if (inclusive ? value < bound : value <= bound) lo = mid + 1;
+            else hi = mid;
+        }
+        return lo;
     }
 
     /** The {@code index}th element, for a caller walking this set by position. */
@@ -118,6 +165,7 @@ final class OrderedValueSet<T> extends AbstractSet<T> {
     T get(int index) {
         return (T) elements[from + index];
     }
+
     /**
      * Takes ownership of {@code distinct}, which must be duplicate-free and never mutated again,
      * and builds no membership index: narrowing a domain filters the array it already holds, and
@@ -125,7 +173,17 @@ final class OrderedValueSet<T> extends AbstractSet<T> {
      * use, or just scans a small array.
      */
     static <T> OrderedValueSet<T> ofDistinct(@NonNull Object[] distinct) {
-        return new OrderedValueSet<>(distinct, null);
+        return new OrderedValueSet<>(distinct, 0, distinct.length, shapeOf(distinct, distinct.length), 0, null, null);
+    }
+
+    /**
+     * As {@link #ofDistinct(Object[])}, over only the first {@code size} of {@code distinct}: a
+     * caller filtering into an array sized for the worst case keeps it rather than trimming a copy.
+     * {@code ascending} is what the caller knows of the set it filtered -- filtering keeps an
+     * ascending set ascending -- and is trusted rather than checked.
+     */
+    static <T> OrderedValueSet<T> ofDistinct(@NonNull Object[] distinct, int size, boolean ascending) {
+        return new OrderedValueSet<>(distinct, 0, size, ascending ? Shape.ASCENDING : Shape.UNORDERED, 0, null, null);
     }
 
     /**
@@ -135,7 +193,8 @@ final class OrderedValueSet<T> extends AbstractSet<T> {
      * builder is spent.
      */
     static <T> OrderedValueSet<T> handingOver(@NonNull Set<T> values) {
-        return new OrderedValueSet<>(values.toArray(), values);
+        Object[] elements = values.toArray();
+        return new OrderedValueSet<>(elements, 0, elements.length, shapeOf(elements, elements.length), 0, null, values);
     }
 
     @Override
@@ -151,7 +210,7 @@ final class OrderedValueSet<T> extends AbstractSet<T> {
     /** Two ranges compare by their bounds alone; anything else as {@link AbstractSet} does. */
     @Override
     public boolean equals(Object o) {
-        if (range && o instanceof OrderedValueSet<?> other && other.range) {
+        if (isRange() && o instanceof OrderedValueSet<?> other && other.isRange()) {
             return rangeMin == other.rangeMin && size == other.size;
         }
         return super.equals(o);
@@ -160,39 +219,46 @@ final class OrderedValueSet<T> extends AbstractSet<T> {
     /** A range as {@code [min..max]}; anything else as {@link AbstractSet} prints it. */
     @Override
     public String toString() {
-        return range ? "[" + rangeMin + ".." + (rangeMin + size - 1) + "]" : super.toString();
+        return isRange() ? "[" + rangeMin + ".." + (rangeMin + size - 1) + "]" : super.toString();
     }
 
     /** A range's hash in closed form: {@link AbstractSet}'s sum of {@link Integer#hashCode}, wrapped as it would. */
     @Override
     public int hashCode() {
-        if (!range) return super.hashCode();
+        if (!isRange()) return super.hashCode();
         return (int) (((long) rangeMin + rangeMin + size - 1) * size / 2);
     }
 
     @Override
     @SuppressWarnings("unchecked")
     public boolean contains(@Nullable Object value) {
-        if (range) {
+        if (isRange()) {
             return value instanceof Integer integer && integer >= rangeMin && (long) integer - rangeMin < size;
         }
         IntBits bits = intBits;
         if (bits == null) {
-            if (membership == null && elements.length <= SCAN_LIMIT) {
-                for (Object element : elements) {
-                    if (element.equals(value)) return true;
+            int end = from + size;
+            if (membership == null && size <= SCAN_LIMIT) {
+                for (int i = from; i < end; i++) {
+                    if (elements[i].equals(value)) return true;
                 }
                 return false;
             }
+            if (root != this) {
+                return value instanceof Number number
+                        && number.doubleValue() >= ((Number) elements[from]).doubleValue()
+                        && number.doubleValue() <= ((Number) elements[end - 1]).doubleValue()
+                        && root.contains(value);
+            }
             // Idempotent, so two threads racing here each decide the same and either may win.
-            bits = IntBits.of(elements);
+            bits = IntBits.of(elements, from, end);
             intBits = bits;
         }
         if (bits != IntBits.NOT_DENSE) return bits.contains(value);
         Set<T> index = membership;
         if (index == null) {
-            index = HashSet.newHashSet(elements.length);
-            for (Object element : elements) index.add((T) element);
+            index = HashSet.newHashSet(size);
+            for (int i = from, end = from + size; i < end; i++) index.add((T) elements[i]);
             membership = index;
         }
         return index.contains(value);
@@ -215,20 +281,23 @@ final class OrderedValueSet<T> extends AbstractSet<T> {
             this.words = words;
         }
 
-        /** The bits of {@code elements}, or {@link #NOT_DENSE} if any is not an {@link Integer} or they are too sparse. */
-        static IntBits of(Object[] elements) {
+        /**
+         * The bits of {@code elements[from..end)}, or {@link #NOT_DENSE} if any is not an {@link Integer} or they
+         * are too sparse.
+         */
+        static IntBits of(Object[] elements, int from, int end) {
             int min = Integer.MAX_VALUE;
             int max = Integer.MIN_VALUE;
-            for (Object element : elements) {
-                if (!(element instanceof Integer integer)) return NOT_DENSE;
+            for (int i = from; i < end; i++) {
+                if (!(elements[i] instanceof Integer integer)) return NOT_DENSE;
                 min = Math.min(min, integer);
                 max = Math.max(max, integer);
             }
             long span = (long) max - min + 1;
-            if (span > (long) elements.length * BITS_PER_ELEMENT_LIMIT) return NOT_DENSE;
+            if (span > (long) (end - from) * BITS_PER_ELEMENT_LIMIT) return NOT_DENSE;
             long[] words = new long[(int) ((span + 63) >>> 6)];
-            for (Object element : elements) {
-                int offset = (Integer) element - min;
+            for (int i = from; i < end; i++) {
+                int offset = (Integer) elements[i] - min;
                 words[offset >>> 6] |= 1L << offset;
             }
             return new IntBits(min, words);

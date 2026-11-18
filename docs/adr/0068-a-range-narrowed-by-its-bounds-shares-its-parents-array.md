@@ -1,6 +1,6 @@
 # 0068. A range narrowed by its bounds shares its parent's array
 
-**Status**: Accepted
+**Status**: Superseded by [0070](0070-an-ascending-domain-narrowed-by-its-bounds-shares-its-parents-array.md)
 
 ## Context
 

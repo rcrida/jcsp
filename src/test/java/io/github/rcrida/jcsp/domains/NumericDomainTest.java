@@ -70,6 +70,45 @@ class NumericDomainTest {
     }
 
     @Test
+    void withBounds_ascendingDomain_isSlicedFromBothEnds() {
+        NumericSetDomain<Integer> domain = (NumericSetDomain<Integer>) NumericDiscreteDomain.of(1, 3, 5, 7, 9, 11);
+
+        NumericDomain<Integer> narrowed = domain.withBounds(2, 10);
+
+        assertThat(narrowed).isInstanceOf(NumericSetDomain.class).isEqualTo(NumericDiscreteDomain.of(3, 5, 7, 9));
+        assertThat(narrowed.getMin()).isEqualTo(3);
+        assertThat(narrowed.getMax()).isEqualTo(9);
+        OrderedValueSet<?> values = (OrderedValueSet<?>) ((NumericSetDomain<Integer>) narrowed).values();
+        assertThat(values.isAscending()).isTrue();
+        assertThat(values.isRange()).isFalse();
+        assertThat(domain.withBounds(4, 6)).isInstanceOf(NumericSingletonDomain.class).isEqualTo(NumericDiscreteDomain.of(5));
+        assertThat(domain.withBounds(4.2, 4.8)).isInstanceOf(NumericEmptyDomain.class);
+    }
+
+    @Test
+    void withBounds_unorderedDomain_filtersKeepingItsOrderAndBounds() {
+        NumericSetDomain<Integer> domain = (NumericSetDomain<Integer>) NumericDiscreteDomain.of(9, 1, 7, 3, 5);
+
+        NumericDomain<Integer> narrowed = domain.withBounds(2, 8);
+
+        assertThat(((NumericSetDomain<Integer>) narrowed).toList()).containsExactly(7, 3, 5);
+        assertThat(narrowed.getMin()).isEqualTo(3);
+        assertThat(narrowed.getMax()).isEqualTo(7);
+        assertThat(((NumericSetDomain<Integer>) narrowed).contains(9)).isFalse();
+        assertThat(domain.withBounds(6, 8)).isInstanceOf(NumericSingletonDomain.class).isEqualTo(NumericDiscreteDomain.of(7));
+        assertThat(domain.withBounds(5.5, 6.5)).isInstanceOf(NumericEmptyDomain.class);
+    }
+
+    @Test
+    void withBounds_descendingDomain_isFilteredNotSliced() {
+        NumericDomain<Integer> narrowed = NumericDiscreteDomain.of(9, 7, 5, 3, 1).withBounds(2, 8);
+
+        assertThat(((NumericSetDomain<Integer>) narrowed).toList()).containsExactly(7, 5, 3);
+        assertThat(narrowed.getMin()).isEqualTo(3);
+        assertThat(narrowed.getMax()).isEqualTo(7);
+    }
+
+    @Test
     void withBounds_emptyDomain_staysEmpty() {
         // An empty domain has no bounds to compare against, so it can't take the fast path above.
         NumericDomain<Integer> narrowed = NumericEmptyDomain.<Integer>instance().withBounds(0, 10);
