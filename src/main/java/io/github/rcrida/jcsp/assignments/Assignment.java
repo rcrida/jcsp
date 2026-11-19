@@ -167,8 +167,14 @@ public interface Assignment extends Valuation {
         return true;
     }
 
+    /**
+     * Whether every one of {@code csp}'s variables is assigned. Asked at every search node, where the
+     * answer is almost always no: an assignment with fewer entries than {@code csp} has variables cannot
+     * cover them all, so that case is answered from the two sizes without a lookup per variable.
+     */
     default boolean isComplete(ConstraintSatisfactionProblem csp) {
         AssignmentValidation.validate(this, csp);
+        if (size() < csp.getVariableDomains().size()) return false;
         return csp.getVariableDomains().keySet().stream().allMatch(this::isAssigned);
     }
 
