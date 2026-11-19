@@ -132,6 +132,21 @@ final class OverlayAssignment implements Assignment {
         };
     }
 
+    /**
+     * The base copied by {@link AssignmentBuilder#copying} with room for every layer and one more entry,
+     * then each layer added, so flattening a chain copies the base's arrays rather than placing its
+     * entries one by one.
+     */
+    @Override
+    public AssignmentBuilder toBuilder() {
+        AssignmentBuilder builder = AssignmentBuilder.copying(base, depth + 1)
+                .statistics(statistics).listener(listener).cancellation(cancellation);
+        for (OverlayAssignment layer = this; layer != null; layer = layer.below) {
+            builder.value(layer.variable, layer.value);
+        }
+        return builder;
+    }
+
     /** Each layer's variable and value, then the base's, with no entry object per entry as {@link #entries} makes. */
     @Override
     public void forEach(@NonNull BiConsumer<? super Variable<?>, ? super Object> action) {

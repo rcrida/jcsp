@@ -8,12 +8,14 @@ import java.util.Arrays;
 import java.util.Iterator;
 import java.util.Map;
 import java.util.NoSuchElementException;
+import java.util.Objects;
 import java.util.Set;
 import java.util.function.BiConsumer;
 
 /**
  * A growable {@link Map} keyed by {@link Variable}, found through {@link Variable#getIndex()} rather
- * than by hashing, for the small maps a propagation builds up and reads back on every domain lookup.
+ * than by hashing, for the small maps a propagation builds up and reads back on every domain lookup,
+ * and for the values of an {@link io.github.rcrida.jcsp.assignments.Assignment}.
  * <p>
  * The entries sit in two arrays in insertion order, so iteration is as deterministic as the order they
  * were put in, which a hash map's is only if its keys' hash codes are. A table of slots, addressed by
@@ -41,7 +43,7 @@ public final class VariableMap<V> extends AbstractMap<Variable<?>, V> {
 
     /** A map holding {@code entries}, in their iteration order. */
     public VariableMap(@NonNull Map<? extends Variable<?>, ? extends V> entries) {
-        this(Math.max(INITIAL_ENTRIES, Integer.highestOneBit(Math.max(1, entries.size() * 2 - 1))));
+        this(capacityFor(entries.size()));
         putAll(entries);
     }
 
@@ -49,6 +51,38 @@ public final class VariableMap<V> extends AbstractMap<Variable<?>, V> {
         keys = new Variable<?>[capacity];
         values = new Object[capacity];
         table = new int[capacity * 2];
+    }
+
+    private VariableMap(Variable<?>[] keys, Object[] values, int[] table, int size) {
+        this.keys = keys;
+        this.values = values;
+        this.table = table;
+        this.size = size;
+    }
+
+    /** An empty map that holds {@code expectedEntries} without growing. */
+    public static <V> VariableMap<V> withExpectedSize(int expectedEntries) {
+        return new VariableMap<>(capacityFor(expectedEntries));
+    }
+
+    /** The smallest power of two, and at least {@link #INITIAL_ENTRIES}, that holds {@code entries}. */
+    private static int capacityFor(int entries) {
+        return Math.max(INITIAL_ENTRIES, Integer.highestOneBit(Math.max(1, entries * 2 - 1)));
+    }
+
+    /**
+     * A copy of this map, in the same order, with room for {@code extraEntries} more without growing.
+     * Where this map already has that room the copy is three array copies, with no entry placed again.
+     */
+    public VariableMap<V> copy(int extraEntries) {
+        int capacity = Math.max(keys.length, capacityFor(size + extraEntries));
+        if (capacity == keys.length) {
+            return new VariableMap<>(keys.clone(), values.clone(), table.clone(), size);
+        }
+        VariableMap<V> copy = new VariableMap<>(Arrays.copyOf(keys, capacity), Arrays.copyOf(values, capacity),
+                new int[capacity * 2], size);
+        copy.placeAll();
+        return copy;
     }
 
     /** The entry number of {@code key} if it is exactly one of this map's keys, otherwise -1. */
@@ -118,9 +152,43 @@ public final class VariableMap<V> extends AbstractMap<Variable<?>, V> {
         keys = Arrays.copyOf(keys, keys.length * 2);
         values = Arrays.copyOf(values, values.length * 2);
         table = new int[keys.length * 2];
+        placeAll();
+    }
+
+    /** Records every entry in an empty {@link #table}. */
+    private void placeAll() {
         for (int entry = 0; entry < size; entry++) {
             place(entry);
         }
+    }
+
+    /**
+     * Whether {@code other} is a {@link Map} with the same entries, as {@link Map#equals} defines it,
+     * read straight from the arrays rather than through {@link #entrySet}, which makes an entry object
+     * for each one.
+     */
+    @Override
+    public boolean equals(Object other) {
+        if (other == this) return true;
+        if (!(other instanceof Map<?, ?> map) || map.size() != size) return false;
+        for (int entry = 0; entry < size; entry++) {
+            Object value = values[entry];
+            Object theirs = map.get(keys[entry]);
+            if (value == null ? theirs != null || !map.containsKey(keys[entry]) : !value.equals(theirs)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /** {@link Map#hashCode}'s sum, read straight from the arrays as {@link #equals} is. */
+    @Override
+    public int hashCode() {
+        int hash = 0;
+        for (int entry = 0; entry < size; entry++) {
+            hash += keys[entry].hashCode() ^ Objects.hashCode(values[entry]);
+        }
+        return hash;
     }
 
     @Override

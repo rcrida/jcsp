@@ -208,4 +208,70 @@ class VariableMapTest {
             assertThat(actual.hashCode()).isEqualTo(oracle.hashCode());
         }
     }
+
+    @Test
+    void aMapSizedForItsEntriesHoldsThemInOrder() {
+        List<Variable<Integer>> variables = variables(9);
+        VariableMap<Integer> map = VariableMap.withExpectedSize(9);
+        variables.forEach(v -> map.put(v, v.getIndex()));
+
+        assertThat(List.copyOf(map.keySet())).isEqualTo(variables);
+    }
+
+    @Test
+    void aCopyWithinCapacityIsIndependentOfItsSource() {
+        List<Variable<Integer>> variables = variables(3);
+        VariableMap<Integer> source = new VariableMap<>();
+        source.put(variables.get(0), 0);
+        source.put(variables.get(1), 1);
+
+        VariableMap<Integer> copy = source.copy(1);
+        copy.put(variables.get(2), 2);
+        copy.put(variables.get(0), 9);
+
+        assertThat(source).isEqualTo(Map.of(variables.get(0), 0, variables.get(1), 1));
+        assertThat(List.copyOf(copy.keySet())).isEqualTo(variables);
+        assertThat(copy.get(variables.get(0))).isEqualTo(9);
+    }
+
+    @Test
+    void aCopyNeedingMoreRoomGrowsAndFindsEveryEntry() {
+        List<Variable<Integer>> variables = variables(20);
+        VariableMap<Integer> source = new VariableMap<>();
+        variables.subList(0, 3).forEach(v -> source.put(v, v.getIndex()));
+
+        VariableMap<Integer> copy = source.copy(17);
+        variables.subList(3, 20).forEach(v -> copy.put(v, v.getIndex()));
+
+        assertThat(source).hasSize(3);
+        assertThat(List.copyOf(copy.keySet())).isEqualTo(variables);
+        variables.forEach(v -> assertThat(copy.get(v)).isEqualTo(v.getIndex()));
+    }
+
+    @Test
+    void equalsComparesEntriesWithAnyMap() {
+        List<Variable<Integer>> variables = variables(2);
+        VariableMap<String> map = new VariableMap<>();
+        map.put(variables.get(0), "a");
+        map.put(variables.get(1), null);
+        Map<Variable<?>, String> same = new LinkedHashMap<>();
+        same.put(variables.get(1), null);
+        same.put(variables.get(0), "a");
+        Map<Variable<?>, String> otherValue = new LinkedHashMap<>(same);
+        otherValue.put(variables.get(0), "b");
+        Map<Variable<?>, String> nullPresent = new LinkedHashMap<>(same);
+        nullPresent.put(variables.get(1), "x");
+        Map<Variable<?>, String> nullKeyMissing = new LinkedHashMap<>();
+        nullKeyMissing.put(variables.get(0), "a");
+        nullKeyMissing.put(factory.<Integer>create("elsewhere"), null);
+
+        assertThat(map.equals(map)).isTrue();
+        assertThat(map.equals(same)).isTrue();
+        assertThat(map.hashCode()).isEqualTo(same.hashCode());
+        assertThat(map.equals("not a map")).isFalse();
+        assertThat(map.equals(Map.of(variables.get(0), "a"))).isFalse();
+        assertThat(map.equals(otherValue)).isFalse();
+        assertThat(map.equals(nullPresent)).isFalse();
+        assertThat(map.equals(nullKeyMissing)).isFalse();
+    }
 }

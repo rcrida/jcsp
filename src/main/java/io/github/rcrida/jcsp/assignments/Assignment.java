@@ -6,11 +6,11 @@ import io.github.rcrida.jcsp.constraints.nary.NogoodConstraint;
 import io.github.rcrida.jcsp.solver.Cancellation;
 import io.github.rcrida.jcsp.solver.listener.SolverListener;
 import io.github.rcrida.jcsp.variables.Variable;
+import io.github.rcrida.jcsp.variables.VariableMap;
 import org.jspecify.annotations.NonNull;
 
 import java.util.Collection;
 import java.util.Collections;
-import java.util.HashMap;
 import java.util.Map;
 import java.util.Set;
 
@@ -34,17 +34,15 @@ public interface Assignment extends Valuation {
     }
 
     /**
-     * Constructs an {@link Assignment} directly from an already-built values map, statistics,
-     * listener, and cancellation token, skipping the builder's copies entirely — for hot
-     * per-candidate construction paths (e.g.
-     * {@link io.github.rcrida.jcsp.solver.LargeNeighborhoodSolver}'s per-combo enumeration) where
-     * the caller already owns a freshly-built map it will never mutate again. {@code values} is
-     * wrapped in an unmodifiable view (an O(1) wrap, not a copy). {@code statistics},
-     * {@code listener}, and {@code cancellation} are required, not defaulted, so a caller deriving
-     * from an existing {@link Assignment} must explicitly carry its {@link #getStatistics}/
-     * {@link #listener}/{@link #cancellation} forward rather than silently starting a fresh,
-     * disconnected one for the derived {@link Assignment}.
+     * An {@link Assignment} over {@code values}, wrapped in an unmodifiable view rather than copied,
+     * with the given statistics, listener and cancellation. The caller must never mutate {@code
+     * values} afterwards.
+     *
+     * @deprecated it saves nothing over the builder, which hands its own map to the assignment it
+     * builds without copying it: use {@link #builder}, or {@link #toBuilder} to extend an existing
+     * assignment with its statistics, listener and cancellation carried over.
      */
+    @Deprecated
     static Assignment ofTrusted(@NonNull Map<Variable<?>, Object> values, @NonNull Statistics statistics,
                                 @NonNull SolverListener listener, @NonNull Cancellation cancellation) {
         return new MapAssignment(Collections.unmodifiableMap(values), statistics, listener, cancellation);
@@ -57,16 +55,12 @@ public interface Assignment extends Valuation {
     Cancellation cancellation();
 
     /**
-     * A builder pre-loaded with this assignment's entries, statistics, listener and cancellation. Sized for
-     * one more entry than this holds, which is what most callers add, so copying never grows the map; and
-     * copied through {@link #forEach}, which hands over each key and value without the entry objects that
-     * iterating {@link #entries} would allocate for every one.
+     * A builder pre-loaded with this assignment's entries, statistics, listener and cancellation, sized
+     * for one more entry than this holds, which is what most callers add; see {@link
+     * AssignmentBuilder#copying}.
      */
     default AssignmentBuilder toBuilder() {
-        AssignmentBuilder builder = new AssignmentBuilder(size() + 1)
-                .statistics(getStatistics()).listener(listener()).cancellation(cancellation());
-        forEach(builder::value);
-        return builder;
+        return AssignmentBuilder.copying(this, 1);
     }
 
     /**
@@ -96,10 +90,7 @@ public interface Assignment extends Valuation {
             }
             next = layered;
         } else {
-            Map<Variable<?>, Object> merged = new HashMap<>(size() + additions.size());
-            forEach(merged::put);
-            merged.putAll(additions);
-            next = ofTrusted(merged, getStatistics(), listener(), cancellation());
+            next = AssignmentBuilder.copying(this, additions.size()).values(additions).build();
         }
         additions.forEach((variable, value) -> {
             getStatistics().incrementNodesExplored();
@@ -110,7 +101,7 @@ public interface Assignment extends Valuation {
 
     /** This assignment overlaid with every entry of {@code another}, whose statistics are added in. */
     default Assignment merge(@NonNull Assignment another) {
-        AssignmentBuilder builder = toBuilder();
+        AssignmentBuilder builder = AssignmentBuilder.copying(this, another.size());
         another.forEach(builder::value);
         Assignment merged = builder.build();
         merged.getStatistics().add(another.getStatistics());
@@ -127,7 +118,12 @@ public interface Assignment extends Valuation {
      * this wrapping.
      */
     default Assignment extractPartialAssignment(@NonNull Set<? extends Variable<?>> variables) {
-        return Assignment.of(partialValues(variables));
+        AssignmentBuilder builder = new AssignmentBuilder(VariableMap.withExpectedSize(variables.size()));
+        for (Variable<?> variable : variables) {
+            Object value = getValueOrNull(variable);
+            if (value != null) builder.value(variable, value);
+        }
+        return builder.build();
     }
 
     default boolean isConsistent(ConstraintSatisfactionProblem csp) {
@@ -176,25 +172,43 @@ public interface Assignment extends Valuation {
     }
 
     /**
-     * Accumulates entries into a {@link HashMap}, which {@link #build} hands to the assignment it
+     * Accumulates entries into a {@link VariableMap}, which {@link #build} hands to the assignment it
      * returns rather than copying; the next mutation after a build copies it first, so the builder
      * stays reusable and a {@link #toBuilder} followed by one {@link #build} copies the entries once.
      * Entry order is unspecified, as for {@link Assignment}.
      */
     final class AssignmentBuilder {
-        private Map<Variable<?>, Object> values;
+        private VariableMap<Object> values;
         private boolean shared;
         private Statistics statistics;
         private SolverListener listener;
         private Cancellation cancellation;
 
         private AssignmentBuilder() {
-            values = new HashMap<>();
+            this(new VariableMap<>());
         }
 
-        /** A builder whose map holds {@code expectedEntries} without growing. */
-        private AssignmentBuilder(int expectedEntries) {
-            values = HashMap.newHashMap(expectedEntries);
+        private AssignmentBuilder(VariableMap<Object> values) {
+            this.values = values;
+        }
+
+        /**
+         * A builder pre-loaded with {@code source}'s entries, statistics, listener and cancellation, with
+         * room for {@code extraEntries} more. An assignment over a {@link VariableMap} is copied by
+         * {@link VariableMap#copy} as whole arrays; any other is copied through {@link #forEach}, which
+         * hands over each key and value without the entry objects iterating {@link #entries} would make.
+         * {@link OverlayAssignment} copies its base this way and then adds its layers.
+         */
+        static AssignmentBuilder copying(Assignment source, int extraEntries) {
+            AssignmentBuilder builder;
+            if (source instanceof MapAssignment map && map.values() instanceof VariableMap<Object> entries) {
+                builder = new AssignmentBuilder(entries.copy(extraEntries));
+            } else {
+                builder = new AssignmentBuilder(VariableMap.withExpectedSize(source.size() + extraEntries));
+                source.forEach(builder::value);
+            }
+            return builder.statistics(source.getStatistics()).listener(source.listener())
+                    .cancellation(source.cancellation());
         }
 
         public AssignmentBuilder value(Variable<?> variable, Object value) {
@@ -209,7 +223,7 @@ public interface Assignment extends Valuation {
 
         private Map<Variable<?>, Object> owned() {
             if (shared) {
-                values = new HashMap<>(values);
+                values = values.copy(1);
                 shared = false;
             }
             return values;
@@ -239,7 +253,7 @@ public interface Assignment extends Valuation {
                 }
                 default -> {
                     shared = true;
-                    yield Collections.unmodifiableMap(values);
+                    yield values;
                 }
             };
             return new MapAssignment(built, statistics, listener, cancellation);
