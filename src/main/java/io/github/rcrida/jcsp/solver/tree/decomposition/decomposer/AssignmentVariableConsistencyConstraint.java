@@ -5,7 +5,7 @@ import lombok.EqualsAndHashCode;
 import lombok.Singular;
 import lombok.experimental.SuperBuilder;
 import lombok.val;
-import io.github.rcrida.jcsp.assignments.Assignment;
+import io.github.rcrida.jcsp.assignments.Valuation;
 import io.github.rcrida.jcsp.constraints.binary.BinaryConstraint;
 import io.github.rcrida.jcsp.constraints.binary.SymmetricBinaryConstraint;
 import io.github.rcrida.jcsp.variables.Variable;
@@ -20,7 +20,7 @@ import java.util.Set;
  */
 @SuperBuilder
 @EqualsAndHashCode(callSuper = true)
-public class AssignmentVariableConsistencyConstraint extends SymmetricBinaryConstraint<Assignment> {
+public class AssignmentVariableConsistencyConstraint extends SymmetricBinaryConstraint<Valuation> {
     /**
      * Every variable the two cliques share. One constraint carries all of them, rather than one
      * constraint per shared variable: arc consistency revises each constraint on an arc separately,
@@ -31,7 +31,7 @@ public class AssignmentVariableConsistencyConstraint extends SymmetricBinaryCons
     @Singular @NonNull Set<Variable<?>> cliqueVariables;
 
     @Override
-    public boolean isSatisfiedBy(@NonNull Assignment leftValue, @NonNull Assignment rightValue) {
+    public boolean isSatisfiedBy(@NonNull Valuation leftValue, @NonNull Valuation rightValue) {
         for (val cliqueVariable : cliqueVariables) {
             val lv = leftValue.getValue(cliqueVariable);
             val rv = rightValue.getValue(cliqueVariable);

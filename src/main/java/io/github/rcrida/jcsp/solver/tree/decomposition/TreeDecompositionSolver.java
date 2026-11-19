@@ -8,6 +8,7 @@ import lombok.val;
 import io.github.rcrida.jcsp.ConstraintSatisfactionProblem;
 import io.github.rcrida.jcsp.assignments.Assignment;
 import io.github.rcrida.jcsp.assignments.Statistics;
+import io.github.rcrida.jcsp.assignments.Valuation;
 import io.github.rcrida.jcsp.constraints.Constraint;
 import io.github.rcrida.jcsp.domains.DiscreteDomain;
 import io.github.rcrida.jcsp.domains.Domain;
@@ -163,18 +164,17 @@ public class TreeDecompositionSolver extends SolverDecorator {
 
     /**
      * Map solution of tree CSP back to solution of original CSP. Each value of each variable of the tree CSP is
-     * an assignment to variables of the original problem, hence we just need to merge all of those assignments
-     * together for the final result, given there will be multiple assignments to each of the original variables
-     * duplicated in multiple tree variables.
+     * a {@link Valuation} of variables of the original problem, so the result is all of them gathered into one
+     * assignment; a variable shared by several cliques has the same value in each.
      *
-     * @param treeAssignment solution as an assignment of assignments to the original variables
-     * @return an assignment to the original variables
+     * @param treeAssignment solution as an assignment of valuations of the original variables
+     * @return an assignment to the original variables, carrying this solver's statistics
      */
     private Assignment recomposeAssignment(@NonNull Assignment treeAssignment) {
-        Assignment recomposed = Assignment.builder().statistics(statistics).cancellation(cancellation).build();
+        Assignment.AssignmentBuilder recomposed = Assignment.builder().statistics(statistics).cancellation(cancellation);
         for (Variable<?> clique : treeAssignment.variables()) {
-            recomposed = recomposed.merge((Assignment) treeAssignment.getValueOrNull(clique));
+            ((Valuation) treeAssignment.getValueOrNull(clique)).forEach(recomposed::value);
         }
-        return recomposed;
+        return recomposed.build();
     }
 }

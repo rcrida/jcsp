@@ -4,7 +4,7 @@ import lombok.Value;
 import lombok.extern.slf4j.Slf4j;
 import lombok.val;
 import io.github.rcrida.jcsp.ConstraintSatisfactionProblem;
-import io.github.rcrida.jcsp.assignments.Assignment;
+import io.github.rcrida.jcsp.assignments.Valuation;
 import io.github.rcrida.jcsp.domains.AssignmentDomain;
 import io.github.rcrida.jcsp.domains.Domain;
 import io.github.rcrida.jcsp.solver.Cancellation;
@@ -101,7 +101,7 @@ public class TreeDecomposerImpl implements TreeDecomposer {
         }
 
         val treeBuilder = ConstraintSatisfactionProblem.builder();
-        val cliqueVariables = new ArrayList<Variable<Assignment>>();
+        val cliqueVariables = new ArrayList<Variable<Valuation>>();
         for (val cliqueVariableDomains : cliqueDomainsByClique) {
             val cliqueDomain = AssignmentDomain.of(cliqueVariableDomains, csp, cancellation);
             if (cliqueDomain.isEmpty()) {
@@ -112,7 +112,7 @@ public class TreeDecomposerImpl implements TreeDecomposer {
                     .sorted(Comparator.comparing(Variable::getName))
                     .toList()
                     .toString();
-            val cliqueVariable = treeBuilder.<Assignment>createVariable(cliqueName, cliqueDomain.get());
+            val cliqueVariable = treeBuilder.<Valuation>createVariable(cliqueName, cliqueDomain.get());
             cliqueVariables.add(cliqueVariable);
         }
         val consistencyConstraints = new HashSet<AssignmentVariableConsistencyConstraint>();

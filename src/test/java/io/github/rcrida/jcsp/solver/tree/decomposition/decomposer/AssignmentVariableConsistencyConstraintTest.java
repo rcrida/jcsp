@@ -2,6 +2,7 @@ package io.github.rcrida.jcsp.solver.tree.decomposition.decomposer;
 
 import lombok.val;
 import io.github.rcrida.jcsp.assignments.Assignment;
+import io.github.rcrida.jcsp.assignments.Valuation;
 import io.github.rcrida.jcsp.constraints.nary.AllDiffConstraint;
 import io.github.rcrida.jcsp.variables.Variable;
 import org.junit.jupiter.api.Test;
@@ -19,9 +20,9 @@ import static org.assertj.core.api.Assertions.assertThat;
 @ExtendWith(MockitoExtension.class)
 public class AssignmentVariableConsistencyConstraintTest {
     static final Variable.Factory VARIABLE_FACTORY = new Variable.Factory();
-    static final Variable<Assignment> V1 = VARIABLE_FACTORY.create("V1");
-    static final Variable<Assignment> V2 = VARIABLE_FACTORY.create("V2");
-    static final Variable<Assignment> V3 = VARIABLE_FACTORY.create("V3");
+    static final Variable<Valuation> V1 = VARIABLE_FACTORY.create("V1");
+    static final Variable<Valuation> V2 = VARIABLE_FACTORY.create("V2");
+    static final Variable<Valuation> V3 = VARIABLE_FACTORY.create("V3");
     static final Variable<Object> CLIQUE_VARIABLE = VARIABLE_FACTORY.create("CV1");
     static final Variable<Object> ANOTHER_CLIQUE_VARIABLE = VARIABLE_FACTORY.create("CV2");
     static final Object VALUE_1 = 1;

@@ -5,6 +5,7 @@ import io.github.rcrida.jcsp.solver.tree.decomposition.decomposer.TreeDecomposer
 import lombok.val;
 import io.github.rcrida.jcsp.ConstraintSatisfactionProblem;
 import io.github.rcrida.jcsp.assignments.Assignment;
+import io.github.rcrida.jcsp.assignments.Valuation;
 import io.github.rcrida.jcsp.variables.Variable;
 import org.jspecify.annotations.NonNull;
 
@@ -18,11 +19,11 @@ import java.util.stream.Stream;
 
 /**
  * A {@link Domain} used for the domains of the nodes produced by {@link TreeDecomposer}.
- * Each potential value in the domain is an {@link Assignment} to all of the clique variables associated with a node of the tree
- * decomposition. The domain consists of all the possible consistent combinations of values of the domains of each of the clique
- * variables.
+ * Each potential value in the domain is a {@link Valuation} of all of the clique variables associated with a node of the tree
+ * decomposition, holding no solve state. The domain consists of all the possible consistent combinations of values of the
+ * domains of each of the clique variables.
  */
-public record AssignmentDomain(Set<Assignment> values) implements DiscreteSetDomain<Assignment> {
+public record AssignmentDomain(Set<Valuation> values) implements DiscreteSetDomain<Valuation> {
     /**
      * Create the domain by iterating over all combinations of the clique variable domains, to create assignments and then
      * filter out any that are not consistent with the constraints of the original problem.
@@ -58,9 +59,13 @@ public record AssignmentDomain(Set<Assignment> values) implements DiscreteSetDom
         return cancellation.isCancelled() ? Optional.empty() : Optional.of(new AssignmentDomain(combinations));
     }
 
-    private static Set<Assignment> populateCombinations(@NonNull Map<Variable<?>, Domain<?>> variableDomains,
-                                                         @NonNull ConstraintSatisfactionProblem csp,
-                                                         @NonNull Cancellation cancellation) {
+    /**
+     * Each consistent combination, built and checked as an {@link Assignment} and kept as {@link
+     * Valuation#copyOf}, which drops the solve state the checking needed.
+     */
+    private static Set<Valuation> populateCombinations(@NonNull Map<Variable<?>, Domain<?>> variableDomains,
+                                                        @NonNull ConstraintSatisfactionProblem csp,
+                                                        @NonNull Cancellation cancellation) {
         // create a list of single variable assignments for each value of the domain of each variable
         val variableAssignments = variableDomains.entrySet().stream()
                 .collect(Collectors.toMap(
@@ -74,6 +79,7 @@ public record AssignmentDomain(Set<Assignment> values) implements DiscreteSetDom
                 .orElse(Stream::empty).get()
                 .takeWhile(a -> !cancellation.isCancelled())
                 .filter(a -> a.isConsistent(csp))
+                .map(Valuation::copyOf)
                 .collect(Collectors.toSet());
     }
 
