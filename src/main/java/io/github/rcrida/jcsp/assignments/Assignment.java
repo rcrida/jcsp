@@ -99,12 +99,18 @@ public interface Assignment extends Valuation {
         return next;
     }
 
-    /** This assignment overlaid with every entry of {@code another}, whose statistics are added in. */
+    /**
+     * This assignment overlaid with every entry of {@code another}, whose statistics are added in unless
+     * they are this assignment's own: two solutions of one solve share its {@link Statistics}, which
+     * already holds both searches' counts, and adding it to itself would double it.
+     */
     default Assignment merge(@NonNull Assignment another) {
         AssignmentBuilder builder = AssignmentBuilder.copying(this, another.size());
         another.forEach(builder::value);
         Assignment merged = builder.build();
-        merged.getStatistics().add(another.getStatistics());
+        if (another.getStatistics() != merged.getStatistics()) {
+            merged.getStatistics().add(another.getStatistics());
+        }
         return merged;
     }
 

@@ -185,6 +185,19 @@ public class AssignmentTest {
     }
 
     @Test
+    void mergingTwoAssignmentsOfOneSolveLeavesItsStatisticsAsTheyAre() {
+        Statistics shared = new Statistics();
+        shared.incrementNodesExplored();
+        val assignment1 = Assignment.builder().statistics(shared).value(variable, value).build();
+        val assignment2 = Assignment.builder().statistics(shared).value(anotherVariable, anotherValue).build();
+
+        val merged = assignment1.merge(assignment2);
+
+        assertThat(merged.getStatistics()).isSameAs(shared);
+        assertThat(shared.getNodesExplored()).isEqualTo(1);
+    }
+
+    @Test
     void isConsistentIncrementsConstraintChecks() {
         when(domain.contains(value)).thenReturn(true);
         val assignment = Assignment.of(Map.of(variable, value));
