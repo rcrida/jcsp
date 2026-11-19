@@ -460,6 +460,7 @@ public interface Solver {
                         .selectorFactory(config.getVariableSelectorFactory())
                         .domainValuesOrderer(config.getValueOrder().create())
                         .inference(nogoodLearningInference(config, fixpointPropagation))
+                        .fixpointPropagation(fixpointPropagation)
                         .limits(limits)
                         .nogoodStore(NogoodStore.forProblem(csp))
                         .statistics(config.getStatistics())

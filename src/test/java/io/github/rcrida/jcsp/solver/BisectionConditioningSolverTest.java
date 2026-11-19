@@ -310,6 +310,42 @@ public class BisectionConditioningSolverTest {
     }
 
     @Test
+    void linearObjective_independentComponentsWithSeveralImprovementsEach_crossProductFilteredToImprovingOrder() {
+        // Maximizing x+y: bisection descends the lower half first, so each component's stream
+        // improves many times on its way up to 10. Their cross product pairs a later solution of one
+        // with an earlier, worse solution of the other after a better pair has already been seen, so
+        // only the shared incumbent filter keeps the combined stream strictly improving. A coarse
+        // epsilon keeps each stream to a handful of solutions: every leaf improves here, so a fine one
+        // would cross thousands with thousands.
+        Variable<Double> x = F.create("decomp_max_x");
+        Variable<Double> y = F.create("decomp_max_y");
+        var csp = ConstraintSatisfactionProblem.builder()
+                .variableDomain(x, IntervalDomain.of(0.0, 10.0))
+                .variableDomain(y, IntervalDomain.of(0.0, 10.0))
+                .build();
+        Map<Variable<? extends Number>, Double> coeffs = new HashMap<>();
+        coeffs.put(x, -1.0);
+        coeffs.put(y, -1.0);
+        LinearObjective objective = LinearObjective.builder().coefficients(coeffs).build();
+        BisectionConditioningSolver bisection = BisectionConditioningSolver.builder()
+                .inner(SINGLETON_EXTRACTOR)
+                .epsilon(1.5)
+                .objective(objective)
+                .build();
+
+        var solutions = bisection.getSolutions(csp).toList();
+
+        assertThat(solutions).hasSizeGreaterThan(2);
+        for (int i = 1; i < solutions.size(); i++) {
+            assertThat(objective.applyAsDouble(solutions.get(i)))
+                    .isLessThan(objective.applyAsDouble(solutions.get(i - 1)));
+        }
+        var best = solutions.getLast();
+        assertThat((Double) best.getValue(x).orElseThrow()).isCloseTo(10.0, within(1.0));
+        assertThat((Double) best.getValue(y).orElseThrow()).isCloseTo(10.0, within(1.0));
+    }
+
+    @Test
     void linearObjective_pinnedDiscreteBridge_stillDecomposesContinuousResidual() {
         // d is an already-pinned discrete "bridge" touching both x and y via constraints, but x
         // and y have no constraint directly between them. Under the unrestricted

@@ -2,16 +2,13 @@ package io.github.rcrida.jcsp.solver;
 
 import io.github.rcrida.jcsp.ConstraintSatisfactionProblem;
 import io.github.rcrida.jcsp.assignments.Assignment;
-import io.github.rcrida.jcsp.consistency.ConstraintConsistency;
-import io.github.rcrida.jcsp.consistency.fixpoint.FixpointConsistency;
-import io.github.rcrida.jcsp.constraints.nary.LinearBoundConstraint;
-import io.github.rcrida.jcsp.constraints.nary.LinearVariableConstraint;
-import io.github.rcrida.jcsp.constraints.nary.SumBoundConstraint;
-import io.github.rcrida.jcsp.constraints.nary.SumVariableConstraint;
+import io.github.rcrida.jcsp.assignments.Statistics;
 import io.github.rcrida.jcsp.domains.BoundedDomain;
 import io.github.rcrida.jcsp.domains.Domain;
 import io.github.rcrida.jcsp.domains.IntervalDomain;
+import io.github.rcrida.jcsp.solver.listener.SolverListener;
 import io.github.rcrida.jcsp.variables.Variable;
+import lombok.Builder;
 import lombok.EqualsAndHashCode;
 import lombok.experimental.SuperBuilder;
 import lombok.extern.slf4j.Slf4j;
@@ -20,9 +17,9 @@ import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 
 import java.util.Comparator;
-import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.function.ToDoubleFunction;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
@@ -55,15 +52,19 @@ import java.util.stream.Stream;
 @EqualsAndHashCode(callSuper = true)
 public class BisectionConditioningSolver extends SolverDecorator {
 
-    private static final List<ConstraintConsistency> REPROPAGATORS = List.of(
-            FixpointConsistency.of(SumBoundConstraint.class),
-            FixpointConsistency.of(SumVariableConstraint.class),
-            FixpointConsistency.of(LinearBoundConstraint.class),
-            FixpointConsistency.of(LinearVariableConstraint.class)
-    );
-
     @NonNull ToDoubleFunction<Assignment> objective;
     double epsilon;
+    /**
+     * Propagates each half after a bisection, and each point after a snap, so a box the constraints
+     * rule out is refuted where it is cut rather than at every leaf beneath it. The solve's own
+     * propagation, so every constraint type that propagates over intervals takes part.
+     */
+    @Builder.Default
+    @NonNull FixpointPropagation fixpointPropagation = FixpointPropagation.FULL;
+    @Builder.Default
+    @NonNull Statistics statistics = new Statistics();
+    @Builder.Default
+    @NonNull Cancellation cancellation = Cancellation.NEVER;
 
     @Override
     public Stream<Assignment> getSolutions(@NonNull ConstraintSatisfactionProblem csp) {
@@ -179,13 +180,23 @@ public class BisectionConditioningSolver extends SolverDecorator {
         double mid = (lo + hi) / 2.0;
         if (hi - lo <= epsilon) {
             log.debug("Snapping {} to {}", target, mid);
-            return allFeasible(withSnapped(csp, target, mid), incumbent);
+            return narrowTo(csp, target, IntervalDomain.of(mid, mid)).stream().flatMap(c -> allFeasible(c, incumbent));
         }
         log.debug("Bisecting {} at {} in [{}, {}]", target, mid, lo, hi);
         return Stream.concat(
-                narrow(csp, target, lo, mid).stream().flatMap(c -> allFeasible(c, incumbent)),
-                narrow(csp, target, mid, hi).stream().flatMap(c -> allFeasible(c, incumbent))
+                narrowTo(csp, target, bd.withBounds(lo, mid)).stream().flatMap(c -> allFeasible(c, incumbent)),
+                narrowTo(csp, target, bd.withBounds(mid, hi)).stream().flatMap(c -> allFeasible(c, incumbent))
         );
+    }
+
+    /**
+     * {@code csp} with {@code target} narrowed to {@code domain} and propagated to a fixpoint from
+     * {@code target}, or empty when that wipes a domain out.
+     */
+    private Optional<ConstraintSatisfactionProblem> narrowTo(ConstraintSatisfactionProblem csp, Variable<?> target,
+                                                             Domain<?> domain) {
+        return fixpointPropagation.applyFixpoint(csp, Map.of(target, domain), Set.of(target),
+                SolverListener.NONE, statistics, cancellation);
     }
 
     /**
@@ -274,39 +285,4 @@ public class BisectionConditioningSolver extends SolverDecorator {
                 .build();
     }
 
-    @SuppressWarnings({"unchecked", "rawtypes"})
-    private static Optional<ConstraintSatisfactionProblem> narrow(ConstraintSatisfactionProblem csp,
-                                                                   Variable<?> target,
-                                                                   double lo, double hi) {
-        BoundedDomain<?> bounded = (BoundedDomain<?>) csp.getDomain(target);
-        var narrowedDomain = bounded.withBounds(lo, hi);
-        return repropagate(csp.toBuilder()
-                .variableDomainEntry((Variable) target, narrowedDomain)
-                .build());
-    }
-
-    private static Optional<ConstraintSatisfactionProblem> repropagate(ConstraintSatisfactionProblem csp) {
-        var current = csp;
-        boolean changed = true;
-        while (changed) {
-            double widthBefore = boundedWidth(current);
-            for (var propagator : REPROPAGATORS) {
-                var next = propagator.apply(current);
-                if (next.isEmpty()) return Optional.empty();
-                current = next.get();
-            }
-            changed = boundedWidth(current) < widthBefore;
-        }
-        return Optional.of(current);
-    }
-
-    private static double boundedWidth(ConstraintSatisfactionProblem csp) {
-        return csp.getVariableDomains().values().stream()
-                .filter(BoundedDomain.class::isInstance)
-                .mapToDouble(d -> {
-                    BoundedDomain<?> bd = (BoundedDomain<?>) d;
-                    return bd.getMax().doubleValue() - bd.getMin().doubleValue();
-                })
-                .sum();
-    }
 }

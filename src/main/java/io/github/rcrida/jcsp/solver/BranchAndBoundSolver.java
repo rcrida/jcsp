@@ -157,6 +157,14 @@ public class BranchAndBoundSolver implements Solver {
     AdaptiveVariableSelector.@NonNull Factory selectorFactory = AdaptiveVariableSelector.Factory.INSTANCE;
     @NonNull DomainValuesOrderer domainValuesOrderer;
     @NonNull Inference inference;
+    /**
+     * The solve's propagation, which {@link #resolveContinuousResidual}'s bisection runs on each box
+     * it cuts. {@link #inference} is built from it but can't stand in for it there: an {@link
+     * Inference} propagates a search node's assignment, and a bisection narrows a domain no
+     * assignment names.
+     */
+    @Builder.Default
+    @NonNull FixpointPropagation fixpointPropagation = FixpointPropagation.FULL;
     @NonNull ToDoubleFunction<Assignment> objective;
     @Builder.Default
     @NonNull SolverLimits limits = SolverLimits.unlimited();
@@ -738,6 +746,9 @@ public class BranchAndBoundSolver implements Solver {
                 .inner(candidate -> SolverDecorator.forcedSolution(candidate).stream())
                 .epsilon(Solver.Factory.DEFAULT_BISECTION_EPSILON)
                 .objective(objective)
+                .fixpointPropagation(fixpointPropagation)
+                .statistics(statistics)
+                .cancellation(cancellation)
                 .build();
         // Not bisection.getSolution(csp): that's BisectionConditioningSolver's own
         // getSolutions(csp).findFirst() -- the first improving point its left-to-right recursive

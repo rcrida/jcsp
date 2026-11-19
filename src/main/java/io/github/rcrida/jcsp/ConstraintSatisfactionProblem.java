@@ -145,10 +145,8 @@ public class ConstraintSatisfactionProblem {
      * Most entries here propagate via interval-arithmetic bounds narrowing. Several are the
      * exception, relying solely on the final {@code isSatisfiedBy} check every solver path already
      * runs before returning a solution (e.g. {@link io.github.rcrida.jcsp.solver.SolverDecorator#forcedSolution})
-     * — the same fallback guarantee every other listed constraint relies on beyond its one upfront
-     * propagation pass in {@link io.github.rcrida.jcsp.solver.BisectionConditioningSolver} (whose own
-     * re-propagation is itself limited to {@link SumBoundConstraint}/{@link LinearBoundConstraint} — see its
-     * {@code REPROPAGATORS}):
+     * — the same fallback guarantee every other listed constraint relies on wherever its propagation
+     * stops short of deciding it:
      * <ul>
      *   <li>{@link io.github.rcrida.jcsp.constraints.unary.UnaryPredicateConstraint} — {@link io.github.rcrida.jcsp.consistency.node.NodeConsistency}
      *       already gates on {@code instanceof DiscreteDomain} and no-ops otherwise.</li>
