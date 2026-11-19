@@ -52,34 +52,6 @@ public class AssignmentTest {
         assertThat(assignment.getValue(anotherVariable)).isEmpty();
     }
     @Test
-    @SuppressWarnings("deprecation")
-    void extractPartialAssignment() {
-        val assignment = Assignment.of(Map.of(variable, value, anotherVariable, anotherValue));
-        val partialAssignment = assignment.extractPartialAssignment(Set.of(variable));
-        assertThat(partialAssignment).isEqualTo(Assignment.of(Map.of(variable, value)));
-    }
-
-    @Test
-    @SuppressWarnings("deprecation")
-    void extractPartialAssignmentLeavesOutAnUnassignedVariable() {
-        val assignment = Assignment.of(Map.of(variable, value));
-        val partialAssignment = assignment.extractPartialAssignment(Set.of(variable, anotherVariable));
-        assertThat(partialAssignment).isEqualTo(Assignment.of(Map.of(variable, value)));
-    }
-
-    @Test
-    @SuppressWarnings("deprecation")
-    void ofTrustedHoldsTheGivenEntriesAndCarriesTheGivenSolveState() {
-        Statistics statistics = new Statistics();
-        Map<Variable<?>, Object> values = new HashMap<>(Map.of(variable, value));
-
-        val assignment = Assignment.ofTrusted(values, statistics, SolverListener.NONE, Cancellation.NEVER);
-
-        assertThat(assignment).isEqualTo(Assignment.of(Map.of(variable, value)));
-        assertThat(assignment.getStatistics()).isSameAs(statistics);
-    }
-
-    @Test
     void withValue() {
         val assignment = Assignment.of(Map.of(variable, value));
         assertThat(assignment.withValue(variable, anotherValue).getValue(variable)).contains(anotherValue);

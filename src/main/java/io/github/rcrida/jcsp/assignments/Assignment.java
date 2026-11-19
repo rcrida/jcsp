@@ -12,7 +12,6 @@ import org.jspecify.annotations.NonNull;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.Map;
-import java.util.Set;
 
 /**
  * A {@link Valuation} plus the {@link Statistics}, {@link SolverListener} and {@link Cancellation}
@@ -31,21 +30,6 @@ public interface Assignment extends Valuation {
 
     static AssignmentBuilder builder() {
         return new AssignmentBuilder();
-    }
-
-    /**
-     * An {@link Assignment} over {@code values}, wrapped in an unmodifiable view rather than copied,
-     * with the given statistics, listener and cancellation. The caller must never mutate {@code
-     * values} afterwards.
-     *
-     * @deprecated it saves nothing over the builder, which hands its own map to the assignment it
-     * builds without copying it: use {@link #builder}, or {@link #toBuilder} to extend an existing
-     * assignment with its statistics, listener and cancellation carried over.
-     */
-    @Deprecated
-    static Assignment ofTrusted(@NonNull Map<Variable<?>, Object> values, @NonNull Statistics statistics,
-                                @NonNull SolverListener listener, @NonNull Cancellation cancellation) {
-        return new MapAssignment(Collections.unmodifiableMap(values), statistics, listener, cancellation);
     }
 
     Statistics getStatistics();
@@ -112,23 +96,6 @@ public interface Assignment extends Valuation {
             merged.getStatistics().add(another.getStatistics());
         }
         return merged;
-    }
-
-    /**
-     * The entries for those of {@code variables} that are assigned here, as a new {@link Assignment}
-     * with a {@link Statistics} of its own.
-     *
-     * @deprecated use {@link #partialValuation}, which holds the same entries and compares equal, with
-     * no solve state to allocate.
-     */
-    @Deprecated
-    default Assignment extractPartialAssignment(@NonNull Set<? extends Variable<?>> variables) {
-        AssignmentBuilder builder = new AssignmentBuilder(VariableMap.withExpectedSize(variables.size()));
-        for (Variable<?> variable : variables) {
-            Object value = getValueOrNull(variable);
-            if (value != null) builder.value(variable, value);
-        }
-        return builder.build();
     }
 
     default boolean isConsistent(ConstraintSatisfactionProblem csp) {

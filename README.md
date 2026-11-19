@@ -524,11 +524,24 @@ InitialAssignmentFactory factory = FallbackAssignmentFactory.builder()
 <dependency>
     <groupId>io.github.rcrida</groupId>
     <artifactId>jcsp</artifactId>
-    <version>4.3.0</version>
+    <version>5.0.0</version>
 </dependency>
 ```
 
 jcsp pulls in [ojAlgo](https://www.ojalgo.org/) (MIT-licensed) as a transitive compile-scope dependency, used for the LP relaxation behind `LinearObjective`-driven optimization (see above), and [xcsp3-tools](https://github.com/xcsp3team/XCSP3-Java-Tools) (MIT-licensed) as a transitive compile-scope dependency, used for `Xcsp3Parser` (see above).
+
+### Upgrading from 4.x
+
+Values a solve stores, and values a constraint is judged on, are now a `Valuation`: a variable→value mapping and nothing else. An `Assignment` is a `Valuation` plus the solve's statistics, listener and cancellation, so code passing assignments in still compiles; code that names the type it gets back, or implements a constraint, may not.
+
+- **`Constraint.isSatisfiedBy` takes a `Valuation`.** A custom `Constraint` must override `isSatisfiedBy(Valuation)`. Calling it with an `Assignment` is unchanged.
+- **`predicateConstraint` takes a `Predicate<Valuation>`.** A lambda passed inline compiles unchanged; a predicate held in a `Predicate<Assignment>` variable no longer fits.
+- **Table tuples are valuations.** `tuplesConstraint` and `conflictTuplesConstraint` accept `Set<? extends Valuation>`, so `Assignment.of(...)` tuples still compile, but `Valuation.of(...)` holds no statistics and halves a large table's memory. `NaryTuplesConstraint.getTuples()` and `NaryConflictTuplesConstraint.getConflicts()` return `Set<Valuation>`.
+- **`AssignmentDomain` is a `DiscreteSetDomain<Valuation>`**, for code that reads tree decomposition's clique values.
+- **Removed:** `Assignment.ofTrusted` (use `Assignment.builder()`, which no longer copies, or `toBuilder()` to carry an assignment's statistics, listener and cancellation over) and `Assignment.extractPartialAssignment` (use `partialValuation`, which holds the same entries and compares equal).
+- **Deprecated:** `TreeSolver`'s four-argument constructor; pass the solve's `Statistics`.
+
+Statistics now count tree-structured search, which they used to miss, and no longer double once per independent component when component solutions merge, so node counts may differ from 4.x.
 
 ### Upgrading from 4.2
 

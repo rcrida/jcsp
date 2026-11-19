@@ -11,8 +11,8 @@ import java.util.function.BiConsumer;
 
 /**
  * An {@link Assignment} backed by one {@link Map}, whose entry order is unspecified: a {@link
- * io.github.rcrida.jcsp.variables.VariableMap} its builder no longer writes to, or an unmodifiable view
- * from {@link Assignment#ofTrusted}. {@link #values} never leaves this package, and its views reject
+ * io.github.rcrida.jcsp.variables.VariableMap} its builder no longer writes to, or an immutable empty or
+ * singleton map. {@link #values} never leaves this package, and its views reject
  * removal; callers read through {@link Assignment}'s accessors.
  */
 record MapAssignment(Map<Variable<?>, Object> values, Statistics statistics, SolverListener listener,
