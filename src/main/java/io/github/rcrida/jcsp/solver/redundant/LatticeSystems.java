@@ -1,7 +1,7 @@
 package io.github.rcrida.jcsp.solver.redundant;
 
 import io.github.rcrida.jcsp.ConstraintSatisfactionProblem;
-import io.github.rcrida.jcsp.assignments.Assignment;
+import io.github.rcrida.jcsp.assignments.Valuation;
 import io.github.rcrida.jcsp.constraints.Constraint;
 import io.github.rcrida.jcsp.constraints.Operator;
 import io.github.rcrida.jcsp.constraints.nary.LinearBoundConstraint;
@@ -154,11 +154,11 @@ final class LatticeSystems {
             case INCONCLUSIVE -> Optional.empty();
             case INFEASIBLE -> Optional.of(UnaryPredicateConstraint.of((Variable<Object>) variables.get(0), value -> false));
             case SOLUTIONS -> {
-                Set<Assignment> tuples = new LinkedHashSet<>();
+                Set<Valuation> tuples = new LinkedHashSet<>();
                 for (int[] solution : result.solutions()) {
                     Map<Variable<?>, Object> values = new TreeMap<>(BY_NAME);
                     for (int j = 0; j < variables.size(); j++) values.put(variables.get(j), solution[j]);
-                    tuples.add(Assignment.of(values));
+                    tuples.add(Valuation.of(values));
                 }
                 yield Optional.of(NaryTuplesConstraint.of(tuples));
             }

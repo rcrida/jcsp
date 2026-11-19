@@ -1,7 +1,7 @@
 package io.github.rcrida.jcsp.solver.redundant;
 
 import io.github.rcrida.jcsp.ConstraintSatisfactionProblem;
-import io.github.rcrida.jcsp.assignments.Assignment;
+import io.github.rcrida.jcsp.assignments.Valuation;
 import io.github.rcrida.jcsp.constraints.Constraint;
 import io.github.rcrida.jcsp.constraints.nary.NaryConflictTuplesConstraint;
 import io.github.rcrida.jcsp.constraints.nary.NaryTuplesConstraint;
@@ -56,13 +56,13 @@ final class ParitySystems {
      * The row {@code tuples} state, if they are every tuple of one parity. {@code forbidden} says
      * they are the disallowed combinations, so the row has the other parity.
      */
-    static Optional<Row> rowOf(Set<Assignment> tuples, boolean forbidden) {
+    static Optional<Row> rowOf(Set<? extends Valuation> tuples, boolean forbidden) {
         if (tuples.isEmpty()) return Optional.empty();
         Set<Variable<?>> variables = tuples.iterator().next().variables();
         int arity = variables.size();
         if (arity < 2 || arity > MAX_ARITY || tuples.size() != 1 << (arity - 1)) return Optional.empty();
         int parity = -1;
-        for (Assignment tuple : tuples) {
+        for (Valuation tuple : tuples) {
             int ones = 0;
             for (Variable<?> variable : variables) {
                 int bit = bitOf(tuple.getValueOrNull(variable));

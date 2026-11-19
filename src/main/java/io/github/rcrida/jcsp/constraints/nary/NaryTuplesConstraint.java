@@ -1,6 +1,7 @@
 package io.github.rcrida.jcsp.constraints.nary;
 
 import io.github.rcrida.jcsp.assignments.Assignment;
+import io.github.rcrida.jcsp.assignments.Valuation;
 import io.github.rcrida.jcsp.consistency.Propagatable;
 import io.github.rcrida.jcsp.domains.DiscreteDomain;
 import io.github.rcrida.jcsp.domains.Domain;
@@ -25,10 +26,11 @@ import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
 
 /**
- * An n-ary constraint defined by a set of permitted assignments: the combined values of the
- * constrained variables must match one of the allowed {@link Assignment} tuples.
+ * An n-ary constraint defined by a set of permitted tuples: the combined values of the
+ * constrained variables must match one of the allowed {@link Valuation}s.
  * <p>
- * Each tuple is expressed as an {@link Assignment}, so variable order is irrelevant.
+ * Each tuple is expressed as a {@link Valuation}, so variable order is irrelevant; {@link #of} keeps
+ * each as {@link Valuation#copyOf}, which holds no solve state.
  * All tuples must contain exactly the same variable set.
  * For partial assignments the constraint is optimistically satisfied.
  * <p>
@@ -37,7 +39,7 @@ import java.util.stream.Collectors;
 @SuperBuilder
 @EqualsAndHashCode(callSuper = true)
 public class NaryTuplesConstraint extends NaryConstraint implements Propagatable {
-    @Getter @Singular Set<Assignment> tuples;
+    @Getter @Singular Set<Valuation> tuples;
 
     /**
      * Lazily-built, immutable inverted index from {@link #tuples}: {@code
@@ -79,7 +81,7 @@ public class NaryTuplesConstraint extends NaryConstraint implements Propagatable
         Map<Variable<?>, Map<Object, BitSet>> index = new LinkedHashMap<>();
         for (Variable<?> v : getVariables()) index.put(v, new LinkedHashMap<>());
         int position = 0;
-        for (Assignment tuple : tuples) {
+        for (Valuation tuple : tuples) {
             for (Variable<?> v : getVariables()) {
                 Object value = tuple.getValue(v).orElseThrow();
                 index.get(v).computeIfAbsent(value, key -> new BitSet(tuples.size())).set(position);
@@ -89,20 +91,20 @@ public class NaryTuplesConstraint extends NaryConstraint implements Propagatable
         return index;
     }
 
-    public static NaryTuplesConstraint of(@NonNull Set<Assignment> tuples) {
+    public static NaryTuplesConstraint of(@NonNull Set<? extends Valuation> tuples) {
         assert !tuples.isEmpty() : "tuples must not be empty";
-        var variableSets = tuples.stream().map(Assignment::variables).collect(Collectors.toSet());
+        var variableSets = tuples.stream().map(Valuation::variables).collect(Collectors.toSet());
         assert variableSets.size() == 1 : "all tuples must contain exactly the same variables";
         return NaryTuplesConstraint.builder()
                 .variables(variableSets.iterator().next())
-                .tuples(tuples)
+                .tuples(tuples.stream().map(Valuation::copyOf).toList())
                 .build();
     }
 
     @Override
     public boolean isSatisfiedBy(@NonNull Assignment assignment) {
         if (!assignment.containsAll(getVariables())) return true;
-        return tuples.contains(assignment.extractPartialAssignment(getVariables()));
+        return tuples.contains(assignment.partialValuation(getVariables()));
     }
 
     /**

@@ -14,6 +14,7 @@ import lombok.val;
 import io.github.rcrida.jcsp.assignments.Assignment;
 import io.github.rcrida.jcsp.assignments.LightweightSets;
 import io.github.rcrida.jcsp.assignments.NogoodStore;
+import io.github.rcrida.jcsp.assignments.Valuation;
 import io.github.rcrida.jcsp.constraints.Constraint;
 import io.github.rcrida.jcsp.constraints.binary.BinaryComparatorConstraint;
 import io.github.rcrida.jcsp.constraints.binary.BinaryLogicConstraint;
@@ -1904,10 +1905,11 @@ public class ConstraintSatisfactionProblem {
          * All tuples must contain exactly the same variable set.
          * Equivalent to MiniZinc's {@code table(x, t)} constraint.
          *
-         * @param tuples the allowed assignments; all must share the same variable set
+         * @param tuples the allowed tuples, such as {@link Valuation#of} or {@link Assignment#of};
+         *     all must share the same variable set
          * @return the builder
          */
-        public ConstraintSatisfactionProblemBuilder tuplesConstraint(@NonNull Set<Assignment> tuples) {
+        public ConstraintSatisfactionProblemBuilder tuplesConstraint(@NonNull Set<? extends Valuation> tuples) {
             return this.constraint(NaryTuplesConstraint.of(tuples));
         }
 
@@ -1915,7 +1917,7 @@ public class ConstraintSatisfactionProblem {
          * The starred-tuple sibling of {@link #tuplesConstraint}: each tuple is a {@code
          * Map<Variable<?>, Object>} whose values may be {@link NaryStarredTuplesConstraint#STAR}
          * ("don't care") instead of a concrete value, for tables with wildcard positions too large
-         * to expand into {@link #tuplesConstraint}'s plain {@link Assignment} tuples.
+         * to expand into {@link #tuplesConstraint}'s plain {@link Valuation} tuples.
          *
          * @param tuples the allowed tuples, each possibly containing {@link
          *     NaryStarredTuplesConstraint#STAR} entries; all must share the same variable set
@@ -1930,10 +1932,10 @@ public class ConstraintSatisfactionProblem {
          * forbidden combinations rather than permitted ones, with everything else implicitly
          * allowed.
          *
-         * @param conflicts the forbidden assignments; all must share the same variable set
+         * @param conflicts the forbidden tuples; all must share the same variable set
          * @return the builder
          */
-        public ConstraintSatisfactionProblemBuilder conflictTuplesConstraint(@NonNull Set<Assignment> conflicts) {
+        public ConstraintSatisfactionProblemBuilder conflictTuplesConstraint(@NonNull Set<? extends Valuation> conflicts) {
             return this.constraint(NaryConflictTuplesConstraint.of(conflicts));
         }
 

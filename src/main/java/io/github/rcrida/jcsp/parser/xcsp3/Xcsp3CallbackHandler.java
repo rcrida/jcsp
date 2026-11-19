@@ -3,6 +3,7 @@ package io.github.rcrida.jcsp.parser.xcsp3;
 import io.github.rcrida.jcsp.ConstraintSatisfactionProblem;
 import io.github.rcrida.jcsp.ConstraintSatisfactionProblem.ConstraintSatisfactionProblemBuilder;
 import io.github.rcrida.jcsp.assignments.Assignment;
+import io.github.rcrida.jcsp.assignments.Valuation;
 import io.github.rcrida.jcsp.constraints.Constraint;
 import io.github.rcrida.jcsp.constraints.Operator;
 import io.github.rcrida.jcsp.constraints.binary.AbsoluteDifferenceConstraint;
@@ -351,7 +352,7 @@ final class Xcsp3CallbackHandler implements XCallbacks2 {
         // A table always has at least one tuple (NaryTuplesConstraint#of rejects an empty one), so
         // the loop runs and the result is a real product rather than the initial infinity.
         double smallest = Double.POSITIVE_INFINITY;
-        for (Assignment tuple : table.getTuples()) {
+        for (Valuation tuple : table.getTuples()) {
             Object w = tuple.getValueOrNull(width);
             Object h = tuple.getValueOrNull(height);
             if (!(w instanceof Number wide) || !(h instanceof Number high)) return null;
@@ -1239,15 +1240,15 @@ final class Xcsp3CallbackHandler implements XCallbacks2 {
             addOrReify(NaryStarredTuplesConstraint.of(starredTuples), id);
             return;
         }
-        Set<Assignment> assignments = new LinkedHashSet<>();
+        Set<Valuation> valuations = new LinkedHashSet<>();
         for (int[] tuple : tuples) {
             Map<Variable<Integer>, Integer> tupleValues = new LinkedHashMap<>();
             for (int i = 0; i < vars.size(); i++) {
                 tupleValues.put(vars.get(i), tuple[i]);
             }
-            assignments.add(Assignment.of(tupleValues));
+            valuations.add(Valuation.of(tupleValues));
         }
-        addOrReify(positive ? NaryTuplesConstraint.of(assignments) : NaryConflictTuplesConstraint.of(assignments), id);
+        addOrReify(positive ? NaryTuplesConstraint.of(valuations) : NaryConflictTuplesConstraint.of(valuations), id);
     }
 
     /**

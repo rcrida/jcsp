@@ -80,6 +80,13 @@ public class NaryTuplesConstraintTest {
         assertThat(NaryTuplesConstraint.of(Set.of(t1, t2, t3))).isEqualTo(constraint);
     }
 
+    @Test
+    void of_keepsTuplesGivenAsAssignmentsWithoutTheirSolveState() {
+        assertThat(NaryTuplesConstraint.of(Set.of(t1, t2, t3)).getTuples())
+                .containsExactlyInAnyOrder(t1, t2, t3)
+                .noneMatch(Assignment.class::isInstance);
+    }
+
     // --- propagate() ---
 
     @Test

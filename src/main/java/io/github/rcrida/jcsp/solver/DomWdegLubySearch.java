@@ -5,6 +5,7 @@ import io.github.rcrida.jcsp.assignments.Assignment;
 import io.github.rcrida.jcsp.assignments.NogoodStore;
 import io.github.rcrida.jcsp.assignments.SolverLimits;
 import io.github.rcrida.jcsp.assignments.Statistics;
+import io.github.rcrida.jcsp.assignments.Valuation;
 import io.github.rcrida.jcsp.consistency.ConsistencyResult;
 import io.github.rcrida.jcsp.consistency.Inference;
 import io.github.rcrida.jcsp.constraints.Constraint;
@@ -488,7 +489,7 @@ public class DomWdegLubySearch implements Solver {
                 for (int c = 0; c < refuted; c++) {
                     Map<Variable<?>, Object> literals = new LinkedHashMap<>(decisions);
                     literals.put(frame.variable, frame.candidates.get(c));
-                    NogoodConstraint nogood = GroundNogoodConstraint.of(Assignment.of(literals), hits);
+                    NogoodConstraint nogood = GroundNogoodConstraint.of(Valuation.of(literals), hits);
                     nogoodStore.record(nogood);
                     recorded.add(nogood);
                     statistics.incrementNogoodsLearned();

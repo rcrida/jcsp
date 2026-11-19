@@ -2,6 +2,7 @@ package io.github.rcrida.jcsp.solver.redundant;
 
 import io.github.rcrida.jcsp.ConstraintSatisfactionProblem;
 import io.github.rcrida.jcsp.assignments.Assignment;
+import io.github.rcrida.jcsp.assignments.Valuation;
 import io.github.rcrida.jcsp.constraints.Constraint;
 import io.github.rcrida.jcsp.constraints.Operator;
 import io.github.rcrida.jcsp.constraints.nary.LinearBoundConstraint;
@@ -97,9 +98,9 @@ class LatticeSystemsTest {
         List<Constraint> posted = systems(csp);
 
         assertThat(posted).hasSize(1).first().isInstanceOf(NaryTuplesConstraint.class);
-        Set<Assignment> tuples = ((NaryTuplesConstraint) posted.get(0)).getTuples();
+        Set<Valuation> tuples = ((NaryTuplesConstraint) posted.get(0)).getTuples();
         assertThat(tuples).hasSize(1);
-        Assignment solution = tuples.iterator().next();
+        Valuation solution = tuples.iterator().next();
         for (int j = 0; j < 30; j++) {
             assertThat(solution.getValue(variableNamed(csp, "x" + j)).orElseThrow()).isEqualTo(MARKET_SPLIT_01_SOLUTION[j]);
         }

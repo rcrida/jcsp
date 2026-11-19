@@ -1,6 +1,7 @@
 package io.github.rcrida.jcsp.assignments;
 
 import io.github.rcrida.jcsp.variables.Variable;
+import io.github.rcrida.jcsp.variables.VariableMap;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 
@@ -28,6 +29,25 @@ import java.util.stream.StreamSupport;
  * to {@code null}.
  */
 public interface Valuation {
+
+    /** A valuation holding {@code values}' entries, which it copies. */
+    static Valuation of(@NonNull Map<? extends Variable<?>, ?> values) {
+        VariableMap<Object> copy = VariableMap.withExpectedSize(values.size());
+        values.forEach(copy::put);
+        return new MapValuation(copy);
+    }
+
+    /**
+     * {@code valuation}'s entries as a valuation that holds nothing else: {@code valuation} itself when
+     * it is already one, otherwise a copy, which drops an {@link Assignment}'s solve state. For values
+     * that are kept, such as a table's tuples.
+     */
+    static Valuation copyOf(@NonNull Valuation valuation) {
+        if (valuation instanceof MapValuation) return valuation;
+        VariableMap<Object> copy = VariableMap.withExpectedSize(valuation.size());
+        valuation.forEach(copy::put);
+        return new MapValuation(copy);
+    }
 
     /** This valuation's value for {@code variable}, or {@code null} if it has none. */
     @Nullable Object getValueOrNull(@NonNull Variable<?> variable);
@@ -107,5 +127,18 @@ public interface Valuation {
             if (value != null) partial.put(variable, value);
         }
         return Collections.unmodifiableMap(partial);
+    }
+
+    /**
+     * The entries for those of {@code variables} that are assigned here, as a {@link Valuation}: what a
+     * table constraint looks up among its tuples.
+     */
+    default Valuation partialValuation(@NonNull Set<? extends Variable<?>> variables) {
+        VariableMap<Object> partial = VariableMap.withExpectedSize(variables.size());
+        for (Variable<?> variable : variables) {
+            Object value = getValueOrNull(variable);
+            if (value != null) partial.put(variable, value);
+        }
+        return new MapValuation(partial);
     }
 }

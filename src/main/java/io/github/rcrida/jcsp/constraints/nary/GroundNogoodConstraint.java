@@ -78,7 +78,7 @@ public class GroundNogoodConstraint extends NaryConstraint implements NogoodCons
     }
 
     public static GroundNogoodConstraint of(@NonNull Map<Variable<?>, Object> forbidden) {
-        return of(Assignment.of(forbidden));
+        return of(Valuation.of(forbidden));
     }
 
     /**

@@ -54,6 +54,12 @@ public class NaryConflictTuplesConstraintTest {
 
     // --- of() validation ---
 
+    @Test void of_keepsConflictsGivenAsAssignmentsWithoutTheirSolveState() {
+        assertThat(constraint.getConflicts())
+                .containsExactlyInAnyOrder(c1, c2, c3)
+                .noneMatch(Assignment.class::isInstance);
+    }
+
     @Test void of_mismatchedVariableSets_asserts() {
         var other = Assignment.of(Map.of(x, 1)); // missing y
         assertThatThrownBy(() -> NaryConflictTuplesConstraint.of(Set.of(c1, other)))

@@ -1,6 +1,7 @@
 package io.github.rcrida.jcsp.constraints.nary;
 
 import io.github.rcrida.jcsp.assignments.Assignment;
+import io.github.rcrida.jcsp.assignments.Valuation;
 import io.github.rcrida.jcsp.consistency.Propagatable;
 import io.github.rcrida.jcsp.domains.DiscreteDomain;
 import io.github.rcrida.jcsp.domains.Domain;
@@ -52,7 +53,7 @@ import java.util.stream.Collectors;
 @SuperBuilder
 @EqualsAndHashCode(callSuper = true)
 public class NaryConflictTuplesConstraint extends NaryConstraint implements Propagatable {
-    @Getter @Singular Set<Assignment> conflicts;
+    @Getter @Singular Set<Valuation> conflicts;
 
     /**
      * Lazily-built, immutable inverted index from {@link #conflicts}: {@code
@@ -92,7 +93,7 @@ public class NaryConflictTuplesConstraint extends NaryConstraint implements Prop
         Map<Object, BitSet>[] byValue = new Map[variables.length];
         for (int k = 0; k < variables.length; k++) byValue[k] = new LinkedHashMap<>();
         int position = 0;
-        for (Assignment conflict : conflicts) {
+        for (Valuation conflict : conflicts) {
             for (int k = 0; k < variables.length; k++) {
                 Object value = conflict.getValue(variables[k]).orElseThrow();
                 byValue[k].computeIfAbsent(value, key -> new BitSet(conflicts.size())).set(position);
@@ -113,20 +114,20 @@ public class NaryConflictTuplesConstraint extends NaryConstraint implements Prop
         return intersection.cardinality();
     }
 
-    public static NaryConflictTuplesConstraint of(@NonNull Set<Assignment> conflicts) {
+    public static NaryConflictTuplesConstraint of(@NonNull Set<? extends Valuation> conflicts) {
         assert !conflicts.isEmpty() : "conflicts must not be empty";
-        var variableSets = conflicts.stream().map(Assignment::variables).collect(Collectors.toSet());
+        var variableSets = conflicts.stream().map(Valuation::variables).collect(Collectors.toSet());
         assert variableSets.size() == 1 : "all conflict tuples must contain exactly the same variables";
         return NaryConflictTuplesConstraint.builder()
                 .variables(variableSets.iterator().next())
-                .conflicts(conflicts)
+                .conflicts(conflicts.stream().map(Valuation::copyOf).toList())
                 .build();
     }
 
     @Override
     public boolean isSatisfiedBy(@NonNull Assignment assignment) {
         if (!assignment.containsAll(getVariables())) return true;
-        return !conflicts.contains(assignment.extractPartialAssignment(getVariables()));
+        return !conflicts.contains(assignment.partialValuation(getVariables()));
     }
 
     /**

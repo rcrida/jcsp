@@ -1,7 +1,7 @@
 package io.github.rcrida.jcsp.solver.redundant;
 
 import io.github.rcrida.jcsp.ConstraintSatisfactionProblem;
-import io.github.rcrida.jcsp.assignments.Assignment;
+import io.github.rcrida.jcsp.assignments.Valuation;
 import io.github.rcrida.jcsp.constraints.Constraint;
 import io.github.rcrida.jcsp.constraints.nary.AtMostOneConstraint;
 import io.github.rcrida.jcsp.constraints.nary.NaryConflictTuplesConstraint;
@@ -65,7 +65,7 @@ final class Pigeonholes {
             if (constraint instanceof AtMostOneConstraint) {
                 cliques.add(constraint.getVariables());
             } else if (constraint instanceof NaryConflictTuplesConstraint table && table.getConflicts().size() == 1) {
-                Assignment tuple = table.getConflicts().iterator().next();
+                Valuation tuple = table.getConflicts().iterator().next();
                 Set<Variable<?>> variables = tuple.variables();
                 if (variables.size() < 2) continue;
                 if (allEqualTo(tuple, 0)) {
@@ -91,7 +91,7 @@ final class Pigeonholes {
                 && discrete.asCollection().stream().allMatch(value -> ParitySystems.bitOf(value) >= 0);
     }
 
-    private static boolean allEqualTo(Assignment tuple, int bit) {
+    private static boolean allEqualTo(Valuation tuple, int bit) {
         for (Variable<?> variable : tuple.variables()) {
             if (ParitySystems.bitOf(tuple.getValueOrNull(variable)) != bit) return false;
         }
