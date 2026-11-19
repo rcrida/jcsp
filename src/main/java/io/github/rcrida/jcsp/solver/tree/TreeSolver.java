@@ -5,6 +5,7 @@ import lombok.extern.slf4j.Slf4j;
 import lombok.val;
 import io.github.rcrida.jcsp.ConstraintSatisfactionProblem;
 import io.github.rcrida.jcsp.assignments.Assignment;
+import io.github.rcrida.jcsp.assignments.Statistics;
 import io.github.rcrida.jcsp.domains.DiscreteDomain;
 import io.github.rcrida.jcsp.domains.Domain;
 import io.github.rcrida.jcsp.consistency.arc.AC3;
@@ -29,6 +30,13 @@ import java.util.function.Consumer;
 import java.util.stream.Stream;
 import java.util.stream.StreamSupport;
 
+/**
+ * Solves a tree-structured problem backtrack-free once it is directionally arc consistent, counting its
+ * search into the {@link #statistics} of the solve it belongs to. It reports to no
+ * {@link io.github.rcrida.jcsp.solver.listener.SolverListener}: the problem it is handed may be
+ * {@link io.github.rcrida.jcsp.solver.tree.decomposition.TreeDecompositionSolver}'s tree of cliques,
+ * whose variables are not the caller's.
+ */
 @Slf4j
 @Value
 public class TreeSolver implements Solver {
@@ -36,6 +44,28 @@ public class TreeSolver implements Solver {
     @NonNull DomainValuesOrderer orderer;
     TreeUnassignedVariableSelector.Factory selectorFactory;
     @NonNull Cancellation cancellation;
+    @NonNull Statistics statistics;
+
+    public TreeSolver(@NonNull TopologicalSorter topologicalSorter, @NonNull DomainValuesOrderer orderer,
+                      TreeUnassignedVariableSelector.Factory selectorFactory, @NonNull Cancellation cancellation,
+                      @NonNull Statistics statistics) {
+        this.topologicalSorter = topologicalSorter;
+        this.orderer = orderer;
+        this.selectorFactory = selectorFactory;
+        this.cancellation = cancellation;
+        this.statistics = statistics;
+    }
+
+    /**
+     * @deprecated counts its search into a {@link Statistics} of its own, which nothing reads: use
+     * {@link #TreeSolver(TopologicalSorter, DomainValuesOrderer, TreeUnassignedVariableSelector.Factory,
+     * Cancellation, Statistics)} with the solve's own.
+     */
+    @Deprecated
+    public TreeSolver(@NonNull TopologicalSorter topologicalSorter, @NonNull DomainValuesOrderer orderer,
+                      TreeUnassignedVariableSelector.Factory selectorFactory, @NonNull Cancellation cancellation) {
+        this(topologicalSorter, orderer, selectorFactory, cancellation, new Statistics());
+    }
 
     @Override
     public Stream<Assignment> getSolutions(@NonNull ConstraintSatisfactionProblem tcsp) {
@@ -53,7 +83,7 @@ public class TreeSolver implements Solver {
         val unassignedVariableSelector = selectorFactory.createSelector(X);
         Domain<?> rootDomain = finalTcsp.getDomain(root);
         log.debug("Domain {}", rootDomain);
-        val start = Assignment.empty();
+        val start = Assignment.builder().statistics(statistics).cancellation(cancellation).build();
         // Pre-filtered once, outside the per-candidate-value loop below, so checking each candidate
         // root value doesn't re-scan the tree's entire constraint list (Assignment#isConsistent's
         // own filter) just to find the handful of constraints that touch root.

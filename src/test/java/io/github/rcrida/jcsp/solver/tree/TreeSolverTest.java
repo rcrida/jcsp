@@ -3,12 +3,15 @@ package io.github.rcrida.jcsp.solver.tree;
 import lombok.val;
 import io.github.rcrida.jcsp.ConstraintSatisfactionProblem;
 import io.github.rcrida.jcsp.assignments.Assignment;
+import io.github.rcrida.jcsp.assignments.Statistics;
 import io.github.rcrida.jcsp.domains.DiscreteDomain;
 import io.github.rcrida.jcsp.domains.Domain;
 import io.github.rcrida.jcsp.domains.EnumDomain;
 import io.github.rcrida.jcsp.domains.IntRangeDomain;
 import io.github.rcrida.jcsp.domains.IntervalDomain;
 import io.github.rcrida.jcsp.solver.Cancellation;
+import io.github.rcrida.jcsp.solver.Solver;
+import io.github.rcrida.jcsp.solver.SolverConfig;
 import io.github.rcrida.jcsp.solver.backtrackingsearch.order.DefaultValueOrderer;
 import io.github.rcrida.jcsp.solver.tree.selector.TreeUnassignedVariableSelector;
 import io.github.rcrida.jcsp.solver.tree.sorter.BFSTopologicalSorter;
@@ -50,14 +53,48 @@ public class TreeSolverTest {
             .notEqualsConstraint(Q, NSW)
             .notEqualsConstraint(NSW, V)
             .build();
-    TreeSolver treeSolver = new TreeSolver(BFSTopologicalSorter.INSTANCE, DefaultValueOrderer.INSTANCE, TreeUnassignedVariableSelector.Factory.INSTANCE, Cancellation.NEVER);
+    Statistics statistics = new Statistics();
+    TreeSolver treeSolver = new TreeSolver(BFSTopologicalSorter.INSTANCE, DefaultValueOrderer.INSTANCE,
+            TreeUnassignedVariableSelector.Factory.INSTANCE, Cancellation.NEVER, statistics);
 
     @Test
     void getSolutions_cancelled_truncatesSilently() {
         val cancellation = new Cancellation();
         cancellation.cancel();
-        val cancelled = new TreeSolver(BFSTopologicalSorter.INSTANCE, DefaultValueOrderer.INSTANCE, TreeUnassignedVariableSelector.Factory.INSTANCE, cancellation);
+        val cancelled = new TreeSolver(BFSTopologicalSorter.INSTANCE, DefaultValueOrderer.INSTANCE,
+                TreeUnassignedVariableSelector.Factory.INSTANCE, cancellation, statistics);
         assertThat(cancelled.getSolutions(AUSTRALIA_WITHOUT_SA)).isEmpty();
+    }
+
+    @Test
+    void getSolution_countsItsSearchIntoTheGivenStatistics() {
+        val solution = treeSolver.getSolution(AUSTRALIA_WITHOUT_SA);
+
+        assertThat(solution).hasValueSatisfying(found -> assertThat(found.getStatistics()).isSameAs(statistics));
+        assertThat(statistics.getNodesExplored()).isGreaterThanOrEqualTo(AUSTRALIA_WITHOUT_SA.getVariableDomains().size());
+        assertThat(statistics.getConstraintChecks()).isPositive();
+    }
+
+    @Test
+    @SuppressWarnings("deprecation")
+    void theDeprecatedConstructorCountsIntoAStatisticsOfItsOwn() {
+        val own = new TreeSolver(BFSTopologicalSorter.INSTANCE, DefaultValueOrderer.INSTANCE,
+                TreeUnassignedVariableSelector.Factory.INSTANCE, Cancellation.NEVER);
+
+        assertThat(own.getSolution(AUSTRALIA_WITHOUT_SA)).isPresent();
+        assertThat(own.getStatistics()).isNotSameAs(statistics);
+        assertThat(own.getStatistics().getNodesExplored()).isPositive();
+    }
+
+    @Test
+    void aTreeSolvedThroughTheFactoryCountsIntoTheSolvesStatistics() {
+        val solveStatistics = new Statistics();
+
+        val solution = Solver.Factory.INSTANCE.createSolver(AUSTRALIA_WITHOUT_SA,
+                SolverConfig.builder().statistics(solveStatistics).build()).getSolution();
+
+        assertThat(solution).isPresent();
+        assertThat(solveStatistics.getNodesExplored()).isPositive();
     }
 
     @Test

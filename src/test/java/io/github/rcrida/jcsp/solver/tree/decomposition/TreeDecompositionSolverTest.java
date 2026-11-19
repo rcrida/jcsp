@@ -3,6 +3,7 @@ package io.github.rcrida.jcsp.solver.tree.decomposition;
 import lombok.val;
 import io.github.rcrida.jcsp.ConstraintSatisfactionProblem;
 import io.github.rcrida.jcsp.assignments.Assignment;
+import io.github.rcrida.jcsp.assignments.Statistics;
 import io.github.rcrida.jcsp.constraints.Operator;
 import io.github.rcrida.jcsp.domains.IntRangeDomain;
 import io.github.rcrida.jcsp.solver.Cancellation;
@@ -94,6 +95,19 @@ public class TreeDecompositionSolverTest {
         when(treeSolver.getSolutions(TREE_CSP)).thenReturn(Stream.of(treeSolution));
 
         assertThat(solver.getSolutions(ORIGINAL_CSP)).containsExactly(originalAssignment);
+    }
+
+    @Test
+    void getSolutions_theRecomposedSolutionCarriesTheSolversStatistics() {
+        val statistics = new Statistics();
+        val withStatistics = TreeDecompositionSolver.builder().inner(defaultSolver).treeDecomposer(treeDecomposer)
+                .treeSolver(treeSolver).targetTreewidth(7).statistics(statistics).build();
+        val treeSolution = Assignment.builder().value(C1, Assignment.of(Map.of(V1, 1, V2, 2))).build();
+        when(treeDecomposer.decompose(eq(ORIGINAL_CSP), anyInt())).thenReturn(Optional.of(TREE_CSP));
+        when(treeSolver.getSolutions(TREE_CSP)).thenReturn(Stream.of(treeSolution));
+
+        assertThat(withStatistics.getSolutions(ORIGINAL_CSP))
+                .singleElement().satisfies(solution -> assertThat(solution.getStatistics()).isSameAs(statistics));
     }
 
     @Test

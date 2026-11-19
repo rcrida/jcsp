@@ -237,7 +237,8 @@ public interface Solver {
         static Solver satisfactionSearch(@NonNull SolverConfig config, int searchIndex,
                                           @NonNull FixpointPropagation fixpointPropagation,
                                           int maxRestarts) {
-            val treeSolver = new TreeSolver(BFSTopologicalSorter.INSTANCE, DefaultValueOrderer.INSTANCE, TreeUnassignedVariableSelector.Factory.INSTANCE, config.getCancellation());
+            val treeSolver = new TreeSolver(BFSTopologicalSorter.INSTANCE, DefaultValueOrderer.INSTANCE,
+                    TreeUnassignedVariableSelector.Factory.INSTANCE, config.getCancellation(), config.getStatistics());
             val inference = nogoodLearningInference(config, fixpointPropagation);
             // treeSolver is stateless (no accumulated learning) and safe to share across sub-problems.
             return IndependentSubproblemSolver.builder()

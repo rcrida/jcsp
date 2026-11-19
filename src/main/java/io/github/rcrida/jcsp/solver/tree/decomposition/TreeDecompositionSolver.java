@@ -171,7 +171,7 @@ public class TreeDecompositionSolver extends SolverDecorator {
      * @return an assignment to the original variables
      */
     private Assignment recomposeAssignment(@NonNull Assignment treeAssignment) {
-        Assignment recomposed = Assignment.empty();
+        Assignment recomposed = Assignment.builder().statistics(statistics).cancellation(cancellation).build();
         for (Variable<?> clique : treeAssignment.variables()) {
             recomposed = recomposed.merge((Assignment) treeAssignment.getValueOrNull(clique));
         }
