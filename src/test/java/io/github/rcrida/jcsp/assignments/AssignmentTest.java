@@ -52,6 +52,7 @@ public class AssignmentTest {
         assertThat(assignment.getValue(anotherVariable)).isEmpty();
     }
     @Test
+    @SuppressWarnings("deprecation")
     void extractPartialAssignment() {
         val assignment = Assignment.of(Map.of(variable, value, anotherVariable, anotherValue));
         val partialAssignment = assignment.extractPartialAssignment(Set.of(variable));
@@ -59,6 +60,7 @@ public class AssignmentTest {
     }
 
     @Test
+    @SuppressWarnings("deprecation")
     void extractPartialAssignmentLeavesOutAnUnassignedVariable() {
         val assignment = Assignment.of(Map.of(variable, value));
         val partialAssignment = assignment.extractPartialAssignment(Set.of(variable, anotherVariable));

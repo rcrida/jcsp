@@ -115,14 +115,13 @@ public interface Assignment extends Valuation {
     }
 
     /**
-     * Same lookup as {@link #partialValues} but wrapped in a full {@link Assignment} — needed by
-     * callers that rely on {@link Assignment} identity/equality (e.g.
-     * {@link io.github.rcrida.jcsp.constraints.nary.NaryTuplesConstraint} comparing against a
-     * table of tuples), unlike
-     * {@link io.github.rcrida.jcsp.constraints.nary.UniformNaryConstraint#isSatisfiedBy}, which
-     * only ever needs the raw value collection and calls {@link #partialValues} directly to skip
-     * this wrapping.
+     * The entries for those of {@code variables} that are assigned here, as a new {@link Assignment}
+     * with a {@link Statistics} of its own.
+     *
+     * @deprecated use {@link #partialValuation}, which holds the same entries and compares equal, with
+     * no solve state to allocate.
      */
+    @Deprecated
     default Assignment extractPartialAssignment(@NonNull Set<? extends Variable<?>> variables) {
         AssignmentBuilder builder = new AssignmentBuilder(VariableMap.withExpectedSize(variables.size()));
         for (Variable<?> variable : variables) {
