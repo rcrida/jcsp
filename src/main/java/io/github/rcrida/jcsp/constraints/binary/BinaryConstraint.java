@@ -4,6 +4,7 @@ import lombok.Value;
 import lombok.experimental.NonFinal;
 import lombok.experimental.SuperBuilder;
 import io.github.rcrida.jcsp.assignments.Assignment;
+import io.github.rcrida.jcsp.assignments.Valuation;
 import io.github.rcrida.jcsp.consistency.arc.Arc;
 import io.github.rcrida.jcsp.constraints.Constraint;
 import io.github.rcrida.jcsp.variables.Variable;
@@ -26,7 +27,7 @@ public abstract class BinaryConstraint<L, R> implements Constraint {
     @NonNull Variable<R> right;
 
     @Override
-    public final boolean isSatisfiedBy(@NonNull Assignment assignment) {
+    public final boolean isSatisfiedBy(@NonNull Valuation assignment) {
         return assignment.getValue(left)
                 .flatMap(leftValue -> assignment.getValue(right)
                         .map(rightValue -> isSatisfiedBy(leftValue, rightValue)))

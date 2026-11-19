@@ -1,6 +1,6 @@
 package io.github.rcrida.jcsp.constraints.nary;
 
-import io.github.rcrida.jcsp.assignments.Assignment;
+import io.github.rcrida.jcsp.assignments.Valuation;
 import io.github.rcrida.jcsp.consistency.Propagatable;
 import io.github.rcrida.jcsp.constraints.LogicOperator;
 import io.github.rcrida.jcsp.constraints.Operator;
@@ -56,7 +56,7 @@ public class RelationLogicConstraint extends NaryConstraint implements Propagata
     public sealed interface Literal permits ValueLiteral, VariableLiteral {
         Set<Variable<?>> variables();
 
-        boolean holds(Assignment assignment);
+        boolean holds(Valuation assignment);
 
         Literal negate();
     }
@@ -76,7 +76,7 @@ public class RelationLogicConstraint extends NaryConstraint implements Propagata
         }
 
         @Override
-        public boolean holds(@NonNull Assignment assignment) {
+        public boolean holds(@NonNull Valuation assignment) {
             return operator.compare(assignment.getValue(variable).orElseThrow(), value);
         }
 
@@ -98,7 +98,7 @@ public class RelationLogicConstraint extends NaryConstraint implements Propagata
         }
 
         @Override
-        public boolean holds(@NonNull Assignment assignment) {
+        public boolean holds(@NonNull Valuation assignment) {
             return operator.compare(assignment.getValue(left).orElseThrow(), assignment.getValue(right).orElseThrow());
         }
 
@@ -138,7 +138,7 @@ public class RelationLogicConstraint extends NaryConstraint implements Propagata
     }
 
     @Override
-    public boolean isSatisfiedBy(@NonNull Assignment assignment) {
+    public boolean isSatisfiedBy(@NonNull Valuation assignment) {
         if (!assignment.containsAll(getVariables())) return true;
         return operator.apply(left.holds(assignment), right.holds(assignment));
     }

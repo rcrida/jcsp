@@ -1,6 +1,6 @@
 package io.github.rcrida.jcsp.constraints.nary;
 
-import io.github.rcrida.jcsp.assignments.Assignment;
+import io.github.rcrida.jcsp.assignments.Valuation;
 import io.github.rcrida.jcsp.consistency.Propagatable;
 import io.github.rcrida.jcsp.constraints.Operator;
 import io.github.rcrida.jcsp.domains.BoundedDomain;
@@ -63,7 +63,7 @@ public class LexConstraint<T extends Comparable<T>> extends NaryConstraint imple
     }
 
     @Override
-    public boolean isSatisfiedBy(@NonNull Assignment assignment) {
+    public boolean isSatisfiedBy(@NonNull Valuation assignment) {
         for (VariablePair<T> pair : variablePairs) {
             val lv = assignment.getValue(pair.left);
             val rv = assignment.getValue(pair.right);

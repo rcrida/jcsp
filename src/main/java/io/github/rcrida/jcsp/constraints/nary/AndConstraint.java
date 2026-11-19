@@ -1,6 +1,6 @@
 package io.github.rcrida.jcsp.constraints.nary;
 
-import io.github.rcrida.jcsp.assignments.Assignment;
+import io.github.rcrida.jcsp.assignments.Valuation;
 import io.github.rcrida.jcsp.consistency.DomainOverlay;
 import io.github.rcrida.jcsp.consistency.Propagatable;
 import io.github.rcrida.jcsp.constraints.Constraint;
@@ -42,7 +42,7 @@ public class AndConstraint extends NaryConstraint implements Propagatable {
     }
 
     @Override
-    public boolean isSatisfiedBy(@NonNull Assignment a) {
+    public boolean isSatisfiedBy(@NonNull Valuation a) {
         return conjuncts.stream().allMatch(c -> c.isSatisfiedBy(a));
     }
 
@@ -69,7 +69,7 @@ public class AndConstraint extends NaryConstraint implements Propagatable {
     private static boolean necessarilySatisfied(Constraint c, Map<Variable<?>, Domain<?>> domains) {
         if (c instanceof Propagatable p) return p.isNecessarilySatisfied(domains);
         Map<Variable<?>, Object> singletons = Propagatable.allSingletonReason(c.getVariables(), domains);
-        return singletons.size() == c.getVariables().size() && c.isSatisfiedBy(Assignment.of(singletons));
+        return singletons.size() == c.getVariables().size() && c.isSatisfiedBy(Valuation.of(singletons));
     }
 
     /**

@@ -1,6 +1,6 @@
 package io.github.rcrida.jcsp.constraints.nary;
 
-import io.github.rcrida.jcsp.assignments.Assignment;
+import io.github.rcrida.jcsp.assignments.Valuation;
 import io.github.rcrida.jcsp.consistency.Propagatable;
 import io.github.rcrida.jcsp.domains.DiscreteDomain;
 import io.github.rcrida.jcsp.domains.Domain;
@@ -64,7 +64,7 @@ public class BinPackingConstraint extends NaryConstraint implements Propagatable
      * violation" both simply fall through to {@code true}.
      */
     @Override
-    public boolean isSatisfiedBy(@NonNull Assignment assignment) {
+    public boolean isSatisfiedBy(@NonNull Valuation assignment) {
         int[] load = new int[capacities.size()];
         for (int i = 0; i < bin.size(); i++) {
             Optional<Integer> b = assignment.getValue(bin.get(i));

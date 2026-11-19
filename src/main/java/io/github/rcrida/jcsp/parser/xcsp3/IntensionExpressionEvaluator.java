@@ -1,6 +1,6 @@
 package io.github.rcrida.jcsp.parser.xcsp3;
 
-import io.github.rcrida.jcsp.assignments.Assignment;
+import io.github.rcrida.jcsp.assignments.Valuation;
 import io.github.rcrida.jcsp.variables.Variable;
 import org.xcsp.common.Types.TypeExpr;
 import org.xcsp.common.predicates.XNode;
@@ -15,7 +15,7 @@ import java.util.stream.LongStream;
 
 /**
  * Converts an XCSP3 {@code <intension>} expression tree -- already parsed into an {@link XNode}
- * AST by {@code xcsp3-tools} -- into a {@link Predicate}{@code <Assignment>} suitable for {@link
+ * AST by {@code xcsp3-tools} -- into a {@link Predicate}{@code <Valuation>} suitable for {@link
  * io.github.rcrida.jcsp.ConstraintSatisfactionProblem.ConstraintSatisfactionProblemBuilder#predicateConstraint}.
  * Covers the full XCSP3-core integer {@code <intension>} grammar: arithmetic ({@code neg}/{@code
  * abs}/{@code sqr}/{@code add}/{@code sub}/{@code mul}/{@code div}/{@code mod}/{@code pow}/{@code
@@ -38,14 +38,14 @@ final class IntensionExpressionEvaluator {
     private IntensionExpressionEvaluator() {
     }
 
-    static Predicate<Assignment> toPredicate(XNode<XVarInteger> tree, Map<String, Variable<Integer>> variablesByName) {
+    static Predicate<Valuation> toPredicate(XNode<XVarInteger> tree, Map<String, Variable<Integer>> variablesByName) {
         return assignment -> evaluate(tree, assignment, variablesByName) != 0;
     }
 
     // Package-private (not private): the "unsupported leaf type" branch below is unreachable through
     // any real XCSP3 intension tree over XVarInteger scope (only VAR/LONG leaves ever occur), so
     // IntensionExpressionEvaluatorTest exercises it directly with a hand-built XNode.specialLeaf(...).
-    static long evaluate(XNode<XVarInteger> node, Assignment assignment, Map<String, Variable<Integer>> variablesByName) {
+    static long evaluate(XNode<XVarInteger> node, Valuation assignment, Map<String, Variable<Integer>> variablesByName) {
         if (node instanceof XNodeLeaf<XVarInteger> leaf) {
             if (leaf.getType() == TypeExpr.VAR) {
                 Variable<Integer> variable = variablesByName.get(((XVarInteger) leaf.value).id());
@@ -79,7 +79,7 @@ final class IntensionExpressionEvaluator {
      * values adjacent to a variable's current position), not just across distinct calls.
      */
     private static Set<Long> evaluateSet(
-            XNode<XVarInteger> node, Assignment assignment, Map<String, Variable<Integer>> variablesByName) {
+            XNode<XVarInteger> node, Valuation assignment, Map<String, Variable<Integer>> variablesByName) {
         if (node.getType() != TypeExpr.SET) {
             throw new UnsupportedXcsp3ConstraintException("in/notin requires a literal set(...) operand, got: " + node.getType());
         }

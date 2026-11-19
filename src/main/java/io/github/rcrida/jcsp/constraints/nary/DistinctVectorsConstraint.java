@@ -1,6 +1,6 @@
 package io.github.rcrida.jcsp.constraints.nary;
 
-import io.github.rcrida.jcsp.assignments.Assignment;
+import io.github.rcrida.jcsp.assignments.Valuation;
 import io.github.rcrida.jcsp.consistency.Propagatable;
 import io.github.rcrida.jcsp.domains.DiscreteDomain;
 import io.github.rcrida.jcsp.domains.Domain;
@@ -67,7 +67,7 @@ public class DistinctVectorsConstraint extends NaryConstraint implements Propaga
     }
 
     @Override
-    public boolean isSatisfiedBy(@NonNull Assignment assignment) {
+    public boolean isSatisfiedBy(@NonNull Valuation assignment) {
         for (int i = 0; i < vectors.size(); i++) {
             for (int j = i + 1; j < vectors.size(); j++) {
                 if (pairViolated(assignment, vectors.get(i), vectors.get(j))) return false;
@@ -77,7 +77,7 @@ public class DistinctVectorsConstraint extends NaryConstraint implements Propaga
     }
 
     /** {@code true} only when every position of both vectors is assigned and all are equal. */
-    private static boolean pairViolated(Assignment assignment, List<Variable<?>> a, List<Variable<?>> b) {
+    private static boolean pairViolated(Valuation assignment, List<Variable<?>> a, List<Variable<?>> b) {
         boolean fullyAssigned = true;
         for (int p = 0; p < a.size(); p++) {
             var va = assignment.getValue(a.get(p));

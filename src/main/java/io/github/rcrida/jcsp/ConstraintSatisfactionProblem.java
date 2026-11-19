@@ -1981,14 +1981,14 @@ public class ConstraintSatisfactionProblem {
         }
 
         /**
-         * Create an arbitrary constraint using a {@link Predicate<Assignment>}. The predicate will need to dereference
+         * Create an arbitrary constraint using a {@link Predicate<Valuation>}. The predicate will need to dereference
          * the values of the variables it requires for the calculation of the predicate value.
          *
          * @param variables the variables that the predicate will reference
-         * @param predicate determines whether the specified assignment is consistent
+         * @param predicate determines whether the specified values are consistent
          * @return the builder
          */
-        public ConstraintSatisfactionProblemBuilder predicateConstraint(@NonNull Set<? extends Variable<?>> variables, @NonNull Predicate<Assignment> predicate) {
+        public ConstraintSatisfactionProblemBuilder predicateConstraint(@NonNull Set<? extends Variable<?>> variables, @NonNull Predicate<Valuation> predicate) {
             return this.constraint(PredicateConstraint.builder().variables(variables).predicate(predicate).build());
         }
 

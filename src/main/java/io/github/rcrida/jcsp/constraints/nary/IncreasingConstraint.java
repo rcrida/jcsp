@@ -1,6 +1,6 @@
 package io.github.rcrida.jcsp.constraints.nary;
 
-import io.github.rcrida.jcsp.assignments.Assignment;
+import io.github.rcrida.jcsp.assignments.Valuation;
 import io.github.rcrida.jcsp.consistency.Propagatable;
 import io.github.rcrida.jcsp.constraints.BinaryDecomposable;
 import io.github.rcrida.jcsp.constraints.ComparableBounds;
@@ -53,7 +53,7 @@ public class IncreasingConstraint<T extends Comparable<T>> extends NaryConstrain
     }
 
     @Override
-    public boolean isSatisfiedBy(@NonNull Assignment assignment) {
+    public boolean isSatisfiedBy(@NonNull Valuation assignment) {
         for (int i = 0; i < orderedVariables.size() - 1; i++) {
             var left  = assignment.getValue(orderedVariables.get(i));
             var right = assignment.getValue(orderedVariables.get(i + 1));

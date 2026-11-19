@@ -4,7 +4,7 @@ import lombok.EqualsAndHashCode;
 import lombok.Getter;
 import lombok.Value;
 import lombok.experimental.SuperBuilder;
-import io.github.rcrida.jcsp.assignments.Assignment;
+import io.github.rcrida.jcsp.assignments.Valuation;
 import io.github.rcrida.jcsp.consistency.Propagatable;
 import io.github.rcrida.jcsp.constraints.BinaryDecomposable;
 import io.github.rcrida.jcsp.constraints.Constraint;
@@ -50,7 +50,7 @@ public class ReifiedConstraint extends NaryConstraint implements BinaryDecomposa
     }
 
     @Override
-    public boolean isSatisfiedBy(@NonNull Assignment a) {
+    public boolean isSatisfiedBy(@NonNull Valuation a) {
         Optional<Boolean> indValue = a.getValue(indicator);
         if (indValue.isEmpty()) return true;
 
@@ -163,7 +163,7 @@ public class ReifiedConstraint extends NaryConstraint implements BinaryDecomposa
         return true;
     }
 
-    private boolean allBodyVarsAssigned(Assignment a) {
+    private boolean allBodyVarsAssigned(Valuation a) {
         for (Variable<?> v : body.getVariables()) {
             if (a.getValue(v).isEmpty()) return false;
         }
@@ -175,7 +175,7 @@ public class ReifiedConstraint extends NaryConstraint implements BinaryDecomposa
         for (Variable<?> v : body.getVariables()) {
             values.put(v, domains.get(v).singleValue().orElseThrow());
         }
-        return body.isSatisfiedBy(Assignment.of(values));
+        return body.isSatisfiedBy(Valuation.of(values));
     }
 
     private static Domain<Boolean> forceIndicator(DiscreteDomain<Boolean> domain, boolean value) {

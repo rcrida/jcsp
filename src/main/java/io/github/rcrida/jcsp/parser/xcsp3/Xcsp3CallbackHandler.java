@@ -496,7 +496,7 @@ final class Xcsp3CallbackHandler implements XCallbacks2 {
      * what the unpropagated fallback would have -- tabulation changes how a constraint propagates,
      * never what it means.
      */
-    Predicate<Assignment> intensionPredicate(XNode<XVarInteger> tree) {
+    Predicate<Valuation> intensionPredicate(XNode<XVarInteger> tree) {
         return IntensionExpressionEvaluator.toPredicate(tree, variablesByName);
     }
 
@@ -1049,15 +1049,15 @@ final class Xcsp3CallbackHandler implements XCallbacks2 {
             throw new UnsupportedXcsp3ConstraintException(
                     "No recognizer for intension over " + variables.size() + " variables: " + id + " " + tree);
         }
-        Predicate<Assignment> predicate = IntensionExpressionEvaluator.toPredicate(tree, variablesByName);
+        Predicate<Valuation> predicate = IntensionExpressionEvaluator.toPredicate(tree, variablesByName);
         Variable<Integer> first = variables.get(0);
         if (variables.size() == 1) {
             return UnaryPredicateConstraint.of(first,
-                    (Integer value) -> predicate.test(Assignment.of(Map.of(first, value))));
+                    (Integer value) -> predicate.test(Valuation.of(Map.of(first, value))));
         }
         Variable<Integer> second = variables.get(1);
         return BinaryPredicateConstraint.of(first, second,
-                (Integer l, Integer r) -> predicate.test(Assignment.of(Map.of(first, l, second, r))));
+                (Integer l, Integer r) -> predicate.test(Valuation.of(Map.of(first, l, second, r))));
     }
 
     // Package-private (not private): TypeExpr.GE/GT never reach here through any real XCSP3

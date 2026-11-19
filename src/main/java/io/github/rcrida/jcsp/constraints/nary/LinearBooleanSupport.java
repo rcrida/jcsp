@@ -1,6 +1,6 @@
 package io.github.rcrida.jcsp.constraints.nary;
 
-import io.github.rcrida.jcsp.assignments.Assignment;
+import io.github.rcrida.jcsp.assignments.Valuation;
 import io.github.rcrida.jcsp.constraints.Operator;
 import io.github.rcrida.jcsp.domains.DiscreteDomain;
 import io.github.rcrida.jcsp.variables.Variable;
@@ -70,7 +70,7 @@ final class LinearBooleanSupport {
      */
     @SuppressWarnings("unchecked")
     static <N extends Number> N weightedSumOfTrue(@NonNull Map<Variable<Boolean>, N> coefficients,
-                                                    @NonNull Assignment assignment, @NonNull N typeSample) {
+                                                    @NonNull Valuation assignment, @NonNull N typeSample) {
         return switch (typeSample) {
             case Byte ignored -> {
                 int s = 0;

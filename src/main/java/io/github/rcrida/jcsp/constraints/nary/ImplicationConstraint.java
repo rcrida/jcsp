@@ -4,7 +4,7 @@ import lombok.EqualsAndHashCode;
 import lombok.Getter;
 import lombok.Value;
 import lombok.experimental.SuperBuilder;
-import io.github.rcrida.jcsp.assignments.Assignment;
+import io.github.rcrida.jcsp.assignments.Valuation;
 import io.github.rcrida.jcsp.consistency.Propagatable;
 import io.github.rcrida.jcsp.constraints.Constraint;
 import io.github.rcrida.jcsp.domains.DiscreteDomain;
@@ -47,7 +47,7 @@ public class ImplicationConstraint extends NaryConstraint implements Propagatabl
     }
 
     @Override
-    public boolean isSatisfiedBy(@NonNull Assignment a) {
+    public boolean isSatisfiedBy(@NonNull Valuation a) {
         return a.getValue(indicator)
                 .map(b -> !b || body.isSatisfiedBy(a))
                 .orElse(true);
@@ -127,7 +127,7 @@ public class ImplicationConstraint extends NaryConstraint implements Propagatabl
         for (Variable<?> v : body.getVariables()) {
             values.put(v, domains.get(v).singleValue().orElseThrow());
         }
-        return body.isSatisfiedBy(Assignment.of(values));
+        return body.isSatisfiedBy(Valuation.of(values));
     }
 
     private static Domain<Boolean> forceIndicatorFalse(DiscreteDomain<Boolean> domain) {

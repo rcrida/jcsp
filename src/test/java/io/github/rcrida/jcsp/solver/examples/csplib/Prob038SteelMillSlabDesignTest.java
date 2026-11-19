@@ -5,6 +5,7 @@ import io.github.rcrida.jcsp.solver.Solver;
 import lombok.val;
 import io.github.rcrida.jcsp.ConstraintSatisfactionProblem;
 import io.github.rcrida.jcsp.assignments.Assignment;
+import io.github.rcrida.jcsp.assignments.Valuation;
 import io.github.rcrida.jcsp.constraints.Operator;
 import io.github.rcrida.jcsp.constraints.unary.UnaryComparatorConstraint;
 import io.github.rcrida.jcsp.domains.BooleanDomain;
@@ -175,7 +176,7 @@ public class Prob038SteelMillSlabDesignTest {
         return builder.build();
     }
 
-    static boolean respectsColorLimit(Assignment a) {
+    static boolean respectsColorLimit(Valuation a) {
         for (Variable<Integer> sb : SB) {
             if (a.getValue(sb).isEmpty()) return true; // optimistic until fully assigned
         }

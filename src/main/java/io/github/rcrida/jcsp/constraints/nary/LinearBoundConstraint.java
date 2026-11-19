@@ -1,6 +1,6 @@
 package io.github.rcrida.jcsp.constraints.nary;
 
-import io.github.rcrida.jcsp.assignments.Assignment;
+import io.github.rcrida.jcsp.assignments.Valuation;
 import io.github.rcrida.jcsp.consistency.Propagatable;
 import io.github.rcrida.jcsp.constraints.Operator;
 import io.github.rcrida.jcsp.domains.Domain;
@@ -46,7 +46,7 @@ public class LinearBoundConstraint<N extends Number> extends NaryConstraint impl
     }
 
     @Override
-    public boolean isSatisfiedBy(@NonNull Assignment assignment) {
+    public boolean isSatisfiedBy(@NonNull Valuation assignment) {
         if (!assignment.containsAll(getVariables())) return true;
         return operator.compare(weightedSum(assignment), bound);
     }
@@ -109,7 +109,7 @@ public class LinearBoundConstraint<N extends Number> extends NaryConstraint impl
     }
 
     @SuppressWarnings("unchecked")
-    private N weightedSum(Assignment assignment) {
+    private N weightedSum(Valuation assignment) {
         return switch (bound) {
             case Byte b -> {
                 int s = 0;

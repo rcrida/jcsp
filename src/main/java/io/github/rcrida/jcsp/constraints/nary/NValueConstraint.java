@@ -1,6 +1,6 @@
 package io.github.rcrida.jcsp.constraints.nary;
 
-import io.github.rcrida.jcsp.assignments.Assignment;
+import io.github.rcrida.jcsp.assignments.Valuation;
 import io.github.rcrida.jcsp.consistency.Propagatable;
 import io.github.rcrida.jcsp.domains.DiscreteDomain;
 import io.github.rcrida.jcsp.domains.Domain;
@@ -69,7 +69,7 @@ public class NValueConstraint<T> extends NaryConstraint implements Propagatable 
      */
     @Override
     @SuppressWarnings("unchecked")
-    public boolean isSatisfiedBy(@NonNull Assignment assignment) {
+    public boolean isSatisfiedBy(@NonNull Valuation assignment) {
         if (!assignment.isAssigned(count)) return true;
 
         Set<T> distinct = new HashSet<>();

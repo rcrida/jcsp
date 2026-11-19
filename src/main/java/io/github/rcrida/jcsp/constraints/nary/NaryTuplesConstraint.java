@@ -1,6 +1,5 @@
 package io.github.rcrida.jcsp.constraints.nary;
 
-import io.github.rcrida.jcsp.assignments.Assignment;
 import io.github.rcrida.jcsp.assignments.Valuation;
 import io.github.rcrida.jcsp.consistency.Propagatable;
 import io.github.rcrida.jcsp.domains.DiscreteDomain;
@@ -102,7 +101,7 @@ public class NaryTuplesConstraint extends NaryConstraint implements Propagatable
     }
 
     @Override
-    public boolean isSatisfiedBy(@NonNull Assignment assignment) {
+    public boolean isSatisfiedBy(@NonNull Valuation assignment) {
         if (!assignment.containsAll(getVariables())) return true;
         return tuples.contains(assignment.partialValuation(getVariables()));
     }

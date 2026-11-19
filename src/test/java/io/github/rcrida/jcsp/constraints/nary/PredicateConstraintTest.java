@@ -1,6 +1,7 @@
 package io.github.rcrida.jcsp.constraints.nary;
 
 import io.github.rcrida.jcsp.assignments.Assignment;
+import io.github.rcrida.jcsp.assignments.Valuation;
 import io.github.rcrida.jcsp.domains.Domain;
 import io.github.rcrida.jcsp.variables.Variable;
 import org.junit.jupiter.api.BeforeEach;
@@ -31,7 +32,7 @@ public class PredicateConstraintTest {
     @Mock
     Domain domain;
     @Mock
-    Predicate<Assignment> predicate;
+    Predicate<Valuation> predicate;
     PredicateConstraint predicateConstraint;
 
     @BeforeEach
@@ -67,8 +68,8 @@ public class PredicateConstraintTest {
         // predicateConstraint/predicate) so this test's intent doesn't depend on those fixtures
         // staying shaped this way.
         Set<Variable<Object>> variables = Set.of(variable1, variable2);
-        Predicate<Assignment> firstPredicate = a -> true;
-        Predicate<Assignment> secondPredicate = a -> false;
+        Predicate<Valuation> firstPredicate = a -> true;
+        Predicate<Valuation> secondPredicate = a -> false;
         var first = PredicateConstraint.builder().variables(variables).predicate(firstPredicate).build();
         var second = PredicateConstraint.builder().variables(variables).predicate(secondPredicate).build();
         assertThat(first).isNotEqualTo(second);
@@ -77,7 +78,7 @@ public class PredicateConstraintTest {
     @Test
     void equals_samePredicateInstanceOverSameVariables_areEqual() {
         Set<Variable<Object>> variables = Set.of(variable1, variable2);
-        Predicate<Assignment> sharedPredicate = a -> true;
+        Predicate<Valuation> sharedPredicate = a -> true;
         var first = PredicateConstraint.builder().variables(variables).predicate(sharedPredicate).build();
         var second = PredicateConstraint.builder().variables(variables).predicate(sharedPredicate).build();
         assertThat(first).isEqualTo(second);

@@ -2,7 +2,7 @@ package io.github.rcrida.jcsp.constraints.nary;
 
 import lombok.EqualsAndHashCode;
 import lombok.experimental.SuperBuilder;
-import io.github.rcrida.jcsp.assignments.Assignment;
+import io.github.rcrida.jcsp.assignments.Valuation;
 import org.jspecify.annotations.NonNull;
 
 import java.util.function.Predicate;
@@ -14,7 +14,7 @@ import java.util.function.Predicate;
  * This constraint is defined by:
  * - {@code variables}: The set of variables to which the constraint applies.
  * - {@link #predicate}: A predicate that evaluates whether the
- *   provided {@link Assignment} satisfies the constraint.
+ *   provided {@link Valuation} satisfies the constraint.
  * <p>
  * The constraint is satisfied if the provided assignment passes the {@link #predicate}.
  * This allows for defining complex relationships and dependencies between multiple variables.
@@ -33,10 +33,10 @@ import java.util.function.Predicate;
 @SuperBuilder
 @EqualsAndHashCode(callSuper = true)
 public class PredicateConstraint extends NaryConstraint {
-    @NonNull private final Predicate<Assignment> predicate;
+    @NonNull private final Predicate<Valuation> predicate;
 
     @Override
-    public boolean isSatisfiedBy(@NonNull Assignment assignment) {
+    public boolean isSatisfiedBy(@NonNull Valuation assignment) {
         if (!assignment.containsAll(getVariables())) {
             return true;
         }

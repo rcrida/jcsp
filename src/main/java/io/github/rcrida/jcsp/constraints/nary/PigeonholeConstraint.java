@@ -1,6 +1,6 @@
 package io.github.rcrida.jcsp.constraints.nary;
 
-import io.github.rcrida.jcsp.assignments.Assignment;
+import io.github.rcrida.jcsp.assignments.Valuation;
 import io.github.rcrida.jcsp.consistency.Propagatable;
 import io.github.rcrida.jcsp.domains.DiscreteDomain;
 import io.github.rcrida.jcsp.domains.Domain;
@@ -111,7 +111,7 @@ public class PigeonholeConstraint extends NaryConstraint implements Propagatable
     }
 
     @Override
-    public boolean isSatisfiedBy(@NonNull Assignment assignment) {
+    public boolean isSatisfiedBy(@NonNull Valuation assignment) {
         for (Set<Variable<?>> pigeon : pigeons) {
             if (assignment.containsAll(pigeon) && pigeon.stream().noneMatch(v -> bit(assignment.getValueOrNull(v)) == 1)) {
                 return false;

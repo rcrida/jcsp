@@ -94,7 +94,7 @@ public class GroundNogoodConstraint extends NaryConstraint implements NogoodCons
     }
 
     @Override
-    public boolean isSatisfiedBy(@NonNull Assignment assignment) {
+    public boolean isSatisfiedBy(@NonNull Valuation assignment) {
         for (var entry : forbidden.entries()) {
             Object value = assignment.getValueOrNull(entry.getKey());
             if (value == null || !value.equals(entry.getValue())) return true;

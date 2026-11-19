@@ -4,6 +4,7 @@ import lombok.Value;
 import lombok.experimental.NonFinal;
 import lombok.experimental.SuperBuilder;
 import io.github.rcrida.jcsp.assignments.Assignment;
+import io.github.rcrida.jcsp.assignments.Valuation;
 import io.github.rcrida.jcsp.constraints.Constraint;
 import io.github.rcrida.jcsp.variables.Variable;
 import org.jspecify.annotations.NonNull;
@@ -24,7 +25,7 @@ public abstract class UnaryConstraint<T> implements Constraint {
     Variable<T> variable;
 
     @Override
-    public final boolean isSatisfiedBy(@NonNull Assignment assignment) {
+    public final boolean isSatisfiedBy(@NonNull Valuation assignment) {
         return assignment.getValue(variable)
                 .map(this::checkValue)
                 .orElse(true);

@@ -1,6 +1,6 @@
 package io.github.rcrida.jcsp.constraints.nary;
 
-import io.github.rcrida.jcsp.assignments.Assignment;
+import io.github.rcrida.jcsp.assignments.Valuation;
 import io.github.rcrida.jcsp.consistency.Propagatable;
 import io.github.rcrida.jcsp.constraints.Operator;
 import io.github.rcrida.jcsp.domains.DiscreteDomain;
@@ -61,7 +61,7 @@ public class ValueConjunctionConstraint<T> extends NaryConstraint implements Pro
      * {@code allAssigned} bookkeeping needed.
      */
     @Override
-    public boolean isSatisfiedBy(@NonNull Assignment assignment) {
+    public boolean isSatisfiedBy(@NonNull Valuation assignment) {
         for (Map.Entry<Variable<T>, T> literal : literals.entrySet()) {
             Optional<T> value = assignment.getValue(literal.getKey());
             if (value.isEmpty()) continue;

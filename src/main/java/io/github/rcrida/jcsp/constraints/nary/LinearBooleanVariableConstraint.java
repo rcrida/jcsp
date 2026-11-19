@@ -1,6 +1,6 @@
 package io.github.rcrida.jcsp.constraints.nary;
 
-import io.github.rcrida.jcsp.assignments.Assignment;
+import io.github.rcrida.jcsp.assignments.Valuation;
 import io.github.rcrida.jcsp.consistency.Propagatable;
 import io.github.rcrida.jcsp.constraints.NumericBounds;
 import io.github.rcrida.jcsp.constraints.Operator;
@@ -56,7 +56,7 @@ public class LinearBooleanVariableConstraint<N extends Number> extends NaryConst
     }
 
     @Override
-    public boolean isSatisfiedBy(@NonNull Assignment assignment) {
+    public boolean isSatisfiedBy(@NonNull Valuation assignment) {
         if (!assignment.containsAll(getVariables())) return true;
         N targetValue = assignment.getValue(target).orElseThrow();
         return operator.compare(LinearBooleanSupport.weightedSumOfTrue(coefficients, assignment, targetValue), targetValue);

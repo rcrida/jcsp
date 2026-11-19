@@ -1,6 +1,6 @@
 package io.github.rcrida.jcsp.parser.xcsp3;
 
-import io.github.rcrida.jcsp.assignments.Assignment;
+import io.github.rcrida.jcsp.assignments.Valuation;
 import io.github.rcrida.jcsp.constraints.Constraint;
 import io.github.rcrida.jcsp.constraints.nary.NaryTuplesConstraint;
 import io.github.rcrida.jcsp.domains.DiscreteDomain;
@@ -68,7 +68,7 @@ final class TabulationRecognizer implements ConstraintRecognizer {
      * affordable case from its unaffordable one was never the size of a constraint but how many
      * there were -- 36 constraints of 1,296 tuples against 4,900 of 2,401, barely twice the size
      * each and 136 times as many. Without this, parsing {@code RoomMate-sr0050-int} exhausted a 4GB
-     * heap. {@link NaryTuplesConstraint} holds each tuple as an {@link Assignment}, so tuple count,
+     * heap. {@link NaryTuplesConstraint} holds each tuple as a {@link Valuation}, so tuple count,
      * not the support index, is what actually bounds memory here.
      */
     static final long MAX_TOTAL_TUPLES = 500_000;
@@ -106,8 +106,8 @@ final class TabulationRecognizer implements ConstraintRecognizer {
             if (tuplesMaterialized + tuples > totalTupleBudget) return Optional.empty();
         }
 
-        Predicate<Assignment> predicate = handler.intensionPredicate(tree);
-        Set<Assignment> supports = new LinkedHashSet<>();
+        Predicate<Valuation> predicate = handler.intensionPredicate(tree);
+        Set<Valuation> supports = new LinkedHashSet<>();
         enumerate(scope, values, 0, new LinkedHashMap<>(), predicate, supports);
         // Charged in candidates, whether or not the table is kept: enumeration walks every
         // candidate, and that walk is what the budget bounds.
@@ -144,12 +144,12 @@ final class TabulationRecognizer implements ConstraintRecognizer {
 
     /** Depth-first walk of the Cartesian product, keeping each tuple the predicate accepts. */
     private static void enumerate(List<Variable<Integer>> scope, List<List<Integer>> values, int index,
-                                  Map<Variable<?>, Object> current, Predicate<Assignment> predicate,
-                                  Set<Assignment> supports) {
+                                  Map<Variable<?>, Object> current, Predicate<Valuation> predicate,
+                                  Set<Valuation> supports) {
         if (index == scope.size()) {
-            // Assignment.of copies through the builder, so current stays safe to mutate on return
-            // and no second defensive copy is needed here.
-            Assignment tuple = Assignment.of(current);
+            // Valuation.of copies, so current stays safe to mutate on return and no second
+            // defensive copy is needed here.
+            Valuation tuple = Valuation.of(current);
             if (predicate.test(tuple)) supports.add(tuple);
             return;
         }

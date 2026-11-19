@@ -408,9 +408,9 @@ builder.inverseConstraint(List.of(f1, f2, f3), List.of(g1, g2, g3))             
 builder.globalCardinalityConstraint(Set.of(v1, v2, v3), Map.of(a, 2, b, 1))           // count(v, a)==2 AND count(v, b)==1  (open GCC)
 builder.globalCardinalityRangeConstraint(Set.of(v1, v2, v3), Map.of(a, new GlobalCardinalityConstraint.OccurrenceRange(1, 2)))  // 1 <= count(v, a) <= 2  (GCC with occurrence ranges)
 builder.nValueConstraint(Set.of(v1, v2, v3), count)                 // count == number of distinct values taken by v1,v2,v3 (count is a variable, so it can be minimized; MiniZinc nvalue)
-builder.tuplesConstraint(Set.of(Assignment.of(...), ...))           // variable values must match one of the allowed assignments (order-independent)
+builder.tuplesConstraint(Set.of(Valuation.of(...), ...))            // variable values must match one of the allowed tuples (order-independent)
 builder.starredTuplesConstraint(Set.of(Map.of(v1, 1, v2, NaryStarredTuplesConstraint.STAR), ...))  // tuplesConstraint sibling with wildcard ("don't care") positions
-builder.conflictTuplesConstraint(Set.of(Assignment.of(...), ...))   // tuplesConstraint's negative sibling: forbidden combinations, everything else implicitly allowed
+builder.conflictTuplesConstraint(Set.of(Valuation.of(...), ...))    // tuplesConstraint's negative sibling: forbidden combinations, everything else implicitly allowed
 builder.valueDisjunctionConstraint(Map.of(v1, 1, v2, 2))            // v1 == 1 OR v2 == 2  (at least one variable equals its own target value)
 builder.valueConjunctionConstraint(Map.of(v1, 1, v2, 2), Operator.EQ)  // v1 == 1 AND v2 == 2  (also NEQ; every variable must meet its own target)
 builder.increasingConstraint(List.of(v1, v2, v3))                   // v1 <= v2 <= v3  (MiniZinc increasing)
@@ -431,7 +431,7 @@ builder.atMostNConstraint(Set.of(b1, b2, b3), n)                    // at most n
 builder.atLeastNConstraint(Set.of(b1, b2, b3), n)                   // at least n booleans are true  (prefer for local search)
 builder.atLeastNConstraintWithCounting(Set.of(b1, b2, b3), n)       // at least n booleans are true via carry-chain  (prefer for backtracking)
 builder.exactlyOneConstraint(Set.of(b1, b2, b3))                    // exactly one boolean is true
-builder.predicateConstraint(Set.of(v1, v2, v3), predicate)          // predicate.test(assignment) over a set of variables
+builder.predicateConstraint(Set.of(v1, v2, v3), predicate)          // predicate.test(valuation) over a set of variables (a Predicate<Valuation>)
 builder.circuitConstraint(List.of(s0, s1, s2))                      // Hamiltonian circuit: successors[i] is the 1-indexed next node after node i+1 (MiniZinc circuit)
 builder.subCircuitConstraint(List.of(s0, s1, s2))                   // circuit through some nodes only: successors[i] == i+1 means node i+1 sits out (XCSP3 circuit / Choco subCircuit)
 builder.diffnConstraint(xs, ys, widths, heights)                     // pairwise non-overlapping 2D rectangles; origin variables accept IntRangeDomain or IntervalDomain (MiniZinc diffn)

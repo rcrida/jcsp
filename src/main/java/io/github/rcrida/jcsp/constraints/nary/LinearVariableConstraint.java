@@ -1,6 +1,6 @@
 package io.github.rcrida.jcsp.constraints.nary;
 
-import io.github.rcrida.jcsp.assignments.Assignment;
+import io.github.rcrida.jcsp.assignments.Valuation;
 import io.github.rcrida.jcsp.consistency.Propagatable;
 import io.github.rcrida.jcsp.constraints.NumericBounds;
 import io.github.rcrida.jcsp.constraints.Operator;
@@ -60,14 +60,14 @@ public class LinearVariableConstraint<N extends Number> extends NaryConstraint i
      * value</em> — same reasoning as {@link SumVariableConstraint#isSatisfiedBy}.
      */
     @Override
-    public boolean isSatisfiedBy(@NonNull Assignment assignment) {
+    public boolean isSatisfiedBy(@NonNull Valuation assignment) {
         if (!assignment.containsAll(getVariables())) return true;
         N targetValue = assignment.getValue(target).orElseThrow();
         return operator.compare(weightedSum(assignment, targetValue), targetValue);
     }
 
     @SuppressWarnings("unchecked")
-    private N weightedSum(@NonNull Assignment assignment, @NonNull N typeSample) {
+    private N weightedSum(@NonNull Valuation assignment, @NonNull N typeSample) {
         return switch (typeSample) {
             case Byte b -> {
                 int s = 0;

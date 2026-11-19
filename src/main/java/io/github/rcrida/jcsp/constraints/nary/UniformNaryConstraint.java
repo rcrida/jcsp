@@ -1,7 +1,7 @@
 package io.github.rcrida.jcsp.constraints.nary;
 
 import lombok.experimental.SuperBuilder;
-import io.github.rcrida.jcsp.assignments.Assignment;
+import io.github.rcrida.jcsp.assignments.Valuation;
 import org.jspecify.annotations.NonNull;
 
 import java.util.Collection;
@@ -19,7 +19,7 @@ public abstract class UniformNaryConstraint<T> extends NaryConstraint {
 
     @Override
     @SuppressWarnings("unchecked")
-    public final boolean isSatisfiedBy(@NonNull Assignment assignment) {
+    public final boolean isSatisfiedBy(@NonNull Valuation assignment) {
         Collection<T> values = (Collection<T>) assignment.partialValues(getVariables()).values();
         return isSatisfiedByValues(values);
     }

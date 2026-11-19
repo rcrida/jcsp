@@ -1,6 +1,6 @@
 package io.github.rcrida.jcsp.constraints.nary;
 
-import io.github.rcrida.jcsp.assignments.Assignment;
+import io.github.rcrida.jcsp.assignments.Valuation;
 import io.github.rcrida.jcsp.consistency.Propagatable;
 import io.github.rcrida.jcsp.constraints.NumericBounds;
 import io.github.rcrida.jcsp.domains.Domain;
@@ -77,7 +77,7 @@ public class DisjunctiveConstraint extends NaryConstraint implements Propagatabl
      * first's end too, so some adjacent pair would already have failed the check.
      */
     @Override
-    public boolean isSatisfiedBy(@NonNull Assignment assignment) {
+    public boolean isSatisfiedBy(@NonNull Valuation assignment) {
         int n = starts.size();
         List<int[]> intervals = new ArrayList<>(n);
         for (int i = 0; i < n; i++) {

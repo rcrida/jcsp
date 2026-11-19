@@ -2,6 +2,7 @@ package io.github.rcrida.jcsp.constraints.nary;
 
 import io.github.rcrida.jcsp.ConstraintSatisfactionProblem;
 import io.github.rcrida.jcsp.assignments.Assignment;
+import io.github.rcrida.jcsp.assignments.Valuation;
 import io.github.rcrida.jcsp.consistency.Propagatable;
 import io.github.rcrida.jcsp.constraints.Constraint;
 import io.github.rcrida.jcsp.constraints.Operator;
@@ -55,7 +56,7 @@ public class AndConstraintTest {
      */
     private record AlwaysInfeasibleUnexplained(Variable<?> variable) implements Constraint, Propagatable {
         @Override
-        public boolean isSatisfiedBy(Assignment a) { return false; }
+        public boolean isSatisfiedBy(Valuation a) { return false; }
 
         @Override
         public String getRelation() { return "always-infeasible"; }
@@ -72,7 +73,7 @@ public class AndConstraintTest {
     /** Minimal {@link Propagatable} conjunct whose {@link #isNecessarilySatisfied} always reports true. */
     private record AlwaysNecessary(Variable<?> variable) implements Constraint, Propagatable {
         @Override
-        public boolean isSatisfiedBy(Assignment a) { return true; }
+        public boolean isSatisfiedBy(Valuation a) { return true; }
 
         @Override
         public String getRelation() { return "always"; }
@@ -99,7 +100,7 @@ public class AndConstraintTest {
     private record UnchangedEntryReporter(Variable<Double> variable, Domain<Double> domain)
             implements Constraint, Propagatable {
         @Override
-        public boolean isSatisfiedBy(Assignment a) { return true; }
+        public boolean isSatisfiedBy(Valuation a) { return true; }
 
         @Override
         public String getRelation() { return "unchanged"; }

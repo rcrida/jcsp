@@ -1,6 +1,6 @@
 package io.github.rcrida.jcsp.constraints.nary;
 
-import io.github.rcrida.jcsp.assignments.Assignment;
+import io.github.rcrida.jcsp.assignments.Valuation;
 import io.github.rcrida.jcsp.consistency.Propagatable;
 import io.github.rcrida.jcsp.domains.DiscreteDomain;
 import io.github.rcrida.jcsp.domains.Domain;
@@ -44,7 +44,7 @@ public class RegularConstraint extends NaryConstraint implements Propagatable {
 
     @Override
     @SuppressWarnings("unchecked")
-    public boolean isSatisfiedBy(@NonNull Assignment assignment) {
+    public boolean isSatisfiedBy(@NonNull Valuation assignment) {
         var dfa = (Automaton<Object>) automaton;
         int state = dfa.initialState();
         for (var var : sequence) {

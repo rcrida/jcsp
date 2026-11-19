@@ -1,6 +1,6 @@
 package io.github.rcrida.jcsp.constraints.nary;
 
-import io.github.rcrida.jcsp.assignments.Assignment;
+import io.github.rcrida.jcsp.assignments.Valuation;
 import io.github.rcrida.jcsp.consistency.Propagatable;
 import io.github.rcrida.jcsp.constraints.NumericBounds;
 import io.github.rcrida.jcsp.constraints.Operator;
@@ -60,14 +60,14 @@ public class SumVariableConstraint<N extends Number> extends NaryConstraint impl
      * on here, and {@link #target}'s runtime value is the only {@code N} instance ever available.
      */
     @Override
-    public boolean isSatisfiedBy(@NonNull Assignment assignment) {
+    public boolean isSatisfiedBy(@NonNull Valuation assignment) {
         if (!assignment.containsAll(getVariables())) return true;
         N targetValue = assignment.getValue(target).orElseThrow();
         return operator.compare(sum(assignment, targetValue), targetValue);
     }
 
     @SuppressWarnings("unchecked")
-    private N sum(@NonNull Assignment assignment, @NonNull N typeSample) {
+    private N sum(@NonNull Valuation assignment, @NonNull N typeSample) {
         return switch (typeSample) {
             case Byte b -> {
                 int s = 0;

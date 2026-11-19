@@ -1,6 +1,6 @@
 package io.github.rcrida.jcsp.constraints.nary;
 
-import io.github.rcrida.jcsp.assignments.Assignment;
+import io.github.rcrida.jcsp.assignments.Valuation;
 import io.github.rcrida.jcsp.consistency.Propagatable;
 import io.github.rcrida.jcsp.domains.Domain;
 import io.github.rcrida.jcsp.domains.SetBoundedDomain;
@@ -56,7 +56,7 @@ public class SetBoundsNogoodConstraint extends NaryConstraint implements NogoodC
     }
 
     @Override
-    public boolean isSatisfiedBy(@NonNull Assignment assignment) {
+    public boolean isSatisfiedBy(@NonNull Valuation assignment) {
         for (var entry : forbidden.entrySet()) {
             var value = assignment.getValue(entry.getKey());
             if (value.isEmpty() || !entry.getValue().contains(value.get())) return true;

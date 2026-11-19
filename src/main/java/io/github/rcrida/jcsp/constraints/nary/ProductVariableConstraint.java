@@ -1,6 +1,6 @@
 package io.github.rcrida.jcsp.constraints.nary;
 
-import io.github.rcrida.jcsp.assignments.Assignment;
+import io.github.rcrida.jcsp.assignments.Valuation;
 import io.github.rcrida.jcsp.consistency.Propagatable;
 import io.github.rcrida.jcsp.constraints.NumericBounds;
 import io.github.rcrida.jcsp.constraints.Operator;
@@ -63,7 +63,7 @@ public class ProductVariableConstraint<N extends Number> extends NaryConstraint 
 
     /** Optimistically satisfied for a partial assignment -- only evaluated once every variable is assigned. */
     @Override
-    public boolean isSatisfiedBy(@NonNull Assignment assignment) {
+    public boolean isSatisfiedBy(@NonNull Valuation assignment) {
         if (!assignment.containsAll(getVariables())) return true;
         double product = factors.stream()
                 .mapToDouble(v -> assignment.getValue(v).orElseThrow().doubleValue())

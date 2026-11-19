@@ -1,6 +1,6 @@
 package io.github.rcrida.jcsp.constraints.nary;
 
-import io.github.rcrida.jcsp.assignments.Assignment;
+import io.github.rcrida.jcsp.assignments.Valuation;
 import io.github.rcrida.jcsp.consistency.Propagatable;
 import io.github.rcrida.jcsp.domains.Domain;
 import io.github.rcrida.jcsp.variables.Variable;
@@ -55,7 +55,7 @@ public class DiffnVariableConstraint extends NaryConstraint implements Propagata
 
     @Override
     @SuppressWarnings("unchecked")
-    public boolean isSatisfiedBy(@NonNull Assignment assignment) {
+    public boolean isSatisfiedBy(@NonNull Valuation assignment) {
         int n = xOrigins.size();
         double[] xs = new double[n];
         double[] ys = new double[n];

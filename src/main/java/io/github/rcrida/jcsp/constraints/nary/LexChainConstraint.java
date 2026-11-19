@@ -1,6 +1,6 @@
 package io.github.rcrida.jcsp.constraints.nary;
 
-import io.github.rcrida.jcsp.assignments.Assignment;
+import io.github.rcrida.jcsp.assignments.Valuation;
 import io.github.rcrida.jcsp.consistency.Propagatable;
 import io.github.rcrida.jcsp.constraints.Operator;
 import io.github.rcrida.jcsp.domains.BoundedDomain;
@@ -58,7 +58,7 @@ public class LexChainConstraint<T extends Comparable<T>> extends NaryConstraint 
     }
 
     @Override
-    public boolean isSatisfiedBy(@NonNull Assignment assignment) {
+    public boolean isSatisfiedBy(@NonNull Valuation assignment) {
         for (int i = 0; i + 1 < rows.size(); i++) {
             if (!pairSatisfied(rows.get(i), rows.get(i + 1), assignment)) return false;
         }
@@ -66,7 +66,7 @@ public class LexChainConstraint<T extends Comparable<T>> extends NaryConstraint 
     }
 
     /** {@code left <op> right} for one pair, optimistic about an unassigned position, as {@link LexConstraint} is. */
-    private boolean pairSatisfied(List<Variable<T>> left, List<Variable<T>> right, Assignment assignment) {
+    private boolean pairSatisfied(List<Variable<T>> left, List<Variable<T>> right, Valuation assignment) {
         for (int j = 0; j < left.size(); j++) {
             Optional<T> l = assignment.getValue(left.get(j));
             Optional<T> r = assignment.getValue(right.get(j));

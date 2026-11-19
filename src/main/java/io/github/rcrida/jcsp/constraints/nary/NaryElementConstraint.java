@@ -1,6 +1,6 @@
 package io.github.rcrida.jcsp.constraints.nary;
 
-import io.github.rcrida.jcsp.assignments.Assignment;
+import io.github.rcrida.jcsp.assignments.Valuation;
 import io.github.rcrida.jcsp.consistency.Propagatable;
 import io.github.rcrida.jcsp.domains.DiscreteDomain;
 import io.github.rcrida.jcsp.domains.Domain;
@@ -64,7 +64,7 @@ public class NaryElementConstraint<T> extends NaryConstraint implements Propagat
 
     @Override
     @SuppressWarnings("unchecked")
-    public boolean isSatisfiedBy(@NonNull Assignment assignment) {
+    public boolean isSatisfiedBy(@NonNull Valuation assignment) {
         if (!assignment.isAssigned(index)) return true;
         Integer i = (Integer) assignment.getValue(index).orElseThrow();
         if (i < 1 || i > vars.size()) return false;
