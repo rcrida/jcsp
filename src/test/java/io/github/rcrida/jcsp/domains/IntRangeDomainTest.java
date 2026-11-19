@@ -84,11 +84,13 @@ public class IntRangeDomainTest {
 
     @Test
     void of_sameRange_returnsTheSameDomain() {
-        NumericSetDomain<Integer> domain = IntRangeDomain.of(-7_000_001, 7_000_001);
+        // Bounds no other test uses, so the static cache holds nothing for them yet; a negative minimum
+        // checks that packing the two bounds into one key keeps them apart.
+        NumericSetDomain<Integer> domain = IntRangeDomain.of(-7_000_009, -7_000_001);
 
-        assertThat(IntRangeDomain.of(-7_000_001, 7_000_001)).isSameAs(domain);
-        assertThat(IntRangeDomain.of(-7_000_001, 7_000_002)).isNotSameAs(domain).isEqualTo(IntRangeDomain.of(-7_000_001, 7_000_002));
-        assertThat(IntRangeDomain.of(-7_000_000, 7_000_001)).isNotSameAs(domain);
+        assertThat(IntRangeDomain.of(-7_000_009, -7_000_001)).isSameAs(domain);
+        assertThat(IntRangeDomain.of(-7_000_009, -7_000_002)).isNotSameAs(domain).isEqualTo(IntRangeDomain.of(-7_000_009, -7_000_002));
+        assertThat(IntRangeDomain.of(-7_000_008, -7_000_001)).isNotSameAs(domain);
     }
 
     @Test

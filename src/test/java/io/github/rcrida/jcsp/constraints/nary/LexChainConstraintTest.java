@@ -283,34 +283,48 @@ public class LexChainConstraintTest {
         // Brute force over {0..3}^6: every tuple the chain accepts and the domains allow must survive the
         // narrowing, an infeasible verdict means there was no such tuple, and any nogood offered for it
         // excludes only tuples the chain rejects.
+        // The tuples, and which of them each chain accepts, don't depend on the trial, so they are built once.
+        List<Variable<Integer>> all = all();
+        Assignment[] assignments = new Assignment[4096];
+        for (int code = 0; code < 4096; code++) {
+            Map<Variable<?>, Object> tuple = new HashMap<>();
+            for (int v = 0; v < 6; v++) tuple.put(all.get(v), (code >> (2 * v)) & 3);
+            assignments[code] = Assignment.of(tuple);
+        }
         var random = new Random(20261030);
         for (Operator operator : List.of(Operator.LEQ, Operator.LT, Operator.GEQ, Operator.GT)) {
             var c = chain(operator);
+            boolean[] acceptedByChain = new boolean[4096];
+            for (int code = 0; code < 4096; code++) acceptedByChain[code] = c.isSatisfiedBy(assignments[code]);
             for (int trial = 0; trial < 400; trial++) {
                 var domains = randomDomains(random);
                 var result = c.propagate(domains);
                 var nogood = result.isEmpty() ? c.explainInfeasible(domains) : Optional.<NogoodConstraint>empty();
+                // Which of the four values each variable's domain holds, before and after narrowing.
+                boolean[][] held = new boolean[6][4];
+                boolean[][] kept = new boolean[6][4];
+                for (int v = 0; v < 6; v++) {
+                    Domain<?> narrowed = result.isEmpty() ? null : result.get().getOrDefault(all.get(v), domains.get(all.get(v)));
+                    for (int value = 0; value < 4; value++) {
+                        held[v][value] = contains(domains.get(all.get(v)), value);
+                        kept[v][value] = narrowed != null && contains(narrowed, value);
+                    }
+                }
                 boolean anySolution = false;
                 for (int code = 0; code < 4096; code++) {
-                    Map<Variable<?>, Object> tuple = new HashMap<>();
                     boolean inDomains = true;
-                    for (int v = 0; v < 6; v++) {
-                        int value = (code >> (2 * v)) & 3;
-                        tuple.put(all().get(v), value);
-                        inDomains &= contains(domains.get(all().get(v)), value);
-                    }
-                    var assignment = Assignment.of(tuple);
-                    boolean accepted = c.isSatisfiedBy(assignment);
+                    for (int v = 0; v < 6; v++) inDomains &= held[v][(code >> (2 * v)) & 3];
+                    var assignment = assignments[code];
+                    boolean accepted = acceptedByChain[code];
                     if (inDomains && accepted) {
                         anySolution = true;
-                        assertThat(result).as("%s lost solution %s", operator, tuple).isPresent();
+                        assertThat(result).as("%s lost solution %s", operator, assignment).isPresent();
                         for (int v = 0; v < 6; v++) {
-                            Domain<?> narrowed = result.get().getOrDefault(all().get(v), domains.get(all().get(v)));
-                            assertThat(contains(narrowed, (code >> (2 * v)) & 3)).isTrue();
+                            assertThat(kept[v][(code >> (2 * v)) & 3]).as("%s narrowed away %s", operator, assignment).isTrue();
                         }
                     }
                     if (nogood.isPresent() && !nogood.get().isSatisfiedBy(assignment)) {
-                        assertThat(accepted).as("%s nogood excluded an accepted tuple %s", operator, tuple).isFalse();
+                        assertThat(accepted).as("%s nogood excluded an accepted tuple %s", operator, assignment).isFalse();
                     }
                 }
                 if (anySolution) assertThat(result).isPresent();
