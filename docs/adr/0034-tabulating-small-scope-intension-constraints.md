@@ -127,3 +127,26 @@ charged for a declined scope as well, since walking its candidates is the cost t
 Two instances in the corpus change, at 60s, seed 12345, 3 pairs: `Knights-015-05` from UNKNOWN
 (once UNSAT in 41s) to UNSAT in 1.8–2.1s and 1,025 nodes, and `Domino-300-300` (whose 300-support
 constraint the candidate count put at 54M bits) from 2.4–3.1s to 1.3–1.7s.
+
+**Later still: the instance budget is two budgets, and a repeated relation is walked once.**
+`MAX_TOTAL_TUPLES` bounded two different costs in one unit: the walk (parse time, in candidates)
+and the tables kept (memory, in tuples). A sparse relation walks far more than it keeps, so it was
+refused for memory it never used: `Knights-020-09`'s nine knight's moves on a 20x20 board walk
+160,000 candidates each for about 2,700 supports, and after three of them the 500,000 budget was
+spent, leaving six to the decomposition — UNKNOWN at 60s against Choco's UNSAT in 0.4s.
+
+It is now `MAX_CANDIDATES_WALKED` (1,000,000) and `MAX_TUPLES_KEPT` (500,000). The recognizer also
+caches each relation's supports by its tree, with variables replaced by their scope positions, plus
+the scope's domains: an XCSP3 `<group>` or `<slide>` states one relation over many scopes, and it is
+walked once and renamed onto each, so the walk budget bounds distinct relations. A relation declined
+for its index is cached as declined, without its supports.
+
+The walk budget was first raised to 5,000,000 without the cache. That tabulated two more relations
+in `RadarSurveillance-8-24-3-2-00`, which then spent 1.5s walking them for no search gain (0.43s to
+1.44s). With the cache Knights no longer needs a large walk budget, and 1,000,000 keeps Radar's
+parse at 0.3s.
+
+Parsing all 139 bundled instances, only three models change. At 60s, seed 12345, 3 pairs:
+`Knights-020-09` from UNKNOWN to UNSAT in 0.9–1.1s, `Knights-020-05` from 7.1–7.5s to 0.6s, and
+`RadarSurveillance-8-24-3-2-00` from 0.43s to 0.58s. Every Knights board Choco 6.0.1 proves within
+30s (up to 25x25, nine knights) jcsp now proves as well; neither proves any board of 50x50 or more.
