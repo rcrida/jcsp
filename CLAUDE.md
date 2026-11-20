@@ -266,8 +266,7 @@ Everything else is in each class's own Javadoc.
   - `Xcsp3CompetitionRunner` — runs the bundled corpus at `src/test/resources/xcsp3/competition/`, or every instance in and below a given folder, one process per instance, cross-checking every solution with `SolutionChecker`. Use it for regression checks after parser or solver changes.
   - `src/test/resources/xcsp3/sat/` — SAT-shaped instances from the XCSP3 `Sat` and `Dubois` series, kept out of the competition corpus so its sweep time is unaffected. Pass it to `Xcsp3CompetitionRunner` as the instance directory.
   - `src/test/resources/xcsp3/tree/` — instances that reach `TreeSolver` with real trees (Hanoi, Renault, Rlfap-graph, StillLife, Primes series): single trees of up to 125 arcs, hundreds of small component trees, and one instance refuted through its trees. Run it the same way after touching tree-structured solving.
-  - `src/test/resources/xcsp3/series/<Series>/` — instances from official XCSP3 series, each answered conclusively by jcsp within the runner's 60s: quick ones guard against regressions, slower ones (tens of seconds) are targets for performance work. One folder per series; pass `series/` to run them all. `Mixed/schur_X2` is the exception: an unsolved stretch target that Choco answers, so UNKNOWN from it is expected, not a regression.
-
+  - `src/test/resources/xcsp3/series/<Series>/` — instances from official XCSP3 series, each answered conclusively by jcsp within the runner's 60s: quick ones guard against regressions, slower ones (tens of seconds) are targets for performance work. One folder per series; pass `series/` to run them all.
 Run any of them with:
 
 ```bash

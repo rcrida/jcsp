@@ -511,6 +511,127 @@ class RelationLogicConstraintTest {
         assertThat(result).contains(Map.of());
     }
 
+    // --- propagate(): neither decided, a value that decides the connective false on its own ---
+
+    private static Domain<Integer> values(Integer... values) {
+        return DiscreteDomain.of(values);
+    }
+
+    private static RelationLogicConstraint.VariableLiteral literal(Variable<Integer> left, Operator operator, Variable<Integer> right) {
+        return new RelationLogicConstraint.VariableLiteral(left, operator, right);
+    }
+
+    @Test
+    void propagate_neitherDecided_sharedVariable_losesTheValueThatFalsifiesBothLiterals() {
+        // x != y || x != z: with y and z both fixed to 1, x = 1 falsifies both, though neither
+        // literal is decided while x is open -- the Schur-triple shape.
+        Variable<Integer> x = F.create("x"), y = F.create("y"), z = F.create("z");
+        var constraint = RelationLogicConstraint.of(literal(x, Operator.NEQ, y), LogicOperator.OR, literal(x, Operator.NEQ, z));
+        var result = constraint.propagate(Map.of(x, ONE_TO_THREE, y, values(1), z, values(1)));
+        assertThat(result).contains(Map.of(x, values(2, 3)));
+    }
+
+    @Test
+    void propagate_neitherDecided_sharedVariable_keepsEveryValueSomeLiteralAllows() {
+        Variable<Integer> x = F.create("x"), y = F.create("y"), z = F.create("z");
+        var constraint = RelationLogicConstraint.of(literal(x, Operator.NEQ, y), LogicOperator.OR, literal(x, Operator.NEQ, z));
+        var result = constraint.propagate(Map.of(x, ONE_TO_THREE, y, values(1), z, values(2)));
+        assertThat(result).contains(Map.of());
+    }
+
+    @Test
+    void propagate_neitherDecided_sharedVariable_equalityLiterals() {
+        // x = y || x = z: 4 is in neither y nor z, 3 matches z's only value, 1 might match y.
+        Variable<Integer> x = F.create("x"), y = F.create("y"), z = F.create("z");
+        var constraint = RelationLogicConstraint.of(literal(x, Operator.EQ, y), LogicOperator.OR, literal(x, Operator.EQ, z));
+        var result = constraint.propagate(Map.of(x, values(1, 2, 3, 4), y, values(1, 2), z, values(3)));
+        assertThat(result).contains(Map.of(x, values(1, 2, 3)));
+    }
+
+    @Test
+    void propagate_neitherDecided_sharedVariable_orderingLiteralsOnEitherSide() {
+        // y > x || z < x, x on the right of both: with y and z fixed to 2, only x = 2 fails both.
+        Variable<Integer> x = F.create("x"), y = F.create("y"), z = F.create("z");
+        var constraint = RelationLogicConstraint.of(literal(y, Operator.GT, x), LogicOperator.OR, literal(z, Operator.LT, x));
+        var result = constraint.propagate(Map.of(x, ONE_TO_THREE, y, values(2), z, values(2)));
+        assertThat(result).contains(Map.of(x, values(1, 3)));
+    }
+
+    @Test
+    void propagate_neitherDecided_sharedVariable_orderingAgainstAnOpenSideIsUndetermined() {
+        // x < y || x > z with y and z in {2, 3}: x = 2 might still be below y, and x = 3, above
+        // z's minimum but not its maximum, might still be above z, so both stay.
+        Variable<Integer> x = F.create("x"), y = F.create("y"), z = F.create("z");
+        var constraint = RelationLogicConstraint.of(literal(x, Operator.LT, y), LogicOperator.OR, literal(x, Operator.GT, z));
+        var result = constraint.propagate(Map.of(x, ONE_TO_THREE, y, values(2, 3), z, values(2, 3)));
+        assertThat(result).contains(Map.of());
+    }
+
+    @Test
+    void propagate_neitherDecided_bothVariablesShared() {
+        // x < y || x > y, inequality as two orderings: with y fixed to 2, x = 2 fails both.
+        Variable<Integer> x = F.create("x"), y = F.create("y");
+        var constraint = RelationLogicConstraint.of(literal(x, Operator.LT, y), LogicOperator.OR, literal(x, Operator.GT, y));
+        var result = constraint.propagate(Map.of(x, ONE_TO_THREE, y, values(2)));
+        assertThat(result).contains(Map.of(x, values(1, 3)));
+    }
+
+    @Test
+    void propagate_neitherDecided_sharedSingleton_isLeftToTheDecidedCases() {
+        Variable<Integer> x = F.create("x"), y = F.create("y"), z = F.create("z");
+        var constraint = RelationLogicConstraint.of(literal(x, Operator.NEQ, y), LogicOperator.OR, literal(x, Operator.NEQ, z));
+        var result = constraint.propagate(Map.of(x, values(1), y, values(1, 2), z, values(1, 2)));
+        assertThat(result).contains(Map.of());
+    }
+
+    @Test
+    void propagate_neitherDecided_sharedVariableWithoutADiscreteDomain_isSkipped() {
+        Variable<Integer> x = F.create("x"), y = F.create("y"), z = F.create("z");
+        var constraint = RelationLogicConstraint.of(literal(x, Operator.NEQ, y), LogicOperator.OR, literal(x, Operator.NEQ, z));
+        var result = constraint.propagate(Map.of(x, io.github.rcrida.jcsp.domains.IntervalDomain.of(0, 5),
+                y, values(1), z, values(1)));
+        assertThat(result).contains(Map.of());
+    }
+
+    @Test
+    void propagate_neitherDecided_otherSideWithoutADiscreteDomain_isUndetermined() {
+        Variable<Integer> x = F.create("x"), y = F.create("y"), z = F.create("z");
+        var constraint = RelationLogicConstraint.of(literal(x, Operator.NEQ, y), LogicOperator.OR, literal(x, Operator.NEQ, z));
+        var result = constraint.propagate(Map.of(x, ONE_TO_THREE,
+                y, io.github.rcrida.jcsp.domains.IntervalDomain.of(0, 5), z, values(1)));
+        assertThat(result).contains(Map.of());
+    }
+
+    @Test
+    void propagate_neitherDecided_and_forcesBothLiterals() {
+        Variable<Integer> a = F.create("a"), b = F.create("b");
+        var constraint = RelationLogicConstraint.of(
+                new RelationLogicConstraint.ValueLiteral(a, Operator.EQ, 1), LogicOperator.AND,
+                new RelationLogicConstraint.ValueLiteral(b, Operator.EQ, 0));
+        var result = constraint.propagate(Map.of(a, ZERO_ONE, b, ZERO_ONE));
+        assertThat(result).contains(Map.of(a, ONE_ONLY, b, ZERO_ONLY));
+    }
+
+    @Test
+    void propagate_neitherDecided_nor_forcesBothLiteralsFalse() {
+        Variable<Integer> a = F.create("a"), b = F.create("b");
+        var constraint = RelationLogicConstraint.of(
+                new RelationLogicConstraint.ValueLiteral(a, Operator.EQ, 1), LogicOperator.NOR,
+                new RelationLogicConstraint.ValueLiteral(b, Operator.EQ, 0));
+        var result = constraint.propagate(Map.of(a, ZERO_ONE, b, ZERO_ONE));
+        assertThat(result).contains(Map.of(a, ZERO_ONLY, b, ONE_ONLY));
+    }
+
+    @Test
+    void propagate_neitherDecided_and_ofContradictoryLiterals_isInfeasible() {
+        // x <= 1 and x >= 2: each is undetermined over {1, 2}, but every value falsifies one.
+        Variable<Integer> x = F.create("x");
+        var constraint = RelationLogicConstraint.of(
+                new RelationLogicConstraint.ValueLiteral(x, Operator.LEQ, 1), LogicOperator.AND,
+                new RelationLogicConstraint.ValueLiteral(x, Operator.GEQ, 2));
+        assertThat(constraint.propagate(Map.of(x, values(1, 2)))).isEmpty();
+    }
+
     // --- propagate(): non-DiscreteDomain literal side degrades to undetermined ---
 
     @Test

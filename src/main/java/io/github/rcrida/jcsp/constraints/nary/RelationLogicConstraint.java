@@ -20,6 +20,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.function.Function;
 
 /**
  * A {@link LogicOperator} connective (AND/OR/XOR/NAND/NOR/XNOR) applied to two <em>relations</em>
@@ -260,7 +261,8 @@ public class RelationLogicConstraint extends NaryConstraint implements Propagata
      *       undetermined side. Neither works -- infeasible. Both work -- no-op (the undetermined
      *       side is unconstrained by this connective). Exactly one works -- {@link #force} the
      *       undetermined literal to that value.</li>
-     *   <li>Neither decided: nothing to derive from either side alone -- no-op.</li>
+     *   <li>Neither decided: {@link #pruneUnsupported} removes the values that would decide the
+     *       connective false on their own.</li>
      * </ul>
      */
     @Override
@@ -280,7 +282,121 @@ public class RelationLogicConstraint extends NaryConstraint implements Propagata
         if (rightDecided) {
             return forceOrNoop(rightStatus == LiteralStatus.SATISFIED, false, left, domains);
         }
-        return Optional.of(Map.of());
+        return pruneUnsupported(domains);
+    }
+
+    /**
+     * With neither literal decided, removes each value that leaves no truth values {@link #operator}
+     * accepts: a literal containing the variable is classified as if the variable were fixed to the
+     * value, one that doesn't keeps its own status. A variable in both literals can decide both at
+     * once -- {@code x != y || x != z} rules out {@code x}'s value once {@code y} and {@code z} are
+     * both fixed to it, though neither literal is decided while {@code x} is open. For {@code AND}
+     * and {@code NOR} every variable is examined, since each literal must take one truth value.
+     * <p>
+     * The two literals are treated as independent, which can only keep a value a joint view would
+     * remove, never remove one with support.
+     */
+    @SuppressWarnings("unchecked")
+    private Optional<Map<Variable<?>, Domain<?>>> pruneUnsupported(Map<Variable<?>, Domain<?>> domains) {
+        Set<Variable<?>> candidates = pruneCandidates();
+        if (candidates.isEmpty()) return Optional.of(Map.of());
+        Map<Variable<?>, Domain<?>> updated = new HashMap<>();
+        for (Variable<?> variable : candidates) {
+            if (!(domains.get(variable) instanceof DiscreteDomain<?> found) || found.isSingleton()) continue;
+            DiscreteDomain<Object> domain = (DiscreteDomain<Object>) found;
+            Function<Object, LiteralStatus> leftGiven = statusGiven(left, variable, domains);
+            Function<Object, LiteralStatus> rightGiven = statusGiven(right, variable, domains);
+            DiscreteDomain.Builder<Object> builder = null;
+            for (Object value : domain.toList()) {
+                if (!satisfiable(leftGiven.apply(value), rightGiven.apply(value))) {
+                    if (builder == null) builder = domain.toBuilder();
+                    builder.delete(value);
+                }
+            }
+            if (builder != null) {
+                DiscreteDomain<Object> narrowed = builder.build();
+                if (narrowed.isEmpty()) return Optional.empty();
+                updated.put(variable, narrowed);
+            }
+        }
+        return Optional.of(updated);
+    }
+
+    /**
+     * The variables {@link #pruneUnsupported} examines: all of them for {@code AND} and {@code NOR},
+     * otherwise those in both literals -- none for most clauses, which this answers without
+     * allocating.
+     */
+    private Set<Variable<?>> pruneCandidates() {
+        if (operator == LogicOperator.AND || operator == LogicOperator.NOR) return getVariables();
+        Set<Variable<?>> shared = Set.of();
+        for (Variable<?> variable : left.variables()) {
+            if (right.variables().contains(variable)) {
+                if (shared.isEmpty()) shared = new LinkedHashSet<>();
+                shared.add(variable);
+            }
+        }
+        return shared;
+    }
+
+    /** Whether some truth value each status allows makes {@link #operator} true. */
+    private boolean satisfiable(LiteralStatus leftStatus, LiteralStatus rightStatus) {
+        for (boolean leftValue : allowed(leftStatus)) {
+            for (boolean rightValue : allowed(rightStatus)) {
+                if (operator.apply(leftValue, rightValue)) return true;
+            }
+        }
+        return false;
+    }
+
+    private static boolean[] allowed(LiteralStatus status) {
+        return switch (status) {
+            case SATISFIED -> new boolean[] {true};
+            case FALSIFIED -> new boolean[] {false};
+            case UNDETERMINED -> new boolean[] {true, false};
+        };
+    }
+
+    /**
+     * {@code literal}'s status with {@code variable} fixed to each value the returned function is
+     * given, against the other side's current domain; its current status, whatever the value, if it
+     * doesn't contain {@code variable}. The other side's domain and extremes are read once, here.
+     */
+    @SuppressWarnings("unchecked")
+    private static Function<Object, LiteralStatus> statusGiven(Literal literal, Variable<?> variable,
+                                                               Map<Variable<?>, Domain<?>> domains) {
+        if (!literal.variables().contains(variable)) {
+            LiteralStatus status = classify(literal, domains);
+            return value -> status;
+        }
+        if (literal instanceof ValueLiteral valueLiteral) {
+            return value -> valueLiteral.operator().compare(value, valueLiteral.value())
+                    ? LiteralStatus.SATISFIED : LiteralStatus.FALSIFIED;
+        }
+        VariableLiteral variableLiteral = (VariableLiteral) literal;
+        boolean fixedOnLeft = variableLiteral.left().equals(variable);
+        Variable<?> otherVariable = fixedOnLeft ? variableLiteral.right() : variableLiteral.left();
+        if (!(domains.get(otherVariable) instanceof DiscreteDomain<?> found)) return value -> LiteralStatus.UNDETERMINED;
+        DiscreteDomain<Object> other = (DiscreteDomain<Object>) found;
+        Operator operator = variableLiteral.operator();
+        if (operator == Operator.EQ || operator == Operator.NEQ) {
+            boolean equalIsSatisfied = operator == Operator.EQ;
+            return value -> {
+                if (!other.contains(value)) return equalIsSatisfied ? LiteralStatus.FALSIFIED : LiteralStatus.SATISFIED;
+                if (!other.isSingleton()) return LiteralStatus.UNDETERMINED;
+                return equalIsSatisfied ? LiteralStatus.SATISFIED : LiteralStatus.FALSIFIED;
+            };
+        }
+        // An ordering holds against every value of the other side exactly when it holds against
+        // both of its extremes, and against none exactly when it holds against neither.
+        Object min = min(other), max = max(other);
+        return value -> {
+            boolean againstMin = fixedOnLeft ? operator.compare(value, min) : operator.compare(min, value);
+            boolean againstMax = fixedOnLeft ? operator.compare(value, max) : operator.compare(max, value);
+            if (againstMin && againstMax) return LiteralStatus.SATISFIED;
+            if (!againstMin && !againstMax) return LiteralStatus.FALSIFIED;
+            return LiteralStatus.UNDETERMINED;
+        };
     }
 
     /**
