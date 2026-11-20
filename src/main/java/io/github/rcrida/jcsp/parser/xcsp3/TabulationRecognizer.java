@@ -19,6 +19,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.SplittableRandom;
 import java.util.function.Predicate;
 
 /**
@@ -87,6 +88,24 @@ final class TabulationRecognizer implements ConstraintRecognizer {
      */
     static final long MAX_CANDIDATES_WALKED = 1_000_000;
 
+    /**
+     * Candidates a relation of more than {@link #SAMPLE_THRESHOLD} is tested on, at random, before it
+     * is walked, to estimate how many supports the walk would keep.
+     */
+    static final int SAMPLE_SIZE = 4096;
+
+    /** Relations up to this many candidates are walked without sampling: sampling would save little. */
+    static final long SAMPLE_THRESHOLD = 4L * SAMPLE_SIZE;
+
+    /**
+     * Hits the sample needs before its estimate can decline a relation. With fewer, the estimate is
+     * too noisy to stand on: at 32 hits, one twice the truth is a four-sigma event.
+     */
+    static final int MIN_SAMPLE_HITS = 32;
+
+    /** Fixed, so a parse makes the same tables every time. */
+    private static final long SAMPLE_SEED = 0x5EED;
+
     private final Xcsp3CallbackHandler handler;
     private final long candidateBudget;
     private final long keptBudget;
@@ -131,15 +150,25 @@ final class TabulationRecognizer implements ConstraintRecognizer {
                 // the multiplication before the budget is ever consulted.
                 if (candidatesWalked + tuples > candidateBudget) return Optional.empty();
             }
+            Predicate<Valuation> predicate = handler.intensionPredicate(tree);
+            long domainSum = values.stream().mapToLong(List::size).sum();
+            if (tuples > SAMPLE_THRESHOLD) {
+                candidatesWalked += SAMPLE_SIZE;
+                // Room only shrinks as tables are kept, so a relation declined for either reason
+                // would be declined again, and is remembered as having no table.
+                long room = Math.min(MAX_INDEX_BITS / domainSum, keptBudget - tuplesKept);
+                if (sampledSupports(scope, values, predicate, tuples) > 2.0 * room) {
+                    relations.put(key, List.of());
+                    return Optional.empty();
+                }
+            }
             supports = new ArrayList<>();
-            enumerate(scope, values, 0, new LinkedHashMap<>(), new Integer[scope.size()],
-                    handler.intensionPredicate(tree), supports);
+            enumerate(scope, values, 0, new LinkedHashMap<>(), new Integer[scope.size()], predicate, supports);
             // Charged whether or not the table is kept: the walk has been paid for either way.
             candidatesWalked += tuples;
             // The index is sized by the supports kept, not the candidates walked: a sparse relation
             // over wide domains, such as a knight's move, makes a small table. One over the ceiling
             // is remembered as having none, so its supports are not held for the rest of the parse.
-            long domainSum = values.stream().mapToLong(List::size).sum();
             if (supports.size() * domainSum > MAX_INDEX_BITS) supports = List.of();
             relations.put(key, supports);
         }
@@ -187,6 +216,26 @@ final class TabulationRecognizer implements ConstraintRecognizer {
             for (XNode<XVarInteger> son : tree.sons) shape(son, positions, out).append(',');
         }
         return out.append(')');
+    }
+
+    /**
+     * The supports a walk of {@code tuples} candidates would keep, estimated from {@link
+     * #SAMPLE_SIZE} of them drawn at random, or zero when fewer than {@link #MIN_SAMPLE_HITS} of
+     * those are supports: too few to estimate from, and a sparse relation is the kind worth walking.
+     */
+    private static double sampledSupports(List<Variable<Integer>> scope, List<List<Integer>> values,
+                                          Predicate<Valuation> predicate, long tuples) {
+        SplittableRandom random = new SplittableRandom(SAMPLE_SEED);
+        Map<Variable<?>, Object> candidate = new LinkedHashMap<>();
+        int hits = 0;
+        for (int i = 0; i < SAMPLE_SIZE; i++) {
+            for (int position = 0; position < scope.size(); position++) {
+                List<Integer> domain = values.get(position);
+                candidate.put(scope.get(position), domain.get(random.nextInt(domain.size())));
+            }
+            if (predicate.test(Valuation.of(candidate))) hits++;
+        }
+        return hits < MIN_SAMPLE_HITS ? 0 : (double) hits / SAMPLE_SIZE * tuples;
     }
 
     /** Depth-first walk of the Cartesian product, keeping the values of each tuple the predicate accepts. */

@@ -117,8 +117,49 @@ class TabulationRecognizerTest {
 
     /** {@code eq(left, right)}. */
     private static XNode<XVarInteger> equal(XVarInteger left, XVarInteger right) {
-        return new XNodeParent<>(TypeExpr.EQ,
+        return relation(TypeExpr.EQ, left, right);
+    }
+
+    /** {@code operator(left, right)}. */
+    private static XNode<XVarInteger> relation(TypeExpr operator, XVarInteger left, XVarInteger right) {
+        return new XNodeParent<>(operator,
                 new XNodeLeaf<>(TypeExpr.VAR, left), new XNodeLeaf<>(TypeExpr.VAR, right));
+    }
+
+    @Test
+    void denseRelationWhoseSampleIsOverTheIndexCeiling_isDeclinedWithoutAWalk() {
+        XVarInteger x = XcspTestNodes.var("x", 0, 4095);
+        XVarInteger y = XcspTestNodes.var("y", 0, 4095);
+        XVarInteger z = XcspTestNodes.var("z", 0, 19_999);
+        // Room to walk x != y's 16.8M candidates and 10,000 more. Walked, it would leave too little
+        // for z's 20,000; declined from its sample, it leaves plenty.
+        var recognizer = new TabulationRecognizer(XcspTestNodes.handlerWith(x, y, z), 4096L * 4096 + 10_000, 100_000);
+        assertThat(recognizer.recognize(relation(TypeExpr.NE, x, y))).isEmpty();
+        // z's one support is too few sample hits to judge it by, so it is walked and kept.
+        assertThat(recognizer.recognize(andOverOneVariable(z, 1, 3))).isPresent();
+    }
+
+    @Test
+    void relationWhoseSampleFitsTheRoom_isWalkedAndKept() {
+        XVarInteger x = XcspTestNodes.var("x", 0, 199);
+        XVarInteger y = XcspTestNodes.var("y", 0, 199);
+        // x <= y keeps 20,100 of 40,000 candidates: plenty of sample hits, and within the index ceiling.
+        var recognizer = new TabulationRecognizer(XcspTestNodes.handlerWith(x, y));
+        Optional<Constraint> result = recognizer.recognize(relation(TypeExpr.LE, x, y));
+        assertThat(result).get().isInstanceOf(NaryTuplesConstraint.class);
+        assertThat(((NaryTuplesConstraint) result.orElseThrow()).getTuples()).hasSize(20_100);
+    }
+
+    @Test
+    void relationWhoseSampleIsOverTheKeptBudget_isDeclinedWithoutAWalk() {
+        XVarInteger x = XcspTestNodes.var("x", 0, 199);
+        XVarInteger y = XcspTestNodes.var("y", 0, 199);
+        XVarInteger z = XcspTestNodes.var("z", 0, 19_999);
+        // The same x <= y against a kept budget of 1,000. Walked, its 40,000 candidates would leave
+        // too little for z's 20,000; declined from its sample, they leave plenty.
+        var recognizer = new TabulationRecognizer(XcspTestNodes.handlerWith(x, y, z), 40_000 + 4096 + 10_000, 1_000);
+        assertThat(recognizer.recognize(relation(TypeExpr.LE, x, y))).isEmpty();
+        assertThat(recognizer.recognize(andOverOneVariable(z, 1, 3))).isPresent();
     }
 
     @Test
