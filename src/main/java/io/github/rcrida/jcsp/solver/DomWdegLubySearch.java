@@ -221,6 +221,8 @@ public class DomWdegLubySearch implements Solver {
         SearchProgress progress = new SearchProgress();
         LongSupplier budgets = restartSchedule.budgets(lubyUnit);
         RestartMemory memory = new RestartMemory();
+        // Only here, never in getSolutions: restricting to one unheld value drops symmetric solutions.
+        boolean interchangeable = InterchangeableValues.hold(csp);
         long backtracksAtStart = statistics.getBacktracks();
         for (int k = 1; k <= maxRestarts; k++) {
             progress.reset();
@@ -245,7 +247,7 @@ public class DomWdegLubySearch implements Solver {
             int[] failures = {0};
             try {
                 Assignment root = Assignment.builder().statistics(statistics).listener(listener).cancellation(cancellation).build();
-                Optional<Assignment> result = searchOne(csp, root, selector, failures, budget, deadline, 1.0, progress, memory);
+                Optional<Assignment> result = searchOne(csp, root, selector, failures, budget, deadline, 1.0, progress, memory, interchangeable);
                 if (result.isPresent()) {
                     log.info("dom/wdeg+Luby: solution found at restart {}", k);
                     return result;
@@ -375,6 +377,9 @@ public class DomWdegLubySearch implements Solver {
      * A candidate resolved without a solution calls {@code progress.complete(childWeight)} exactly
      * once, wherever it ends: immediately for a rejected or failed value, or when the child node it
      * led to failed outright or ran out of candidates.
+     * <p>
+     * With {@code interchangeable}, a node's candidates are cut by {@link InterchangeableValues#restrict}
+     * to the values already held plus one more.
      */
     @SuppressWarnings("unchecked")
     private Optional<Assignment> searchOne(@NonNull ConstraintSatisfactionProblem csp,
@@ -385,7 +390,8 @@ public class DomWdegLubySearch implements Solver {
                                            long deadline,
                                            double weight,
                                            SearchProgress progress,
-                                           RestartMemory memory) {
+                                           RestartMemory memory,
+                                           boolean interchangeable) {
         Deque<Frame> stack = new ArrayDeque<>();
         ConstraintSatisfactionProblem enterCsp = csp;
         Assignment enterFrom = assignment;
@@ -402,6 +408,7 @@ public class DomWdegLubySearch implements Solver {
                     Variable<?> variable = selector.select(enterCsp, current);
                     List<Object> candidates = phaseMemory.prioritise(variable,
                             (List<Object>) domainValuesOrderer.order(enterCsp, variable, current).toList());
+                    if (interchangeable) candidates = InterchangeableValues.restrict(candidates, current);
                     stack.push(new Frame(enterCsp, current, variable, candidates, enterWeight));
                 } else if (!stack.isEmpty()) {
                     progress.complete(stack.peek().childWeight);

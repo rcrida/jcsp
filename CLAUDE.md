@@ -105,6 +105,7 @@ Every domain is a record except `ObjectEmptyDomain`/`NumericEmptyDomain` (final 
 - `PhaseMemory` puts the remembered value first. It is written only from the strictly deepest assignment seen ([ADR-0026](docs/adr/0026-solution-guided-phase-saving.md)).
 - After `STAGNANT_RESTART_LIMIT` restarts with no new deepest assignment, the weights and the phase memory are both reset ([ADR-0032](docs/adr/0032-adaptive-weight-reset-on-stagnant-restarts.md), [ADR-0039](docs/adr/0039-discard-the-phase-memory-on-stagnation.md)).
 - `getSolutions()` has no restarts and doesn't consult the phase memory.
+- When `InterchangeableValues.hold` finds the values interchangeable (one domain, only constraints no renaming of values changes), `getSolution` branches on the values already held plus one unheld value; `getSolutions` doesn't, since it must return every renaming ([ADR-0072](docs/adr/0072-one-unheld-value-per-node-when-values-are-interchangeable.md)).
 
 **`BranchAndBoundSolver`**:
 - Incumbent pruning, composed with the same `NogoodStore` wiring ([ADR-0002](docs/adr/0002-nogood-learning-as-first-class-constraints.md)).

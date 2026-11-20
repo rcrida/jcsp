@@ -67,6 +67,16 @@ class DomWdegLubySearchTest {
                 .build();
     }
 
+    /**
+     * Adds a variable fixed to a value of its own, assigned at the root without a node, so the
+     * problem's values are not interchangeable and {@link InterchangeableValues} leaves the search
+     * alone: the restart tests below need a colouring refuted the long way.
+     */
+    private ConstraintSatisfactionProblem.ConstraintSatisfactionProblemBuilder withoutInterchangeableValues(
+            ConstraintSatisfactionProblem.ConstraintSatisfactionProblemBuilder builder, String name) {
+        return builder.variableDomain(VF.create(name), IntRangeDomain.of(0, 0));
+    }
+
     // ── Solving ─────────────────────────────────────────────────────────────
 
     @Test
@@ -299,7 +309,7 @@ class DomWdegLubySearchTest {
                 builder.notEqualsConstraint(vars.get(i), vars.get(j));
             }
         }
-        ConstraintSatisfactionProblem csp = builder.build();
+        ConstraintSatisfactionProblem csp = withoutInterchangeableValues(builder, "fixedStagnant").build();
 
         DomWdegLubySearch solver = DomWdegLubySearch.builder()
                 .lubyUnit(1)
@@ -331,7 +341,7 @@ class DomWdegLubySearchTest {
                 builder.notEqualsConstraint(vars.get(i), vars.get(j));
             }
         }
-        ConstraintSatisfactionProblem csp = builder.build();
+        ConstraintSatisfactionProblem csp = withoutInterchangeableValues(builder, "fixedInterleaved").build();
 
         DomWdegLubySearch luby = DomWdegLubySearch.builder()
                 .lubyUnit(1)
@@ -369,6 +379,7 @@ class DomWdegLubySearchTest {
                 .notEqualsConstraint(w, x).notEqualsConstraint(w, y).notEqualsConstraint(w, z)
                 .notEqualsConstraint(x, y).notEqualsConstraint(x, z)
                 .notEqualsConstraint(y, z)
+                .variableDomain(VF.create("fixedProgress"), IntRangeDomain.of(0, 0))
                 .build();
 
         DomWdegLubySearch solver = DomWdegLubySearch.builder()

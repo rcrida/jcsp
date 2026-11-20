@@ -32,6 +32,9 @@ class RestartNogoodsSearchTest {
         for (int i = 0; i < count; i++) {
             for (int j = i + 1; j < count; j++) builder.notEqualsConstraint(vars.get(i), vars.get(j));
         }
+        // A variable fixed to a value of its own, assigned at the root, so the values are not
+        // interchangeable and the search refutes the problem the long way these tests rely on.
+        builder.variableDomain(VF.create("rn" + count + "_" + values + "_fixed"), IntRangeDomain.of(0, 0));
         return builder.build();
     }
 
