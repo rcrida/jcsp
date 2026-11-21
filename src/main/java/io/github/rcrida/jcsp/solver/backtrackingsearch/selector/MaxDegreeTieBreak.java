@@ -1,5 +1,6 @@
 package io.github.rcrida.jcsp.solver.backtrackingsearch.selector;
 
+import io.github.rcrida.jcsp.assignments.Valuation;
 import io.github.rcrida.jcsp.constraints.Constraint;
 import io.github.rcrida.jcsp.constraints.nary.NogoodConstraint;
 import io.github.rcrida.jcsp.variables.Variable;
@@ -35,6 +36,18 @@ final class MaxDegreeTieBreak implements TieBreak {
 
     @Override
     public @NonNull Variable<?> choose(@NonNull List<Variable<?>> tied) {
+        List<Variable<?>> most = mostConstrained(tied);
+        return most.size() == 1 ? most.get(0) : then.choose(most);
+    }
+
+    @Override
+    public @NonNull Variable<?> choose(@NonNull List<Variable<?>> tied, @NonNull Valuation assignment) {
+        List<Variable<?>> most = mostConstrained(tied);
+        return most.size() == 1 ? most.get(0) : then.choose(most, assignment);
+    }
+
+    /** The variables of {@code tied} with the highest degree, in their order there. */
+    private List<Variable<?>> mostConstrained(List<Variable<?>> tied) {
         int highest = -1;
         List<Variable<?>> most = new ArrayList<>();
         for (Variable<?> variable : tied) {
@@ -45,7 +58,7 @@ final class MaxDegreeTieBreak implements TieBreak {
             }
             if (degree == highest) most.add(variable);
         }
-        return most.size() == 1 ? most.get(0) : then.choose(most);
+        return most;
     }
 
     @Override

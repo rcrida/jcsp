@@ -1,5 +1,6 @@
 package io.github.rcrida.jcsp.solver.backtrackingsearch.selector;
 
+import io.github.rcrida.jcsp.assignments.Valuation;
 import io.github.rcrida.jcsp.constraints.Constraint;
 import io.github.rcrida.jcsp.variables.Variable;
 import org.jspecify.annotations.NonNull;
@@ -33,6 +34,9 @@ public interface TieBreak {
          */
         Factory RANDOM = constraints -> new RandomTieBreak();
 
+        /** The first tied variable, in the problem's variable order, whatever the restart. */
+        Factory FIRST = constraints -> tied -> tied.get(0);
+
         /**
          * The default: during the first run the most constrained of the tied variables ({@link
          * #maxDegree}), then {@link #RANDOM}. See
@@ -48,6 +52,14 @@ public interface TieBreak {
             return constraints -> new MaxDegreeTieBreak(constraints, then.create(constraints));
         }
 
+        /**
+         * Keeps the tied variables sharing the most structural constraints with variables already
+         * assigned, and hands any that remain tied to {@code then}.
+         */
+        static @NonNull Factory mostConnected(@NonNull Factory then) {
+            return constraints -> new MostConnectedTieBreak(constraints, then.create(constraints));
+        }
+
         /** Breaks ties with {@code first} until the second restart begins, then with {@code later}. */
         static @NonNull Factory firstRun(@NonNull Factory first, @NonNull Factory later) {
             return constraints -> new FirstRunTieBreak(first.create(constraints), later.create(constraints));
@@ -60,6 +72,14 @@ public interface TieBreak {
      * One of {@code tied}, which holds at least two variables, in the order the selector ranked them.
      */
     @NonNull Variable<?> choose(@NonNull List<Variable<?>> tied);
+
+    /**
+     * One of {@code tied}, as {@link #choose(List)}, for a tie-break that also looks at the variables
+     * {@code assignment} holds. Defaults to ignoring it.
+     */
+    default @NonNull Variable<?> choose(@NonNull List<Variable<?>> tied, @NonNull Valuation assignment) {
+        return choose(tied);
+    }
 
     /**
      * A restart is beginning, with {@code random} as its source of randomness, or {@code null} for

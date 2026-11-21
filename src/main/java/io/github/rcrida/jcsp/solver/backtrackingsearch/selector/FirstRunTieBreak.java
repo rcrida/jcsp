@@ -1,5 +1,6 @@
 package io.github.rcrida.jcsp.solver.backtrackingsearch.selector;
 
+import io.github.rcrida.jcsp.assignments.Valuation;
 import io.github.rcrida.jcsp.variables.Variable;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
@@ -25,6 +26,11 @@ final class FirstRunTieBreak implements TieBreak {
     @Override
     public @NonNull Variable<?> choose(@NonNull List<Variable<?>> tied) {
         return (restarts <= 1 ? first : later).choose(tied);
+    }
+
+    @Override
+    public @NonNull Variable<?> choose(@NonNull List<Variable<?>> tied, @NonNull Valuation assignment) {
+        return (restarts <= 1 ? first : later).choose(tied, assignment);
     }
 
     @Override

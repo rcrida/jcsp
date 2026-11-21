@@ -23,8 +23,11 @@ Tie-breaking is its own strategy, `TieBreak`, built per solve by a `TieBreak.Fac
 among equals, so either can be swapped without touching the other. `AdaptiveVariableSelector.Factory`
 gains `cutsetFirst(tieBreaks)` and `domWdeg(tieBreaks)`.
 
-Three tie-breaks compose:
-- `RANDOM`, the previous behaviour.
+The tie-breaks compose:
+- `RANDOM`, the previous behaviour, and `FIRST`, the first tied variable.
+- `mostConnected(then)`, which keeps the tied variables sharing the most constraints with assigned
+  ones and hands the rest to `then`. The selector passes the assignment through `choose(tied,
+  assignment)`, which other tie-breaks ignore by default.
 - `maxDegree(then)`, which keeps the tied variables in the most structural constraints and hands the
   rest to `then`.
 - `firstRun(first, later)`, which uses `first` until the second restart begins.
@@ -38,6 +41,19 @@ one-argument constructors keep `RANDOM`.
   tree corpora on three seeds the pooled time ratios were 1.017, 0.957 and 0.967. `Primes-20-40-2-7`
   ran 3.9× slower and `BinPacking-mdd-n1c1w4a` 4.3× slower on one seed, and lost its optimum on
   another. Fixing the order in every run removes the variety restarts exist to provide.
+- **Variable order in the first run** (`firstRun(FIRST, RANDOM)`). It tests whether the first run
+  only needs to be the same on every seed. `schur_X2` stays fast (1.4k–2.9k nodes on five seeds),
+  but against degree the pooled ratios were 1.170 (competition), 1.033 (series) and 1.390 (tree).
+  On seed 3 it lost both `BinPacking-n1c1w4a` optima and `StripPacking-C1P1` (confirmed by re-runs),
+  and `Taillard-os-04-04-0` went from 1.3s to 8.4s on every seed. Which variables the first run
+  prefers matters, not just that it is fixed.
+- **Preferring variables connected to the assignment** (`mostConnected`: the tied variables sharing
+  the most constraints with assigned ones). In the first run, against degree, the pooled ratios were
+  0.934, 1.094 and 1.081, but total time rose 7.7%, 1.8% and 30.5%. Many short instances got
+  slightly faster, while the hard ones got slower: `BinPacking-n1c1w4a` 1.7–3.4× on every seed,
+  `Fischer-03-08-fair` and `schur_X2` up to 4.6×. In every run it was worse still on `schur_X2`
+  (25k–75k nodes against 1.4k–2.9k). It keeps the search near its last decisions, where degree
+  spreads the first ones over the most constrained variables.
 - **Changing dom/wdeg's ranking itself**, for example a weighted-degree term. The live weighted
   degree is already in the ratio; it is only at equal ratios that the seed decides.
 

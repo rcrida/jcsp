@@ -1,6 +1,7 @@
 package io.github.rcrida.jcsp.solver.backtrackingsearch.selector;
 
 import io.github.rcrida.jcsp.ConstraintSatisfactionProblem;
+import io.github.rcrida.jcsp.assignments.Valuation;
 import io.github.rcrida.jcsp.constraints.Constraint;
 import io.github.rcrida.jcsp.constraints.nary.GroundNogoodConstraint;
 import io.github.rcrida.jcsp.domains.IntRangeDomain;
@@ -45,11 +46,18 @@ class TieBreakTest {
     private static final class Last implements TieBreak {
         final List<List<Variable<?>>> asked = new ArrayList<>();
         final List<Random> told = new ArrayList<>();
+        final List<Valuation> seen = new ArrayList<>();
 
         @Override
         public Variable<?> choose(List<Variable<?>> tied) {
             asked.add(List.copyOf(tied));
             return tied.get(tied.size() - 1);
+        }
+
+        @Override
+        public Variable<?> choose(List<Variable<?>> tied, Valuation assignment) {
+            seen.add(assignment);
+            return choose(tied);
         }
 
         @Override
@@ -59,12 +67,85 @@ class TieBreakTest {
     }
 
     @Test
-    void aTieBreakIgnoresRestartsByDefault() {
+    void aTieBreakIgnoresRestartsAndTheAssignmentByDefault() {
         TieBreak first = tied -> tied.get(0);
 
         first.onRestart(new Random(1));
 
         assertThat(first.choose(List.of(b, c))).isEqualTo(b);
+        assertThat(first.choose(List.of(c, b), Valuation.of(Map.of(a, 1)))).isEqualTo(c);
+    }
+
+    @Test
+    void firstTakesTheFirstWhateverTheRestart() {
+        TieBreak tieBreak = TieBreak.Factory.FIRST.create(Set.of());
+
+        tieBreak.onRestart(new Random(1));
+
+        assertThat(tieBreak.choose(List.of(c, b, d))).isEqualTo(c);
+    }
+
+    @Test
+    void mostConnectedTakesTheTiedVariableWithTheMostConstraintsOnAssignedOnes() {
+        // With b assigned, a shares a≠b with it; c shares only the nogoods, which are not counted.
+        Last next = new Last();
+        TieBreak tieBreak = TieBreak.Factory.mostConnected(constraints -> next).create(constraints());
+
+        assertThat(tieBreak.choose(List.of(c, a, d), Valuation.of(Map.of(b, 1)))).isEqualTo(a);
+        assertThat(next.asked).isEmpty();
+    }
+
+    @Test
+    void mostConnectedHandsTheRemainingTiesAndTheAssignmentToTheNext() {
+        Last next = new Last();
+        TieBreak tieBreak = TieBreak.Factory.mostConnected(constraints -> next).create(constraints());
+        Valuation nothingAssigned = Valuation.of(Map.of());
+
+        assertThat(tieBreak.choose(List.of(d, b, c), nothingAssigned)).isEqualTo(c);
+        assertThat(next.asked).containsExactly(List.of(d, b, c));
+        assertThat(next.seen).containsExactly(nothingAssigned);
+    }
+
+    @Test
+    void mostConnectedWithoutAnAssignmentHandsEveryTiedVariableOn() {
+        Last next = new Last();
+        TieBreak tieBreak = TieBreak.Factory.mostConnected(constraints -> next).create(constraints());
+        Random random = new Random(1);
+
+        assertThat(tieBreak.choose(List.of(a, b))).isEqualTo(b);
+        tieBreak.onRestart(random);
+
+        assertThat(next.asked).containsExactly(List.of(a, b));
+        assertThat(next.seen).isEmpty();
+        assertThat(next.told).containsExactly(random);
+    }
+
+    @Test
+    void maxDegreePassesTheAssignmentOnWithTheRemainingTies() {
+        Last next = new Last();
+        TieBreak tieBreak = TieBreak.Factory.maxDegree(constraints -> next).create(constraints());
+        Valuation assignment = Valuation.of(Map.of(d, 1));
+
+        assertThat(tieBreak.choose(List.of(a, b), assignment)).isEqualTo(a);
+        assertThat(tieBreak.choose(List.of(b, c), assignment)).isEqualTo(c);
+        assertThat(next.asked).containsExactly(List.of(b, c));
+        assertThat(next.seen).containsExactly(assignment);
+    }
+
+    @Test
+    void firstRunPassesTheAssignmentToWhicheverIsInUse() {
+        Last first = new Last();
+        Last later = new Last();
+        TieBreak tieBreak = TieBreak.Factory.firstRun(constraints -> first, constraints -> later).create(Set.of());
+        Valuation assignment = Valuation.of(Map.of(d, 1));
+
+        tieBreak.choose(List.of(b, c), assignment);
+        tieBreak.onRestart(null);
+        tieBreak.onRestart(null);
+        tieBreak.choose(List.of(b, c), assignment);
+
+        assertThat(first.seen).containsExactly(assignment);
+        assertThat(later.seen).containsExactly(assignment);
     }
 
     @Test

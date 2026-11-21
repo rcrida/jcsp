@@ -260,7 +260,7 @@ public class DomWdegVariableSelector implements AdaptiveVariableSelector {
             }
         }
         if (tied.isEmpty()) return Optional.empty();
-        return Optional.of(tied.size() == 1 ? tied.get(0) : tieBreak.choose(tied));
+        return Optional.of(tied.size() == 1 ? tied.get(0) : tieBreak.choose(tied, assignment));
     }
 
     /**
