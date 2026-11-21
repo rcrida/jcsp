@@ -31,8 +31,14 @@ public class CutsetFirstSelector implements AdaptiveVariableSelector {
     private final DomWdegVariableSelector domWdeg;
     private final Set<Variable<?>> cutset;
 
+    /** Breaks dom/wdeg's ties with {@link TieBreak.Factory#RANDOM}. */
     public CutsetFirstSelector(@NonNull Set<Constraint> constraints) {
-        this.domWdeg = new DomWdegVariableSelector(constraints);
+        this(constraints, TieBreak.Factory.RANDOM.create(constraints));
+    }
+
+    /** Breaks dom/wdeg's ties, in both phases, with {@code tieBreak}. */
+    public CutsetFirstSelector(@NonNull Set<Constraint> constraints, @NonNull TieBreak tieBreak) {
+        this.domWdeg = new DomWdegVariableSelector(constraints, tieBreak);
         Set<Variable<?>> variables = new HashSet<>();
         for (Constraint constraint : constraints) {
             if (!(constraint instanceof NogoodConstraint)) variables.addAll(constraint.getVariables());

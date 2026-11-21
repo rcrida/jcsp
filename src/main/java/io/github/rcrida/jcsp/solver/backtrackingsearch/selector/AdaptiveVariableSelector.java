@@ -37,11 +37,24 @@ public interface AdaptiveVariableSelector extends UnassignedVariableSelector {
     @FunctionalInterface
     interface Factory {
 
-        /** The default: dom/wdeg, branching on a small cycle cutset first -- see {@link CutsetFirstSelector}. */
-        Factory INSTANCE = CutsetFirstSelector::new;
+        /**
+         * The default: dom/wdeg, branching on a small cycle cutset first, with the default tie-break --
+         * see {@link CutsetFirstSelector} and {@link TieBreak.Factory#DEFAULT}.
+         */
+        Factory INSTANCE = cutsetFirst(TieBreak.Factory.DEFAULT);
 
-        /** dom/wdeg alone, with no cutset tier -- see {@link DomWdegVariableSelector}. */
-        Factory DOM_WDEG = DomWdegVariableSelector::new;
+        /** dom/wdeg alone, with no cutset tier, and the default tie-break -- see {@link DomWdegVariableSelector}. */
+        Factory DOM_WDEG = domWdeg(TieBreak.Factory.DEFAULT);
+
+        /** {@link CutsetFirstSelector}, breaking dom/wdeg's ties with {@code tieBreaks}. */
+        static @NonNull Factory cutsetFirst(TieBreak.@NonNull Factory tieBreaks) {
+            return constraints -> new CutsetFirstSelector(constraints, tieBreaks.create(constraints));
+        }
+
+        /** {@link DomWdegVariableSelector}, breaking its ties with {@code tieBreaks}. */
+        static @NonNull Factory domWdeg(TieBreak.@NonNull Factory tieBreaks) {
+            return constraints -> new DomWdegVariableSelector(constraints, tieBreaks.create(constraints));
+        }
 
         AdaptiveVariableSelector createSelector(@NonNull Set<Constraint> constraints);
     }

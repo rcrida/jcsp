@@ -134,3 +134,4 @@ section instead.
 | [0070](0070-an-ascending-domain-narrowed-by-its-bounds-shares-its-parents-array.md) | An ascending domain narrowed by its bounds shares its parent's array | Accepted |
 | [0071](0071-intrangedomain-of-shares-a-range-through-a-weak-global-cache.md) | `IntRangeDomain.of` shares a range through a weak global cache | Accepted |
 | [0072](0072-one-unheld-value-per-node-when-values-are-interchangeable.md) | One unheld value per node when values are interchangeable | Accepted |
+| [0073](0073-break-the-first-runs-ties-by-degree.md) | Break the first run's ties by degree | Accepted |

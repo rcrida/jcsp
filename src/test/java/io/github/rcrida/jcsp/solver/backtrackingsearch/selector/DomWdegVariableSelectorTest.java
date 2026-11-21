@@ -226,6 +226,19 @@ class DomWdegVariableSelectorTest {
         verifyNoInteractions(random);
     }
 
+    @Test
+    void tiesGoToTheGivenTieBreakInTheProblemsVariableOrder() {
+        var csp = new Problem().variable(v1, 1).variable(v2, 1).variable(v3, 1).build();
+        List<List<Variable<?>>> asked = new java.util.ArrayList<>();
+        var selector = new DomWdegVariableSelector(new HashSet<>(csp.getConstraints()), tied -> {
+            asked.add(List.copyOf(tied));
+            return tied.get(tied.size() - 1);
+        });
+
+        assertThat(selector.select(csp, Assignment.empty())).isEqualTo(v3);
+        assertThat(asked).containsExactly(List.of(v1, v2, v3));
+    }
+
     // ── last-conflict reasoning ───────────────────────────────────────────────
 
     @Test

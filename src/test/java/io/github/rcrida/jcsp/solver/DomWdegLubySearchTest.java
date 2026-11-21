@@ -672,6 +672,10 @@ class DomWdegLubySearchTest {
                 .domainValuesOrderer(io.github.rcrida.jcsp.solver.backtrackingsearch.order.DefaultValueOrderer.INSTANCE)
                 .inference(Solver.Factory.FULL_PROPAGATION_INFERENCE)
                 .nogoodStore(store)
+                // The subtrees above follow the variable-order tie-break; ranking ties by degree
+                // takes a different path, which this test does not describe.
+                .selectorFactory(io.github.rcrida.jcsp.solver.backtrackingsearch.selector.AdaptiveVariableSelector
+                        .Factory.cutsetFirst(io.github.rcrida.jcsp.solver.backtrackingsearch.selector.TieBreak.Factory.RANDOM))
                 .build();
 
         List<Assignment> solutions = solver.getSolutions(csp).toList();

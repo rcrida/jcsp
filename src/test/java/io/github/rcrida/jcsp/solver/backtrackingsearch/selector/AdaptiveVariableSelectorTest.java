@@ -58,4 +58,24 @@ class AdaptiveVariableSelectorTest {
         assertThat(AdaptiveVariableSelector.Factory.DOM_WDEG.createSelector(Set.of()))
                 .isInstanceOf(DomWdegVariableSelector.class);
     }
+
+    /** Two unconstrained variables, which every dom/wdeg ratio ties. */
+    private ConstraintSatisfactionProblem tied(Variable<Integer> first, Variable<Integer> second) {
+        return ConstraintSatisfactionProblem.builder()
+                .variableDomain(first, IntRangeDomain.of(1, 2))
+                .variableDomain(second, IntRangeDomain.of(1, 2))
+                .build();
+    }
+
+    @Test
+    void factoriesBreakTiesWithTheGivenTieBreak() {
+        Variable<Integer> a = F.create("tie_a"), b = F.create("tie_b");
+        var csp = tied(a, b);
+        TieBreak.Factory last = constraints -> tied -> tied.get(tied.size() - 1);
+
+        assertThat(AdaptiveVariableSelector.Factory.cutsetFirst(last).createSelector(Set.of()).select(csp, Assignment.empty()))
+                .isEqualTo(b);
+        assertThat(AdaptiveVariableSelector.Factory.domWdeg(last).createSelector(Set.of()).select(csp, Assignment.empty()))
+                .isEqualTo(b);
+    }
 }

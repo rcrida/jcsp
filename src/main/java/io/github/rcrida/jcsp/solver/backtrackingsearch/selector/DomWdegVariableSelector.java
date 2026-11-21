@@ -40,12 +40,9 @@ import java.util.Set;
  * Instances are stateful and not thread-safe. Create one per solve call; weights accumulate
  * across Luby restarts within the same call.
  * <p>
- * {@link #onRestart} lets a caller (namely {@link
- * io.github.rcrida.jcsp.solver.DomWdegLubySearch#getSolution}, once per Luby restart, via a
- * configured {@link RestartRandomization}) control how ties in {@link #select}'s minimum ratio are
- * broken. Left unseeded ({@code null}, the default), ties are broken by {@code
- * csp.getVariableDomains()}'s iteration order (a {@code LinkedHashMap}, so this is the
- * first-declared tied variable, deterministically) -- today's exact behaviour, unchanged.
+ * Ties in {@link #select}'s minimum ratio go to a {@link TieBreak}, listed in {@code
+ * csp.getVariableDomains()}'s iteration order, and {@link #onRestart} passes each restart's
+ * {@link RestartRandomization} source on to it.
  * <p>
  * {@link #onValueRejected} implements last-conflict reasoning (Lecoutre, Saïs, Tabary &amp; Vion
  * 2009): {@link #select} checks it first, ahead of the dom/wdeg ratio computation (and its own
@@ -85,8 +82,13 @@ public class DomWdegVariableSelector implements AdaptiveVariableSelector {
     private final boolean[] assigned;
     /** Per constraint, scratch for {@link #select}: how many of its variables are unassigned. */
     private final int[] unassigned;
-    private @Nullable Random tieBreakRandom;
+    private final TieBreak tieBreak;
     private @Nullable Variable<?> lastConflictVariable;
+
+    /** Breaks ties with {@link TieBreak.Factory#RANDOM}. */
+    public DomWdegVariableSelector(@NonNull Set<Constraint> constraints) {
+        this(constraints, TieBreak.Factory.RANDOM.create(constraints));
+    }
 
     /**
      * {@link NogoodConstraint}s in {@code constraints} are dropped entirely rather than indexed:
@@ -96,7 +98,8 @@ public class DomWdegVariableSelector implements AdaptiveVariableSelector {
      * structural constraints (before any nogood has been learned), so this is a no-op there —
      * the filter exists for direct/test construction with a nogood already present.
      */
-    public DomWdegVariableSelector(@NonNull Set<Constraint> constraints) {
+    public DomWdegVariableSelector(@NonNull Set<Constraint> constraints, @NonNull TieBreak tieBreak) {
+        this.tieBreak = tieBreak;
         List<Constraint> structural = constraints.stream().filter(c -> !(c instanceof NogoodConstraint)).toList();
         int highest = -1;
         for (Constraint constraint : structural) {
@@ -162,17 +165,10 @@ public class DomWdegVariableSelector implements AdaptiveVariableSelector {
         }
     }
 
-    /**
-     * Sets (or clears, via {@code null}) the {@link Random} used to break ties in {@link #select}'s
-     * minimum ratio -- dom/wdeg's response to {@link AdaptiveVariableSelector#onRestart}, raised
-     * once per Luby restart by {@link io.github.rcrida.jcsp.solver.DomWdegLubySearch#getSolution}
-     * with whatever the configured {@link RestartRandomization} returns for that restart. {@code
-     * null}, for {@link RestartRandomization#NONE}, restores deterministic first-tied-candidate
-     * behaviour.
-     */
+    /** Passes the restart, and its source of randomness, to the {@link TieBreak}. */
     @Override
     public void onRestart(@Nullable Random random) {
-        this.tieBreakRandom = random;
+        tieBreak.onRestart(random);
     }
 
     /**
@@ -264,9 +260,7 @@ public class DomWdegVariableSelector implements AdaptiveVariableSelector {
             }
         }
         if (tied.isEmpty()) return Optional.empty();
-        return Optional.of(tieBreakRandom == null || tied.size() == 1
-                ? tied.get(0)
-                : tied.get(tieBreakRandom.nextInt(tied.size())));
+        return Optional.of(tied.size() == 1 ? tied.get(0) : tieBreak.choose(tied));
     }
 
     /**
