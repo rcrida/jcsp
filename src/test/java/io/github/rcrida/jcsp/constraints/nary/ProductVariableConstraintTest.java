@@ -38,6 +38,12 @@ class ProductVariableConstraintTest {
                 .isSatisfiedBy(Assignment.of(Map.of(X, 2.0, Y, 3.0, T, 6.0)))).isTrue();
     }
 
+    @Test void isSatisfiedBy_eq_negativeFactorTimesZero_equalsZero() {
+        // -2.0 * 0.0 is -0.0, which a boxed comparison against a target of 0.0 tells apart.
+        assertThat(ProductVariableConstraint.of(Set.of(X, Y), Operator.EQ, T)
+                .isSatisfiedBy(Assignment.of(Map.of(X, -2.0, Y, 0.0, T, 0.0)))).isTrue();
+    }
+
     @Test void isSatisfiedBy_eq_violated() {
         assertThat(ProductVariableConstraint.of(Set.of(X, Y), Operator.EQ, T)
                 .isSatisfiedBy(Assignment.of(Map.of(X, 2.0, Y, 3.0, T, 5.0)))).isFalse();
@@ -58,6 +64,19 @@ class ProductVariableConstraintTest {
         assertThat(result).isPresent();
         assertThat(result.get()).containsOnlyKeys(T);
         assertThat(tDom(result.get()).getMax()).isEqualTo(15.0);
+    }
+
+    @Test void propagate_eq_negativeFactorTimesZero_keepsZeroInTheTarget() {
+        // -2.0 * 0 is -0.0, which a Set<Double> holds apart from the 0.0 a target value of 0
+        // widens to -- coverage then dropped a product it had reached.
+        Variable.Factory factory = new Variable.Factory();
+        Variable<Integer> x = factory.create("x");
+        Variable<Integer> y = factory.create("y");
+        Variable<Integer> t = factory.create("t");
+        var result = ProductVariableConstraint.of(Set.of(x, y), Operator.EQ, t).propagate(
+                Map.of(x, IntRangeDomain.of(-2, -1), y, IntRangeDomain.of(0, 1), t, IntRangeDomain.of(-2, 0)));
+        assertThat(result).isPresent();
+        assertThat(result.get()).doesNotContainKey(t);
     }
 
     @Test void propagate_eq_complementaryProductStraddlesZero_leavesThatFactorAlone() {

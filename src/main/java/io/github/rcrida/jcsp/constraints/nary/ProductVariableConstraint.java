@@ -67,7 +67,7 @@ public class ProductVariableConstraint<N extends Number> extends NaryConstraint 
         if (!assignment.containsAll(getVariables())) return true;
         double product = factors.stream()
                 .mapToDouble(v -> assignment.getValue(v).orElseThrow().doubleValue())
-                .reduce(1.0, (a, b) -> a * b);
+                .reduce(1.0, (a, b) -> a * b) + 0.0; // -0.0 -> 0.0, which the boxed comparison tells apart
         double targetValue = assignment.getValue(target).orElseThrow().doubleValue();
         return operator.compare(product, targetValue);
     }

@@ -62,7 +62,8 @@ public class ProductConstraint<N extends Number> extends UniformNaryConstraint<N
     @Override
     protected boolean isSatisfiedByValues(@NonNull Collection<N> values) {
         if (values.size() < getVariables().size()) return true;
-        double product = values.stream().mapToDouble(Number::doubleValue).reduce(1.0, (a, b) -> a * b);
+        // + 0.0 turns -0.0 (a negative factor times zero) into 0.0, which the boxed comparison tells apart.
+        double product = values.stream().mapToDouble(Number::doubleValue).reduce(1.0, (a, b) -> a * b) + 0.0;
         return operator.compare(product, bound.doubleValue());
     }
 

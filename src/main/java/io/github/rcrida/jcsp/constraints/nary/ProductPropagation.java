@@ -135,7 +135,8 @@ final class ProductPropagation {
                                                      List<Set<N>> supported, Set<Double> reachable) {
         if (index == values.size()) {
             if (!targetAccepts.test(product)) return;
-            reachable.add(product);
+            // + 0.0 turns -0.0 (a negative factor times zero) into 0.0, which Double#equals tells apart.
+            reachable.add(product + 0.0);
             for (int i = 0; i < chosen.length; i++) {
                 supported.get(i).add((N) chosen[i]);
             }

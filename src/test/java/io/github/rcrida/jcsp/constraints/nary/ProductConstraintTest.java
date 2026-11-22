@@ -36,6 +36,12 @@ public class ProductConstraintTest {
                 .isSatisfiedBy(Assignment.of(Map.of(X, 2.0, Y, 3.0)))).isTrue();
     }
 
+    @Test void isSatisfiedBy_eq_negativeFactorTimesZero_equalsZero() {
+        // -2.0 * 0.0 is -0.0, which a boxed comparison against 0.0 tells apart.
+        assertThat(ProductConstraint.of(Set.of(X, Y), Operator.EQ, 0.0)
+                .isSatisfiedBy(Assignment.of(Map.of(X, -2.0, Y, 0.0)))).isTrue();
+    }
+
     @Test void isSatisfiedBy_eq_violated() {
         assertThat(ProductConstraint.of(Set.of(X, Y), Operator.EQ, 5.0)
                 .isSatisfiedBy(Assignment.of(Map.of(X, 2.0, Y, 3.0)))).isFalse();
