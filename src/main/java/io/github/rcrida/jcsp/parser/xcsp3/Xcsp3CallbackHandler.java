@@ -48,6 +48,7 @@ import io.github.rcrida.jcsp.constraints.nary.OrderedConstraint;
 import io.github.rcrida.jcsp.constraints.nary.PredicateConstraint;
 import io.github.rcrida.jcsp.constraints.nary.ProductVariableConstraint;
 import io.github.rcrida.jcsp.constraints.nary.RegularConstraint;
+import io.github.rcrida.jcsp.constraints.nary.LinearBoundConstraint;
 import io.github.rcrida.jcsp.constraints.nary.LinearVariableConstraint;
 import io.github.rcrida.jcsp.constraints.nary.SumBoundConstraint;
 import io.github.rcrida.jcsp.constraints.nary.ValueConjunctionConstraint;
@@ -1494,8 +1495,11 @@ final class Xcsp3CallbackHandler implements XCallbacks2 {
 
     void applyLinearCondition(Map<Variable<Integer>, Integer> coefficients, Condition condition, String id) {
         if (condition instanceof ConditionVal val) {
-            builder.linearConstraint(coefficients, mapOperator(val.operator), (int) val.k);
+            addOrReify(LinearBoundConstraint.of(coefficients, mapOperator(val.operator), (int) val.k), id);
         } else if (condition instanceof ConditionVar var) {
+            if (currentReification != null) {
+                throw new UnsupportedXcsp3ConstraintException("Reified linear sum with a variable target is not supported: " + id);
+            }
             builder.linearConstraint(coefficients, mapOperator(var.operator), variableFor(var.x));
         } else {
             throw new UnsupportedXcsp3ConstraintException("Unsupported linear condition: " + id);

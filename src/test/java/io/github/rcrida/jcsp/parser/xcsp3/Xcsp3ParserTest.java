@@ -1213,6 +1213,26 @@ class Xcsp3ParserTest {
         assertThat(solutions(instance.csp())).hasSize(9);
     }
 
+    @Test void weightedSumFullyReified_indicatorTracksConstraintTruthValue() throws IOException {
+        Xcsp3Instance instance = parseXml(
+                "<var id=\"x\"> 0..2 </var><var id=\"y\"> 0..2 </var><var id=\"b\"> 0..1 </var>",
+                "<sum reifiedBy=\"b\"><list> x y </list><coeffs> 2 1 </coeffs><condition> (le,2) </condition></sum>");
+        for (Assignment a : solutions(instance.csp())) {
+            int x = digitOf(a, "x");
+            int y = digitOf(a, "y");
+            int b = digitOf(a, "b");
+            assertThat(b == 1).as("x=%d, y=%d, b=%d", x, y, b).isEqualTo(2 * x + y <= 2);
+        }
+        assertThat(solutions(instance.csp())).hasSize(9);
+    }
+
+    @Test void weightedSumWithVariableTargetReified_throwsUnsupported() {
+        assertThatThrownBy(() -> parseXml(
+                "<var id=\"x\"> 0..2 </var><var id=\"y\"> 0..2 </var><var id=\"k\"> 0..6 </var><var id=\"b\"> 0..1 </var>",
+                "<sum reifiedBy=\"b\"><list> x y </list><coeffs> 2 1 </coeffs><condition> (le,k) </condition></sum>"))
+                .isInstanceOf(UnsupportedXcsp3ConstraintException.class);
+    }
+
     @Test void sumWithVariableTargetReified_throwsUnsupported() {
         assertThatThrownBy(() -> parseXml(
                 "<var id=\"x\"> 0..2 </var><var id=\"y\"> 0..2 </var><var id=\"k\"> 0..4 </var><var id=\"b\"> 0..1 </var>",
