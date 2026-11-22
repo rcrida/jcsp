@@ -7,6 +7,7 @@ import io.github.rcrida.jcsp.variables.Variable;
 import org.junit.jupiter.api.Test;
 import org.xcsp.common.Condition;
 import org.xcsp.common.Types.TypeExpr;
+import org.xcsp.common.Types.TypeConditionOperatorRel;
 import org.xcsp.common.Types.TypeFlag;
 import org.xcsp.common.predicates.XNode;
 import io.github.rcrida.jcsp.constraints.unary.UnaryPredicateConstraint;
@@ -51,6 +52,68 @@ class Xcsp3CallbackHandlerTest {
         Xcsp3CallbackHandler handler = new Xcsp3CallbackHandler();
         assertThatThrownBy(() -> handler.applyLinearCondition(Map.of(x, 2), NEITHER_VAL_NOR_VAR, "c0"))
                 .isInstanceOf(UnsupportedXcsp3ConstraintException.class);
+    }
+
+    @Test void applyLinearBooleanCondition_unrecognisedConditionShape_throws() {
+        Variable<Boolean> b = variableFactory.create("b");
+        Xcsp3CallbackHandler handler = new Xcsp3CallbackHandler();
+        assertThatThrownBy(() -> handler.applyLinearBooleanCondition(Map.of(b, 1), NEITHER_VAL_NOR_VAR, "c0"))
+                .isInstanceOf(UnsupportedXcsp3ConstraintException.class);
+    }
+
+    private static XNodeLeaf<XVarInteger> leaf(XVarInteger v) {
+        return new XNodeLeaf<>(TypeExpr.VAR, v);
+    }
+
+    private static XNodeLeaf<XVarInteger> leaf(long constant) {
+        return new XNodeLeaf<>(TypeExpr.LONG, constant);
+    }
+
+    @SafeVarargs
+    private static XNode<XVarInteger>[] terms(XNode<XVarInteger>... terms) {
+        return terms;
+    }
+
+    /** The canonizer folds {@code mul(2,3)} to {@code 6} in a real file; unfolded, it is a constant term. */
+    @Test void sumOfExpressions_productOfConstantsOnly_isAConstantTerm() {
+        XVarInteger x = XcspTestNodes.var("x", 0, 5);
+        Xcsp3CallbackHandler handler = XcspTestNodes.handlerWith(x);
+        handler.buildCtrSum("c0", terms(leaf(x), new XNodeParent<>(TypeExpr.MUL, leaf(2), leaf(3))),
+                Condition.buildFrom(TypeConditionOperatorRel.LE, 8));
+        Variable<Integer> variable = handler.toInstance().csp().getVariableDomains().keySet().stream()
+                .map(v -> (Variable<Integer>) v).findFirst().orElseThrow();
+        Constraint built = handler.toInstance().csp().getConstraints().iterator().next();
+        assertThat(built.isSatisfiedBy(Assignment.of(Map.of(variable, 2)))).isTrue();
+        assertThat(built.isSatisfiedBy(Assignment.of(Map.of(variable, 3)))).isFalse();
+    }
+
+    @Test void sumOfExpressions_unresolvableTerm_throws() {
+        XVarInteger x = XcspTestNodes.var("x", -5, 5);
+        XVarInteger y = XcspTestNodes.var("y", 0, 5);
+        Xcsp3CallbackHandler handler = XcspTestNodes.handlerWith(x, y);
+        assertThatThrownBy(() -> handler.buildCtrSum("c0",
+                terms(leaf(y), new XNodeParent<>(TypeExpr.ABS, leaf(x))),
+                Condition.buildFrom(TypeConditionOperatorRel.LE, 8)))
+                .isInstanceOf(UnsupportedXcsp3ConstraintException.class)
+                .hasMessageContaining("Unsupported sum term");
+    }
+
+    @Test void sumOfRelations_unrecognizedRelation_throws() {
+        // Four variables too wide for TabulationRecognizer, in a shape no other recognizer claims.
+        XVarInteger a = XcspTestNodes.var("a", 0, 4095);
+        XVarInteger b = XcspTestNodes.var("b", 0, 4095);
+        XVarInteger c = XcspTestNodes.var("c", 0, 4095);
+        XVarInteger d = XcspTestNodes.var("d", 0, 4095);
+        Xcsp3CallbackHandler handler = XcspTestNodes.handlerWith(a, b, c, d);
+        XNodeParent<XVarInteger> relation = new XNodeParent<>(TypeExpr.IMP,
+                new XNodeParent<>(TypeExpr.AND,
+                        new XNodeParent<>(TypeExpr.LE, leaf(a), leaf(b)),
+                        new XNodeParent<>(TypeExpr.LE, leaf(c), leaf(d))),
+                new XNodeParent<>(TypeExpr.EQ, leaf(a), leaf(c)));
+        assertThatThrownBy(() -> handler.buildCtrSum("c0", terms(relation),
+                Condition.buildFrom(TypeConditionOperatorRel.GE, 1)))
+                .isInstanceOf(UnsupportedXcsp3ConstraintException.class)
+                .hasMessageContaining("No recognizer for sum term");
     }
 
     @Test void buildCtrCircuit_fixedSize_throws() {

@@ -41,6 +41,7 @@ import org.junit.jupiter.api.io.TempDir;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -1641,6 +1642,159 @@ class Xcsp3ParserTest {
                 "<var id=\"x\"> 0..5 </var><var id=\"y\"> 0..5 </var><var id=\"c1\"> 1..2 </var><var id=\"c2\"> 1..2 </var>"
                         + "<var id=\"b\"> 0..1 </var>",
                 "<sum reifiedBy=\"b\"><list> x y </list><coeffs> c1 c2 </coeffs><condition> (eq,10) </condition></sum>"))
+                .isInstanceOf(UnsupportedXcsp3ConstraintException.class);
+    }
+
+    // ---- sum over expressions ------------------------------------------------------------------------------------
+
+    private static final String XYZ_0_2 = "<var id=\"x\"> 0..2 </var><var id=\"y\"> 0..2 </var><var id=\"z\"> 0..2 </var>";
+
+    /** Every solution of {@code instance} over x, y, z satisfies {@code relation}, and none is missing. */
+    private static void assertSolutionsOverXyzAre(Xcsp3Instance instance, int max, Predicate<int[]> relation) {
+        Set<List<Integer>> actual = solutions(instance.csp()).stream()
+                .map(a -> List.of(digitOf(a, "x"), digitOf(a, "y"), digitOf(a, "z")))
+                .collect(Collectors.toSet());
+        Set<List<Integer>> expected = new HashSet<>();
+        for (int x = 0; x <= max; x++) {
+            for (int y = 0; y <= max; y++) {
+                for (int z = 0; z <= max; z++) {
+                    if (relation.test(new int[]{x, y, z})) expected.add(List.of(x, y, z));
+                }
+            }
+        }
+        assertThat(actual).isEqualTo(expected);
+    }
+
+    private static int truth(boolean b) {
+        return b ? 1 : 0;
+    }
+
+    @Test void sumOfRelations_countsTheTermsThatHold() throws IOException {
+        Xcsp3Instance instance = parseXml(XYZ_0_2,
+                "<sum><list> eq(x,1) ne(y,z) lt(x,y) </list><condition> (eq,2) </condition></sum>");
+        assertSolutionsOverXyzAre(instance, 2,
+                v -> truth(v[0] == 1) + truth(v[1] != v[2]) + truth(v[0] < v[1]) == 2);
+    }
+
+    @Test void sumOfRelations_weighted() throws IOException {
+        Xcsp3Instance instance = parseXml(XYZ_0_2,
+                "<sum><list> eq(x,1) ne(y,z) lt(x,y) </list><coeffs> 2 1 3 </coeffs><condition> (ge,4) </condition></sum>");
+        assertSolutionsOverXyzAre(instance, 2,
+                v -> 2 * truth(v[0] == 1) + truth(v[1] != v[2]) + 3 * truth(v[0] < v[1]) >= 4);
+    }
+
+    @Test void sumOfRelations_variableTarget() throws IOException {
+        Xcsp3Instance instance = parseXml(XYZ_0_2,
+                "<sum><list> eq(x,1) eq(y,1) </list><condition> (eq,z) </condition></sum>");
+        assertSolutionsOverXyzAre(instance, 2, v -> truth(v[0] == 1) + truth(v[1] == 1) == v[2]);
+    }
+
+    @Test void sumOfRelationsFullyReified_indicatorTracksConstraintTruthValue() throws IOException {
+        Xcsp3Instance instance = parseXml(XYZ_0_2 + "<var id=\"b\"> 0..1 </var>",
+                "<sum reifiedBy=\"b\"><list> eq(x,1) ne(y,z) </list><condition> (eq,1) </condition></sum>");
+        Set<Assignment> solutions = solutions(instance.csp());
+        for (Assignment a : solutions) {
+            int x = digitOf(a, "x");
+            int y = digitOf(a, "y");
+            int z = digitOf(a, "z");
+            assertThat(digitOf(a, "b") == 1).isEqualTo(truth(x == 1) + truth(y != z) == 1);
+        }
+        assertThat(solutions).hasSize(27);
+    }
+
+    @Test void sumOfRelationsWithVariableTargetReified_throwsUnsupported() {
+        assertThatThrownBy(() -> parseXml(XYZ_0_2 + "<var id=\"b\"> 0..1 </var>",
+                "<sum reifiedBy=\"b\"><list> eq(x,1) eq(y,1) </list><condition> (eq,z) </condition></sum>"))
+                .isInstanceOf(UnsupportedXcsp3ConstraintException.class);
+    }
+
+    @Test void sumOfExpressions_foldsVariablesProductsConstantsAndRelations() throws IOException {
+        Xcsp3Instance instance = parseXml(XYZ_0_2,
+                "<sum><list> x mul(y,z) mul(x,y,z) add(z,2) mul(x,3) eq(y,1) </list>"
+                        + "<coeffs> 1 2 1 1 1 4 </coeffs><condition> (le,12) </condition></sum>");
+        assertSolutionsOverXyzAre(instance, 2,
+                v -> v[0] + 2 * v[1] * v[2] + v[0] * v[1] * v[2] + v[2] + 2 + 3 * v[0] + 4 * truth(v[1] == 1) <= 12);
+    }
+
+    @Test void sumOfExpressions_powersOfNegativePositiveAndMixedSignVariables() throws IOException {
+        Xcsp3Instance instance = parseXml(
+                "<var id=\"x\"> -2..-1 </var><var id=\"y\"> 1..2 </var><var id=\"z\"> -1..2 </var>",
+                "<sum><list> mul(x,x) mul(y,y,y) mul(z,z) mul(x,z,z) </list><condition> (eq,9) </condition></sum>");
+        Set<List<Integer>> actual = solutions(instance.csp()).stream()
+                .map(a -> List.of(digitOf(a, "x"), digitOf(a, "y"), digitOf(a, "z")))
+                .collect(Collectors.toSet());
+        Set<List<Integer>> expected = new HashSet<>();
+        for (int x = -2; x <= -1; x++) {
+            for (int y = 1; y <= 2; y++) {
+                for (int z = -1; z <= 2; z++) {
+                    if (x * x + y * y * y + z * z + x * z * z == 9) expected.add(List.of(x, y, z));
+                }
+            }
+        }
+        assertThat(expected).isNotEmpty();
+        assertThat(actual).isEqualTo(expected);
+    }
+
+    @Test void sumOfExpressions_variableTarget() throws IOException {
+        Xcsp3Instance instance = parseXml(XYZ_0_2,
+                "<sum><list> mul(x,y) eq(x,2) </list><condition> (eq,z) </condition></sum>");
+        assertSolutionsOverXyzAre(instance, 2, v -> v[0] * v[1] + truth(v[0] == 2) == v[2]);
+    }
+
+    @Test void sumOfExpressionsFullyReified_indicatorTracksConstraintTruthValue() throws IOException {
+        Xcsp3Instance instance = parseXml(XYZ_0_2 + "<var id=\"b\"> 0..1 </var>",
+                "<sum reifiedBy=\"b\"><list> mul(x,y) z </list><condition> (le,2) </condition></sum>");
+        Set<Assignment> solutions = solutions(instance.csp());
+        for (Assignment a : solutions) {
+            int x = digitOf(a, "x");
+            int y = digitOf(a, "y");
+            int z = digitOf(a, "z");
+            assertThat(digitOf(a, "b") == 1).isEqualTo(x * y + z <= 2);
+        }
+        assertThat(solutions).hasSize(27);
+    }
+
+    @Test void sumOfExpressionsWithConstantTermAndVariableTarget_throwsUnsupported() {
+        assertThatThrownBy(() -> parseXml(XYZ_0_2,
+                "<sum><list> add(x,1) mul(x,y) </list><condition> (eq,z) </condition></sum>"))
+                .isInstanceOf(UnsupportedXcsp3ConstraintException.class);
+    }
+
+    @Test void objectiveMinimizeSumOfExpressions_weighted() throws IOException {
+        Xcsp3Instance instance = parseXml(XYZ_0_2,
+                "<intension> ge(add(x,y),2) </intension>",
+                "<minimize type=\"sum\"><list> mul(x,y) eq(x,0) add(z,3) </list><coeffs> 2 5 1 </coeffs></minimize>");
+        Assignment best = Solver.Factory.INSTANCE.createSolver(instance.csp(), instance.objective()).getSolution().orElseThrow();
+        // x=2, y=0, z=0: 2*0 + 5*0 + 0 + 3
+        assertThat(instance.maximize()).isFalse();
+        assertThat(instance.objective().applyAsDouble(best)).isEqualTo(3.0);
+    }
+
+    @Test void objectiveMaximizeSumOfExpressions() throws IOException {
+        Xcsp3Instance instance = parseXml(XYZ_0_2,
+                "<intension> le(add(x,y),3) </intension>",
+                "<maximize type=\"sum\"><list> mul(x,y) ne(x,z) </list></maximize>");
+        Assignment best = Solver.Factory.INSTANCE.createSolver(instance.csp(), instance.objective()).getSolution().orElseThrow();
+        // x*y is at most 2 under x+y <= 3, and x != z costs nothing: 3, negated for minimizing
+        assertThat(instance.maximize()).isTrue();
+        assertThat(instance.objective().applyAsDouble(best)).isEqualTo(-3.0);
+    }
+
+    @Test void objectiveMinimizeSumOfExpressionsWithoutCoefficients_andMaximizeWithThem() throws IOException {
+        Xcsp3Instance minimized = parseXml(XYZ_0_2, "<intension> ge(x,1) </intension>",
+                "<minimize type=\"sum\"><list> mul(x,y) add(x,1) </list></minimize>");
+        Assignment low = Solver.Factory.INSTANCE.createSolver(minimized.csp(), minimized.objective()).getSolution().orElseThrow();
+        assertThat(minimized.objective().applyAsDouble(low)).isEqualTo(2.0);
+
+        Xcsp3Instance maximized = parseXml(XYZ_0_2, "<intension> le(x,1) </intension>",
+                "<maximize type=\"sum\"><list> mul(x,y) eq(z,1) </list><coeffs> 1 3 </coeffs></maximize>");
+        Assignment high = Solver.Factory.INSTANCE.createSolver(maximized.csp(), maximized.objective()).getSolution().orElseThrow();
+        assertThat(maximized.objective().applyAsDouble(high)).isEqualTo(-5.0);
+    }
+
+    @Test void objectiveMaximumOfExpressions_throwsUnsupported() {
+        assertThatThrownBy(() -> parseXml(XYZ_0_2, "<intension> ge(x,1) </intension>",
+                "<minimize type=\"maximum\"><list> add(x,1) mul(y,z) </list></minimize>"))
                 .isInstanceOf(UnsupportedXcsp3ConstraintException.class);
     }
 

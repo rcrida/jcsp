@@ -12,6 +12,7 @@ import io.github.rcrida.jcsp.constraints.binary.BinaryElementConstraint;
 import io.github.rcrida.jcsp.constraints.binary.BinaryPredicateConstraint;
 import io.github.rcrida.jcsp.constraints.binary.BinaryNotEqualsConstraint;
 import io.github.rcrida.jcsp.constraints.binary.BinaryOffsetConstraint;
+import io.github.rcrida.jcsp.constraints.binary.SquareVariableConstraint;
 import io.github.rcrida.jcsp.constraints.nary.AbsoluteDifferenceVariableConstraint;
 import io.github.rcrida.jcsp.constraints.nary.AllDiffConstraint;
 import io.github.rcrida.jcsp.constraints.nary.AllEqualConstraint;
@@ -48,6 +49,8 @@ import io.github.rcrida.jcsp.constraints.nary.OrderedConstraint;
 import io.github.rcrida.jcsp.constraints.nary.PredicateConstraint;
 import io.github.rcrida.jcsp.constraints.nary.ProductVariableConstraint;
 import io.github.rcrida.jcsp.constraints.nary.RegularConstraint;
+import io.github.rcrida.jcsp.constraints.nary.LinearBooleanBoundConstraint;
+import io.github.rcrida.jcsp.constraints.nary.LinearBooleanVariableConstraint;
 import io.github.rcrida.jcsp.constraints.nary.LinearBoundConstraint;
 import io.github.rcrida.jcsp.constraints.nary.LinearVariableConstraint;
 import io.github.rcrida.jcsp.constraints.nary.SumBoundConstraint;
@@ -146,11 +149,13 @@ final class Xcsp3CallbackHandler implements XCallbacks2 {
     private final Map<String, Variable<Integer>> subAuxiliaries = new LinkedHashMap<>();
     private final Map<Set<Variable<Integer>>, Variable<Integer>> productAuxiliaries = new LinkedHashMap<>();
     private final Map<String, Variable<Integer>> addAuxiliaries = new LinkedHashMap<>();
+    private final Map<String, Variable<Integer>> squareAuxiliaries = new LinkedHashMap<>();
     private final Map<Set<Variable<Integer>>, List<PendingCount>> pendingSingleValueCounts = new LinkedHashMap<>();
     private @Nullable ToDoubleFunction<Assignment> objective;
     private boolean maximize;
     private @Nullable XReification currentReification;
     private int declaredConstraintCount;
+    private int sumTermCount;
 
     /**
      * The registered {@code <intension>} pattern-matcher chain, in the exact priority order the
@@ -1417,6 +1422,172 @@ final class Xcsp3CallbackHandler implements XCallbacks2 {
         applySumCondition(products, condition, id);
     }
 
+    @Override
+    public void buildCtrSum(String id, XNode<XVarInteger>[] trees, Condition condition) {
+        buildCtrSum(id, trees, unitCoefficients(trees.length), condition);
+    }
+
+    /**
+     * {@code Σ coeffs[i]·trees[i] <op> condition} over expressions. When every term is a
+     * predicate, each becomes one reified indicator under a {@link LinearBooleanBoundConstraint}
+     * or {@link LinearBooleanVariableConstraint}, as {@link RelationSumRecognizer} does for an
+     * {@code add} of relations; otherwise every term is folded into integer coefficients by
+     * {@link #foldExpressionTerm}.
+     */
+    @Override
+    public void buildCtrSum(String id, XNode<XVarInteger>[] trees, int[] coeffs, Condition condition) {
+        if (Arrays.stream(trees).allMatch(tree -> tree.getType().isPredicateOperator())) {
+            Map<Variable<Boolean>, Integer> weights = new LinkedHashMap<>();
+            for (int i = 0; i < trees.length; i++) {
+                weights.put(predicateIndicator(trees[i], id), coeffs[i]);
+            }
+            applyLinearBooleanCondition(weights, condition, id);
+            return;
+        }
+        LinearTerms terms = foldExpressionTerms(trees, coeffs, id);
+        if (condition instanceof ConditionVal val) {
+            addOrReify(LinearBoundConstraint.of(terms.coefficients(), mapOperator(val.operator),
+                    (int) val.k - terms.offset()), id);
+        } else if (terms.offset() == 0) {
+            applyLinearCondition(terms.coefficients(), condition, id);
+        } else {
+            throw new UnsupportedXcsp3ConstraintException("Sum with a constant term and a variable target is not supported: " + id);
+        }
+    }
+
+    // As with applySumCondition, the final "else" is unreachable through a real XCSP3 <sum>.
+    void applyLinearBooleanCondition(Map<Variable<Boolean>, Integer> weights, Condition condition, String id) {
+        if (condition instanceof ConditionVal val) {
+            addOrReify(LinearBooleanBoundConstraint.of(weights, mapOperator(val.operator), (int) val.k), id);
+        } else if (condition instanceof ConditionVar var) {
+            if (currentReification != null) {
+                throw new UnsupportedXcsp3ConstraintException("Reified sum with a variable target is not supported: " + id);
+            }
+            builder.constraint(LinearBooleanVariableConstraint.of(weights, mapOperator(var.operator), variableFor(var.x)));
+        } else {
+            throw new UnsupportedXcsp3ConstraintException("Unsupported sum condition: " + id);
+        }
+    }
+
+    private static int[] unitCoefficients(int length) {
+        int[] coeffs = new int[length];
+        Arrays.fill(coeffs, 1);
+        return coeffs;
+    }
+
+    /** A weighted sum of variables plus a constant, from {@link #foldExpressionTerms}. */
+    private record LinearTerms(Map<Variable<Integer>, Integer> coefficients, int offset) {}
+
+    private LinearTerms foldExpressionTerms(XNode<XVarInteger>[] trees, int[] coeffs, String id) {
+        Map<Variable<Integer>, Integer> coefficients = new LinkedHashMap<>();
+        int offset = 0;
+        for (int i = 0; i < trees.length; i++) {
+            offset += foldExpressionTerm(coefficients, trees[i], coeffs[i], id);
+        }
+        return new LinearTerms(coefficients, offset);
+    }
+
+    /**
+     * Adds {@code weight·term} to {@code coefficients} and returns the constant it contributes. A
+     * constant contributes only that; an {@code add} folds each operand; a {@code mul} multiplies
+     * its constant factors into the weight and the rest into one {@link #productAuxiliary}; any
+     * other term becomes one variable via {@link #termVariable}.
+     */
+    private int foldExpressionTerm(Map<Variable<Integer>, Integer> coefficients, XNode<XVarInteger> term,
+                                   int weight, String id) {
+        Optional<Integer> constant = asConstant(term);
+        if (constant.isPresent()) {
+            return weight * constant.get();
+        }
+        if (term.getType() == TypeExpr.ADD) {
+            int offset = 0;
+            for (XNode<XVarInteger> operand : term.sons) {
+                offset += foldExpressionTerm(coefficients, operand, weight, id);
+            }
+            return offset;
+        }
+        if (term.getType() != TypeExpr.MUL) {
+            coefficients.merge(termVariable(term, id), weight, Integer::sum);
+            return 0;
+        }
+        int factor = weight;
+        Map<Variable<Integer>, Integer> powers = new LinkedHashMap<>();
+        for (XNode<XVarInteger> operand : term.sons) {
+            Optional<Integer> constantFactor = asConstant(operand);
+            if (constantFactor.isPresent()) {
+                factor *= constantFactor.get();
+            } else {
+                powers.merge(termVariable(operand, id), 1, Integer::sum);
+            }
+        }
+        Variable<Integer> product = null;
+        for (Map.Entry<Variable<Integer>, Integer> power : powers.entrySet()) {
+            Variable<Integer> raised = power(power.getKey(), power.getValue());
+            product = product == null ? raised : productAuxiliary(product, raised);
+        }
+        if (product == null) {
+            return factor;
+        }
+        coefficients.merge(product, factor, Integer::sum);
+        return 0;
+    }
+
+    /** {@code base^exponent} as one variable: a {@link #squareAuxiliary}, times {@code base} for each further power. */
+    private Variable<Integer> power(Variable<Integer> base, int exponent) {
+        if (exponent == 1) {
+            return base;
+        }
+        Variable<Integer> raised = squareAuxiliary(base);
+        for (int i = 2; i < exponent; i++) {
+            raised = productAuxiliary(raised, base);
+        }
+        return raised;
+    }
+
+    /**
+     * Fresh variable holding {@code operand²}, linked by a {@link SquareVariableConstraint} and
+     * memoized by {@code operand}'s name, since {@link #productAuxiliary}'s factor set cannot hold a
+     * variable twice.
+     */
+    private Variable<Integer> squareAuxiliary(Variable<Integer> operand) {
+        return squareAuxiliaries.computeIfAbsent(operand.getName() + "$sqr", name -> {
+            int[] bounds = boundsByName.get(operand.getName());
+            int lowSquare = bounds[0] * bounds[0];
+            int highSquare = bounds[1] * bounds[1];
+            int lo = bounds[0] <= 0 && bounds[1] >= 0 ? 0 : Math.min(lowSquare, highSquare);
+            int hi = Math.max(lowSquare, highSquare);
+            Variable<Integer> square = builder.createVariable(name, IntRangeDomain.of(lo, hi));
+            builder.constraint(SquareVariableConstraint.of(operand, Operator.EQ, square));
+            boundsByName.put(name, new int[]{lo, hi});
+            return square;
+        });
+    }
+
+    /** {@code term} as one integer variable: a predicate's 0/1 value, anything else via {@link #resolveVariable}. */
+    private Variable<Integer> termVariable(XNode<XVarInteger> term, String id) {
+        if (term.getType().isPredicateOperator()) {
+            return zeroOneVariable(predicateIndicator(term, id));
+        }
+        return resolveVariable(term).orElseThrow(() ->
+                new UnsupportedXcsp3ConstraintException("Unsupported sum term " + term + ": " + id));
+    }
+
+    /** A fresh indicator reified against {@code predicate}, as recognized by {@link #recognizeConstraint}. */
+    private Variable<Boolean> predicateIndicator(XNode<XVarInteger> predicate, String id) {
+        Constraint relation = recognizeConstraint(predicate).orElseThrow(() ->
+                new UnsupportedXcsp3ConstraintException("No recognizer for sum term " + predicate + ": " + id));
+        return newReifiedIndicator(indicatorName("Term" + sumTermCount++, relation), relation);
+    }
+
+    /** A {@code 0..1} integer variable equal to 1 exactly when {@code indicator} holds. */
+    private Variable<Integer> zeroOneVariable(Variable<Boolean> indicator) {
+        String name = indicator.getName() + "$int";
+        Variable<Integer> value = builder.createVariable(name, IntRangeDomain.of(0, 1));
+        builder.reifyConstraint(indicator, UnaryComparatorConstraint.of(value, Operator.EQ, 1));
+        boundsByName.put(name, new int[]{0, 1});
+        return value;
+    }
+
     /**
      * When both factors are confirmed {@code {0,1}}-domain, builds a {@link MinVariableConstraint}
      * instead of a {@link ProductVariableConstraint} for exactly the same reason {@link
@@ -2282,6 +2453,47 @@ final class Xcsp3CallbackHandler implements XCallbacks2 {
     public void buildObjToMaximize(String id, TypeObjective type, XVarInteger[] list, int[] coeffs) {
         objective = buildArrayObjective(id, type, list, coeffs, true);
         maximize = true;
+    }
+
+    @Override
+    public void buildObjToMinimize(String id, TypeObjective type, XNode<XVarInteger>[] trees) {
+        objective = buildExpressionObjective(id, type, trees, unitCoefficients(trees.length), false);
+        maximize = false;
+    }
+
+    @Override
+    public void buildObjToMaximize(String id, TypeObjective type, XNode<XVarInteger>[] trees) {
+        objective = buildExpressionObjective(id, type, trees, unitCoefficients(trees.length), true);
+        maximize = true;
+    }
+
+    @Override
+    public void buildObjToMinimize(String id, TypeObjective type, XNode<XVarInteger>[] trees, int[] coeffs) {
+        objective = buildExpressionObjective(id, type, trees, coeffs, false);
+        maximize = false;
+    }
+
+    @Override
+    public void buildObjToMaximize(String id, TypeObjective type, XNode<XVarInteger>[] trees, int[] coeffs) {
+        objective = buildExpressionObjective(id, type, trees, coeffs, true);
+        maximize = true;
+    }
+
+    /**
+     * A {@code <minimize type="sum">}/{@code <maximize type="sum">} over expressions, each term
+     * folded by {@link #foldExpressionTerm} into a {@link LinearObjective}, negated for
+     * {@code maximize} as {@link #buildSumObjective} does. Every other aggregation is unsupported.
+     */
+    private LinearObjective buildExpressionObjective(String id, TypeObjective type, XNode<XVarInteger>[] trees,
+                                                     int[] coeffs, boolean maximizing) {
+        if (type != TypeObjective.SUM) {
+            throw new UnsupportedXcsp3ConstraintException("Only sum-type expression objectives are supported, got: " + type);
+        }
+        LinearTerms terms = foldExpressionTerms(trees, coeffs, id);
+        double sign = maximizing ? -1.0 : 1.0;
+        LinearObjective.LinearObjectiveBuilder linearObjectiveBuilder = LinearObjective.builder().constant(sign * terms.offset());
+        terms.coefficients().forEach((variable, coefficient) -> linearObjectiveBuilder.coefficient(variable, sign * coefficient));
+        return linearObjectiveBuilder.build();
     }
 
     /**
