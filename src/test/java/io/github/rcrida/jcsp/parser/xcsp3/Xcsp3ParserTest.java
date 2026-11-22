@@ -1758,6 +1758,12 @@ class Xcsp3ParserTest {
                 .hasMessageContaining("Power out of integer range");
     }
 
+    @Test void sumOfExpressions_foldsDifferencesAndNegations() throws IOException {
+        Xcsp3Instance instance = parseXml(XYZ_0_2,
+                "<sum><list> sub(x,y) neg(z) mul(sub(x,z),y) </list><condition> (eq,-1) </condition></sum>");
+        assertSolutionsOverXyzAre(instance, 2, v -> v[0] - v[1] - v[2] + (v[0] - v[2]) * v[1] == -1);
+    }
+
     @Test void sumOfExpressions_variableTarget() throws IOException {
         Xcsp3Instance instance = parseXml(XYZ_0_2,
                 "<sum><list> mul(x,y) eq(x,2) </list><condition> (eq,z) </condition></sum>");
@@ -1815,9 +1821,71 @@ class Xcsp3ParserTest {
         assertThat(maximized.objective().applyAsDouble(high)).isEqualTo(-5.0);
     }
 
-    @Test void objectiveMaximumOfExpressions_throwsUnsupported() {
+    /** The optimum of {@code objective} over x, y, z in 0..2 satisfying {@code feasible}, by brute force. */
+    private static int bruteForceOptimum(Predicate<int[]> feasible, java.util.function.ToIntFunction<int[]> objective, boolean maximizing) {
+        int best = maximizing ? Integer.MIN_VALUE : Integer.MAX_VALUE;
+        for (int x = 0; x <= 2; x++) {
+            for (int y = 0; y <= 2; y++) {
+                for (int z = 0; z <= 2; z++) {
+                    int[] v = {x, y, z};
+                    if (!feasible.test(v)) continue;
+                    int value = objective.applyAsInt(v);
+                    best = maximizing ? Math.max(best, value) : Math.min(best, value);
+                }
+            }
+        }
+        return best;
+    }
+
+    @Test void objectiveMaximumOfExpressions_minimizesTheLargestTerm() throws IOException {
+        Xcsp3Instance instance = parseXml(XYZ_0_2, "<intension> ge(add(x,y,z),4) </intension>",
+                "<minimize type=\"maximum\"><list> x add(y,1) sub(x,z) neg(y) dist(x,y) min(x,z) max(y,z)"
+                        + " mul(y,z) div(x,2) min(dist(x,z),sub(4,dist(x,z))) </list></minimize>");
+        Assignment best = Solver.Factory.INSTANCE.createSolver(instance.csp(), instance.objective()).getSolution().orElseThrow();
+        int expected = bruteForceOptimum(v -> v[0] + v[1] + v[2] >= 4,
+                v -> java.util.stream.IntStream.of(v[0], v[1] + 1, v[0] - v[2], -v[1], Math.abs(v[0] - v[1]),
+                        Math.min(v[0], v[2]), Math.max(v[1], v[2]), v[1] * v[2], v[0] / 2,
+                        Math.min(Math.abs(v[0] - v[2]), 4 - Math.abs(v[0] - v[2]))).max().orElseThrow(), false);
+        assertThat(instance.objective().applyAsDouble(best)).isEqualTo(expected);
+    }
+
+    @Test void objectiveMaximizeMaximumOfExpressions() throws IOException {
+        Xcsp3Instance instance = parseXml(XYZ_0_2, "<intension> le(add(x,y,z),2) </intension>",
+                "<maximize type=\"maximum\"><list> mul(x,2) add(y,z,1) </list></maximize>");
+        Assignment best = Solver.Factory.INSTANCE.createSolver(instance.csp(), instance.objective()).getSolution().orElseThrow();
+        int expected = bruteForceOptimum(v -> v[0] + v[1] + v[2] <= 2, v -> Math.max(2 * v[0], v[1] + v[2] + 1), true);
+        assertThat(instance.objective().applyAsDouble(best)).isEqualTo(-expected);
+    }
+
+    @Test void objectiveWeightedMaximumOfExpressions_throwsUnsupported() {
         assertThatThrownBy(() -> parseXml(XYZ_0_2, "<intension> ge(x,1) </intension>",
-                "<minimize type=\"maximum\"><list> add(x,1) mul(y,z) </list></minimize>"))
+                "<minimize type=\"maximum\"><list> add(x,1) mul(y,z) </list><coeffs> 2 1 </coeffs></minimize>"))
+                .isInstanceOf(UnsupportedXcsp3ConstraintException.class);
+    }
+
+    @Test void objectiveMinimumOfExpressions_throwsUnsupported() {
+        assertThatThrownBy(() -> parseXml(XYZ_0_2, "<intension> ge(x,1) </intension>",
+                "<minimize type=\"minimum\"><list> add(x,1) mul(y,z) </list></minimize>"))
+                .isInstanceOf(UnsupportedXcsp3ConstraintException.class);
+    }
+
+    @Test void countOfExpressions_variableTarget() throws IOException {
+        Xcsp3Instance instance = parseXml(XYZ_0_2,
+                "<count><list> and(eq(x,1),ne(y,z)) eq(y,2) lt(x,z) </list><values> 1 </values><condition> (eq,z) </condition></count>");
+        assertSolutionsOverXyzAre(instance, 2,
+                v -> truth(v[0] == 1 && v[1] != v[2]) + truth(v[1] == 2) + truth(v[0] < v[2]) == v[2]);
+    }
+
+    @Test void countOfExpressions_ofArithmeticTermsAgainstAConstant() throws IOException {
+        Xcsp3Instance instance = parseXml(XYZ_0_2,
+                "<count><list> add(x,y) sub(y,z) mul(x,z) </list><values> 2 </values><condition> (ge,2) </condition></count>");
+        assertSolutionsOverXyzAre(instance, 2,
+                v -> truth(v[0] + v[1] == 2) + truth(v[1] - v[2] == 2) + truth(v[0] * v[2] == 2) >= 2);
+    }
+
+    @Test void countOfRepeatedExpressions_throwsUnsupported() {
+        assertThatThrownBy(() -> parseXml(XYZ_0_2,
+                "<count><list> add(x,y) add(x,y) z </list><values> 2 </values><condition> (ge,1) </condition></count>"))
                 .isInstanceOf(UnsupportedXcsp3ConstraintException.class);
     }
 
@@ -3019,6 +3087,38 @@ class Xcsp3ParserTest {
                 .isInstanceOf(UnsupportedXcsp3ConstraintException.class);
     }
 
+    private static final String THREE_ITEMS_TWO_BINS =
+            "<var id=\"x\"> 0..1 </var><var id=\"y\"> 0..1 </var><var id=\"z\"> 0..1 </var>";
+
+    @Test void binPackingWithPerBinLimits_capsEachBinSeparately() throws IOException {
+        Xcsp3Instance instance = parseXml(THREE_ITEMS_TWO_BINS,
+                "<binPacking><list> x y z </list><sizes> 3 4 2 </sizes><limits> 5 6 </limits></binPacking>");
+        int[] sizes = {3, 4, 2};
+        assertSolutionsOverXyzAre(instance, 1, v -> {
+            int[] load = new int[2];
+            for (int i = 0; i < 3; i++) load[v[i]] += sizes[i];
+            return load[0] <= 5 && load[1] <= 6;
+        });
+    }
+
+    @Test void binPackingWithPerBinLimits_binBeyondTheLimits_throwsUnsupported() {
+        assertThatThrownBy(() -> parseXml("<var id=\"x\"> 0..2 </var><var id=\"y\"> 0..1 </var>",
+                "<binPacking><list> x y </list><sizes> 3 4 </sizes><limits> 5 6 </limits></binPacking>"))
+                .isInstanceOf(UnsupportedXcsp3ConstraintException.class);
+    }
+
+    @Test void binPackingWithPerBinLimits_negativeBin_throwsUnsupported() {
+        assertThatThrownBy(() -> parseXml("<var id=\"x\"> -1..1 </var><var id=\"y\"> 0..1 </var>",
+                "<binPacking><list> x y </list><sizes> 3 4 </sizes><limits> 5 6 </limits></binPacking>"))
+                .isInstanceOf(UnsupportedXcsp3ConstraintException.class);
+    }
+
+    @Test void binPackingWithExactLoads_throwsUnsupported() {
+        assertThatThrownBy(() -> parseXml(THREE_ITEMS_TWO_BINS,
+                "<binPacking><list> x y z </list><sizes> 3 4 2 </sizes><loads> 5 4 </loads></binPacking>"))
+                .isInstanceOf(UnsupportedXcsp3ConstraintException.class);
+    }
+
     // ---- instantiation ----------------------------------------------------------------------------------------
 
     @Test void instantiation_pinsListedVariablesToListedValues() throws IOException {
@@ -3093,20 +3193,24 @@ class Xcsp3ParserTest {
         assertThat(total).isEqualTo(2);
     }
 
-    @Test void generalExpressionMinimizeObjective_throwsUnsupported() {
-        assertThatThrownBy(() -> parseXml(
+    @Test void expressionMinimizeObjective_foldsTheTree() throws IOException {
+        Xcsp3Instance instance = parseXml(
                 "<var id=\"x\"> 0..9 </var><var id=\"y\"> 0..9 </var>",
                 "<intension> ge(x,2) </intension>",
-                "<minimize> add(x,y) </minimize>"))
-                .isInstanceOf(UnsupportedXcsp3ConstraintException.class);
+                "<minimize> add(x,y) </minimize>");
+        Assignment best = Solver.Factory.INSTANCE.createSolver(instance.csp(), instance.objective()).getSolution().orElseThrow();
+        assertThat(instance.maximize()).isFalse();
+        assertThat(instance.objective().applyAsDouble(best)).isEqualTo(2.0);
     }
 
-    @Test void generalExpressionMaximizeObjective_throwsUnsupported() {
-        assertThatThrownBy(() -> parseXml(
+    @Test void expressionMaximizeObjective_foldsTheTree() throws IOException {
+        Xcsp3Instance instance = parseXml(
                 "<var id=\"x\"> 0..9 </var><var id=\"y\"> 0..9 </var>",
-                "<intension> ge(x,2) </intension>",
-                "<maximize> add(x,y) </maximize>"))
-                .isInstanceOf(UnsupportedXcsp3ConstraintException.class);
+                "<intension> le(add(x,y),10) </intension>",
+                "<maximize> mul(x,y) </maximize>");
+        Assignment best = Solver.Factory.INSTANCE.createSolver(instance.csp(), instance.objective()).getSolution().orElseThrow();
+        assertThat(instance.maximize()).isTrue();
+        assertThat(instance.objective().applyAsDouble(best)).isEqualTo(-25.0);
     }
 
     // ---- operator coverage (mapOperator / mapOrderingOperator) -------------------------------------------------------------

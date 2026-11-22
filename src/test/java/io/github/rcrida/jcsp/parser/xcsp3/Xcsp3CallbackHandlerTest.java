@@ -9,6 +9,7 @@ import org.xcsp.common.Condition;
 import org.xcsp.common.Types.TypeExpr;
 import org.xcsp.common.Types.TypeConditionOperatorRel;
 import org.xcsp.common.Types.TypeFlag;
+import org.xcsp.common.Types.TypeObjective;
 import org.xcsp.common.predicates.XNode;
 import io.github.rcrida.jcsp.constraints.unary.UnaryPredicateConstraint;
 import java.util.List;
@@ -85,6 +86,44 @@ class Xcsp3CallbackHandlerTest {
         Constraint built = handler.toInstance().csp().getConstraints().iterator().next();
         assertThat(built.isSatisfiedBy(Assignment.of(Map.of(variable, 2)))).isTrue();
         assertThat(built.isSatisfiedBy(Assignment.of(Map.of(variable, 3)))).isFalse();
+    }
+
+    /** The canonizer folds a constant out of a maximum's list in a real file; left in, it is a constant variable. */
+    @Test void maximumObjective_constantTerm_isAConstantVariable() {
+        XVarInteger x = XcspTestNodes.var("x", 0, 9);
+        Xcsp3CallbackHandler handler = XcspTestNodes.handlerWith(x);
+        handler.buildObjToMinimize("o", TypeObjective.MAXIMUM, terms(leaf(5), leaf(x)));
+        Xcsp3Instance instance = handler.toInstance();
+        Optional<Assignment> best = io.github.rcrida.jcsp.solver.Solver.Factory.INSTANCE
+                .createSolver(instance.csp(), instance.objective()).getSolution();
+        assertThat(instance.objective().applyAsDouble(best.orElseThrow())).isEqualTo(5.0);
+    }
+
+    @Test void maximumObjective_expressionRangeTooWide_throws() {
+        XVarInteger x = XcspTestNodes.var("x", 0, 2000);
+        Xcsp3CallbackHandler handler = XcspTestNodes.handlerWith(x);
+        assertThatThrownBy(() -> handler.buildObjToMinimize("o", TypeObjective.MAXIMUM,
+                terms(new XNodeParent<>(TypeExpr.MUL, leaf(x), leaf(1000)))))
+                .isInstanceOf(UnsupportedXcsp3ConstraintException.class)
+                .hasMessageContaining("too large to materialize");
+    }
+
+    @Test void maximumObjective_expressionBelowIntegerRange_throws() {
+        XVarInteger x = XcspTestNodes.var("x", -1_000_000_000, -999_999_990);
+        Xcsp3CallbackHandler handler = XcspTestNodes.handlerWith(x);
+        assertThatThrownBy(() -> handler.buildObjToMinimize("o", TypeObjective.MAXIMUM,
+                terms(new XNodeParent<>(TypeExpr.ADD, leaf(x), leaf(-2_000_000_000)))))
+                .isInstanceOf(UnsupportedXcsp3ConstraintException.class)
+                .hasMessageContaining("too large to materialize");
+    }
+
+    @Test void maximumObjective_expressionAboveIntegerRange_throws() {
+        XVarInteger x = XcspTestNodes.var("x", 1_000_000_000, 1_000_000_010);
+        Xcsp3CallbackHandler handler = XcspTestNodes.handlerWith(x);
+        assertThatThrownBy(() -> handler.buildObjToMinimize("o", TypeObjective.MAXIMUM,
+                terms(new XNodeParent<>(TypeExpr.ADD, leaf(x), leaf(2_000_000_000)))))
+                .isInstanceOf(UnsupportedXcsp3ConstraintException.class)
+                .hasMessageContaining("too large to materialize");
     }
 
     @Test void sumOfExpressions_unresolvableTerm_throws() {

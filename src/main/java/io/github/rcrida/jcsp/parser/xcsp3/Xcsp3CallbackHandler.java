@@ -104,6 +104,7 @@ import java.util.Set;
 import java.util.function.Predicate;
 import java.util.function.ToDoubleFunction;
 import java.util.stream.Collectors;
+import java.util.stream.IntStream;
 
 /**
  * Drives {@code xcsp3-tools}' SAX-based parser by implementing its {@link XCallbacks2} callback
@@ -150,12 +151,14 @@ final class Xcsp3CallbackHandler implements XCallbacks2 {
     private final Map<Set<Variable<Integer>>, Variable<Integer>> productAuxiliaries = new LinkedHashMap<>();
     private final Map<String, Variable<Integer>> addAuxiliaries = new LinkedHashMap<>();
     private final Map<String, Variable<Integer>> powerAuxiliaries = new LinkedHashMap<>();
+    private final Map<String, Variable<Integer>> linearAuxiliaries = new LinkedHashMap<>();
     private final Map<Set<Variable<Integer>>, List<PendingCount>> pendingSingleValueCounts = new LinkedHashMap<>();
     private @Nullable ToDoubleFunction<Assignment> objective;
     private boolean maximize;
     private @Nullable XReification currentReification;
     private int declaredConstraintCount;
     private int sumTermCount;
+    private int extremumCount;
 
     /**
      * The registered {@code <intension>} pattern-matcher chain, in the exact priority order the
@@ -618,6 +621,7 @@ final class Xcsp3CallbackHandler implements XCallbacks2 {
             int maxDiff = Math.max(Math.abs(aBounds[1] - bBounds[0]), Math.abs(aBounds[0] - bBounds[1]));
             Variable<Integer> aux = builder.createVariable(name, IntRangeDomain.of(0, maxDiff));
             builder.constraint(AbsoluteDifferenceVariableConstraint.of(a, b, Operator.EQ, aux));
+            boundsByName.put(name, new int[]{0, maxDiff});
             return aux;
         });
     }
@@ -1489,9 +1493,10 @@ final class Xcsp3CallbackHandler implements XCallbacks2 {
 
     /**
      * Adds {@code weight·term} to {@code coefficients} and returns the constant it contributes. A
-     * constant contributes only that; an {@code add} folds each operand; a {@code mul} multiplies
-     * its constant factors into the weight and the rest into one {@link #productAuxiliary}; any
-     * other term becomes one variable via {@link #termVariable}.
+     * constant contributes only that; an {@code add} folds each operand, a {@code sub} its second
+     * operand negated and a {@code neg} its only one; a {@code mul} multiplies its constant factors
+     * into the weight and the rest into one {@link #productAuxiliary}; any other term becomes one
+     * variable via {@link #termVariable}.
      */
     private int foldExpressionTerm(Map<Variable<Integer>, Integer> coefficients, XNode<XVarInteger> term,
                                    int weight, String id) {
@@ -1505,6 +1510,13 @@ final class Xcsp3CallbackHandler implements XCallbacks2 {
                 offset += foldExpressionTerm(coefficients, operand, weight, id);
             }
             return offset;
+        }
+        if (term.getType() == TypeExpr.SUB) {
+            return foldExpressionTerm(coefficients, term.sons[0], weight, id)
+                    + foldExpressionTerm(coefficients, term.sons[1], -weight, id);
+        }
+        if (term.getType() == TypeExpr.NEG) {
+            return foldExpressionTerm(coefficients, term.sons[0], -weight, id);
         }
         if (term.getType() != TypeExpr.MUL) {
             coefficients.merge(termVariable(term, id), weight, Integer::sum);
@@ -1560,13 +1572,82 @@ final class Xcsp3CallbackHandler implements XCallbacks2 {
         });
     }
 
-    /** {@code term} as one integer variable: a predicate's 0/1 value, anything else via {@link #resolveVariable}. */
+    /**
+     * {@code term} as one integer variable: a predicate's 0/1 value, a {@code dist} through {@link
+     * #distanceAuxiliary}, a {@code min}/{@code max} through {@link #extremumAuxiliary}, arithmetic
+     * through {@link #linearAuxiliary}, anything else via {@link #resolveVariable}.
+     */
+    @SuppressWarnings("unchecked")
     private Variable<Integer> termVariable(XNode<XVarInteger> term, String id) {
         if (term.getType().isPredicateOperator()) {
             return zeroOneVariable(predicateIndicator(term, id));
         }
-        return resolveVariable(term).orElseThrow(() ->
-                new UnsupportedXcsp3ConstraintException("Unsupported sum term " + term + ": " + id));
+        Optional<Variable<Integer>> bare = asVariable(term);
+        if (bare.isPresent()) {
+            return bare.get();
+        }
+        return switch (term.getType()) {
+            case DIST -> distanceAuxiliary(termVariable(term.sons[0], id), termVariable(term.sons[1], id));
+            case MIN, MAX -> extremumAuxiliary(term.getType(),
+                    Arrays.stream(term.sons).map(operand -> termVariable(operand, id)).toList());
+            case ADD, SUB, NEG, MUL, LONG -> linearAuxiliary(foldExpressionTerms(new XNode[]{term}, new int[]{1}, id));
+            default -> resolveVariable(term).orElseThrow(() ->
+                    new UnsupportedXcsp3ConstraintException("Unsupported sum term " + term + ": " + id));
+        };
+    }
+
+    /**
+     * {@code terms} as one variable: a constant's {@link #constantVariable}, a lone unit-weight
+     * variable itself, or a fresh auxiliary linked by a {@link LinearBoundConstraint} and memoized
+     * by the folded terms.
+     */
+    private Variable<Integer> linearAuxiliary(LinearTerms terms) {
+        if (terms.coefficients().isEmpty()) {
+            return constantVariable(terms.offset());
+        }
+        Map.Entry<Variable<Integer>, Integer> first = terms.coefficients().entrySet().iterator().next();
+        if (terms.coefficients().size() == 1 && first.getValue() == 1 && terms.offset() == 0) {
+            return first.getKey();
+        }
+        String key = terms.coefficients().entrySet().stream()
+                .map(e -> e.getKey().getName() + "x" + e.getValue())
+                .sorted()
+                .collect(Collectors.joining("$", "$lin$", "$plus" + terms.offset()));
+        return linearAuxiliaries.computeIfAbsent(key, name -> {
+            long lo = terms.offset(), hi = terms.offset();
+            for (Map.Entry<Variable<Integer>, Integer> term : terms.coefficients().entrySet()) {
+                int[] bounds = boundsByName.get(term.getKey().getName());
+                long atLo = (long) term.getValue() * bounds[0], atHi = (long) term.getValue() * bounds[1];
+                lo += Math.min(atLo, atHi);
+                hi += Math.max(atLo, atHi);
+            }
+            if (hi - lo + 1 > MAX_MATERIALIZED_DOMAIN_SIZE || lo < Integer.MIN_VALUE || hi > Integer.MAX_VALUE) {
+                throw new UnsupportedXcsp3ConstraintException("Expression range too large to materialize: " + name);
+            }
+            Variable<Integer> value = builder.createVariable(name, IntRangeDomain.of((int) lo, (int) hi));
+            Map<Variable<Integer>, Integer> link = new LinkedHashMap<>(terms.coefficients());
+            link.merge(value, -1, Integer::sum);
+            builder.constraint(LinearBoundConstraint.of(link, Operator.EQ, -terms.offset()));
+            boundsByName.put(name, new int[]{(int) lo, (int) hi});
+            return value;
+        });
+    }
+
+    /** Fresh variable equal to the {@code min} or {@code max} of {@code operands}. */
+    private Variable<Integer> extremumAuxiliary(TypeExpr type, List<Variable<Integer>> operands) {
+        boolean min = type == TypeExpr.MIN;
+        IntStream lows = operands.stream().mapToInt(v -> boundsByName.get(v.getName())[0]);
+        IntStream highs = operands.stream().mapToInt(v -> boundsByName.get(v.getName())[1]);
+        int lo = min ? lows.min().orElseThrow() : lows.max().orElseThrow();
+        int hi = min ? highs.min().orElseThrow() : highs.max().orElseThrow();
+        String name = "$" + type.lcname + extremumCount++;
+        Variable<Integer> value = builder.createVariable(name, IntRangeDomain.of(lo, hi));
+        Set<Variable<Integer>> operandSet = new LinkedHashSet<>(operands);
+        builder.constraint(min
+                ? MinVariableConstraint.of(operandSet, Operator.EQ, value)
+                : MaxVariableConstraint.of(operandSet, Operator.EQ, value));
+        boundsByName.put(name, new int[]{lo, hi});
+        return value;
     }
 
     /** A fresh indicator reified against {@code predicate}, as recognized by {@link #recognizeConstraint}. */
@@ -1686,7 +1767,26 @@ final class Xcsp3CallbackHandler implements XCallbacks2 {
 
     @Override
     public void buildCtrCount(String id, XVarInteger[] list, int[] values, Condition condition) {
-        Set<Variable<Integer>> vars = toVariableSet(list);
+        applyCount(toVariableSet(list), values, condition, id);
+    }
+
+    /**
+     * {@code count} over expressions: each term becomes one variable by {@link #termVariable}. Two
+     * terms resolving to the same variable would merge in the counted set, so that is refused.
+     */
+    @Override
+    public void buildCtrCount(String id, XNode<XVarInteger>[] trees, int[] values, Condition condition) {
+        Set<Variable<Integer>> vars = new LinkedHashSet<>();
+        for (XNode<XVarInteger> tree : trees) {
+            vars.add(termVariable(tree, id));
+        }
+        if (vars.size() < trees.length) {
+            throw new UnsupportedXcsp3ConstraintException("count over repeated expressions is not supported: " + id);
+        }
+        applyCount(vars, values, condition, id);
+    }
+
+    private void applyCount(Set<Variable<Integer>> vars, int[] values, Condition condition, String id) {
         if (condition instanceof ConditionVal val) {
             Operator operator = mapOperator(val.operator);
             int n = (int) val.k;
@@ -2366,6 +2466,24 @@ final class Xcsp3CallbackHandler implements XCallbacks2 {
         addOrReify(BinPackingConstraint.of(bins, weights, capacities), id);
     }
 
+    /**
+     * {@code binPacking} with one capacity per bin ({@code <limits>}). Exact {@code <loads>}, and a
+     * bin variable that can name a bin outside {@code capacities}, are unsupported.
+     */
+    @Override
+    public void buildCtrBinPacking(String id, XVarInteger[] list, int[] sizes, int[] capacities, boolean loads) {
+        if (loads) {
+            throw new UnsupportedXcsp3ConstraintException("binPacking with exact loads is not supported: " + id);
+        }
+        int minBin = Arrays.stream(list).mapToInt(v -> boundsByName.get(v.id())[0]).min().orElseThrow();
+        int maxBin = Arrays.stream(list).mapToInt(v -> boundsByName.get(v.id())[1]).max().orElseThrow();
+        if (minBin < 0 || maxBin >= capacities.length) {
+            throw new UnsupportedXcsp3ConstraintException("binPacking bins must index its limits from 0: " + id);
+        }
+        addOrReify(BinPackingConstraint.of(toVariableList(list), Arrays.stream(sizes).boxed().toList(),
+                Arrays.stream(capacities).boxed().toList()), id);
+    }
+
     // ---- instantiation ----------------------------------------------------------------------------------------
 
     /**
@@ -2414,18 +2532,19 @@ final class Xcsp3CallbackHandler implements XCallbacks2 {
         maximize = true;
     }
 
+    /** A single expression, folded as a one-term sum: every non-linear part becomes an auxiliary variable. */
     @Override
+    @SuppressWarnings("unchecked")
     public void buildObjToMinimize(String id, XNodeParent<XVarInteger> tree) {
-        // Unlike a single-variable or sum-type objective, a general intension-tree objective has no
-        // well-defined lower bound under a partial assignment (would need interval arithmetic over
-        // the remaining variables' domains), which BranchAndBoundSolver's pruning requires -- out of
-        // MVP scope.
-        throw new UnsupportedXcsp3ConstraintException("General expression objectives are not supported: " + id);
+        objective = buildExpressionObjective(id, TypeObjective.SUM, new XNode[]{tree}, new int[]{1}, false);
+        maximize = false;
     }
 
     @Override
+    @SuppressWarnings("unchecked")
     public void buildObjToMaximize(String id, XNodeParent<XVarInteger> tree) {
-        throw new UnsupportedXcsp3ConstraintException("General expression objectives are not supported: " + id);
+        objective = buildExpressionObjective(id, TypeObjective.SUM, new XNode[]{tree}, new int[]{1}, true);
+        maximize = true;
     }
 
     @Override
@@ -2477,14 +2596,19 @@ final class Xcsp3CallbackHandler implements XCallbacks2 {
     }
 
     /**
-     * A {@code <minimize type="sum">}/{@code <maximize type="sum">} over expressions, each term
-     * folded by {@link #foldExpressionTerm} into a {@link LinearObjective}, negated for
-     * {@code maximize} as {@link #buildSumObjective} does. Every other aggregation is unsupported.
+     * A {@code <minimize>}/{@code <maximize>} over expressions. A sum folds each term by {@link
+     * #foldExpressionTerm} into a {@link LinearObjective}, negated for {@code maximize} as {@link
+     * #buildSumObjective} does; an unweighted maximum turns each term into a variable by {@link
+     * #termVariable} for {@link #maxObjective}. Every other aggregation is unsupported.
      */
     private LinearObjective buildExpressionObjective(String id, TypeObjective type, XNode<XVarInteger>[] trees,
                                                      int[] coeffs, boolean maximizing) {
+        if (type == TypeObjective.MAXIMUM && Arrays.stream(coeffs).allMatch(c -> c == 1)) {
+            return maxObjective(Arrays.stream(trees).map(tree -> termVariable(tree, id)).toList(), maximizing);
+        }
         if (type != TypeObjective.SUM) {
-            throw new UnsupportedXcsp3ConstraintException("Only sum-type expression objectives are supported, got: " + type);
+            throw new UnsupportedXcsp3ConstraintException(
+                    "Only sum-type and unweighted maximum-type expression objectives are supported, got: " + type);
         }
         LinearTerms terms = foldExpressionTerms(trees, coeffs, id);
         double sign = maximizing ? -1.0 : 1.0;
@@ -2556,10 +2680,14 @@ final class Xcsp3CallbackHandler implements XCallbacks2 {
         if (coeffs != null) {
             throw new UnsupportedXcsp3ConstraintException("Weighted maximum-type array objectives are not supported");
         }
-        int maxLo = Arrays.stream(list).mapToInt(v -> boundsByName.get(v.id())[0]).max().orElseThrow();
-        int maxHi = Arrays.stream(list).mapToInt(v -> boundsByName.get(v.id())[1]).max().orElseThrow();
+        return maxObjective(toVariableList(list), maximizing);
+    }
+
+    private LinearObjective maxObjective(List<Variable<Integer>> list, boolean maximizing) {
+        int maxLo = list.stream().mapToInt(v -> boundsByName.get(v.getName())[0]).max().orElseThrow();
+        int maxHi = list.stream().mapToInt(v -> boundsByName.get(v.getName())[1]).max().orElseThrow();
         Variable<Integer> max = builder.createVariable("$max", IntRangeDomain.of(maxLo, maxHi));
-        builder.maxConstraint(toVariableSet(list), Operator.EQ, max);
+        builder.maxConstraint(new LinkedHashSet<>(list), Operator.EQ, max);
         return LinearObjective.builder().coefficient(max, maximizing ? -1.0 : 1.0).build();
     }
 }
