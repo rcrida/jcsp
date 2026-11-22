@@ -66,7 +66,8 @@ public class SquareVariableConstraint<N extends Number> extends BinaryConstraint
      * Bounds-consistency propagation for {@code left^2 <op> right}, structured exactly like {@link
      * io.github.rcrida.jcsp.constraints.nary.AbsoluteDifferenceVariableConstraint#propagate}: only
      * {@link Operator#EQ}, {@link Operator#LEQ}, and {@link Operator#GEQ} propagate. {@code right}
-     * is always narrowed to the achievable {@code [sqLo, sqHi]} square range (see {@link
+     * is raised to the smallest achievable square {@code sqLo} under {@code LEQ}/{@code EQ} and
+     * lowered to the largest {@code sqHi} under {@code GEQ}/{@code EQ} (see {@link
      * SquareConstraint}'s own Javadoc for that derivation); {@code left} is additionally narrowed
      * for {@code LEQ}/{@code EQ} (the decomposition {@code left^2 <= right} implies {@code
      * -sqrt(right.max) <= left <= sqrt(right.max)}), mirroring {@code
@@ -76,9 +77,9 @@ public class SquareVariableConstraint<N extends Number> extends BinaryConstraint
      * untouched, the same tradeoff that class's own {@code GEQ} case accepts. {@code newTargetHi}
      * is not re-checked for non-negativity before the {@code sqrt} below: whenever {@code leqLike}
      * is true and the {@code sqLo > targetHi} infeasibility check above didn't already return,
-     * {@code targetHi >= sqLo >= 0} necessarily holds, and {@code newTargetHi = min(targetHi,
-     * sqHi)} of two values each {@code >= sqLo} is itself {@code >= sqLo >= 0} -- a real
-     * non-negative bound, never a defensive guess.
+     * {@code targetHi >= sqLo >= 0} necessarily holds, and {@code newTargetHi} is {@code targetHi}
+     * or, under {@code EQ}, {@code min(targetHi, sqHi)} of two values each {@code >= sqLo} -- a
+     * real non-negative bound either way, never a defensive guess.
      */
     @Override
     @SuppressWarnings("unchecked")
@@ -98,8 +99,8 @@ public class SquareVariableConstraint<N extends Number> extends BinaryConstraint
         if (leqLike && sqLo > targetHi) return Optional.empty();
         if (geqLike && sqHi < targetLo) return Optional.empty();
 
-        double newTargetLo = geqLike ? Math.max(targetLo, sqLo) : targetLo;
-        double newTargetHi = leqLike ? Math.min(targetHi, sqHi) : targetHi;
+        double newTargetLo = leqLike ? Math.max(targetLo, sqLo) : targetLo;
+        double newTargetHi = geqLike ? Math.min(targetHi, sqHi) : targetHi;
 
         Map<Variable<?>, Domain<?>> updated = new HashMap<>();
         Optional<Domain<N>> prunedTarget = NumericBounds.narrow(rightDomain, newTargetLo, newTargetHi);

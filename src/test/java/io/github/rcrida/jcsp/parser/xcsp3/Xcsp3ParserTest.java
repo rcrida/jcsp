@@ -618,6 +618,22 @@ class Xcsp3ParserTest {
         }
     }
 
+    @Test void intensionSquareComparedToVariable_findsEverySolution() throws IOException {
+        for (String operator : List.of("le", "ge")) {
+            Xcsp3Instance instance = parseXml(
+                    "<var id=\"x\"> 2..3 </var><var id=\"y\"> 0..12 </var>",
+                    "<intension> " + operator + "(mul(x,x),y) </intension>");
+            assertThat(instance.csp().getConstraints().iterator().next()).isInstanceOf(SquareVariableConstraint.class);
+            long expected = 0;
+            for (int x = 2; x <= 3; x++) {
+                for (int y = 0; y <= 12; y++) {
+                    if (operator.equals("le") ? x * x <= y : x * x >= y) expected++;
+                }
+            }
+            assertThat(solutions(instance.csp())).as(operator).hasSize((int) expected);
+        }
+    }
+
     @Test void intensionProductOfPairSelfProduct_routesThroughSquareVariableConstraint() throws IOException {
         // eq(mul(x,x),y) -- a genuine self-product ("x squared"). ProductVariableConstraint#of
         // takes a Set<Variable<N>>, which can't represent one variable used twice as a factor -- a

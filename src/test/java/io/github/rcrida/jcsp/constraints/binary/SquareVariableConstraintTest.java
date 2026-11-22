@@ -100,10 +100,10 @@ public class SquareVariableConstraintTest {
         // straddles-zero case (sqLo=0) and the entirely-positive case (both exercised elsewhere in
         // this class already, e.g. x=[2,5] above). t=[0,20] is wide enough that narrowing its min up
         // to sqLo=4 stays feasible (unlike a narrower target range, which would invert lo>hi and
-        // report infeasible instead -- not what this test is checking).
-        var result = SquareVariableConstraint.of(X, Operator.GEQ, T)
+        // report infeasible instead -- not what this test is checking). LEQ: x^2 <= t needs t >= 4.
+        var result = SquareVariableConstraint.of(X, Operator.LEQ, T)
                 .propagate(Map.of(X, IntRangeDomain.of(-5, -2), T, IntRangeDomain.of(0, 20))).orElseThrow();
-        assertThat(((DiscreteDomain<Integer>) result.get(T)).toList()).doesNotContain(0, 1, 2, 3);
+        assertThat(((DiscreteDomain<Integer>) result.get(T)).toList()).doesNotContain(0, 1, 2, 3).contains(4, 20);
     }
 
     @Test void propagate_eq_targetNarrowingEmptiesGappedDomain_infeasible() {
@@ -130,11 +130,12 @@ public class SquareVariableConstraintTest {
 
     // --- propagate: LEQ ---
 
-    @Test void propagate_leq_narrowsTargetMax() {
-        // x=[-5,5]: sqHi=25; t=[0,100] -> t narrows to [0,25]; x unaffected since sqrt(25)=5=xMax already
+    @Test void propagate_leq_raisesTargetMinOnly() {
+        // x=[2,5]: sqLo=4; t=[0,100] -> x^2 <= t needs t >= 4, but any larger t is still reachable
+        // (x=2, t=100), so t's max stays; x unaffected since sqrt(100)=10 exceeds xMax already
         var result = SquareVariableConstraint.of(X, Operator.LEQ, T)
-                .propagate(Map.of(X, IntRangeDomain.of(-5, 5), T, IntRangeDomain.of(0, 100))).orElseThrow();
-        assertThat(((DiscreteDomain<Integer>) result.get(T)).toList()).contains(25).doesNotContain(26);
+                .propagate(Map.of(X, IntRangeDomain.of(2, 5), T, IntRangeDomain.of(0, 100))).orElseThrow();
+        assertThat(((DiscreteDomain<Integer>) result.get(T)).toList()).doesNotContain(0, 1, 2, 3).contains(4, 100);
         assertThat(result.containsKey(X)).isFalse();
     }
 
@@ -154,12 +155,12 @@ public class SquareVariableConstraintTest {
 
     // --- propagate: GEQ (no operand narrowing) ---
 
-    @Test void propagate_geq_narrowsTargetMinOnly_leavesOperandUntouched() {
-        // x=[-5,5]: sqLo=0 (straddles zero); t=[10,100] -> newTargetLo=max(10,0)=10 unchanged
-        // Use a domain not straddling zero to get a nonzero sqLo: x=[2,5]: sqLo=4
+    @Test void propagate_geq_lowersTargetMaxOnly_leavesOperandUntouched() {
+        // x=[2,5]: sqHi=25; t=[0,100] -> x^2 >= t needs t <= 25, but any smaller t is still
+        // reachable (x=2, t=0), so t's min stays
         var result = SquareVariableConstraint.of(X, Operator.GEQ, T)
                 .propagate(Map.of(X, IntRangeDomain.of(2, 5), T, IntRangeDomain.of(0, 100))).orElseThrow();
-        assertThat(((DiscreteDomain<Integer>) result.get(T)).toList()).doesNotContain(0, 1, 2, 3);
+        assertThat(((DiscreteDomain<Integer>) result.get(T)).toList()).contains(0, 25).doesNotContain(26);
         assertThat(result.containsKey(X)).isFalse();
     }
 
