@@ -12,7 +12,7 @@ import io.github.rcrida.jcsp.constraints.binary.BinaryElementConstraint;
 import io.github.rcrida.jcsp.constraints.binary.BinaryPredicateConstraint;
 import io.github.rcrida.jcsp.constraints.binary.BinaryNotEqualsConstraint;
 import io.github.rcrida.jcsp.constraints.binary.BinaryOffsetConstraint;
-import io.github.rcrida.jcsp.constraints.binary.SquareVariableConstraint;
+import io.github.rcrida.jcsp.constraints.binary.PowerVariableConstraint;
 import io.github.rcrida.jcsp.constraints.nary.AbsoluteDifferenceVariableConstraint;
 import io.github.rcrida.jcsp.constraints.nary.AllDiffConstraint;
 import io.github.rcrida.jcsp.constraints.nary.AllEqualConstraint;
@@ -149,7 +149,7 @@ final class Xcsp3CallbackHandler implements XCallbacks2 {
     private final Map<String, Variable<Integer>> subAuxiliaries = new LinkedHashMap<>();
     private final Map<Set<Variable<Integer>>, Variable<Integer>> productAuxiliaries = new LinkedHashMap<>();
     private final Map<String, Variable<Integer>> addAuxiliaries = new LinkedHashMap<>();
-    private final Map<String, Variable<Integer>> squareAuxiliaries = new LinkedHashMap<>();
+    private final Map<String, Variable<Integer>> powerAuxiliaries = new LinkedHashMap<>();
     private final Map<Set<Variable<Integer>>, List<PendingCount>> pendingSingleValueCounts = new LinkedHashMap<>();
     private @Nullable ToDoubleFunction<Assignment> objective;
     private boolean maximize;
@@ -1532,34 +1532,31 @@ final class Xcsp3CallbackHandler implements XCallbacks2 {
         return 0;
     }
 
-    /** {@code base^exponent} as one variable: a {@link #squareAuxiliary}, times {@code base} for each further power. */
+    /**
+     * {@code base^exponent} as one variable: {@code base} itself, or a fresh auxiliary linked by a
+     * {@link PowerVariableConstraint} and memoized per base and exponent, since {@link
+     * #productAuxiliary}'s factor set cannot hold a variable twice.
+     */
     private Variable<Integer> power(Variable<Integer> base, int exponent) {
         if (exponent == 1) {
             return base;
         }
-        Variable<Integer> raised = squareAuxiliary(base);
-        for (int i = 2; i < exponent; i++) {
-            raised = productAuxiliary(raised, base);
-        }
-        return raised;
-    }
-
-    /**
-     * Fresh variable holding {@code operand²}, linked by a {@link SquareVariableConstraint} and
-     * memoized by {@code operand}'s name, since {@link #productAuxiliary}'s factor set cannot hold a
-     * variable twice.
-     */
-    private Variable<Integer> squareAuxiliary(Variable<Integer> operand) {
-        return squareAuxiliaries.computeIfAbsent(operand.getName() + "$sqr", name -> {
-            int[] bounds = boundsByName.get(operand.getName());
-            int lowSquare = bounds[0] * bounds[0];
-            int highSquare = bounds[1] * bounds[1];
-            int lo = bounds[0] <= 0 && bounds[1] >= 0 ? 0 : Math.min(lowSquare, highSquare);
-            int hi = Math.max(lowSquare, highSquare);
-            Variable<Integer> square = builder.createVariable(name, IntRangeDomain.of(lo, hi));
-            builder.constraint(SquareVariableConstraint.of(operand, Operator.EQ, square));
+        return powerAuxiliaries.computeIfAbsent(base.getName() + "$pow" + exponent, name -> {
+            int[] bounds = boundsByName.get(base.getName());
+            double atMinExact = Math.pow(bounds[0], exponent);
+            double atMaxExact = Math.pow(bounds[1], exponent);
+            if (Math.max(Math.abs(atMinExact), Math.abs(atMaxExact)) > Integer.MAX_VALUE) {
+                throw new UnsupportedXcsp3ConstraintException("Power out of integer range: " + name);
+            }
+            int atMin = (int) atMinExact;
+            int atMax = (int) atMaxExact;
+            boolean straddlesZero = bounds[0] <= 0 && bounds[1] >= 0;
+            int lo = exponent % 2 == 1 ? atMin : straddlesZero ? 0 : Math.min(atMin, atMax);
+            int hi = exponent % 2 == 1 ? atMax : Math.max(atMin, atMax);
+            Variable<Integer> raised = builder.createVariable(name, IntRangeDomain.of(lo, hi));
+            builder.constraint(PowerVariableConstraint.of(base, exponent, Operator.EQ, raised));
             boundsByName.put(name, new int[]{lo, hi});
-            return square;
+            return raised;
         });
     }
 

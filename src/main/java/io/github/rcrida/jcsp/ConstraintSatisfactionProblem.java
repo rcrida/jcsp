@@ -23,6 +23,7 @@ import io.github.rcrida.jcsp.constraints.binary.BinaryConstraint;
 import io.github.rcrida.jcsp.constraints.binary.BinaryElementConstraint;
 import io.github.rcrida.jcsp.constraints.binary.AbsoluteDifferenceConstraint;
 import io.github.rcrida.jcsp.constraints.nary.AbsoluteDifferenceVariableConstraint;
+import io.github.rcrida.jcsp.constraints.binary.PowerVariableConstraint;
 import io.github.rcrida.jcsp.constraints.binary.SquareVariableConstraint;
 import io.github.rcrida.jcsp.constraints.unary.SquareConstraint;
 import io.github.rcrida.jcsp.constraints.binary.DivisionConstraint;
@@ -185,7 +186,7 @@ public class ConstraintSatisfactionProblem {
      * {@link NogoodConstraint} implementation needs its own entry here too.
      */
     private static final Set<Class<? extends Constraint>> CONTINUOUS_COMPATIBLE_CONSTRAINTS =
-            Set.of(SumBoundConstraint.class, SumVariableConstraint.class, LinearBoundConstraint.class, LinearVariableConstraint.class, UnaryComparatorConstraint.class, BinaryComparatorConstraint.class, BinaryOffsetConstraint.class, AbsoluteDifferenceConstraint.class, AbsoluteDifferenceVariableConstraint.class, SquareConstraint.class, SquareVariableConstraint.class, DivisionConstraint.class, LexConstraint.class, CumulativeConstraint.class, MaxConstraint.class, MaxVariableConstraint.class, MinConstraint.class, MinVariableConstraint.class, ProductConstraint.class, DiffnConstraint.class, GroundNogoodConstraint.class, RangeNogoodConstraint.class, ValueSetNogoodConstraint.class, IncreasingConstraint.class, DecreasingConstraint.class, UnaryPredicateConstraint.class, BinaryPredicateConstraint.class, PredicateConstraint.class, ReifiedConstraint.class, ImplicationConstraint.class, AndConstraint.class, NaryElementConstraint.class);
+            Set.of(SumBoundConstraint.class, SumVariableConstraint.class, LinearBoundConstraint.class, LinearVariableConstraint.class, UnaryComparatorConstraint.class, BinaryComparatorConstraint.class, BinaryOffsetConstraint.class, AbsoluteDifferenceConstraint.class, AbsoluteDifferenceVariableConstraint.class, SquareConstraint.class, SquareVariableConstraint.class, PowerVariableConstraint.class, DivisionConstraint.class, LexConstraint.class, CumulativeConstraint.class, MaxConstraint.class, MaxVariableConstraint.class, MinConstraint.class, MinVariableConstraint.class, ProductConstraint.class, DiffnConstraint.class, GroundNogoodConstraint.class, RangeNogoodConstraint.class, ValueSetNogoodConstraint.class, IncreasingConstraint.class, DecreasingConstraint.class, UnaryPredicateConstraint.class, BinaryPredicateConstraint.class, PredicateConstraint.class, ReifiedConstraint.class, ImplicationConstraint.class, AndConstraint.class, NaryElementConstraint.class);
 
     /**
      * Constraint types that support {@link io.github.rcrida.jcsp.domains.SetBoundedDomain} (e.g.

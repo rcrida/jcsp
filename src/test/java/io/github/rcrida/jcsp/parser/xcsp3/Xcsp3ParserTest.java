@@ -1751,6 +1751,13 @@ class Xcsp3ParserTest {
         assertThat(actual).isEqualTo(expected);
     }
 
+    @Test void sumOfExpressions_powerBeyondIntegerRange_throwsUnsupported() {
+        assertThatThrownBy(() -> parseXml("<var id=\"x\"> 0..2000 </var><var id=\"y\"> 0..5 </var>",
+                "<sum><list> mul(x,x,x) y </list><condition> (le,100) </condition></sum>"))
+                .isInstanceOf(UnsupportedXcsp3ConstraintException.class)
+                .hasMessageContaining("Power out of integer range");
+    }
+
     @Test void sumOfExpressions_variableTarget() throws IOException {
         Xcsp3Instance instance = parseXml(XYZ_0_2,
                 "<sum><list> mul(x,y) eq(x,2) </list><condition> (eq,z) </condition></sum>");

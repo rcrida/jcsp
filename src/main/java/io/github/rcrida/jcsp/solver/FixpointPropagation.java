@@ -19,6 +19,7 @@ import io.github.rcrida.jcsp.solver.listener.PropagationListener;
 import io.github.rcrida.jcsp.solver.listener.SolverListener;
 import io.github.rcrida.jcsp.constraints.binary.AbsoluteDifferenceConstraint;
 import io.github.rcrida.jcsp.constraints.nary.AbsoluteDifferenceVariableConstraint;
+import io.github.rcrida.jcsp.constraints.binary.PowerVariableConstraint;
 import io.github.rcrida.jcsp.constraints.binary.SquareVariableConstraint;
 import io.github.rcrida.jcsp.constraints.unary.SquareConstraint;
 import io.github.rcrida.jcsp.constraints.binary.BinaryComparatorConstraint;
@@ -185,6 +186,7 @@ public class FixpointPropagation {
             FixpointConsistency.of(AbsoluteDifferenceVariableConstraint.class),
             FixpointConsistency.of(SquareConstraint.class),
             FixpointConsistency.of(SquareVariableConstraint.class),
+            FixpointConsistency.of(PowerVariableConstraint.class),
             FixpointConsistency.of(AllDiffConstraint.class),
             FixpointConsistency.of(AllEqualConstraint.class),
             FixpointConsistency.of(DistinctVectorsConstraint.class),
