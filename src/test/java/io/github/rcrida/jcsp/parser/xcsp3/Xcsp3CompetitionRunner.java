@@ -93,6 +93,10 @@ public final class Xcsp3CompetitionRunner {
      * {@code Bibd-sum-06-050-25-03-10} spans 1,539 to over 196,000 nodes across eight seeds. Sweep
      * a few seeds and compare the distributions whenever a change touches search order, and
      * especially whenever it touches seed derivation itself.
+     * <p>
+     * {@code -Dxcsp3.runner.modelInfo=false} skips {@link #modelInfo}'s parse, which runs in this
+     * process with no time limit: one instance whose parse thrashes the heap would otherwise stall
+     * the whole sweep. The model column then reads {@code -}.
      */
     public static void main(String[] args) throws IOException, URISyntaxException, InterruptedException {
         Path directory = args.length >= 1 ? Path.of(args[0]) : bundledInstanceDirectory();
@@ -259,7 +263,8 @@ public final class Xcsp3CompetitionRunner {
      */
     private static Result runOne(Path instance, long timeLimitSeconds, long seed, boolean neighbourhoods)
             throws IOException, InterruptedException {
-        Model model = modelInfo(instance);
+        Model model = Boolean.parseBoolean(System.getProperty("xcsp3.runner.modelInfo", "true"))
+                ? modelInfo(instance) : new Model("-", true);
 
         String javaBin = System.getProperty("java.home") + File.separator + "bin" + File.separator + "java";
         String classpath = System.getProperty("java.class.path");
@@ -312,7 +317,8 @@ public final class Xcsp3CompetitionRunner {
      * {@link UnsupportedXcsp3ConstraintException} for a construct this parser doesn't map) is
      * reported inline rather than propagated -- the child process below independently re-parses the
      * same file and reports its own failure via {@link #firstResultLine}, so this method failing
-     * shouldn't abort the whole batch.
+     * shouldn't abort the whole batch. That includes {@link OutOfMemoryError}: a table too large to
+     * parse here is the child's to report, and the parse's own garbage is unreachable once caught.
      */
     private static Model modelInfo(Path instance) {
         try {
@@ -323,6 +329,8 @@ public final class Xcsp3CompetitionRunner {
                     parsed.objective() != null);
         } catch (Exception e) {
             return new Model("PARSE ERROR", false);
+        } catch (OutOfMemoryError e) {
+            return new Model("PARSE OOM", false);
         }
     }
 

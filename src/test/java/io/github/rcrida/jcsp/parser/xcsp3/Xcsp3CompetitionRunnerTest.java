@@ -63,4 +63,22 @@ class Xcsp3CompetitionRunnerTest {
         assertThat(report).contains("Series/nested ");
         assertThat(report).contains("1 solved, 0 unknown/timeout, 0 failed (of 1)");
     }
+
+    @Test
+    void theModelSizeParseCanBeSkipped(@TempDir Path directory) throws IOException, InterruptedException {
+        Files.writeString(directory.resolve("small.xml"), instanceWithALargeSolution());
+        ByteArrayOutputStream withModel = new ByteArrayOutputStream();
+        ByteArrayOutputStream withoutModel = new ByteArrayOutputStream();
+
+        Xcsp3CompetitionRunner.run(directory, 5, 1L, new PrintStream(withModel, true, StandardCharsets.UTF_8));
+        System.setProperty("xcsp3.runner.modelInfo", "false");
+        try {
+            Xcsp3CompetitionRunner.run(directory, 5, 1L, new PrintStream(withoutModel, true, StandardCharsets.UTF_8));
+        } finally {
+            System.clearProperty("xcsp3.runner.modelInfo");
+        }
+
+        assertThat(withModel.toString(StandardCharsets.UTF_8)).contains("10000v/5000c");
+        assertThat(withoutModel.toString(StandardCharsets.UTF_8)).doesNotContain("10000v/5000c").contains("SATISFIABLE");
+    }
 }

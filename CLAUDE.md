@@ -276,5 +276,6 @@ mvn test-compile
 java -cp target/classes:target/test-classes:$(mvn -q dependency:build-classpath -Dmdep.outputFile=/dev/stdout) <main-class> [args]
 # <main-class>: io.github.rcrida.jcsp.benchmark.NogoodPropagationBenchmark
 #               org.openjdk.jmh.Main CsplibBenchmarks        (optional regex to filter)
-#               io.github.rcrida.jcsp.parser.xcsp3.Xcsp3CompetitionRunner [instanceDir] [timeLimitSeconds]   (default: bundled corpus, 60s)
+#               io.github.rcrida.jcsp.parser.xcsp3.Xcsp3CompetitionRunner [instanceDir] [timeLimitSeconds]   (default: bundled corpus, 60s;
+#                 add -Dxcsp3.runner.modelInfo=false before the class for unfamiliar instances: its in-process model-size parse has no time limit)
 ```
