@@ -1,8 +1,6 @@
 package io.github.rcrida.jcsp.constraints.nary;
 
-import java.util.ArrayDeque;
 import java.util.Arrays;
-import java.util.Deque;
 import java.util.List;
 
 /**
@@ -26,38 +24,55 @@ final class TarjanSCC {
         int[] scc = new int[n];
         boolean[] onStack = new boolean[n];
         Arrays.fill(disc, -1);
-        Deque<Integer> stack = new ArrayDeque<>();
-        int[] counter = {0};
-        int[] sccCount = {0};
-        for (int i = 0; i < n; i++) {
-            if (disc[i] == -1) strongconnect(i, graph, disc, low, scc, onStack, stack, counter, sccCount);
-        }
-        return scc;
-    }
-
-    private static void strongconnect(int v, List<List<Integer>> graph,
-                                       int[] disc, int[] low, int[] scc,
-                                       boolean[] onStack, Deque<Integer> stack,
-                                       int[] counter, int[] sccCount) {
-        disc[v] = low[v] = counter[0]++;
-        stack.push(v);
-        onStack[v] = true;
-        for (int w : graph.get(v)) {
-            if (disc[w] == -1) {
-                strongconnect(w, graph, disc, low, scc, onStack, stack, counter, sccCount);
-                low[v] = Math.min(low[v], low[w]);
-            } else if (onStack[w]) {
-                low[v] = Math.min(low[v], disc[w]);
+        // The component stack, and the depth-first path with how far each node on it has scanned
+        // its edges: explicit, because a path can pass through every node, and recursing that deep
+        // overflowed the thread's stack at a few thousand. Nodes are visited in the order a
+        // recursive search would visit them, so components are numbered the same way.
+        int[] stack = new int[n];
+        int top = 0;
+        int[] path = new int[n];
+        int[] scanned = new int[n];
+        int counter = 0;
+        int sccCount = 0;
+        for (int root = 0; root < n; root++) {
+            if (disc[root] != -1) continue;
+            int depth = 0;
+            path[0] = root;
+            scanned[0] = 0;
+            disc[root] = low[root] = counter++;
+            stack[top++] = root;
+            onStack[root] = true;
+            while (depth >= 0) {
+                int v = path[depth];
+                List<Integer> edges = graph.get(v);
+                if (scanned[depth] < edges.size()) {
+                    int w = edges.get(scanned[depth]++);
+                    if (disc[w] == -1) {
+                        disc[w] = low[w] = counter++;
+                        stack[top++] = w;
+                        onStack[w] = true;
+                        path[++depth] = w;
+                        scanned[depth] = 0;
+                    } else if (onStack[w]) {
+                        low[v] = Math.min(low[v], disc[w]);
+                    }
+                    continue;
+                }
+                if (low[v] == disc[v]) {
+                    int component = sccCount++;
+                    int w;
+                    do {
+                        w = stack[--top];
+                        onStack[w] = false;
+                        scc[w] = component;
+                    } while (w != v);
+                }
+                if (--depth >= 0) {
+                    int parent = path[depth];
+                    low[parent] = Math.min(low[parent], low[v]);
+                }
             }
         }
-        if (low[v] == disc[v]) {
-            int component = sccCount[0]++;
-            int w;
-            do {
-                w = stack.pop();
-                onStack[w] = false;
-                scc[w] = component;
-            } while (w != v);
-        }
+        return scc;
     }
 }

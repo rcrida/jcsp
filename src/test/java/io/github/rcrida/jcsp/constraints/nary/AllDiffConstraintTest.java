@@ -41,6 +41,34 @@ public class AllDiffConstraintTest {
     }
 
     @Test
+    void propagate_anAugmentingPathThroughEveryVariable_forcesTheWholeChain() {
+        // x_i in {i, i+1}, matched first to i; y in {0} then needs every x_i shifted to i+1, one
+        // augmenting path through all of them. A recursive search overflowed the thread's stack
+        // well before this length.
+        int n = 20_000;
+        var factory = new Variable.Factory();
+        Map<Variable<?>, Domain<?>> domains = new java.util.HashMap<>();
+        java.util.List<Variable<Integer>> xs = new java.util.ArrayList<>();
+        for (int i = 0; i < n; i++) {
+            Variable<Integer> x = factory.create("x" + i);
+            xs.add(x);
+            domains.put(x, io.github.rcrida.jcsp.domains.DiscreteDomain.of(i, i + 1));
+        }
+        Variable<Integer> y = factory.create("y");
+        domains.put(y, io.github.rcrida.jcsp.domains.DiscreteDomain.of(0));
+        var variables = new java.util.LinkedHashSet<Variable<Integer>>(xs);
+        variables.add(y);
+
+        var narrowed = AllDiffConstraint.<Integer>builder().variables(variables).build().propagate(domains);
+
+        assertThat(narrowed).hasValueSatisfying(updates -> {
+            assertThat(updates).hasSize(n);
+            assertThat(updates.get(xs.get(0))).isEqualTo(io.github.rcrida.jcsp.domains.DiscreteDomain.of(1));
+            assertThat(updates.get(xs.get(n - 1))).isEqualTo(io.github.rcrida.jcsp.domains.DiscreteDomain.of(n));
+        });
+    }
+
+    @Test
     void decomposition_overThreeVariables_isPropagatedByTheConstraintItself() {
         var pair = AllDiffConstraint.builder().variables(Set.of(variable1, variable2)).build();
         var single = AllDiffConstraint.builder().variables(Set.of(variable1)).build();

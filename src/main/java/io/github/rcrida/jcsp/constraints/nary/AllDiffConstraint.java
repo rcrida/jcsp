@@ -126,8 +126,9 @@ public class AllDiffConstraint<T> extends UniformNaryConstraint<T> implements Pr
         Arrays.fill(matchVal, -1);
 
         int matchingSize = 0;
+        AugmentingPath path = new AugmentingPath(n);
         for (int i = 0; i < n; i++) {
-            if (augment(i, varAdj, matchVar, matchVal, new boolean[m])) matchingSize++;
+            if (path.augment(i, varAdj, matchVar, matchVal, new boolean[m])) matchingSize++;
         }
 
         return new MatchingResult((List<Variable<?>>) (List<?>) vars, valueList, varAdj, matchVar, matchVal, matchingSize);
@@ -270,19 +271,54 @@ public class AllDiffConstraint<T> extends UniformNaryConstraint<T> implements Pr
         });
     }
 
-    private boolean augment(int u, List<List<Integer>> adj, int[] matchVar, int[] matchVal,
-                             boolean[] visited) {
-        for (int v : adj.get(u)) {
-            if (!visited[v]) {
-                visited[v] = true;
-                if (matchVal[v] == -1 || augment(matchVal[v], adj, matchVar, matchVal, visited)) {
-                    matchVar[u] = v;
-                    matchVal[v] = u;
+    /**
+     * Kuhn's augmenting-path search, depth first, with the path on explicit stacks rather than the
+     * thread's: a path can pass through every variable, and recursing that deep overflowed the
+     * stack at a few thousand. It tries values in the same order a recursive search would, so it
+     * finds the same matching. One instance serves every search of a matching.
+     */
+    private static final class AugmentingPath {
+        /** The variable at each depth of the current path. */
+        private final int[] variables;
+        /** How many of that variable's values the search has tried. */
+        private final int[] tried;
+        /** The value that variable takes on the path. */
+        private final int[] values;
+
+        AugmentingPath(int variableCount) {
+            variables = new int[variableCount];
+            tried = new int[variableCount];
+            values = new int[variableCount];
+        }
+
+        /** Extends the matching by a path from unmatched variable {@code root}, if there is one. */
+        boolean augment(int root, List<List<Integer>> adj, int[] matchVar, int[] matchVal, boolean[] visited) {
+            int depth = 0;
+            variables[0] = root;
+            tried[0] = 0;
+            while (depth >= 0) {
+                List<Integer> candidates = adj.get(variables[depth]);
+                if (tried[depth] == candidates.size()) {
+                    depth--;
+                    continue;
+                }
+                int value = candidates.get(tried[depth]++);
+                if (visited[value]) continue;
+                visited[value] = true;
+                values[depth] = value;
+                if (matchVal[value] == -1) {
+                    for (int d = depth; d >= 0; d--) {
+                        matchVar[variables[d]] = values[d];
+                        matchVal[values[d]] = variables[d];
+                    }
                     return true;
                 }
+                depth++;
+                variables[depth] = matchVal[value];
+                tried[depth] = 0;
             }
+            return false;
         }
-        return false;
     }
 
 }
