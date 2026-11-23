@@ -4,6 +4,7 @@ import io.github.rcrida.jcsp.ConstraintSatisfactionProblem;
 import io.github.rcrida.jcsp.assignments.Assignment;
 import io.github.rcrida.jcsp.domains.IntRangeDomain;
 import io.github.rcrida.jcsp.solver.Cancellation;
+import io.github.rcrida.jcsp.solver.neighbourhood.LargeNeighbourhoodSearch;
 import io.github.rcrida.jcsp.solver.LinearObjective;
 import io.github.rcrida.jcsp.solver.RestartRandomization;
 import io.github.rcrida.jcsp.solver.listener.SolverListener;
@@ -54,6 +55,23 @@ class Xcsp3ProblemRunnerTest {
             System.setOut(new PrintStream(new java.io.FileOutputStream(java.io.FileDescriptor.out), true, StandardCharsets.UTF_8));
         }
         assertThat(buffer.toString(StandardCharsets.UTF_8)).contains("s SATISFIABLE").contains("v <instantiation><list> x </list>");
+    }
+
+    @Test void parseAndSolve_cancelledDuringTheParse_reportsUnknown() throws IOException {
+        Path instanceFile = tempDir.resolve("instance.xml");
+        Files.writeString(instanceFile, """
+                <instance format="XCSP3" type="CSP">
+                <variables><var id="x"> 0..2 </var></variables>
+                <constraints><intension> ge(x,0) </intension></constraints>
+                </instance>
+                """);
+        Cancellation cancellation = new Cancellation();
+        cancellation.cancel();
+        ByteArrayOutputStream buffer = new ByteArrayOutputStream();
+
+        Xcsp3ProblemRunner.parseAndSolve(instanceFile, cancellation, null, LargeNeighbourhoodSearch.OFF, printStreamInto(buffer));
+
+        assertThat(buffer.toString(StandardCharsets.UTF_8)).contains("c parse cancelled").contains("s UNKNOWN");
     }
 
     @Test void main_withThirdArgument_pinsRestartRandomizationSeed() throws IOException {

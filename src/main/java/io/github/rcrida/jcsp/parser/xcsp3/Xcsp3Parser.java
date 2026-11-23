@@ -1,5 +1,7 @@
 package io.github.rcrida.jcsp.parser.xcsp3;
 
+import io.github.rcrida.jcsp.solver.Cancellation;
+
 import java.io.IOException;
 import java.nio.file.Path;
 
@@ -58,7 +60,19 @@ public final class Xcsp3Parser {
      * @throws UnsupportedXcsp3ConstraintException if the instance uses a recognised-but-unmappable construct
      */
     public static Xcsp3Instance parse(Path xcsp3File) throws IOException {
-        Xcsp3CallbackHandler handler = new Xcsp3CallbackHandler();
+        return parse(xcsp3File, Cancellation.NEVER);
+    }
+
+    /**
+     * Parses like {@link #parse(Path)}, abandoning the parse once {@code cancellation} is cancelled.
+     * It is checked once per constraint, per table tuple and per automaton transition, so work
+     * {@code xcsp3-tools} does between those checks, such as reading a constraint's XML, runs to
+     * completion first.
+     *
+     * @throws Xcsp3ParseCancelledException if {@code cancellation} is cancelled before the parse completes
+     */
+    public static Xcsp3Instance parse(Path xcsp3File, Cancellation cancellation) throws IOException {
+        Xcsp3CallbackHandler handler = new Xcsp3CallbackHandler(cancellation);
         try {
             handler.loadInstance(xcsp3File.toString());
         } catch (RuntimeException e) {

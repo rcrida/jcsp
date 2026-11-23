@@ -32,6 +32,7 @@ import io.github.rcrida.jcsp.constraints.unary.SquareConstraint;
 import io.github.rcrida.jcsp.constraints.unary.UnaryComparatorConstraint;
 import io.github.rcrida.jcsp.constraints.unary.UnaryInSetConstraint;
 import io.github.rcrida.jcsp.constraints.unary.UnaryPredicateConstraint;
+import io.github.rcrida.jcsp.solver.Cancellation;
 import io.github.rcrida.jcsp.solver.Solver;
 import io.github.rcrida.jcsp.variables.Variable;
 import io.github.rcrida.jcsp.variables.VariablesByName;
@@ -1683,6 +1684,20 @@ class Xcsp3ParserTest {
 
     private static int truth(boolean b) {
         return b ? 1 : 0;
+    }
+
+    @Test void aCancelledParse_isAbandoned() throws IOException {
+        Path file = tempDir.resolve("cancelled.xml");
+        Files.writeString(file, """
+                <instance format="XCSP3" type="CSP">
+                <variables><var id="x"> 0..2 </var><var id="y"> 0..2 </var></variables>
+                <constraints><extension><list> x y </list><supports> (0,1)(1,2) </supports></extension></constraints>
+                </instance>
+                """);
+        Cancellation cancellation = new Cancellation();
+        cancellation.cancel();
+
+        assertThatThrownBy(() -> Xcsp3Parser.parse(file, cancellation)).isInstanceOf(Xcsp3ParseCancelledException.class);
     }
 
     @Test void notOfANaryEquality_meansNotAllEqual() throws IOException {

@@ -66,27 +66,41 @@ public final class Xcsp3ProblemRunner {
         LargeNeighbourhoodSearch neighbourhoods = args.length >= 4 && args[3].equals("lns")
                 ? LargeNeighbourhoodSearch.DEFAULT
                 : LargeNeighbourhoodSearch.OFF;
-        run(Xcsp3Parser.parse(instanceFile), timeLimitSeconds, restartRandomization, neighbourhoods, System.out);
+        run(instanceFile, timeLimitSeconds, restartRandomization, neighbourhoods, System.out);
     }
 
     /**
-     * Enforces {@code timeLimitSeconds} by cancelling a fresh {@link Cancellation} from a
-     * background timer once it elapses, then delegates to {@link #solve}. {@code null}
-     * {@code restartRandomization} leaves {@link SolverConfig}'s own random-per-call default in
-     * place -- see this class's own Javadoc for when a caller should pass a fixed seed instead.
-     * {@code neighbourhoods} applies to an optimization instance; {@link #main}'s optional fourth
-     * argument {@code lns} selects {@link LargeNeighbourhoodSearch#DEFAULT}.
+     * Enforces {@code timeLimitSeconds} over the parse and the solve together by cancelling a fresh
+     * {@link Cancellation} from a background timer once it elapses, then delegates to {@link
+     * #parseAndSolve}. {@code null} {@code restartRandomization} leaves {@link SolverConfig}'s own
+     * random-per-call default in place -- see this class's own Javadoc for when a caller should pass
+     * a fixed seed instead. {@code neighbourhoods} applies to an optimization instance; {@link
+     * #main}'s optional fourth argument {@code lns} selects {@link LargeNeighbourhoodSearch#DEFAULT}.
      */
-    static void run(Xcsp3Instance instance, long timeLimitSeconds, @Nullable RestartRandomization restartRandomization,
-                     LargeNeighbourhoodSearch neighbourhoods, PrintStream out) {
+    static void run(Path instanceFile, long timeLimitSeconds, @Nullable RestartRandomization restartRandomization,
+                     LargeNeighbourhoodSearch neighbourhoods, PrintStream out) throws IOException {
         Cancellation cancellation = new Cancellation();
         ScheduledExecutorService timer = Executors.newSingleThreadScheduledExecutor();
         timer.schedule(cancellation::cancel, timeLimitSeconds, TimeUnit.SECONDS);
         try {
-            solve(instance, cancellation, SolverListener.NONE, restartRandomization, neighbourhoods, out);
+            parseAndSolve(instanceFile, cancellation, restartRandomization, neighbourhoods, out);
         } finally {
             timer.shutdownNow();
         }
+    }
+
+    /** Parses under {@code cancellation}, reporting {@code s UNKNOWN} if it is cancelled first, then delegates to {@link #solve}. */
+    static void parseAndSolve(Path instanceFile, Cancellation cancellation, @Nullable RestartRandomization restartRandomization,
+                              LargeNeighbourhoodSearch neighbourhoods, PrintStream out) throws IOException {
+        Xcsp3Instance instance;
+        try {
+            instance = Xcsp3Parser.parse(instanceFile, cancellation);
+        } catch (Xcsp3ParseCancelledException e) {
+            out.println("c parse cancelled at the time limit");
+            out.println("s UNKNOWN");
+            return;
+        }
+        solve(instance, cancellation, SolverListener.NONE, restartRandomization, neighbourhoods, out);
     }
 
     /**

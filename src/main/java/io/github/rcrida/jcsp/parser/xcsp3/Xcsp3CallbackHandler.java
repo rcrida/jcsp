@@ -64,6 +64,7 @@ import io.github.rcrida.jcsp.domains.Domain;
 import io.github.rcrida.jcsp.domains.IntRangeDomain;
 import io.github.rcrida.jcsp.domains.NumericDiscreteDomain;
 import io.github.rcrida.jcsp.solver.BranchAndBoundSolver;
+import io.github.rcrida.jcsp.solver.Cancellation;
 import io.github.rcrida.jcsp.solver.LinearObjective;
 import io.github.rcrida.jcsp.variables.Variable;
 import org.jspecify.annotations.Nullable;
@@ -238,7 +239,15 @@ final class Xcsp3CallbackHandler implements XCallbacks2 {
     /** Unreified tables, scanned by {@link #taskEnergyFloors} for linked width/height pairs. */
     private final List<NaryTuplesConstraint> unreifiedTables = new ArrayList<>();
 
+    /** Checked once per constraint, per table tuple and per automaton transition, and before the problem is built. */
+    private final Cancellation cancellation;
+
     Xcsp3CallbackHandler() {
+        this(Cancellation.NEVER);
+    }
+
+    Xcsp3CallbackHandler(Cancellation cancellation) {
+        this.cancellation = cancellation;
         // By default xcsp3-tools "recognizes" simple intension/count/sum/etc. shapes and routes
         // them to more specific callbacks (buildCtrPrimitive, buildCtrExactly, buildCtrAmong, ...)
         // instead of the generic ones this class implements. rawParameters() disables that
@@ -252,9 +261,18 @@ final class Xcsp3CallbackHandler implements XCallbacks2 {
         return implem;
     }
 
+    /** Throws {@link Xcsp3ParseCancelledException} once {@link #cancellation} is cancelled. */
+    private void checkCancelled() {
+        if (cancellation.isCancelled()) {
+            throw new Xcsp3ParseCancelledException();
+        }
+    }
+
     Xcsp3Instance toInstance() {
+        checkCancelled();
         flushPendingSingleValueCounts();
         flushPendingNoOverlaps();
+        checkCancelled();
         Set<String> declaredVariableNames = new LinkedHashSet<>(variablesByName.keySet());
         declaredVariableNames.addAll(symbolicVariablesByName.keySet());
         return new Xcsp3Instance(builder.build(), objective, maximize,
@@ -281,6 +299,7 @@ final class Xcsp3CallbackHandler implements XCallbacks2 {
      */
     @Override
     public void loadCtr(XCtr c) {
+        checkCancelled();
         declaredConstraintCount++;
         XReification previous = currentReification;
         currentReification = c.reification;
@@ -1241,6 +1260,7 @@ final class Xcsp3CallbackHandler implements XCallbacks2 {
             }
             Set<Map<Variable<?>, Object>> starredTuples = new LinkedHashSet<>();
             for (int[] tuple : tuples) {
+                checkCancelled();
                 Map<Variable<?>, Object> tupleValues = new LinkedHashMap<>();
                 for (int i = 0; i < vars.size(); i++) {
                     tupleValues.put(vars.get(i), tuple[i] == Constants.STAR_INT ? NaryStarredTuplesConstraint.STAR : tuple[i]);
@@ -1252,6 +1272,7 @@ final class Xcsp3CallbackHandler implements XCallbacks2 {
         }
         Set<Valuation> valuations = new LinkedHashSet<>();
         for (int[] tuple : tuples) {
+            checkCancelled();
             Map<Variable<Integer>, Integer> tupleValues = new LinkedHashMap<>();
             for (int i = 0; i < vars.size(); i++) {
                 tupleValues.put(vars.get(i), tuple[i]);
@@ -2122,6 +2143,7 @@ final class Xcsp3CallbackHandler implements XCallbacks2 {
         }
         Map<Integer, Map<Integer, Integer>> automatonTransitions = new LinkedHashMap<>();
         for (Transition t : transitions) {
+            checkCancelled();
             int value = ((Long) t.value).intValue();
             automatonTransitions.computeIfAbsent(stateIndices.get(t.start), s -> new LinkedHashMap<>())
                     .put(value, stateIndices.get(t.end));
