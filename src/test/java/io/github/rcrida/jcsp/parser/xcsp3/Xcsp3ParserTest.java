@@ -1685,6 +1685,26 @@ class Xcsp3ParserTest {
         return b ? 1 : 0;
     }
 
+    @Test void notOfANaryEquality_meansNotAllEqual() throws IOException {
+        // xcsp3-tools canonizes this into ne(x,y,z) before the handler sees it.
+        assertSolutionsOverXyzAre(parseXml(XYZ_0_2, "<intension> not(eq(x,y,z)) </intension>"), 2,
+                v -> !(v[0] == v[1] && v[1] == v[2]));
+    }
+
+    @Test void implicationFromANaryEquality_holdsWheneverTheyAreNotAllEqual() throws IOException {
+        // Canonized into or(ne(x,y,z),...): the RotatingRostering shape.
+        assertSolutionsOverXyzAre(parseXml(XYZ_0_2, "<intension> imp(eq(x,y,z),ne(x,1)) </intension>"), 2,
+                v -> !(v[0] == v[1] && v[1] == v[2]) || v[0] != 1);
+    }
+
+    @Test void orderingOverThreeOperands_isRefused() {
+        for (String relation : List.of("lt", "le", "ge", "gt")) {
+            assertThatThrownBy(() -> parseXml(XYZ_0_2, "<intension> " + relation + "(x,y,z) </intension>"))
+                    .isInstanceOf(UnsupportedXcsp3ConstraintException.class)
+                    .hasMessageContaining("3 operands");
+        }
+    }
+
     @Test void sumOfRelations_countsTheTermsThatHold() throws IOException {
         Xcsp3Instance instance = parseXml(XYZ_0_2,
                 "<sum><list> eq(x,1) ne(y,z) lt(x,y) </list><condition> (eq,2) </condition></sum>");

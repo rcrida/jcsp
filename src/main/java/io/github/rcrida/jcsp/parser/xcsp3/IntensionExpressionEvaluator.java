@@ -105,11 +105,13 @@ final class IntensionExpressionEvaluator {
             case MIN -> LongStream.of(operands).min().orElseThrow();
             case MAX -> LongStream.of(operands).max().orElseThrow();
             case EQ -> allEqual(operands) ? 1 : 0;
-            case NE -> operands[0] != operands[1] ? 1 : 0;
-            case LT -> operands[0] < operands[1] ? 1 : 0;
-            case LE -> operands[0] <= operands[1] ? 1 : 0;
-            case GE -> operands[0] >= operands[1] ? 1 : 0;
-            case GT -> operands[0] > operands[1] ? 1 : 0;
+            // XCSP3 defines ne as binary; xcsp3-tools 2.5's canonizer rewrites not(eq(x1,...,xk)) into
+            // ne(x1,...,xk), so a wider ne means "not all equal".
+            case NE -> allEqual(operands) ? 0 : 1;
+            case LT -> binary(type, operands)[0] < operands[1] ? 1 : 0;
+            case LE -> binary(type, operands)[0] <= operands[1] ? 1 : 0;
+            case GE -> binary(type, operands)[0] >= operands[1] ? 1 : 0;
+            case GT -> binary(type, operands)[0] > operands[1] ? 1 : 0;
             case NOT -> operands[0] == 0 ? 1 : 0;
             case AND -> LongStream.of(operands).allMatch(v -> v != 0) ? 1 : 0;
             case OR -> LongStream.of(operands).anyMatch(v -> v != 0) ? 1 : 0;
@@ -125,6 +127,14 @@ final class IntensionExpressionEvaluator {
             case IF -> operands[0] != 0 ? operands[1] : operands[2];
             default -> throw new UnsupportedXcsp3ConstraintException("Unsupported intension operator: " + type);
         };
+    }
+
+    /** Returns {@code operands}, refusing an ordering over other than two operands, which XCSP3 does not define. */
+    private static long[] binary(TypeExpr type, long[] operands) {
+        if (operands.length != 2) {
+            throw new UnsupportedXcsp3ConstraintException(type + " over " + operands.length + " operands is not defined by XCSP3");
+        }
+        return operands;
     }
 
     private static boolean allEqual(long[] operands) {
