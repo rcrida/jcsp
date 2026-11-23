@@ -348,7 +348,7 @@ public class FixpointPropagation {
         if (propagator == NogoodFixpointConsistency.INSTANCE) {
             return nogoodLearningEnabled || !csp.getNogoods().isEmpty();
         }
-        if (propagator == AC3.INSTANCE) return !csp.getAllBinaryConstraints().isEmpty();
+        if (propagator == AC3.INSTANCE) return csp.hasBinaryConstraints();
         return !(propagator instanceof FixpointConsistency fc) || fc.appliesTo(csp);
     }
 

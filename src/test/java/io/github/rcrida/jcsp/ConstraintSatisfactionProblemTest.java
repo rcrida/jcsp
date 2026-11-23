@@ -241,6 +241,52 @@ public class ConstraintSatisfactionProblemTest {
     }
 
     @Test
+    void aWideAllDifferent_givesNoArcsButStillDecomposesOnRequest() {
+        Variable<Integer> a = VARIABLE_FACTORY.create("wide_a");
+        Variable<Integer> b = VARIABLE_FACTORY.create("wide_b");
+        Variable<Integer> c = VARIABLE_FACTORY.create("wide_c");
+        val csp = ConstraintSatisfactionProblem.builder()
+                .variableDomain(a, domain)
+                .variableDomain(b, domain)
+                .variableDomain(c, domain)
+                .allDiffConstraint(Set.of(a, b, c))
+                .build();
+
+        assertThat(csp.getAllBinaryArcs()).isEmpty();
+        assertThat(csp.hasBinaryConstraints()).isTrue();
+        assertThat(csp.mayHoldBinaryConstraintOf(BinaryNotEqualsConstraint.class)).isTrue();
+        assertThat(csp.mayHoldBinaryConstraintOf(io.github.rcrida.jcsp.constraints.binary.BinaryComparatorConstraint.class)).isFalse();
+        assertThat(csp.getAllBinaryConstraints()).containsExactlyInAnyOrder(
+                BinaryNotEqualsConstraint.of(a, b), BinaryNotEqualsConstraint.of(a, c), BinaryNotEqualsConstraint.of(b, c));
+        assertThat(csp.getAllBinaryConstraints()).isSameAs(csp.getAllBinaryConstraints());
+    }
+
+    @Test
+    void aTwoVariableAllDifferent_keepsItsArc() {
+        Variable<Integer> a = VARIABLE_FACTORY.create("narrow_a");
+        Variable<Integer> b = VARIABLE_FACTORY.create("narrow_b");
+        val csp = ConstraintSatisfactionProblem.builder()
+                .variableDomain(a, domain)
+                .variableDomain(b, domain)
+                .allDiffConstraint(Set.of(a, b))
+                .build();
+
+        assertThat(csp.getAllBinaryArcs()).containsExactlyInAnyOrder(new Arc(a, b), new Arc(b, a));
+        assertThat(csp.hasBinaryConstraints()).isTrue();
+        assertThat(csp.mayHoldBinaryConstraintOf(BinaryNotEqualsConstraint.class)).isTrue();
+        assertThat(csp.getAllBinaryConstraints()).containsExactly(BinaryNotEqualsConstraint.of(a, b));
+    }
+
+    @Test
+    void noBinaryConstraints_hasNone() {
+        Variable<Integer> a = VARIABLE_FACTORY.create("none_a");
+        val csp = ConstraintSatisfactionProblem.builder().variableDomain(a, domain).build();
+
+        assertThat(csp.hasBinaryConstraints()).isFalse();
+        assertThat(csp.mayHoldBinaryConstraintOf(BinaryNotEqualsConstraint.class)).isFalse();
+    }
+
+    @Test
     void getConstraintsTouching_structuralOnly() {
         Variable<Integer> a = VARIABLE_FACTORY.create("touch_a");
         Variable<Integer> b = VARIABLE_FACTORY.create("touch_b");

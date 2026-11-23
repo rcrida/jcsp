@@ -6,7 +6,10 @@ import io.github.rcrida.jcsp.consistency.ConstraintConsistency;
 import io.github.rcrida.jcsp.consistency.fixpoint.FixpointConsistency;
 import io.github.rcrida.jcsp.consistency.arc.AC3;
 import io.github.rcrida.jcsp.consistency.node.NodeConsistency;
+import io.github.rcrida.jcsp.constraints.nary.AllDiffConstraint;
 import io.github.rcrida.jcsp.constraints.nary.AtLeastNConstraint;
+import io.github.rcrida.jcsp.constraints.nary.CircuitConstraint;
+import io.github.rcrida.jcsp.constraints.nary.SubCircuitConstraint;
 import io.github.rcrida.jcsp.constraints.nary.ExactlyOneConstraint;
 import io.github.rcrida.jcsp.constraints.nary.AmongConstraint;
 import io.github.rcrida.jcsp.constraints.nary.AtMostNConstraint;
@@ -77,14 +80,10 @@ public interface LocalSolver {
     interface Factory {
         /**
          * Runs once, before the repair search starts, in the same order as {@link
-         * FixpointPropagation#PROPAGATORS} except without the
-         * outer fixpoint loop and without {@link io.github.rcrida.jcsp.constraints.nary.AllDiffConstraint}'s GAC (Régin's algorithm):
-         * that propagator is comparatively expensive (a bipartite-matching computation), and
-         * repair-based search doesn't recoup that cost the way a single one-shot pass through
-         * {@link PropagationFixpointSolver} does — {@link MinConflictsSolver}/{@link
-         * TabuSearchSolver} never re-run propagation mid-search, they just need a decent starting
-         * assignment and cheap per-step conflict scoring, and will happily walk through and repair
-         * an all-different violation on their own rather than needing it ruled out up front.
+         * FixpointPropagation#PROPAGATORS} except without the outer fixpoint loop.
+         * {@link AllDiffConstraint}, {@link CircuitConstraint} and {@link SubCircuitConstraint} run
+         * their own propagation here because, over three or more variables, AC3 has no pairwise
+         * not-equals arcs of theirs to revise.
          * {@link AtLeastNConstraint}/{@link AtMostNConstraint} are included here specifically
          * because those boolean constraints have no binary decomposition for AC3 to lean on
          * otherwise, so this is their only source of propagation in the local-search chain.
@@ -96,6 +95,9 @@ public interface LocalSolver {
                 FixpointConsistency.of(BinaryOffsetConstraint.class),
                 FixpointConsistency.of(AbsoluteDifferenceConstraint.class),
                 AC3.INSTANCE,
+                FixpointConsistency.of(AllDiffConstraint.class),
+                FixpointConsistency.of(CircuitConstraint.class),
+                FixpointConsistency.of(SubCircuitConstraint.class),
                 FixpointConsistency.of(SumBoundConstraint.class),
                 FixpointConsistency.of(SumVariableConstraint.class),
                 FixpointConsistency.of(LinearBoundConstraint.class),

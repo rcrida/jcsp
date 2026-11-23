@@ -39,7 +39,7 @@ final class LocalSearchSupport {
                 csp.getConstraints().stream().filter(c -> c instanceof UnaryConstraint));
         Stream<Constraint> nonDecomposableNary = csp.getConstraints().stream()
                 .filter(c -> c instanceof NaryConstraint
-                        && (!(c instanceof BinaryDecomposable bd) || bd.getAsBinaryConstraints().isEmpty() || !bd.isDecompositionComplete()));
+                        && (!(c instanceof BinaryDecomposable bd) || !bd.hasBinaryDecomposition() || !bd.isDecompositionComplete()));
         return Stream.concat(binaryAndUnary, nonDecomposableNary);
     }
 

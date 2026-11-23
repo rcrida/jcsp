@@ -65,6 +65,30 @@ public class AllDiffConstraint<T> extends UniformNaryConstraint<T> implements Pr
     }
 
     /**
+     * Over three or more variables, {@link #propagate}'s GAC subsumes arc consistency on the pairwise
+     * not-equals. Over two, the single pair stays an arc, so a tree-structured problem keeps it.
+     */
+    @Override
+    public boolean propagatesItsDecomposition() {
+        return getVariables().size() > 2;
+    }
+
+    @Override
+    public boolean hasBinaryDecomposition() {
+        return getVariables().size() >= 2;
+    }
+
+    @Override
+    public boolean mayDecomposeInto(Class<?> type) {
+        return decomposesIntoNotEquals(getVariables().size(), type);
+    }
+
+    /** Whether pairwise not-equals over {@code arity} distinct variables hold an instance of {@code type}. */
+    static boolean decomposesIntoNotEquals(int arity, Class<?> type) {
+        return arity >= 2 && type.isAssignableFrom(BinaryNotEqualsConstraint.class);
+    }
+
+    /**
      * The bipartite variable/value graph and maximum matching, shared by {@link #propagate} and
      * {@link #explainInfeasible} so the matching computation lives in exactly one place.
      */

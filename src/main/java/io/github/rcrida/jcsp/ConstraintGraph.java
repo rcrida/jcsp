@@ -20,6 +20,7 @@ import java.util.Deque;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -35,7 +36,8 @@ import java.util.stream.Stream;
  * avoiding redundant recomputation during solving.
  */
 @Value
-@ToString(exclude = {"neighbours", "allBinaryConstraints", "allBinaryArcConstraints", "auxiliaryCache", "declaredDomains"})
+@ToString(exclude = {"neighbours", "propagatedBinaryConstraints", "selfPropagatingDecomposables", "allBinaryArcConstraints",
+        "auxiliaryCache", "declaredDomains"})
 class ConstraintGraph {
     Set<Constraint> constraints;
     boolean isCyclic;
@@ -45,12 +47,18 @@ class ConstraintGraph {
      */
     @EqualsAndHashCode.Exclude Map<Variable<?>, Set<Variable<?>>> neighbours;
     /**
-     * A set of all binary constraints applicable to this problem. Where possible casts n-ary constrains
-     * as additional binary constraints. Ignores n-ary constraints that aren't decomposable.
+     * The binary constraints worth propagating as arcs: every {@link BinaryConstraint}, and the
+     * decomposition of every {@link BinaryDecomposable} that does not {@linkplain
+     * BinaryDecomposable#propagatesItsDecomposition() propagate it itself}.
      */
-    @EqualsAndHashCode.Exclude Set<BinaryConstraint<?, ?>> allBinaryConstraints;
+    @EqualsAndHashCode.Exclude Set<BinaryConstraint<?, ?>> propagatedBinaryConstraints;
     /**
-     * A map containing all binary constraints associated with each arc.
+     * The decomposable constraints whose decompositions {@link #propagatedBinaryConstraints} leaves
+     * out; {@link #getAllBinaryConstraints()} builds those only when asked.
+     */
+    @EqualsAndHashCode.Exclude List<BinaryDecomposable> selfPropagatingDecomposables;
+    /**
+     * {@link #propagatedBinaryConstraints} grouped by each arc they constrain.
      */
     @EqualsAndHashCode.Exclude Map<Arc, List<BinaryConstraint<?, ?>>> allBinaryArcConstraints;
     /**
@@ -116,8 +124,12 @@ class ConstraintGraph {
         this.declaredDomains = variableDomains;
         Set<Variable<?>> variables = variableDomains.keySet();
         this.neighbours = computeNeighbours(constraints, variables, eagerNeighbourBudget, lazyNeighbourThreshold);
-        this.allBinaryConstraints = computeAllBinaryConstraints(constraints);
-        this.allBinaryArcConstraints = computeAllBinaryArcConstraints(this.allBinaryConstraints);
+        this.selfPropagatingDecomposables = constraints.stream()
+                .filter(c -> c instanceof BinaryDecomposable bd && bd.propagatesItsDecomposition())
+                .map(c -> (BinaryDecomposable) c)
+                .toList();
+        this.propagatedBinaryConstraints = computePropagatedBinaryConstraints(constraints);
+        this.allBinaryArcConstraints = computeAllBinaryArcConstraints(this.propagatedBinaryConstraints);
         val visited = new HashSet<Variable<?>>();
         if (this.neighbours.isEmpty()) {
             this.isCyclic = false;
@@ -134,6 +146,36 @@ class ConstraintGraph {
      */
     boolean isTree() {
         return !isCyclic && isFullyConnected;
+    }
+
+    /** Key for {@link #getAllBinaryConstraints()}'s memoized value in {@link #auxiliaryCache}. */
+    private static final Object ALL_BINARY_CONSTRAINTS = new Object();
+
+    /**
+     * {@link #propagatedBinaryConstraints} plus the decompositions it leaves out, built on first
+     * request: for cutting a decomposable constraint across a variable subset, and for local search.
+     */
+    Set<BinaryConstraint<?, ?>> getAllBinaryConstraints() {
+        if (selfPropagatingDecomposables.isEmpty()) return propagatedBinaryConstraints;
+        return computeAuxiliaryCacheIfAbsent(ALL_BINARY_CONSTRAINTS, graph -> {
+            Set<BinaryConstraint<?, ?>> all = new LinkedHashSet<>(propagatedBinaryConstraints);
+            for (BinaryDecomposable decomposable : selfPropagatingDecomposables) {
+                all.addAll(decomposable.getAsBinaryConstraints());
+            }
+            return Collections.unmodifiableSet(all);
+        });
+    }
+
+    /** Whether {@link #getAllBinaryConstraints()} is non-empty, answered without building it. */
+    boolean hasBinaryConstraints() {
+        return !propagatedBinaryConstraints.isEmpty()
+                || selfPropagatingDecomposables.stream().anyMatch(BinaryDecomposable::hasBinaryDecomposition);
+    }
+
+    /** Whether {@link #getAllBinaryConstraints()} holds an instance of {@code type}, answered without building it. */
+    boolean mayHoldBinaryConstraintOf(Class<?> type) {
+        return propagatedBinaryConstraints.stream().anyMatch(type::isInstance)
+                || selfPropagatingDecomposables.stream().anyMatch(d -> d.mayDecomposeInto(type));
     }
 
     Set<Arc> getAllBinaryArcs() {
@@ -232,13 +274,13 @@ class ConstraintGraph {
      * the relative order of multiple {@link BinaryConstraint}s sharing the same {@link Arc} in that
      * method's own per-arc constraint lists.
      */
-    private static Set<BinaryConstraint<?, ?>> computeAllBinaryConstraints(Set<Constraint> constraints) {
+    private static Set<BinaryConstraint<?, ?>> computePropagatedBinaryConstraints(Set<Constraint> constraints) {
         val binaryConstraints = constraints.stream()
                 .filter(c -> c instanceof BinaryConstraint)
                 .map(c -> (BinaryConstraint<?, ?>) c)
                 .toList();
         val inferredBinaryConstraints = constraints.stream()
-                .filter(c -> c instanceof BinaryDecomposable)
+                .filter(c -> c instanceof BinaryDecomposable bd && !bd.propagatesItsDecomposition())
                 .map(c -> (BinaryDecomposable) c)
                 .flatMap(c -> c.getAsBinaryConstraints().stream())
                 .toList();

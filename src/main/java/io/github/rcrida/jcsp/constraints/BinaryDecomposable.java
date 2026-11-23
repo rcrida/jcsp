@@ -24,4 +24,23 @@ public interface BinaryDecomposable {
     default boolean isDecompositionComplete() {
         return true;
     }
+
+    /**
+     * Whether this constraint's own propagation already achieves at least arc consistency on {@link
+     * #getAsBinaryConstraints()}, so that propagating the decomposition too would prune nothing more.
+     * Such a decomposition is left out of AC3's arcs, and built only when a caller asks for it.
+     */
+    default boolean propagatesItsDecomposition() {
+        return false;
+    }
+
+    /** Whether {@link #getAsBinaryConstraints()} is non-empty; override to answer without building it. */
+    default boolean hasBinaryDecomposition() {
+        return !getAsBinaryConstraints().isEmpty();
+    }
+
+    /** Whether {@link #getAsBinaryConstraints()} holds an instance of {@code type}; override to answer without building it. */
+    default boolean mayDecomposeInto(Class<?> type) {
+        return getAsBinaryConstraints().stream().anyMatch(type::isInstance);
+    }
 }

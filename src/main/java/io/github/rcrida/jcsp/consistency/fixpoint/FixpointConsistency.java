@@ -157,7 +157,7 @@ public class FixpointConsistency implements ConstraintConsistency {
 
     public boolean appliesTo(ConstraintSatisfactionProblem csp) {
         return !filteredConstraints(csp).isEmpty()
-                || csp.getAllBinaryConstraints().stream().anyMatch(constraintType::isInstance);
+                || csp.mayHoldBinaryConstraintOf(constraintType);
     }
 
     @Override

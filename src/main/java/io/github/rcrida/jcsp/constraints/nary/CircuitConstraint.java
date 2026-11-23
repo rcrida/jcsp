@@ -83,6 +83,25 @@ public class CircuitConstraint extends NaryConstraint implements Propagatable, B
         return false;
     }
 
+    /**
+     * Over three or more successors, {@link #propagate}'s singleton propagation pass already gives
+     * arc consistency on the pairwise not-equals.
+     */
+    @Override
+    public boolean propagatesItsDecomposition() {
+        return getVariables().size() > 2;
+    }
+
+    @Override
+    public boolean hasBinaryDecomposition() {
+        return getVariables().size() >= 2;
+    }
+
+    @Override
+    public boolean mayDecomposeInto(Class<?> type) {
+        return AllDiffConstraint.decomposesIntoNotEquals(getVariables().size(), type);
+    }
+
 
     /** Step 1: self-loop removal — node i+1 cannot point to itself. */
     private PassOutcome selfLoopPass(Map<Variable<?>, Domain<?>> domains, Map<Variable<?>, Domain<?>> updated) {

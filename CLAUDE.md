@@ -126,18 +126,17 @@ Every domain is a record except `ObjectEmptyDomain`/`NumericEmptyDomain` (final 
 
 `AC3` (`consistency.arc`) is the arc-consistency propagator used everywhere. That covers `PROPAGATORS`' entry, `MAC` (run per search node before the fixpoint), `TreeSolver` and local-search preprocessing. `AC3BitRm` is a tested alternative that is deliberately **not wired in** ([ADR-0022](docs/adr/0022-bitset-and-residue-arc-consistency-ac3bitrm.md)).
 
-`revise` asks `BinaryConstraint#mayPruneAlongArc` before scanning the domain product, so a constraint whose support condition is decidable from the to-side domain alone can decline the scan. `BinaryNotEqualsConstraint` is the only override (`size() <= 1`). The contract is one-sided — `false` asserts every from-value has support, so a wrong `false` loses propagation silently; an empty to-side must return `true`. No type is ever excluded from AC3 ([ADR-0045](docs/adr/0045-cheap-arc-prechecks-over-excluding-types-from-ac3.md)).
+`revise` asks `BinaryConstraint#mayPruneAlongArc` before scanning the domain product, so a constraint whose support condition is decidable from the to-side domain alone can decline the scan. `BinaryNotEqualsConstraint` is the only override (`size() <= 1`). The contract is one-sided — `false` asserts every from-value has support, so a wrong `false` loses propagation silently; an empty to-side must return `true`. No type is ever excluded from AC3 ([ADR-0045](docs/adr/0045-cheap-arc-prechecks-over-excluding-types-from-ac3.md)). AC3's arcs do leave out a `BinaryDecomposable`'s pairs when the constraint `propagatesItsDecomposition()` (AllDiff, Circuit, SubCircuit over three or more variables); `getAllBinaryConstraints()` still builds them on request for cutset splitting and local search ([ADR-0074](docs/adr/0074-a-constraint-that-propagates-its-own-decomposition-gives-ac3-no-arcs.md)).
 
 ### Local Search Chain
 
 `LocalSolver.Factory.INSTANCE.createLocalSolver(maxAttempts, maxSteps, factory, LocalSolverConfig)` builds:
 
 ```
-NodeConsistency → UnaryComparatorBounds → BinaryComparatorBounds → OffsetBounds → AC3 → SumBounds → LinearBounds → CountValue → InverseArc → AmongValue → AtLeastN/AtMostN → CumulativeTimetable → GlobalCardinalityValue → LexBounds → TuplesGAC → IndependentSubproblems → MinConflicts
+NodeConsistency → UnaryComparatorBounds → BinaryComparatorBounds → OffsetBounds → AC3 → AllDiff/Circuit/SubCircuit → SumBounds → LinearBounds → CountValue → InverseArc → AmongValue → AtLeastN/AtMostN → CumulativeTimetable → GlobalCardinalityValue → LexBounds → TuplesGAC → IndependentSubproblems → MinConflicts
 ```
 
 - Seeded by `RandomAssignmentFactory`, `GreedyAssignmentFactory` or `FallbackAssignmentFactory`.
-- `AllDiffConstraint` GAC is deliberately excluded from preprocessing (see `LocalSolver.Factory.PREPROCESSORS`).
 - `LocalSolverConfig` carries a `LocalSolverListener`. The 3-arg overload is deprecated.
 - Routing: all-boolean with no `ExactlyOne`/`AtLeastN` → `WalkSATSolver`. Objective with `ExactlyOneConstraint` → `LargeNeighborhoodSolver`. Otherwise `RaceLocalSolver` races `MinConflictsSolver` against `TabuSearchSolver`, wrapped in `IndependentSubproblemLocalSolver` ([ADR-0003](docs/adr/0003-race-competing-strategies-over-predictive-routing.md)).
 - Leaf solvers run `maxAttempts` restarts in parallel.

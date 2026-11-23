@@ -135,3 +135,4 @@ section instead.
 | [0071](0071-intrangedomain-of-shares-a-range-through-a-weak-global-cache.md) | `IntRangeDomain.of` shares a range through a weak global cache | Accepted |
 | [0072](0072-one-unheld-value-per-node-when-values-are-interchangeable.md) | One unheld value per node when values are interchangeable | Accepted |
 | [0073](0073-break-the-first-runs-ties-by-degree.md) | Break the first run's ties by degree | Accepted |
+| [0074](0074-a-constraint-that-propagates-its-own-decomposition-gives-ac3-no-arcs.md) | A constraint that propagates its own decomposition gives AC3 no arcs | Accepted |

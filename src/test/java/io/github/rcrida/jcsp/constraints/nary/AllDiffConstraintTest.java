@@ -41,6 +41,20 @@ public class AllDiffConstraintTest {
     }
 
     @Test
+    void decomposition_overThreeVariables_isPropagatedByTheConstraintItself() {
+        var pair = AllDiffConstraint.builder().variables(Set.of(variable1, variable2)).build();
+        var single = AllDiffConstraint.builder().variables(Set.of(variable1)).build();
+
+        assertThat(allDiffConstraint.propagatesItsDecomposition()).isTrue();
+        assertThat(pair.propagatesItsDecomposition()).isFalse();
+        assertThat(pair.hasBinaryDecomposition()).isTrue();
+        assertThat(single.hasBinaryDecomposition()).isFalse();
+        assertThat(allDiffConstraint.mayDecomposeInto(io.github.rcrida.jcsp.constraints.binary.BinaryNotEqualsConstraint.class)).isTrue();
+        assertThat(allDiffConstraint.mayDecomposeInto(io.github.rcrida.jcsp.constraints.binary.BinaryComparatorConstraint.class)).isFalse();
+        assertThat(single.mayDecomposeInto(io.github.rcrida.jcsp.constraints.binary.BinaryNotEqualsConstraint.class)).isFalse();
+    }
+
+    @Test
     void isSatisfiedByEmpty() {
         assertThat(allDiffConstraint.isSatisfiedBy(Assignment.of(Map.of()))).isTrue();
     }

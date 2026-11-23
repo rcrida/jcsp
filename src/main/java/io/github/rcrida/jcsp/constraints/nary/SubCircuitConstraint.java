@@ -121,6 +121,25 @@ public class SubCircuitConstraint extends NaryConstraint implements Propagatable
         return false;
     }
 
+    /**
+     * Over three or more successors, {@link #propagate}'s duplicate-successor pass already gives arc
+     * consistency on the pairwise not-equals.
+     */
+    @Override
+    public boolean propagatesItsDecomposition() {
+        return getVariables().size() > 2;
+    }
+
+    @Override
+    public boolean hasBinaryDecomposition() {
+        return getVariables().size() >= 2;
+    }
+
+    @Override
+    public boolean mayDecomposeInto(Class<?> type) {
+        return AllDiffConstraint.decomposesIntoNotEquals(getVariables().size(), type);
+    }
+
     /** The node a fixed successor points at, or {@code -1} when this node is not yet fixed. */
     private int fixedNext(int i, Map<Variable<?>, Domain<?>> domains, Map<Variable<?>, Domain<?>> updated) {
         DiscreteDomain<Integer> dom = CircuitPropagation.currentDomain(successors, i, domains, updated);

@@ -581,14 +581,28 @@ public class ConstraintSatisfactionProblem {
 
     /**
      * A set of all binary constraints applicable to this problem. Where possible casts n-ary constrains
-     * as additional binary constraints. Ignores n-ary constraints that aren't decomposable.
+     * as additional binary constraints. Ignores n-ary constraints that aren't decomposable. A
+     * decomposition that {@linkplain BinaryDecomposable#propagatesItsDecomposition() its constraint
+     * propagates itself} is built on the first call, which for a wide one is costly.
      */
     public Set<BinaryConstraint<?, ?>> getAllBinaryConstraints() {
         return constraintGraph.getAllBinaryConstraints();
     }
 
+    /** Whether {@link #getAllBinaryConstraints()} is non-empty, answered without building it. */
+    public boolean hasBinaryConstraints() {
+        return constraintGraph.hasBinaryConstraints();
+    }
+
+    /** Whether {@link #getAllBinaryConstraints()} holds an instance of {@code type}, answered without building it. */
+    public boolean mayHoldBinaryConstraintOf(@NonNull Class<?> type) {
+        return constraintGraph.mayHoldBinaryConstraintOf(type);
+    }
+
     /**
-     * A set of all binary arcs applicable to this problem.
+     * The arcs AC3 revises: those of every binary constraint, and of the decomposition of every
+     * {@link BinaryDecomposable} that does not {@linkplain BinaryDecomposable#propagatesItsDecomposition()
+     * propagate it itself}.
      */
     public Set<Arc> getAllBinaryArcs() {
         return constraintGraph.getAllBinaryArcs();
@@ -692,7 +706,7 @@ public class ConstraintSatisfactionProblem {
     public Set<Variable<?>> getUnsplittableVariables() {
         return getConstraints().stream()
                 .filter(c -> c instanceof NaryConstraint)
-                .filter(c -> !(c instanceof BinaryDecomposable bd) || bd.getAsBinaryConstraints().isEmpty())
+                .filter(c -> !(c instanceof BinaryDecomposable bd) || !bd.hasBinaryDecomposition())
                 .map(c -> (NaryConstraint) c)
                 .flatMap(c -> c.getVariables().stream())
                 .collect(Collectors.toSet());

@@ -26,6 +26,20 @@ public class CircuitConstraintTest {
         return NumericDiscreteDomain.of(values);
     }
 
+    // --- decomposition ---
+
+    @Test
+    void decomposition_overThreeSuccessors_isPropagatedByTheConstraintItself() {
+        var wide = CircuitConstraint.of(List.of(s0, s1, s2));
+        var pair = CircuitConstraint.of(List.of(s0, s1));
+
+        assertThat(wide.propagatesItsDecomposition()).isTrue();
+        assertThat(pair.propagatesItsDecomposition()).isFalse();
+        assertThat(pair.hasBinaryDecomposition()).isTrue();
+        assertThat(CircuitConstraint.of(List.of(s0)).hasBinaryDecomposition()).isFalse();
+        assertThat(wide.mayDecomposeInto(io.github.rcrida.jcsp.constraints.binary.BinaryNotEqualsConstraint.class)).isTrue();
+    }
+
     // --- factory ---
 
     @Test

@@ -60,6 +60,19 @@ class SubCircuitConstraintTest {
         return map;
     }
 
+    // --- decomposition ---
+
+    @Test
+    void decomposition_overThreeSuccessors_isPropagatedByTheConstraintItself() {
+        var pair = SubCircuitConstraint.of(List.of(s0, s1));
+
+        assertThat(constraint.propagatesItsDecomposition()).isTrue();
+        assertThat(pair.propagatesItsDecomposition()).isFalse();
+        assertThat(pair.hasBinaryDecomposition()).isTrue();
+        assertThat(SubCircuitConstraint.of(List.of(s0)).hasBinaryDecomposition()).isFalse();
+        assertThat(constraint.mayDecomposeInto(io.github.rcrida.jcsp.constraints.binary.BinaryNotEqualsConstraint.class)).isTrue();
+    }
+
     // --- isSatisfiedBy ---
 
     @Test
