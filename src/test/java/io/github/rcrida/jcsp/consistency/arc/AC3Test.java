@@ -9,6 +9,8 @@ import io.github.rcrida.jcsp.constraints.binary.BinaryTuplesConstraint;
 import io.github.rcrida.jcsp.constraints.nary.GroundNogoodConstraint;
 import io.github.rcrida.jcsp.domains.DiscreteDomain;
 import io.github.rcrida.jcsp.domains.Domain;
+import io.github.rcrida.jcsp.consistency.DomainOverlay;
+import io.github.rcrida.jcsp.solver.Cancellation;
 import io.github.rcrida.jcsp.domains.EnumDomain;
 import io.github.rcrida.jcsp.domains.IntRangeDomain;
 import io.github.rcrida.jcsp.domains.IntervalDomain;
@@ -19,6 +21,7 @@ import org.junit.jupiter.api.Test;
 
 import java.util.ArrayDeque;
 import java.util.EnumSet;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -58,6 +61,32 @@ public class AC3Test {
         System.out.println(arcConstrainedProblem);
         assertThat(arcConstrainedProblem.getVariableDomains().get(left)).isEqualTo(DiscreteDomain.of(0, 1, 2, 3));
         assertThat(arcConstrainedProblem.getVariableDomains().get(right)).isEqualTo(DiscreteDomain.of(0, 1, 4, 9));
+    }
+
+    @Test
+    void narrow_withACancellation_stopsBeforeTheNextArc() {
+        val domain = IntRangeDomain.of(0, 10);
+        val builder = ConstraintSatisfactionProblem.builder();
+        Variable<Object> left = variableFactory.create("left");
+        Variable<Object> right = variableFactory.create("right");
+        builder.variableDomainEntry(left, domain);
+        builder.variableDomainEntry(right, domain);
+        builder.constraint(BinaryTuplesConstraint.of(left, right, Set.of(BinaryTuple.of(0, 0), BinaryTuple.of(2, 4))));
+        val problem = builder.build();
+        Map<Variable<?>, Domain<?>> running = new HashMap<>();
+        Map<Variable<?>, Domain<?>> cancelled = new HashMap<>();
+        val cancellation = new Cancellation();
+        cancellation.cancel();
+
+        val narrowed = AC3.INSTANCE.narrow(problem, DomainOverlay.of(problem.getVariableDomains(), running), running, null,
+                Cancellation.NEVER);
+        val stopped = AC3.INSTANCE.narrow(problem, DomainOverlay.of(problem.getVariableDomains(), cancelled), cancelled, null,
+                cancellation);
+
+        assertThat(narrowed).contains(Set.of(left, right));
+        assertThat(running.get(left)).isEqualTo(DiscreteDomain.of(0, 2));
+        assertThat(stopped).contains(Set.of());
+        assertThat(cancelled).isEmpty();
     }
 
     @Test

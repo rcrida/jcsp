@@ -12,6 +12,7 @@ import io.github.rcrida.jcsp.constraints.nary.GroundNogoodConstraint;
 import io.github.rcrida.jcsp.constraints.nary.NogoodConstraint;
 import io.github.rcrida.jcsp.domains.DiscreteDomain;
 import io.github.rcrida.jcsp.domains.Domain;
+import io.github.rcrida.jcsp.solver.Cancellation;
 import io.github.rcrida.jcsp.variables.Variable;
 import io.github.rcrida.jcsp.variables.VariableMap;
 import org.jspecify.annotations.Nullable;
@@ -164,11 +165,34 @@ public class AC3 implements ConstraintConsistency {
         return result;
     }
 
+    /**
+     * {@link #apply(ConstraintSatisfactionProblem, Set)} in place, stopping between arcs once {@code
+     * cancellation} is cancelled: a single pass over large tables can run for minutes.
+     */
+    @Override
+    public Optional<Set<Variable<?>>> narrow(ConstraintSatisfactionProblem csp,
+                                             Map<Variable<?>, Domain<?>> view,
+                                             Map<Variable<?>, Domain<?>> updates,
+                                             @Nullable Set<Variable<?>> changedSinceLastRun,
+                                             Cancellation cancellation) {
+        return ConstraintConsistency.narrowByApplying(csp, updates,
+                before -> run(before, seedQueue(before, changedSinceLastRun), cancellation));
+    }
+
     /** {@link #applyQueue} over a queue of entries, so that taking an arc off it needs no lookup. */
     Optional<ConstraintSatisfactionProblem> run(ConstraintSatisfactionProblem problem, Queue<ArcEntry> queue) {
+        return run(problem, queue, Cancellation.NEVER);
+    }
+
+    /**
+     * {@link #run(ConstraintSatisfactionProblem, Queue)}, returning the narrowing made so far once
+     * {@code cancellation} is cancelled: sound, but not arc consistent.
+     */
+    private Optional<ConstraintSatisfactionProblem> run(ConstraintSatisfactionProblem problem, Queue<ArcEntry> queue,
+                                                        Cancellation cancellation) {
         val entriesByTarget = arcIndex(problem).entriesByTarget();
         val revisions = new Revisions(problem);
-        while (!queue.isEmpty()) {
+        while (!queue.isEmpty() && !cancellation.isCancelled()) {
             val entry = queue.poll();
             val arc = entry.arc();
             val X_i = arc.getFrom();

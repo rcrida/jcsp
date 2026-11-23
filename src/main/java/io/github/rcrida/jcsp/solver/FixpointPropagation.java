@@ -451,12 +451,12 @@ public class FixpointPropagation {
             Statistics statistics, Cancellation cancellation) {
         Map<Variable<?>, Domain<?>> updates = new VariableMap<>(initialUpdates);
         var view = DomainOverlay.of(csp.getVariableDomains(), updates);
+        // applyFixpoint has checked the cancellation already, so checking after each pass, which a
+        // cancellation may cut short with an incomplete narrowing, covers the pass that follows too.
         for (int i = worklist.next(); i >= 0; i = worklist.next()) {
-            if (cancellation.isCancelled()) {
-                throw new SolverCancelledException(statistics);
-            }
-            var changed = propagators.get(i).narrow(csp, view, updates, worklist.takeDirty(i));
+            var changed = propagators.get(i).narrow(csp, view, updates, worklist.takeDirty(i), cancellation);
             if (changed.isEmpty()) return Optional.empty();
+            checkCancelled(statistics, cancellation);
             if (!changed.get().isEmpty()) {
                 worklist.wake(i, changed.get());
             }

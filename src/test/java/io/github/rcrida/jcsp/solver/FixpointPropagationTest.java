@@ -140,6 +140,26 @@ public class FixpointPropagationTest {
     }
 
     @Test
+    void applyFixpoint_cancelledDuringTheLastPropagator_throwsRatherThanReturnAnIncompleteFixpoint() {
+        // The only propagator is cancelled mid-pass and leaves the worklist empty, so nothing
+        // after it would otherwise notice.
+        var cancellation = new Cancellation();
+        var cancelling = new io.github.rcrida.jcsp.consistency.ConstraintConsistency() {
+            @Override
+            public java.util.Optional<ConstraintSatisfactionProblem> apply(ConstraintSatisfactionProblem csp) {
+                cancellation.cancel();
+                return java.util.Optional.of(csp);
+            }
+        };
+        Variable<Integer> x = F.create("midcancelx");
+        var csp = ConstraintSatisfactionProblem.builder().variableDomain(x, IntRangeDomain.of(1, 5)).build();
+        var propagation = FixpointPropagation.builder().propagators(java.util.List.of(cancelling)).build();
+
+        assertThatThrownBy(() -> propagation.applyFixpoint(csp, null, SolverListener.NONE, new Statistics(), cancellation))
+                .isInstanceOf(SolverCancelledException.class);
+    }
+
+    @Test
     void applyFixpoint_cancelledBeforeFirstPropagator_throwsSolverCancelledException() {
         Variable<Integer> x = F.create("cancelledx");
         var csp = ConstraintSatisfactionProblem.builder().variableDomain(x, IntRangeDomain.of(1, 5)).build();

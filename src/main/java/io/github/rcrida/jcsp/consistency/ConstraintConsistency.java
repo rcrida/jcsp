@@ -3,6 +3,7 @@ package io.github.rcrida.jcsp.consistency;
 import io.github.rcrida.jcsp.ConstraintSatisfactionProblem;
 import io.github.rcrida.jcsp.constraints.nary.NogoodConstraint;
 import io.github.rcrida.jcsp.domains.Domain;
+import io.github.rcrida.jcsp.solver.Cancellation;
 import io.github.rcrida.jcsp.variables.Variable;
 import org.jspecify.annotations.Nullable;
 
@@ -12,6 +13,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
+import java.util.function.Function;
 
 /**
  * A single consistency/propagation pass over a {@link ConstraintSatisfactionProblem}.
@@ -62,14 +64,39 @@ public interface ConstraintConsistency {
                                               Map<Variable<?>, Domain<?>> view,
                                               Map<Variable<?>, Domain<?>> updates,
                                               @Nullable Set<Variable<?>> changedSinceLastRun) {
+        return narrowByApplying(csp, updates, before -> apply(before, changedSinceLastRun));
+    }
+
+    /**
+     * Narrows in place by running {@code pass} on a copy of {@code csp} carrying {@code updates} and
+     * writing back whatever it changed, as {@link #narrow(ConstraintSatisfactionProblem, Map, Map, Set)}'s
+     * default does.
+     */
+    static Optional<Set<Variable<?>>> narrowByApplying(
+            ConstraintSatisfactionProblem csp, Map<Variable<?>, Domain<?>> updates,
+            Function<ConstraintSatisfactionProblem, Optional<ConstraintSatisfactionProblem>> pass) {
         ConstraintSatisfactionProblem before = csp.withDomains(updates);
-        return apply(before, changedSinceLastRun).map(after -> {
+        return pass.apply(before).map(after -> {
             Set<Variable<?>> changed = changedVariables(before.getVariableDomains(), after.getVariableDomains());
             for (Variable<?> variable : changed) {
                 updates.put(variable, after.getVariableDomains().get(variable));
             }
             return changed;
         });
+    }
+
+    /**
+     * {@link #narrow(ConstraintSatisfactionProblem, Map, Map, Set)}, for a pass long enough to
+     * consult {@code cancellation} as it goes. Such a pass may stop early once it is cancelled,
+     * returning the sound but incomplete narrowing it has made, so a caller must check {@code
+     * cancellation} afterwards rather than treat the result as a fixpoint. The default ignores it.
+     */
+    default Optional<Set<Variable<?>>> narrow(ConstraintSatisfactionProblem csp,
+                                              Map<Variable<?>, Domain<?>> view,
+                                              Map<Variable<?>, Domain<?>> updates,
+                                              @Nullable Set<Variable<?>> changedSinceLastRun,
+                                              Cancellation cancellation) {
+        return narrow(csp, view, updates, changedSinceLastRun);
     }
 
     /**
