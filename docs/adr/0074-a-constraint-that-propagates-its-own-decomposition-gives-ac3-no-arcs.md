@@ -46,6 +46,16 @@ add a tuning knob.
 **Generating arcs lazily** instead of materializing them. It would fix the memory, but AC3 would
 still revise millions of arcs per pass for pruning the constraints' own propagators already do.
 
+**Giving `CircuitConstraint` and `SubCircuitConstraint` Régin's GAC over their successors**, since
+both are permutations. Built and measured, then reverted: a pass that ran `AllDiffConstraint.propagate`
+over the successors on every call, after the cheap passes. On the 33 `circuit` instances of the
+2022-2025 competitions (VRP_LC, KnightTour2, CrazyFrog, TSPTW2) plus `Mario-easy-4` and
+`Tpp-3-3-20-1`, at 30s, it solved nothing new and lost two of the three VRP_LC solutions, with
+2-10x fewer nodes in the time on CrazyFrog and KnightTour2: the matching is rebuilt from scratch on
+every call, and the fixpoint re-wakes the constraint after its own narrowings. `Tpp-3-3-20-1` went
+from 0.37s to 1.03s and `Mario-easy-4` from 1.53s to 2.34s. Pruning was not what these models
+lacked: neither version finds a 10x10 knight's tour in 30s.
+
 **Keeping AC3 the only local-search preprocessor for these constraints.** Measured with
 `MinConflicts`/`Tabu` through `LocalSolver` (20 runs, 10 attempts of 2,000 steps, two rounds):
 without the pairs and without the propagators, `Sudoku-s01a-alldiff` dropped from 20/20 solved to
