@@ -16,6 +16,8 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
+import java.util.TreeMap;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Stream;
 
@@ -137,9 +139,12 @@ public final class Xcsp3CompetitionRunner {
         int solved = 0, unknown = 0, failed = 0, checkMismatches = 0;
         int optimumFound = 0, feasibleOnly = 0, optimizationInstances = 0;
         double solveSeconds = 0;
+        Map<String, FolderTally> byFolder = new TreeMap<>();
         long batchStartNanos = System.nanoTime();
         for (Path instance : instances) {
             Result result = runOne(instance, timeLimitSeconds, seed, neighbourhoods);
+            byFolder.computeIfAbsent(folderOf(directory.relativize(instance)), folder -> new FolderTally())
+                    .add(category(result.summary()) == Category.SOLVED, result.elapsedSeconds());
             out.println(ROW_FORMAT.formatted(instanceName(directory.relativize(instance)), "%.2f".formatted(result.elapsedSeconds()),
                     result.summary(), result.crossCheck(), result.objective(), result.model(),
                     formatSearchSpace(result.searchSpaceBefore()), formatSearchSpace(result.searchSpaceAtRoot()),
@@ -180,6 +185,46 @@ public final class Xcsp3CompetitionRunner {
         if (checkMismatches > 0) {
             out.printf("%d SolutionChecker cross-check MISMATCH(ES) -- see Check column above%n", checkMismatches);
         }
+        if (byFolder.size() > 1) {
+            printFolderTable(byFolder, out);
+        }
+    }
+
+    /** How many instances one folder held, how many were answered, and their total solve time. */
+    private static final class FolderTally {
+        private int instances;
+        private int answered;
+        private double seconds;
+
+        void add(boolean answered, double seconds) {
+            instances++;
+            if (answered) this.answered++;
+            this.seconds += seconds;
+        }
+    }
+
+    /** The folder an instance sits in, relative to the run's directory: {@code .} at its top. */
+    private static String folderOf(Path relativeInstance) {
+        Path parent = relativeInstance.getParent();
+        return parent == null ? "." : parent.toString();
+    }
+
+    /**
+     * The per-folder totals as a markdown table, for a run over a tree such as {@code
+     * xcsp3/benchmark}, whose folders are its splits and tiers; release notes carry it.
+     */
+    private static void printFolderTable(Map<String, FolderTally> byFolder, PrintStream out) {
+        out.println();
+        out.println("| Folder | Instances | Answered | Solve time (s) |");
+        out.println("|---|---:|---:|---:|");
+        FolderTally total = new FolderTally();
+        byFolder.forEach((folder, tally) -> {
+            out.printf("| %s | %d | %d | %.1f |%n", folder, tally.instances, tally.answered, tally.seconds);
+            total.instances += tally.instances;
+            total.answered += tally.answered;
+            total.seconds += tally.seconds;
+        });
+        out.printf("| **Total** | %d | %d | %.1f |%n", total.instances, total.answered, total.seconds);
     }
 
     private static boolean isXcsp3Instance(Path path) {

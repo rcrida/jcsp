@@ -65,6 +65,34 @@ class Xcsp3CompetitionRunnerTest {
     }
 
     @Test
+    void instancesInSeveralFolders_endWithAPerFolderTable(@TempDir Path directory)
+            throws IOException, InterruptedException {
+        Files.writeString(Files.createDirectories(directory.resolve("quick")).resolve("a.xml"), instanceWithALargeSolution());
+        Files.writeString(Files.createDirectories(directory.resolve("perf")).resolve("b.xml"), instanceWithALargeSolution());
+        Files.writeString(directory.resolve("top.xml"), instanceWithALargeSolution());
+        ByteArrayOutputStream captured = new ByteArrayOutputStream();
+
+        Xcsp3CompetitionRunner.run(directory, 5, 1L, new PrintStream(captured, true, StandardCharsets.UTF_8));
+
+        String report = captured.toString(StandardCharsets.UTF_8);
+        assertThat(report).contains("| Folder | Instances | Answered | Solve time (s) |");
+        assertThat(report).containsPattern("\\| \\. \\| 1 \\| 1 \\| [0-9.]+ \\|");
+        assertThat(report).containsPattern("\\| perf \\| 1 \\| 1 \\| [0-9.]+ \\|");
+        assertThat(report).containsPattern("\\| quick \\| 1 \\| 1 \\| [0-9.]+ \\|");
+        assertThat(report).containsPattern("\\| \\*\\*Total\\*\\* \\| 3 \\| 3 \\| [0-9.]+ \\|");
+    }
+
+    @Test
+    void instancesInOneFolder_haveNoPerFolderTable(@TempDir Path directory) throws IOException, InterruptedException {
+        Files.writeString(directory.resolve("only.xml"), instanceWithALargeSolution());
+        ByteArrayOutputStream captured = new ByteArrayOutputStream();
+
+        Xcsp3CompetitionRunner.run(directory, 5, 1L, new PrintStream(captured, true, StandardCharsets.UTF_8));
+
+        assertThat(captured.toString(StandardCharsets.UTF_8)).doesNotContain("| Folder |");
+    }
+
+    @Test
     void theModelSizeParseCanBeSkipped(@TempDir Path directory) throws IOException, InterruptedException {
         Files.writeString(directory.resolve("small.xml"), instanceWithALargeSolution());
         ByteArrayOutputStream withModel = new ByteArrayOutputStream();
