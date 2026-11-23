@@ -11,6 +11,7 @@ import io.github.rcrida.jcsp.variables.Variable;
 import org.junit.jupiter.api.Test;
 
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
@@ -56,6 +57,26 @@ public class NaryStarredTuplesConstraintTest {
     }
 
     // --- of() validation ---
+
+    @Test void of_sparseTuples_equalsTheSameTableWithExplicitStars() {
+        Map<Variable<?>, Object> sparse1 = Map.of(x, 1);
+        Map<Variable<?>, Object> sparse2 = Map.of(x, 2);
+
+        NaryStarredTuplesConstraint sparse = NaryStarredTuplesConstraint.of(List.of(x, y, z), Set.of(sparse1, sparse2));
+
+        assertThat(sparse).isEqualTo(constraint);
+        assertThat(sparse.getVariables()).containsExactlyInAnyOrder(x, y, z);
+        assertThat(sparse.getTuples()).containsExactlyInAnyOrder(sparse1, sparse2);
+    }
+
+    @Test void of_sparseTuples_assertsTheyNameOnlyScopeVariablesAndNoStars() {
+        assertThatThrownBy(() -> NaryStarredTuplesConstraint.of(List.of(x, y, z), Set.of()))
+                .isInstanceOf(AssertionError.class);
+        assertThatThrownBy(() -> NaryStarredTuplesConstraint.of(List.of(x, y), Set.of(Map.of(z, 1))))
+                .isInstanceOf(AssertionError.class);
+        assertThatThrownBy(() -> NaryStarredTuplesConstraint.of(List.of(x, y, z), Set.of(Map.of(x, STAR))))
+                .isInstanceOf(AssertionError.class);
+    }
 
     @Test void of_mismatchedVariableSets_asserts() {
         Map<Variable<?>, Object> other = Map.of(x, 1, y, 1); // missing z

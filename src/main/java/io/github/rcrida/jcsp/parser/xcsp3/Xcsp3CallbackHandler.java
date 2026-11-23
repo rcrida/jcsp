@@ -1261,13 +1261,14 @@ final class Xcsp3CallbackHandler implements XCallbacks2 {
             Set<Map<Variable<?>, Object>> starredTuples = new LinkedHashSet<>();
             for (int[] tuple : tuples) {
                 checkCancelled();
+                // Only the non-starred cells: a wide table can star nearly every cell.
                 Map<Variable<?>, Object> tupleValues = new LinkedHashMap<>();
                 for (int i = 0; i < vars.size(); i++) {
-                    tupleValues.put(vars.get(i), tuple[i] == Constants.STAR_INT ? NaryStarredTuplesConstraint.STAR : tuple[i]);
+                    if (tuple[i] != Constants.STAR_INT) tupleValues.put(vars.get(i), tuple[i]);
                 }
                 starredTuples.add(tupleValues);
             }
-            addOrReify(NaryStarredTuplesConstraint.of(starredTuples), id);
+            addOrReify(NaryStarredTuplesConstraint.of(vars, starredTuples), id);
             return;
         }
         Set<Valuation> valuations = new LinkedHashSet<>();

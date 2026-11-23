@@ -424,7 +424,7 @@ public final class LpModelBuilder {
      * domains, so trusting it here would be unsound), or no objective coefficient variable is
      * determined for <em>every</em> one of {@code key}'s live values. That last condition isn't just
      * "nothing gained" -- it's load-bearing for soundness: an objective variable left undetermined
-     * (missing column, or {@link NaryStarredTuplesConstraint#STAR}) for even one live tuple can't be
+     * (a missing column, including a starred cell, which {@link NaryStarredTuplesConstraint} leaves out) for even one live tuple can't be
      * linked at all, since {@link #addAssignmentRelaxationRows}'s linking row is an equality tying the
      * variable to a weighted sum of {@code key}'s indicators -- omitting the undetermined value's term
      * would silently force that variable to {@code 0} whenever that value is selected, cutting off a
@@ -441,17 +441,15 @@ public final class LpModelBuilder {
         Set<Variable<?>> fullyDeterminedOthers = null;
         for (Map<Variable<?>, Object> tuple : liveTuples) {
             // key is always one of table's own variables (it came from table.getVariables() ∩
-            // gcc.getVariables()), and both NaryTuplesConstraint/NaryStarredTuplesConstraint's own
-            // factories assert every tuple carries a value for every one of the constraint's
-            // variables, so tuple.get(key) is never null here.
+            // gcc.getVariables()), so tuple.get(key) is null only where a starred tuple stars it.
             Object keyValue = tuple.get(key);
-            if (keyValue == NaryStarredTuplesConstraint.STAR || byKeyValue.containsKey(keyValue)) {
+            if (keyValue == null || byKeyValue.containsKey(keyValue)) {
                 return Optional.empty();
             }
             Map<Variable<?>, Object> relevantOthers = new LinkedHashMap<>();
             for (Variable<? extends Number> otherVar : objective.getCoefficients().keySet()) {
                 Object cell = tuple.get(otherVar);
-                if (cell != null && cell != NaryStarredTuplesConstraint.STAR) relevantOthers.put(otherVar, cell);
+                if (cell != null) relevantOthers.put(otherVar, cell);
             }
             byKeyValue.put(keyValue, relevantOthers);
             fullyDeterminedOthers = fullyDeterminedOthers == null
@@ -499,10 +497,7 @@ public final class LpModelBuilder {
         }
         NaryStarredTuplesConstraint t = (NaryStarredTuplesConstraint) table;
         return t.getTuples().stream()
-                .filter(tuple -> t.getVariables().stream().allMatch(v -> {
-                    Object cell = tuple.get(v);
-                    return cell == NaryStarredTuplesConstraint.STAR || csp.getDomain(v).contains(cell);
-                }))
+                .filter(tuple -> tuple.entrySet().stream().allMatch(e -> csp.getDomain(e.getKey()).contains(e.getValue())))
                 .toList();
     }
 

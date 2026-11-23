@@ -11,8 +11,11 @@ import lombok.Singular;
 import lombok.experimental.SuperBuilder;
 import org.jspecify.annotations.NonNull;
 
+import java.util.Collection;
 import java.util.Comparator;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
@@ -45,14 +48,34 @@ public class NaryStarredTuplesConstraint extends NaryConstraint implements Propa
      */
     public static final Object STAR = new Object();
 
+    /** The tuples, each naming only its non-starred cells: a scope variable missing from a tuple is starred there. */
     @Getter @Singular Set<Map<Variable<?>, Object>> tuples;
 
+    /** Tuples that each name every variable of the scope, with {@link #STAR} for a starred cell. */
     public static NaryStarredTuplesConstraint of(@NonNull Set<Map<Variable<?>, Object>> tuples) {
         assert !tuples.isEmpty() : "tuples must not be empty";
         var variableSets = tuples.stream().map(Map::keySet).collect(Collectors.toSet());
         assert variableSets.size() == 1 : "all tuples must contain exactly the same variables";
+        Set<Map<Variable<?>, Object>> sparse = new LinkedHashSet<>();
+        for (Map<Variable<?>, Object> tuple : tuples) {
+            Map<Variable<?>, Object> cells = new LinkedHashMap<>(tuple);
+            cells.values().removeIf(cell -> cell == STAR);
+            sparse.add(cells);
+        }
+        return of(variableSets.iterator().next(), sparse);
+    }
+
+    /**
+     * Tuples over {@code scope} that each name only their non-starred cells, which is much smaller
+     * for a wide table that stars most of each row.
+     */
+    public static NaryStarredTuplesConstraint of(@NonNull Collection<? extends Variable<?>> scope,
+                                                 @NonNull Set<Map<Variable<?>, Object>> tuples) {
+        assert !tuples.isEmpty() : "tuples must not be empty";
+        assert tuples.stream().allMatch(t -> scope.containsAll(t.keySet()) && !t.containsValue(STAR))
+                : "tuples must name only scope variables, and no stars";
         return NaryStarredTuplesConstraint.builder()
-                .variables(variableSets.iterator().next())
+                .variables(scope)
                 .tuples(tuples)
                 .build();
     }
@@ -60,8 +83,8 @@ public class NaryStarredTuplesConstraint extends NaryConstraint implements Propa
     @Override
     public boolean isSatisfiedBy(@NonNull Valuation assignment) {
         if (!assignment.containsAll(getVariables())) return true;
-        return tuples.stream().anyMatch(t -> getVariables().stream()
-                .allMatch(v -> t.get(v) == STAR || t.get(v).equals(assignment.getValue(v).orElseThrow())));
+        return tuples.stream().anyMatch(t -> t.entrySet().stream()
+                .allMatch(e -> e.getValue().equals(assignment.getValue(e.getKey()).orElseThrow())));
     }
 
     /**
@@ -75,16 +98,13 @@ public class NaryStarredTuplesConstraint extends NaryConstraint implements Propa
     @Override
     public Optional<Map<Variable<?>, Domain<?>>> propagate(@NonNull Map<Variable<?>, Domain<?>> domains) {
         var liveTuples = tuples.stream()
-                .filter(t -> getVariables().stream().allMatch(v -> {
-                    Object cell = t.get(v);
-                    return cell == STAR || domains.get(v).contains(cell);
-                }))
+                .filter(t -> t.entrySet().stream().allMatch(e -> domains.get(e.getKey()).contains(e.getValue())))
                 .toList();
         if (liveTuples.isEmpty()) return Optional.empty();
 
         Map<Variable<?>, Domain<?>> updated = new HashMap<>();
         for (Variable<?> v : getVariables()) {
-            if (liveTuples.stream().anyMatch(t -> t.get(v) == STAR)) continue;
+            if (liveTuples.stream().anyMatch(t -> !t.containsKey(v))) continue;
             DiscreteDomain<?> dom = (DiscreteDomain<?>) domains.get(v);
             var supportedValues = liveTuples.stream().map(t -> t.get(v)).collect(Collectors.toSet());
             if (supportedValues.size() < dom.size()) {
@@ -110,7 +130,7 @@ public class NaryStarredTuplesConstraint extends NaryConstraint implements Propa
                 .toList();
         return "{" + tuples.stream()
                 .map(t -> sortedVars.stream()
-                        .map(v -> t.get(v) == STAR ? "*" : t.get(v).toString())
+                        .map(v -> t.containsKey(v) ? t.get(v).toString() : "*")
                         .collect(Collectors.joining(", ", "(", ")")))
                 .sorted()
                 .collect(Collectors.joining(", ")) + "}";
