@@ -17,6 +17,7 @@ import org.jspecify.annotations.Nullable;
 
 import java.io.IOException;
 import java.io.PrintStream;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Map;
@@ -25,6 +26,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Function;
+import java.util.function.IntConsumer;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -66,26 +68,75 @@ public final class Xcsp3ProblemRunner {
         LargeNeighbourhoodSearch neighbourhoods = args.length >= 4 && args[3].equals("lns")
                 ? LargeNeighbourhoodSearch.DEFAULT
                 : LargeNeighbourhoodSearch.OFF;
-        run(instanceFile, timeLimitSeconds, restartRandomization, neighbourhoods, System.out);
+        run(instanceFile, timeLimitSeconds, restartRandomization, neighbourhoods, System.out, System::exit);
     }
+
+    /** How long past the time limit {@link Watchdog} waits for the cancellation to be honoured. */
+    static final long WATCHDOG_GRACE_SECONDS = 5;
 
     /**
      * Enforces {@code timeLimitSeconds} over the parse and the solve together by cancelling a fresh
      * {@link Cancellation} from a background timer once it elapses, then delegates to {@link
-     * #parseAndSolve}. {@code null} {@code restartRandomization} leaves {@link SolverConfig}'s own
+     * #parseAndSolve}. Work that never checks the cancellation, such as {@code xcsp3-tools}' own XML
+     * processing, is cut off by a {@link Watchdog} {@link #WATCHDOG_GRACE_SECONDS} later, which
+     * calls {@code exit}. {@code null} {@code restartRandomization} leaves {@link SolverConfig}'s own
      * random-per-call default in place -- see this class's own Javadoc for when a caller should pass
      * a fixed seed instead. {@code neighbourhoods} applies to an optimization instance; {@link
      * #main}'s optional fourth argument {@code lns} selects {@link LargeNeighbourhoodSearch#DEFAULT}.
      */
     static void run(Path instanceFile, long timeLimitSeconds, @Nullable RestartRandomization restartRandomization,
-                     LargeNeighbourhoodSearch neighbourhoods, PrintStream out) throws IOException {
+                     LargeNeighbourhoodSearch neighbourhoods, PrintStream out, IntConsumer exit) throws IOException {
         Cancellation cancellation = new Cancellation();
+        AnswerStream answers = new AnswerStream(out);
         ScheduledExecutorService timer = Executors.newSingleThreadScheduledExecutor();
         timer.schedule(cancellation::cancel, timeLimitSeconds, TimeUnit.SECONDS);
+        timer.schedule(new Watchdog(answers, exit)::fire, timeLimitSeconds + WATCHDOG_GRACE_SECONDS, TimeUnit.SECONDS);
         try {
-            parseAndSolve(instanceFile, cancellation, restartRandomization, neighbourhoods, out);
+            parseAndSolve(instanceFile, cancellation, restartRandomization, neighbourhoods, answers);
         } finally {
             timer.shutdownNow();
+        }
+    }
+
+    /**
+     * The runner's output, which notes when a status ({@code s}) line starts the answer and can be
+     * muted, so that a {@link Watchdog} answering in the solve's place leaves one status line.
+     */
+    static final class AnswerStream extends PrintStream {
+        private boolean answered;
+        private boolean muted;
+
+        AnswerStream(PrintStream out) {
+            super(out, true, StandardCharsets.UTF_8);
+        }
+
+        @Override
+        public synchronized void println(String line) {
+            if (muted) return;
+            answered |= line.startsWith("s ");
+            super.println(line);
+        }
+
+        /** Prints {@code s UNKNOWN} and mutes everything after it, unless the answer has already begun. */
+        synchronized boolean giveUp() {
+            if (answered) return false;
+            println("c no answer " + WATCHDOG_GRACE_SECONDS + "s past the time limit");
+            println("s UNKNOWN");
+            muted = true;
+            return true;
+        }
+    }
+
+    /**
+     * Answers {@code s UNKNOWN} and exits when the solve has still not answered after the grace
+     * period; once it has begun answering, it is left to finish, however long a large {@code v}
+     * line takes to write.
+     */
+    record Watchdog(AnswerStream answers, IntConsumer exit) {
+        void fire() {
+            if (answers.giveUp()) {
+                exit.accept(0);
+            }
         }
     }
 

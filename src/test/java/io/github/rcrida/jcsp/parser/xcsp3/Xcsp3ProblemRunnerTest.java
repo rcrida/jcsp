@@ -57,6 +57,33 @@ class Xcsp3ProblemRunnerTest {
         assertThat(buffer.toString(StandardCharsets.UTF_8)).contains("s SATISFIABLE").contains("v <instantiation><list> x </list>");
     }
 
+    @Test void watchdog_beforeAnyAnswer_answersUnknownMutesTheSolveAndExits() {
+        ByteArrayOutputStream buffer = new ByteArrayOutputStream();
+        var answers = new Xcsp3ProblemRunner.AnswerStream(printStreamInto(buffer));
+        List<Integer> exits = new java.util.ArrayList<>();
+        answers.println("c still parsing");
+
+        new Xcsp3ProblemRunner.Watchdog(answers, exits::add).fire();
+        answers.println("s SATISFIABLE");
+
+        assertThat(buffer.toString(StandardCharsets.UTF_8).lines())
+                .containsExactly("c still parsing", "c no answer 5s past the time limit", "s UNKNOWN");
+        assertThat(exits).containsExactly(0);
+    }
+
+    @Test void watchdog_onceTheAnswerHasBegun_leavesItToFinish() {
+        ByteArrayOutputStream buffer = new ByteArrayOutputStream();
+        var answers = new Xcsp3ProblemRunner.AnswerStream(printStreamInto(buffer));
+        List<Integer> exits = new java.util.ArrayList<>();
+        answers.println("s SATISFIABLE");
+
+        new Xcsp3ProblemRunner.Watchdog(answers, exits::add).fire();
+        answers.println("v <instantiation/>");
+
+        assertThat(buffer.toString(StandardCharsets.UTF_8).lines()).containsExactly("s SATISFIABLE", "v <instantiation/>");
+        assertThat(exits).isEmpty();
+    }
+
     @Test void parseAndSolve_cancelledDuringTheParse_reportsUnknown() throws IOException {
         Path instanceFile = tempDir.resolve("instance.xml");
         Files.writeString(instanceFile, """
