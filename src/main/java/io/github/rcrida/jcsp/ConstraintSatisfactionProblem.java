@@ -781,7 +781,8 @@ public class ConstraintSatisfactionProblem {
             while (!queue.isEmpty()) {
                 val variable = queue.poll();
                 componentVariables.add(variable);
-                getConstraints().stream()
+                // The index can over-approximate nogoods, hence the filter.
+                getConstraintsTouching(variable).stream()
                         .filter(c -> c.getVariables().contains(variable))
                         .forEach(componentConstraints::add);
                 neighbours.get(variable).stream()
